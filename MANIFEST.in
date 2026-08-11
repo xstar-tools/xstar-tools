@@ -243,3 +243,12 @@ include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_12.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_12.py
 include docs/developer/type51_all_element_production_0_6_82_12.md
 include tests/test_type51_all_element_production_0_6_82_12.py
+
+# 0.6.82.13 all-element atomic-data-type source-semantic generalization.
+include qualification/atomic_type_all_element_generalization_0_6_82_13.json
+include tools/qualification/check_atomic_type_all_element_generalization_0_6_82_13.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_13.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_13.py
+include docs/developer/atomic_type_all_element_generalization_0_6_82_13.md
+include tests/test_atomic_type_all_element_generalization_0_6_82_13.py
+include qualification/atomic_data_type_all_element_audit_0_6_82_13.csv

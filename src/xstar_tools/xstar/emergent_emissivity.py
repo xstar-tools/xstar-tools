@@ -1124,38 +1124,25 @@ def _compact_mg_line_emissivity_table(
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
 # XSTAR-FUNCTION-COMMENT-END
 def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
-    requested = None
-    control = getattr(context, "profile_control", None)
-    if isinstance(control, MutableMapping):
-        backend_selection = control.get("backend_selection")
-        if isinstance(backend_selection, Mapping):
-            requested = str(backend_selection.get("emissivity_backend", "python"))
-    requested = requested or os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BACKEND") or "python"
-    status = rates_backend_status(requested=requested)
-    return bool(status.active == "cpp" and (int(status.cpp_feature_flags or 0) & 4))
+    """Retired Mg-only product accelerator; generic emissivity stays authoritative.
 
-
-
+    0.6.82.13 removes target-element-specific accelerator ownership from the
+    science path.  Native/generic spectral backends remain available separately.
+    """
+    return False
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the emissivity upstream type4 product enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
 # XSTAR-FUNCTION-COMMENT-END
 def _emissivity_upstream_type4_product_enabled() -> bool:
-    """Opt-in product gate for the accepted/promoted Mg type-4/type-50 upstream C++ path.
+    """Return false: 0.6.82.13 retires the Mg-only emissivity product path.
 
-    This gate is intentionally independent of EMISSIVITY_BACKEND=cpp so a
-    wrapper can keep the broader emissivity backend on Python while enabling
-    exactly this one upstream promoted product path.
+    The historical environment names remain accepted only by shadow/forensic
+    tooling; source-generic Python/native spectral construction owns products.
     """
-    for name in (
-        "XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_PRODUCT_CPP",
-        "XSTAR_ATOMIC_EMISSIVITY_MG_TYPE4_PRODUCT_CPP",
-    ):
-        value = os.environ.get(name)
-        if value is not None and str(value).strip().lower() not in {"", "0", "false", "no", "off"}:
-            return True
     return False
+
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the emissivity upstream type4 shadow enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.

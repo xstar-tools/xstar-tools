@@ -390,6 +390,23 @@ long long integer_or(const std::vector<std::string>& fields, const std::map<std:
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the canonical xdef abundance base for Z=1..30 when an older
+// compact program omits the explicit abundance column.
+// Reference context: xstarsetup.f90 abundance bases; publication fallback only.
+// XSTAR-FUNCTION-COMMENT-END
+double xdef_abundance_fallback(int z) {
+    static constexpr std::array<double,31> kXdef{{
+        0.0, 1.0, 1.0e-1, 1.0e-10, 1.0e-10, 1.0e-10,
+        3.70e-4, 1.10e-4, 6.80e-4, 3.98e-8, 2.80e-5,
+        1.78e-6, 3.50e-5, 2.45e-6, 3.50e-5, 3.31e-7,
+        1.60e-5, 3.98e-7, 4.50e-6, 8.91e-8, 2.10e-6,
+        1.66e-9, 1.35e-7, 2.51e-8, 7.08e-7, 2.51e-7,
+        2.50e-5, 1.26e-7, 2.00e-6, 3.16e-8, 1.58e-8,
+    }};
+    return z >= 1 && z <= 30 ? kXdef[static_cast<std::size_t>(z)] : 0.0;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Load elements into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
@@ -409,7 +426,7 @@ std::vector<ElementMeta> read_elements(const std::filesystem::path& program_dir)
         e.element_index = static_cast<int>(integer_or(fields, columns, "element_index"));
         e.element_z = static_cast<int>(integer_or(fields, columns, "element_z"));
         e.n_rows = static_cast<int>(integer_or(fields, columns, "n_rows"));
-        e.abundance = number_or(fields, columns, "abundance", e.element_z == 1 ? 1.0 : e.element_z == 2 ? 0.1 : e.element_z == 12 ? 3.5e-5 : 0.0);
+        e.abundance = number_or(fields, columns, "abundance", xdef_abundance_fallback(e.element_z));
         e.row_offset = offset;
         offset += e.n_rows;
         out.push_back(e);
@@ -8273,7 +8290,11 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
             (r.line_energy_ev > 0.0 ? 12398.419843320026 / r.line_energy_ev : 0.0);
         row.emis_in = total_emis * ptmp1 / denom;
         row.emis_out = total_emis * ptmp2 / denom;
-        row.opacity = ((r.type99_valid || r.data_type == 99) && r.element_z <= 2)
+        // Canonical ucalc Type-99 uses calt99 -> phint53hunt and never
+        // assigns direct opakab, independent of target element.  Earlier
+        // publication code preserved this source-zero rule only for H/He,
+        // which reintroduced an element restriction absent from FORTRAN.
+        row.opacity = (r.type99_valid || r.data_type == 99)
             ? 0.0 : r.opakab * lower * abundance_scale;
         row.tau_in = std::isfinite(r.type50_tau_in) ? r.type50_tau_in : 0.0;
         row.tau_out = std::isfinite(r.type50_tau_out) ? r.type50_tau_out : 0.0;
@@ -8391,7 +8412,7 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
         row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
         if (r.data_type == 59) {
             row.opacity = lower * abundance_scale * std::max(0.0, r.opakab);
-        } else if ((r.type99_valid || r.data_type == 99) && r.element_z <= 2) {
+        } else if (r.type99_valid || r.data_type == 99) {
             row.opacity = 0.0;
         } else {
             row.opacity = std::max(0.0,

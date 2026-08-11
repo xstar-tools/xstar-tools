@@ -27,6 +27,7 @@ docs/cpp/index.md
 docs/cpp/xstar_cpp.md
 docs/developer/adding_atomic_data.md
 docs/developer/architecture.md
+docs/developer/atomic_type_all_element_generalization_0_6_82_13.md
 docs/developer/broad_multi_element_closure_0_6_82_5.md
 docs/developer/broad_multi_element_oracle_0_6_82_4.md
 docs/developer/broad_multi_element_science_0_6_82_3.md
@@ -166,6 +167,8 @@ examples/reference_outputs/o7_solver_source_fit_density_grid_summary.json
 examples/reference_outputs/o7_solver_source_fit_summary_reference.json
 examples/reference_outputs/o7_source_fit_summary.json
 examples/reference_outputs/o7_source_fit_weights.csv
+qualification/atomic_data_type_all_element_audit_0_6_82_13.csv
+qualification/atomic_type_all_element_generalization_0_6_82_13.json
 qualification/benchmark_cli_adapter_0_6_75.json
 qualification/broad_multi_element_closure_0_6_82_5.json
 qualification/broad_multi_element_oracle_0_6_82_4.json
@@ -468,6 +471,7 @@ src/xstar_tools/xstar/cpp/xstar_xspec_table_internal.hpp
 src/xstar_tools/xstar/cpp/xstar_xspec_table_writer.cpp
 src/xstar_tools/xstar/data/coheat.dat
 tests/test_0654_native_layout_cleanup.py
+tests/test_atomic_type_all_element_generalization_0_6_82_13.py
 tests/test_benchmark_cli_adapter_0_6_75.py
 tests/test_benchmark_reference_cleanup.py
 tests/test_broad_multi_element_closure_0_6_82_5.py
@@ -570,6 +574,7 @@ tools/ci/performance_report.py
 tools/ci/report_benchmark_results.py
 tools/ci/require_science_assets.py
 tools/packaging/prepare_local_conda_recipe.py
+tools/qualification/check_atomic_type_all_element_generalization_0_6_82_13.py
 tools/qualification/check_benchmark_cli_adapter_0_6_75.py
 tools/qualification/check_broad_multi_element_closure_0_6_82_5.py
 tools/qualification/check_broad_multi_element_oracle_0_6_82_4.py
@@ -625,6 +630,7 @@ tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_12.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_13.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
@@ -632,6 +638,7 @@ tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_9.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_11.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_12.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_13.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py

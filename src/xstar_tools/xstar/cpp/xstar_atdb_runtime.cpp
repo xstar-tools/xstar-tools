@@ -35,9 +35,11 @@ constexpr int kProgramAbi = 60486;
 constexpr int kType49PhextrapMaxPoints = 999;
 constexpr int kType53LayoutMagic = 221; // legacy Mg-only 12-stage payload
 constexpr int kType49LayoutMagic = 222; // legacy Mg-only 12-stage payload
-constexpr int kType99LayoutMagic = 223;
+constexpr int kType99LayoutMagic = 223; // legacy 12-stage payload
+constexpr int kType99LayoutMagicZ1Z30V068213 = 226;
 constexpr int kType53LayoutMagicZ1Z30V06481231 = 224;
 constexpr int kType49LayoutMagicZ1Z30V06481231 = 225;
+constexpr int kType70SourceIonIdentityMagicV068213 = 227;
 constexpr double kEvAngstrom = 12398.419843320026;
 
 // Atomic-database record semantics (XSTAR Manual, Chapter 12; Mendoza et al.
@@ -1025,8 +1027,10 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     // directly to the Type-50 branch, so they share endpoint/radiative handling.
     else if (dt==50 || dt==91) {
         need(ii.size()>=2 && rr.size()>=3,"short payload"); int id1=ii[0],id2=ii[1]; int r1=row_for_local(l,ion,id1),r2=row_for_local(l,ion,id2);
-        const auto* s1=find_snapshot(l,ion,id1); const auto* s2=find_snapshot(l,ion,id2); double e1=s1?s1->energy:row_energy(l,r1),e2=s2?s2->energy:row_energy(l,r2);
-        if (b.element_z==12 && b.ion_stage<=4) { e1=row_energy(l,r1); e2=row_energy(l,r2); }
+        const auto* s1=find_snapshot(l,ion,id1); const auto* s2=find_snapshot(l,ion,id2);
+        // 0.6.82.13: Type-50 endpoint ownership is the mutable source leveltemp
+        // workspace for every element.  Do not special-case Mg low ions.
+        double e1=s1?s1->energy:row_energy(l,r1),e2=s2?s2->energy:row_energy(l,r2);
         if ((e1/(1.0e-24+e2)-1.0)<1.0e-8) { lower=r1; upper=r2; } else { lower=r2; upper=r1; }
         auto scalar=local_pair(l,ion,id1,id2); double wavelength=std::abs(rr[0]),aij=rr[2]; double gup=row_weight(l,scalar.second),glo=row_weight(l,scalar.first);
         double oscillator=wavelength<=0?0.0:1.0e-16*aij*gup*wavelength*wavelength/(0.667274*glo); energy=std::abs(e1-e2);
@@ -1155,7 +1159,19 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             case 67: need(ii.size()>=2&&rr.size()>=3,"short payload"); energy_order_pair(ii[0],ii[1]); break;
             // Type 70 is the older superlevel recombination/photoionization table:
             // density and temperature grids plus recombination coefficients and a PI curve.
-            case 70: { need(ii.size()>=5,"short integer payload"); int id1=std::min<int>(ii[ii.size()-2],std::max(b.nlev-1,1)); int id2=std::max<int>(b.nlev+ii[ii.size()-3]-1,b.nlev); set_pair(id1,id2); break; }
+            case 70: {
+                need(ii.size()>=5,"short integer payload");
+                int id1=std::min<int>(ii[ii.size()-2],std::max(b.nlev-1,1));
+                int id2=std::max<int>(b.nlev+ii[ii.size()-3]-1,b.nlev);
+                set_pair(id1,id2);
+                // ucalc.f90's Type-70 high-density clamp is guarded by
+                // jkion.eq.1, where jkion is the global ATDB ion index.  The
+                // compact per-element ion_counter restarts at one for every Z
+                // and must not be used for that source identity test.
+                out.ints.push_back(static_cast<std::int64_t>(ion));
+                out.ints.push_back(kType70SourceIonIdentityMagicV068213);
+                break;
+            }
             case 75: { need(ii.size()>=3&&rr.size()>=2,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); break; }
             case 79: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 81: need(ii.size()>=2&&!rr.empty(),"short payload"); energy_order_pair(ii[0],ii[1]); break;
@@ -1225,7 +1241,32 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         need(ii.size()>=4&&rr.size()>=8,"short payload");int setup_idest1=ii[ii.size()-2];int id1=std::min<int>(setup_idest1,std::max(b.nlev-1,1)),id2=b.nlev+ii[ii.size()-4]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);const auto* bound=find_level(l,ion,id1);const auto* setup_bound=find_level(l,ion,setup_idest1);const auto* parentlv=find_level(l,ion,b.nlev);need(bound&&setup_bound&&parentlv,"lacks literal bound/parent levels");const double source_errc_rank_energy=std::max(0.1,setup_bound->ionpot-setup_bound->energy);double dest_e=parentlv->energy,dest_w=parentlv->weight,ex_e=0,ex_w=0,threshold=0;int ex_mode=0;
         if(id2<=b.nlev){const auto* dest=find_level(l,ion,id2);need(dest,"lacks destination level");dest_e=dest->energy;dest_w=dest->weight;threshold=std::abs(bound->energy-parentlv->energy);}else{auto bit=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_index==ion;});need(bit!=l.blocks.end()&&std::next(bit)!=l.blocks.end(),"has no next-ion destination");int local2=id2-b.nlev+1;const auto* ex=find_level(l,std::next(bit)->ion_index,local2);need(ex,"lacks next-ion destination level");ex_mode=1;ex_e=ex->energy;ex_w=ex->weight;dest_w=ex_w;threshold=std::abs(bound->energy+ex_e);dest_e=parentlv->energy+ex_e;}
         out.reals=rr;out.reals.insert(out.reals.end(),{dest_e,threshold,dest_w});
-        if(b.element_z==12){auto incoming=[&](int col){const auto* v=find_snapshot(l,ion,col);return std::pair<double,double>{v?v->energy:0.0,v?v->weight:0.0};};auto ib=incoming(id1),ip=incoming(b.nlev),id=incoming(id2);out.reals.insert(out.reals.end(),{ib.first,ib.second,ip.first,ip.second,id.first,id.second,ex_e,ex_w});std::array<int,3> cols{{id1,b.nlev,id2}};std::array<int,3> masks{{0,0,0}};for(int ci=0;ci<3;++ci){std::vector<double> energies,weights;for(int st=1;st<=12;++st){auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==st;});const auto* v=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,cols[ci]);energies.push_back(v?v->energy:0.0);weights.push_back(v?v->weight:0.0);if(v)masks[ci]|=1<<(st-1);}out.reals.insert(out.reals.end(),energies.begin(),energies.end());out.reals.insert(out.reals.end(),weights.begin(),weights.end());}out.ints.insert(out.ints.end(),{id1,b.nlev,id2,masks[0],masks[1],masks[2],ex_mode,kType99LayoutMagic});}
+        {
+            // 0.6.82.13: ucalc Type-99 consumes the persistent leveltemp
+            // energy/statistical-weight workspace independently of target
+            // element.  Serialize the full Z=1..30 candidate context for all
+            // elements; the record/sequence topology still decides whether a
+            // Type-99 record exists.
+            auto incoming=[&](int col){const auto* v=find_snapshot(l,ion,col);return std::pair<double,double>{v?v->energy:0.0,v?v->weight:0.0};};
+            auto ib=incoming(id1),ip=incoming(b.nlev),id=incoming(id2);
+            out.reals.insert(out.reals.end(),{ib.first,ib.second,ip.first,ip.second,id.first,id.second,ex_e,ex_w});
+            std::array<int,3> cols{{id1,b.nlev,id2}};
+            std::array<std::uint32_t,3> masks{{0u,0u,0u}};
+            for(int ci=0;ci<3;++ci){
+                std::vector<double> energies,weights;
+                energies.reserve(30); weights.reserve(30);
+                for(int st=1;st<=30;++st){
+                    auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==st;});
+                    const auto* v=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,cols[ci]);
+                    energies.push_back(v?v->energy:0.0);
+                    weights.push_back(v?v->weight:0.0);
+                    if(v)masks[ci]|=(1u<<static_cast<unsigned>(st-1));
+                }
+                out.reals.insert(out.reals.end(),energies.begin(),energies.end());
+                out.reals.insert(out.reals.end(),weights.begin(),weights.end());
+            }
+            out.ints.insert(out.ints.end(),{id1,b.nlev,id2,static_cast<std::int64_t>(masks[0]),static_cast<std::int64_t>(masks[1]),static_cast<std::int64_t>(masks[2]),ex_mode,kType99LayoutMagicZ1Z30V068213});
+        }
         // v82 patch 5.20.5: xstarsetup builds errc before calc_emis using
         // leveltemp rlev(4,idest1)-rlev(1,idest1), independent of calt99's
         // later threshold/destination semantics.  Append it as internal payload.

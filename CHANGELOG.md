@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 0.6.82.13 - 2026-08-11
+
+- Generalize the atomic-data-type science contract across all supported elements wherever canonical FORTRAN XSTAR 2.59g is target-element independent.
+- Keep the complete 1--102 catalog closed: 78 physical data types and 24 source no-op/metadata labels.
+- Generalize Type-50 mutable endpoint and live line-escape ownership; retain legacy H/Mg maps only as non-source compatibility scaffolding outside canonical runtime-state use.
+- Make canonical Type-51 commitment universal across C++ backends and retain the already-general Type-49 source path.
+- Make Type-53 canonical bound-free commitment depend on lowered source context rather than H/He/C/Mg identity; historical row-46 oracle use is non-native qualification only.
+- Promote canonical Type-57, Type-60/62 and Type-68 semantics unconditionally wherever those source-defined ion-sequence records exist.
+- Extend Type-99 persistent `leveltemp` energy/statistical-weight ownership from the old Mg 12-stage payload to a Z=1--30 layout, retaining old-layout read compatibility.
+- Mirror Z=1--30 Type-49/53/99 lowering in Python and retire Mg-only Python matrix/rate/emissivity product accelerators from science ownership; generic source evaluators remain authoritative.
+- Expand the Python compact/native ATDB lowerer from the historical H/He/Mg subset to all 78 physical FORTRAN labels, with Z=1--30 atomic masses and `xdef` defaults; the 44 non-direct/non-alias labels route through the generic source UCalc opcode.
+- Fix Type-70 source identity: the FORTRAN high-density cap is keyed to global `jkion==1` (hydrogen), not the first compact ion of every element.
+- Make Type-99 direct opacity publication source-zero for all elements and generalize the science-FITS `xdef` fallback table through Z=30.
+- Default the optional C++ element-engine scope to Z=1--30 when enabled, while preserving explicit subset overrides.
+- Preserve genuine FORTRAN ion-sequence/data-family restrictions. The thermal-ledger/source-order cleanup is explicitly deferred to a separate milestone.
+- Do not claim low-xi closure: H+He+C `rlogxi=-3,-2,-5` remain external FORTRAN host gates. Science revision and ABIs remain frozen.
+
 ## 0.6.82.12 - 2026-08-11
 
 - Promote the canonical/source-faithful Type-51 Burgess-Tully collision evaluator to the normal native-production path for every active element.

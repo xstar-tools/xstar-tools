@@ -1362,51 +1362,39 @@ def _lower_upper(result: UCalcResult, levels: UCalcLevelTable) -> Tuple[int, int
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
 def _matrix_cpp_active_for_mg() -> bool:
-    """Return true when libxstar_matrix.so should own Mg matrix-term batches."""
-    try:
-        status = matrix_backend_status(os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND"))
-    except Exception:
-        return False
-    if status.active != "cpp":
-        return False
-    flags = int(status.cpp_feature_flags or 0)
-    # Feature bit 2 is the v0.5.67 Mg type-7 term builder in libxstar_matrix.so.
-    return bool(flags & 2)
+    """Legacy Mg-only accelerator retired from science ownership in 0.6.82.13.
 
+    The generic Python/Fortran-equivalent evaluator remains authoritative for
+    every element.  The old Mg kernels stay in-tree only for forensic/performance
+    archaeology and are not selectable as a product-producing science path.
+    """
+    return False
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the matrix mg rates matrix active for mg operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
 def _matrix_mg_rates_matrix_active_for_mg() -> bool:
-    """Return true when the coarse Mg rates+matrix ABI is available."""
-    try:
-        status = matrix_backend_status(os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND"))
-    except Exception:
-        return False
-    if status.active != "cpp":
-        return False
-    flags = int(status.cpp_feature_flags or 0)
-    return bool(flags & 32)
+    """Legacy Mg-only accelerator retired from science ownership in 0.6.82.13.
 
+    The generic Python/Fortran-equivalent evaluator remains authoritative for
+    every element.  The old Mg kernels stay in-tree only for forensic/performance
+    archaeology and are not selectable as a product-producing science path.
+    """
+    return False
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the matrix mg ion source scan active for mg operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
 def _matrix_mg_ion_source_scan_active_for_mg() -> bool:
-    """Return true when C++ can traverse Mg ion source-pointer chains."""
-    try:
-        status = matrix_backend_status(os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND"))
-    except Exception:
-        return False
-    if status.active != "cpp":
-        return False
-    flags = int(status.cpp_feature_flags or 0)
-    return bool(flags & 128)
+    """Legacy Mg-only accelerator retired from science ownership in 0.6.82.13.
 
-
-
+    The generic Python/Fortran-equivalent evaluator remains authoritative for
+    every element.  The old Mg kernels stay in-tree only for forensic/performance
+    archaeology and are not selectable as a product-producing science path.
+    """
+    return False
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the env truthy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
@@ -1454,18 +1442,13 @@ def _matrix_mg_ion_type49_auto_enabled_for_mg() -> bool:
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
 def _rates_cpp_active_for_mg() -> bool:
-    """Return true when the legacy optional C++ rates backend should own Mg batches."""
-    try:
-        status = rates_backend_status(os.environ.get("XSTAR_ATOMIC_RATES_BACKEND"))
-    except Exception:
-        return False
-    if status.active != "cpp":
-        return False
-    flags = int(status.cpp_feature_flags or 0)
-    # Feature bit 2 is the v0.5.54 Mg type-7 term builder.
-    return bool(flags & 2)
+    """Legacy Mg-only accelerator retired from science ownership in 0.6.82.13.
 
-
+    The generic Python/Fortran-equivalent evaluator remains authoritative for
+    every element.  The old Mg kernels stay in-tree only for forensic/performance
+    archaeology and are not selectable as a product-producing science path.
+    """
+    return False
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the mg type49 shadow term signature operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
@@ -4106,9 +4089,14 @@ def _native_element_engine_env_enabled(element_z: int, *, product: bool = False,
     if not enabled:
         return False
     try:
-        elements = {int(item.strip()) for item in str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ELEMENTS", "1,2,12")).split(",") if item.strip()}
+        default_elements = ",".join(str(z) for z in range(1, 31))
+        elements = {
+            int(item.strip())
+            for item in str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ELEMENTS", default_elements)).split(",")
+            if item.strip()
+        }
     except ValueError:
-        elements = {1, 2, 12}
+        elements = set(range(1, 31))
     if int(element_z) not in elements:
         return False
     if product and str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_PRODUCT", "0")).strip().lower() not in {"1", "true", "yes", "on"}:
