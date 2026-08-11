@@ -5661,7 +5661,11 @@ RadiationField source_powerlaw_radiation(const xstar_atdb_runtime::ProductionPar
         total += (raw[i] + raw[i - 1]) * (field.energy_ev[i] - field.energy_ev[i - 1]) / 2.0;
     }
     if (!(total > 0.0) || !std::isfinite(total)) throw std::runtime_error("standalone power-law normalization is nonpositive");
-    constexpr double ergsev = 1.602197e-12;
+    // constants.f90 declares REAL(8) ergsev from an unsuffixed default-REAL
+    // literal.  Match the actual FORTRAN execution: binary32-round first,
+    // then promote to binary64.  This constant belongs to ispec4 power-law
+    // normalization; do not substitute the separate historical ispcg2 literal.
+    constexpr double ergsev = static_cast<double>(static_cast<float>(1.602176634e-12));
     for (std::size_t i = 0; i < raw.size(); ++i) {
         field.incident[i] = raw[i] * (params.luminosity_1e38 / total / ergsev);
     }
@@ -7769,7 +7773,9 @@ std::size_t qualification_source_nbinc(double energy, const std::vector<double>&
 // XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_powerlaw(
     double index, double luminosity_1e38, const std::vector<double>& energy) {
-    constexpr double erg_per_ev = 1.602197e-12;
+    // Source ispec4/constants.f90 semantics: default-REAL literal rounded
+    // to binary32 before assignment to REAL(8).
+    constexpr double erg_per_ev = static_cast<double>(static_cast<float>(1.602176634e-12));
     std::vector<double> raw(energy.size(), 0.0);
     for (std::size_t i = 0; i < energy.size(); ++i) {
         if (energy[i] <= 0.01) {

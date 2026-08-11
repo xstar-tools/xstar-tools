@@ -268,3 +268,11 @@ include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_15.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_15.py
 include docs/developer/type50_source_element_mass_0_6_82_15.md
 include tests/test_type50_source_element_mass_0_6_82_15.py
+
+# 0.6.82.16 source-faithful ispec4 erg/eV normalization.
+include qualification/ispec4_source_ergsev_0_6_82_16.json
+include tools/qualification/check_ispec4_source_ergsev_0_6_82_16.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_16.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_16.py
+include docs/developer/ispec4_source_ergsev_0_6_82_16.md
+include tests/test_ispec4_source_ergsev_0_6_82_16.py

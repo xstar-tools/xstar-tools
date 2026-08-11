@@ -45,6 +45,7 @@ docs/developer/fortran_source_map.md
 docs/developer/function_commenting.md
 docs/developer/host_compatibility_0_6_74.md
 docs/developer/index.md
+docs/developer/ispec4_source_ergsev_0_6_82_16.md
 docs/developer/legacy_source_port_cli_cleanup.md
 docs/developer/live_zone_progress_0_6_82_3.md
 docs/developer/lte_rnisi_workspace_0_6_82_8.md
@@ -188,6 +189,7 @@ qualification/cpp_warning_cleanup_0_6_58.json
 qualification/documentation_milestone_0_6_70.json
 qualification/example_history_cleanup_0_6_63.json
 qualification/host_compat_benchmark_semantics_0_6_74.json
+qualification/ispec4_source_ergsev_0_6_82_16.json
 qualification/legacy_source_port_cli_cleanup_0_6_65.json
 qualification/live_zone_progress_0_6_82_3.json
 qualification/local_zone_naming_cleanup_0_6_59.json
@@ -493,6 +495,7 @@ tests/test_documentation_history_cleanup.py
 tests/test_documentation_milestone_0_6_70.py
 tests/test_example_history_cleanup.py
 tests/test_host_compat_benchmark_semantics_0_6_74.py
+tests/test_ispec4_source_ergsev_0_6_82_16.py
 tests/test_legacy_source_port_cli_cleanup.py
 tests/test_live_zone_progress_0_6_82_3.py
 tests/test_local_zone_naming_cleanup.py
@@ -597,6 +600,7 @@ tools/qualification/check_cpp_warning_cleanup.py
 tools/qualification/check_documentation_milestone.py
 tools/qualification/check_example_history_cleanup.py
 tools/qualification/check_host_compat_benchmark_semantics_0_6_74.py
+tools/qualification/check_ispec4_source_ergsev_0_6_82_16.py
 tools/qualification/check_legacy_source_port_cli_cleanup.py
 tools/qualification/check_live_zone_progress_0_6_82_3.py
 tools/qualification/check_local_zone_naming_cleanup.py
@@ -641,6 +645,7 @@ tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_12.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_13.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_14.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_15.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_16.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
@@ -651,6 +656,7 @@ tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_12.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_13.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_14.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_15.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_16.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py

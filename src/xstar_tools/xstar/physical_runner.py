@@ -289,6 +289,9 @@ def _normalize_diagnostics_mode(value: str | None) -> str:
 
 
 ERGSEV = 1.602197e-12
+# constants.f90: REAL(8) parameter initialized by an unsuffixed default-REAL
+# literal.  Canonical ispec4 therefore sees binary32 rounding before promotion.
+ISPEC4_ERGSEV = float(np.float32(1.602176634e-12))
 HC_EV_ANGSTROM = float(np.float32(12398.4016))
 ELEMENT_SYMBOLS = (
     "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -769,7 +772,7 @@ def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[
         total += (raw[i] + raw[i - 1]) * (epi[i] - epi[i - 1]) / 2.0
     if total <= 0.0:
         raise XSTARPythonRunnerError("power-law 1-1000 Ry normalization is nonpositive")
-    z += raw * (float(luminosity_1e38) / total / ERGSEV)
+    z += raw * (float(luminosity_1e38) / total / ISPEC4_ERGSEV)
 
     # XSTAR immediately applies ispecgg, using a slightly different bin gate.
     total2 = 0.0
@@ -778,7 +781,7 @@ def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[
             total2 += (z[i] + z[i - 1]) * (epi[i] - epi[i - 1]) / 2.0
     if total2 <= 0.0:
         raise XSTARPythonRunnerError("renormalized power-law luminosity is nonpositive")
-    z *= float(luminosity_1e38) / total2 / ERGSEV
+    z *= float(luminosity_1e38) / total2 / ISPEC4_ERGSEV
     return z
 
 

@@ -2,8 +2,10 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.15`  
+**Distribution:** `0.6.82.16`  
 
+
+**0.6.82.16 source-faithful `ispec4` normalization:** canonical `ispec4.f90` uses `constants.f90` `ergsev`, whose unsuffixed default-REAL initializer `1.602176634e-12` is rounded before promotion to `REAL(8)`. Python and C++ built-in power-law normalization now use that source-executed value while preserving the separate historical `ispcg2` reporting literal. The 0.6.82.15 host run is exact through row 67 in printed `h-c` and `ntotit`; only three isolated late `ntotit` differences remain before the host SIGKILL near completion. `rlogxi=-3,-2` remain host gates and the science revision/ABIs remain frozen.
 
 **0.6.82.15 source-parent Type-50 mass repair:** canonical FORTRAN obtains the nuclear mass used by Type-50 Doppler broadening from the rate-type-11 element parent reached through `line -> ion -> element`; C++ and Python previously replaced that source-owned value with hard-coded periodic-table masses. Production lowering/profile metadata now use the ATDB parent value for every applicable element, with the old tables retained only for incomplete synthetic fixtures. This is the next focused correction after 0.6.82.14 moved the serious `rlogxi=-3` divergence from row 3 to row 12. `rlogxi=-3,-2` remain host gates; the accepted science revision and public ABIs remain frozen.
 

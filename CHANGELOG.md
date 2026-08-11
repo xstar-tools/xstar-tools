@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.16 - 2026-08-11
+
+- Restore canonical `ispec4.f90` power-law erg/eV normalization in Python and native C++. `ispec4` imports `ergsev` from `constants.f90`, where `real(8), parameter :: ergsev = 1.602176634e-12`; the unsuffixed initializer is default-REAL-rounded before promotion, giving approximately `1.602176616204154e-12`.
+- Remove the historical port value `1.602197e-12` from both ispec4-equivalent power-law normalization passes. Preserve the separate historical `ispcg2.f90` diagnostic/publication literal unchanged.
+- Preserve 0.6.82.15 source-parent Type-50 mass ownership, 0.6.82.14 source-faithful high-tau `pescl` pi, and 0.6.82.13 all-element atomic-data generalization. DSEC, escape formulas, optical-depth transport, and thermal-ledger ownership are unchanged.
+- Host evidence motivating this narrow cleanup: 0.6.82.15 makes H+He+C `rlogxi=-3` rows 1-67 exact in printed `h-c` and `ntotit`; only isolated `ntotit` differences remain at rows 68, 71, and 75 before the host process is SIGKILLed after row 76. H I bound-free optical depth is already very large in this regime, so ppm source normalization differences are amplified in the escaping photo-rate.
+- Do not claim low-`xi` closure before host reruns. `rlogxi=-3` and `-2` remain the immediate gates; the host return-code-137 issue near the final row is tracked separately from numerical science. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` remain frozen.
+
 ## 0.6.82.15 - 2026-08-11
 
 - Restore canonical Type-50 nuclear-mass ownership. Literal `ucalc.f90` and `binemislin.f90` walk `line -> ion -> element` and read the second REAL from the rate-type-11 element record; the port had substituted a hard-coded modern periodic-table mass by `Z`.
