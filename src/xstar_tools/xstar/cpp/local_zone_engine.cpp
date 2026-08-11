@@ -13847,10 +13847,12 @@ int run_impl(
                 }
             }
             if (revisit_csv && !revisit_csv) throw std::runtime_error("cannot write patch5.18.1 Type-53 selected-revisit audit");
-            std::cout
-                << "V048746255172582_PATCH520144_CALC_EMIS_REVISIT_SOURCE_SEQUENCE=" << source_sequence_v82_patch511 << "\n"
-                << "V048746255172582_PATCH520144_TYPE53_SELECTED_REVISIT_SELECTED=" << type53_selected << "\n"
-                << "V048746255172582_PATCH520144_TYPE53_SELECTED_REVISIT_PUBLISHED=" << type53_revisit_published << "\n";
+            if (!environment_flag("XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS")) {
+                std::cout
+                    << "V048746255172582_PATCH520144_CALC_EMIS_REVISIT_SOURCE_SEQUENCE=" << source_sequence_v82_patch511 << "\n"
+                    << "V048746255172582_PATCH520144_TYPE53_SELECTED_REVISIT_SELECTED=" << type53_selected << "\n"
+                    << "V048746255172582_PATCH520144_TYPE53_SELECTED_REVISIT_PUBLISHED=" << type53_revisit_published << "\n";
+            }
             if (patch520144_call2_audit) std::cout
                 << "V048746255172582_CALL2_TYPE53_CALC_EMISAB_SEED_GRID_BINS=999\n"
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_CANDIDATES=" << type53_candidates << "\n"
@@ -14027,11 +14029,13 @@ int run_impl(
             }
             if (type49_revisit_csv_v82_patch52082 && !type49_revisit_csv_v82_patch52082)
                 throw std::runtime_error("cannot write patch5.20.8.2 Type-49 three-stage audit");
-            std::cout
-                << "V048746255172582_PATCH520144_TYPE49_SELECTED_REVISIT_SELECTED="
-                << type49_selected_v82_patch52082 << "\n"
-                << "V048746255172582_PATCH520144_TYPE49_SELECTED_REVISIT_PUBLISHED="
-                << type49_revisit_published_v82_patch52082 << "\n";
+            if (!environment_flag("XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS")) {
+                std::cout
+                    << "V048746255172582_PATCH520144_TYPE49_SELECTED_REVISIT_SELECTED="
+                    << type49_selected_v82_patch52082 << "\n"
+                    << "V048746255172582_PATCH520144_TYPE49_SELECTED_REVISIT_PUBLISHED="
+                    << type49_revisit_published_v82_patch52082 << "\n";
+            }
             if (patch520144_call2_audit) std::cout
                 << "V048746255172582_PATCH52082_TYPE49_REDUCED_SEED_PUBLICATION=RESTORED_SOURCE_OWNER_PATCH52094\n"
                 << "V048746255172582_PATCH52082_TYPE49_PRODUCTION_SEED=CALC_EMISAB_REDUCED_OWNER_PATCH52094\n"

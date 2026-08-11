@@ -405,6 +405,15 @@ def _backend_environment(mapping: ModeMapping):
         "XSTAR_ATOMIC_THERMAL_BACKEND": mapping.thermal_backend,
         "XSTAR_ATOMIC_ENGINE_BACKEND": mapping.engine_backend,
     }
+    # 0.6.80.1: the accepted modular C++ kernels still contain a handful of
+    # historical parity-campaign console markers.  Suppress only those markers
+    # for normal public zone-python execution.  An explicit caller setting
+    # XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS=0 keeps the old debug output.
+    if (
+        mapping.public_mode == "zone-python"
+        and "XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS" not in os.environ
+    ):
+        names["XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS"] = "1"
     old = {key: os.environ.get(key) for key in names}
     try:
         os.environ.update(names)

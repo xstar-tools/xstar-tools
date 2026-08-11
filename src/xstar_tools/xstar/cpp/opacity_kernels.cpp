@@ -1991,7 +1991,7 @@ int xstar_opacity_apply_line_profile_v1(
         const char* forced = std::getenv("XSTAR_V064896_FORCE_LEGACY_TYPE50");
         const bool force_legacy = forced && *forced && std::strcmp(forced, "0") != 0 &&
             std::strcmp(forced, "false") != 0 && std::strcmp(forced, "FALSE") != 0;
-        if (standalone_native) {
+        if (standalone_native && !env_truthy("XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS")) {
             std::fputs(force_legacy
                 ? "V064896_TYPE50_MODE=LEGACY_0951_FORCED\n"
                 : "V064896_TYPE50_MODE=OPTIMIZED_STANDALONE\n", stdout);

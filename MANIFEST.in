@@ -111,3 +111,9 @@ include tools/qualification/check_python_production_diagnostics_0_6_80.py
 include qualification/python_production_diagnostics_0_6_80.json
 include docs/developer/python_production_diagnostics.md
 include tests/test_python_production_diagnostics_0_6_80.py
+
+# 0.6.80.1 zone-python legacy console-output cleanup.
+include qualification/zone_python_console_cleanup_0_6_80_1.json
+include tools/qualification/check_zone_python_console_cleanup_0_6_80_1.py
+include tests/test_zone_python_console_cleanup_0_6_80_1.py
+include docs/developer/zone_python_console_cleanup.md

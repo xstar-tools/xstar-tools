@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.80.1 — zone-python legacy console cleanup - 2026-08-10
+
+- Suppress six historical parity-campaign `V...` console markers during normal public `zone-python` execution.
+- Preserve the existing native behavior for `zone-cpp`, `zone-all`, and `xstar-cpp`.
+- Allow explicit debugging to retain the legacy markers with `XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS=0`.
+- No scientific arithmetic, FITS publication, ABI, or accepted Python diagnostics behavior changes.
+
 # 0.6.80 — production Python diagnostics cleanup - 2026-08-10
 
 - Keep the accepted `diagnostics_mode=full` numerical/orchestration path for `pure-python` and `zone-python`, but separate diagnostic computation from diagnostic file emission.
