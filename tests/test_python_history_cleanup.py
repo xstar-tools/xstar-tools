@@ -23,7 +23,15 @@ def test_archived_parity_campaign_modules_are_outside_active_namespace():
     assert data["productization_version"] == "0.6.56"
     assert len(data["archived_modules"]) == 51
     assert len(data["archived_tests"]) == 36
-    assert len(list(ACTIVE.glob("*.py"))) == 81
+    active_count = len(list(ACTIVE.glob("*.py")))
+    contract_path = ROOT / "qualification" / "xstar_parameter_contract_0_6_82.json"
+    expected = 81
+    if contract_path.is_file():
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        if contract.get("product_version") == "0.6.82" and contract.get("science_change") is False:
+            added = contract.get("additional_xstar_source_files", [])
+            expected += sum(1 for rel in added if rel.endswith(".py") and "/xstar/" in rel)
+    assert active_count == expected
     for name in (
         "call1_secant_temperature_ieee_audit",
         "call2_helium_source_family_reconstruction",

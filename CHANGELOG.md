@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.82.1 — full multi-element native ATDB/lowering closure - 2026-08-10
+
+- Generalize native ATDB endpoint lowering for realistic multi-element XSTAR mixtures instead of rejecting source-valid `idest` endpoints that extend beyond the compact element matrix dimension.
+- Follow canonical `calc_hmc_ion.f90` / `calc_hmc_element.f90` / `msolvelucy.f90` semantics: retain the raw shifted source endpoint through lowering and apply the source `min(ipmat,indb(...))` alias only at the matrix-consumption boundary.
+- Preserve all previously qualified in-bounds endpoint arithmetic byte-for-byte in meaning; source `leveltemp` fallback energy/statistical-weight lookup is used only for newly reachable endpoints above the compact dimension.
+- Keep the fix element-independent for the complete XSTAR Z=1..30 topology rather than adding element-specific exceptions.
+- Add a realistic broad-composition `examples/xstar_example.par` enabling H, He, C, N, O, Ne, Mg, Al, Si, S, Ar, Ca, Cr, Fe, and Ni with the normal `xdef` abundance base.
+- Add source-concordance and structural qualification against the supplied XSTAR 2.59g `calc_hmc_ion`, `calc_hmc_element`, `msolvelucy`, `levwkelement`, `ucalc`, and `setptrs` sources.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ reference `0.6.48.12.3.44`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60488`, and XSPEC-table ABI `1`; the change expands previously rejected native inputs and does not alter accepted in-bounds regressions.
+
 # 0.6.81.1 — canonical XSTAR2TABLE 2x3-grid closure - 2026-08-10
 
 - Correct the historical `SliceEnergySpectra` edge interpretation: the reported high index is an energy edge, so the selected table-bin count is `high-low`, not `high-low+1`.

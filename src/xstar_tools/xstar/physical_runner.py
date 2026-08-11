@@ -36,6 +36,8 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
+
+from .abundance_tables import resolve_abundance_table
 from .source_real_energy_grid import source_ener_grid
 
 from .. import __version__ as XSTAR_ATOMIC_VERSION
@@ -579,6 +581,21 @@ def _sha256_file(path: str | Path) -> str:
 # Purpose: Implement the value map operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
 # XSTAR-FUNCTION-COMMENT-END
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Return the source-required public product set for lwrite/npass.
+# Reference context: XSTAR Manual ss. 4.3.16 and Chapter 5 output descriptions;
+# xstar.f90 opens/saves/closes detail files only for lwrite>0 or npass>1.
+# XSTAR-FUNCTION-COMMENT-END
+def _required_products_for_controls(*, lwrite: int, npass: int) -> tuple[str, ...]:
+    detail_names = {
+        "xo01_detail.fits", "xo01_detal2.fits",
+        "xo01_detal3.fits", "xo01_detal4.fits",
+    }
+    if int(lwrite) > 0 or int(npass) > 1:
+        return REQUIRED_XSTAR_PRODUCTS
+    return tuple(name for name in REQUIRED_XSTAR_PRODUCTS if name not in detail_names)
+
+
 def _value_map(parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any]) -> tuple[dict[str, Any], str | None]:
     if isinstance(parameters, XSTARInputParameters):
         return parameters.as_dict(), parameters.source
@@ -618,12 +635,24 @@ def normalize_xstar_parameters(
             f"observed {values['spectrum']!r}"
         )
     values["spectrum"] = "pow"
-    abundance_table = str(values["abundtbl"]).strip().lower()[:4]
-    if abundance_table != "xdef":
-        raise UnsupportedXSTARParameterError(
-            "the first public physical runner supports abundtbl='xdef' only"
-        )
+    abundance_table, baseline_abundances = resolve_abundance_table(values["abundtbl"])
     values["abundtbl"] = abundance_table
+
+    # XPI constrains these three public control parameters before rread1 sees
+    # them.  Mirror the canonical xstar.par ranges here so every public mode
+    # has the same contract even when it is invoked without HEASoft/XPI.
+    lwrite = int(values["lwrite"])
+    if lwrite not in (0, 1):
+        raise XSTARPythonRunnerError("lwrite must be 0 or 1")
+    values["lwrite"] = lwrite
+    lprint = int(values["lprint"])
+    if not -1 <= lprint <= 6:
+        raise XSTARPythonRunnerError("lprint must be in the XSTAR range -1..6")
+    values["lprint"] = lprint
+    loopcontrol = int(values["loopcontrol"])
+    if not 0 <= loopcontrol <= 30000:
+        raise XSTARPythonRunnerError("loopcontrol must be in the XSTAR range 0..30000")
+    values["loopcontrol"] = loopcontrol
     radexp = float(values["radexp"])
     if radexp < -99.0:
         raise UnsupportedXSTARParameterError(
@@ -689,12 +718,12 @@ def normalize_xstar_parameters(
     multipliers = np.asarray([float(values[name]) for name in ABUNDANCE_PARAMETER_NAMES])
     if np.any(~np.isfinite(multipliers)) or np.any(multipliers < 0.0):
         raise XSTARPythonRunnerError("element abundance multipliers must be finite and nonnegative")
-    physical = multipliers * XDEF_ABUNDANCES
+    physical = multipliers * baseline_abundances
     values["density"] = density
     return NormalizedXSTARParameters(
         values=values,
         abundance_multipliers=multipliers,
-        baseline_abundances=XDEF_ABUNDANCES.copy(),
+        baseline_abundances=baseline_abundances.copy(),
         physical_abundances=physical,
         lcdd=lcdd,
         temperature_t4=t4,
@@ -2640,6 +2669,10 @@ def run_xstar_from_parameters(
         zero_unspecified_abundances=zero_unspecified_abundances,
         abundances=abundances,
     )
+    required_products = _required_products_for_controls(
+        lwrite=int(normalized.get("lwrite")),
+        npass=int(normalized.get("npass")),
+    )
     pointer_cache_path, metadata_cache_path = _cache_paths(resolved_atdb, cache_dir)
     _emit_progress(
         progress_callback,
@@ -2653,9 +2686,9 @@ def run_xstar_from_parameters(
     _output_setup_t0 = time.perf_counter()
     out.mkdir(parents=True, exist_ok=True)
     if not overwrite:
-        _present, missing = products_present(out)
+        missing = tuple(name for name in required_products if not (out / name).is_file())
         if not missing:
-            raise XSTARPythonRunnerError(f"all output products already exist in {out}")
+            raise XSTARPythonRunnerError(f"all source-required output products already exist in {out}")
     else:
         for name in REQUIRED_XSTAR_PRODUCTS:
             target = out / name
@@ -2813,13 +2846,14 @@ def run_xstar_from_parameters(
                 "continuum_diagnostic_skipped",
                 diagnostics_mode=diagnostics_mode,
             )
-        present, missing = products_present(out)
+        present = tuple(name for name in required_products if (out / name).is_file())
+        missing = tuple(name for name in required_products if name not in present)
         products = {name: out / name for name in present}
         completed_zones = sum(len(item.shell_results) for item in radial.pass_results)
         ready = not missing
         if not ready:
             raise XSTARPythonAcceptanceError(
-                "Python XSTAR run did not create the strict ten-product set; missing: "
+                "Python XSTAR run did not create the source-required product set; missing: "
                 + ", ".join(missing)
             )
         source_order = tuple(state.provenance.get("completed_source_routines", ())) + tuple(writer.source_order)
@@ -2841,10 +2875,14 @@ def run_xstar_from_parameters(
             completed_zones=completed_zones,
             source_order=source_order,
             warnings=(
-                ("lprint>0 verbose terminal diagnostic branches are not emitted; "
-                 "all structured FITS products and comparator-visible step-log rows are retained")
-                if int(normalized.get("lprint")) > 0 else ""
-            ,) if int(normalized.get("lprint")) > 0 else (),
+                (
+                    "lprint=-1 minimal-log formatting is characterized but not reproduced exactly; "
+                    "structured FITS products and comparator-visible step-log rows are retained"
+                    if int(normalized.get("lprint")) < 0
+                    else "lprint>0 verbose terminal/log diagnostic branches are characterized but not emitted completely; "
+                         "structured FITS products and comparator-visible step-log rows are retained"
+                ),
+            ) if int(normalized.get("lprint")) != 0 else (),
             provenance={
                 "runner": "run_xstar_from_parameters",
                 "package_version": "0.6.48.3",
@@ -2852,7 +2890,15 @@ def run_xstar_from_parameters(
                 "reference_trace_schema_version": "0.6.48.3",
                 "source_faithful_calculation_path": True,
                 "verbose_pprint_complete": int(normalized.get("lprint")) == 0,
-                "strict_ten_product_contract": True,
+                "lprint_contract": {
+                    "requested": int(normalized.get("lprint")),
+                    "accepted_range": [-1, 6],
+                    "standard_fits_unaffected": True,
+                    "optional_ascii_verbosity_fully_reproduced": int(normalized.get("lprint")) == 0,
+                },
+                "strict_ten_product_contract": len(required_products) == len(REQUIRED_XSTAR_PRODUCTS),
+                "source_required_product_count": len(required_products),
+                "detail_products_required": bool(int(normalized.get("lwrite")) > 0 or int(normalized.get("npass")) > 1),
                 "xstar_outputs_used_as_python_inputs": False,
                 "diagnostics_mode": diagnostics_mode,
                 "high_volume_diagnostics_enabled": bool(high_volume_diagnostics),

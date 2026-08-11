@@ -2,7 +2,7 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.79`  
+**Distribution:** `0.6.82`  
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -75,6 +75,44 @@ xstar-tools version
 xstar-tools backends
 xstar-tools doctor
 ```
+
+## 3.1 XSTAR parameter compatibility added in 0.6.82
+
+The public XSTAR parameter contract now includes all ten documented abundance
+bases for `abundtbl`: `xdef`, `angr`, `aspl`, `feld`, `aneb`, `grsa`, `wilm`,
+`lodd`, `lpgp`, and `lpgs`. The supplied XSTAR 2.59g source uses `lgpp` and
+`lgps` for the last two tables; those source spellings are accepted as aliases.
+The element inputs (`habund` through `znabund`) remain multipliers of the
+selected base, matching `xstarsetup.f90`.
+
+`lwrite` follows the literal XSTAR source condition for the four pass-specific
+detail products: they are produced when `lwrite>0` **or** `npass>1`. Thus a
+normal one-pass run with `lwrite=0` produces the five standard final FITS
+products (`xout_abund1`, `xout_cont1`, `xout_lines1`, `xout_rrc1`, and
+`xout_spect1`) plus `xout_step.log`, but not `xo01_detail.fits`,
+`xo01_detal2.fits`, `xo01_detal3.fits`, or `xo01_detal4.fits`. Native
+standalone acceptance uses the same control-derived product count rather than
+requiring nine FITS files unconditionally.
+
+`lprint` accepts the XSTAR 2.59g parameter-file range `-1..6`. It is an ASCII/log
+verbosity control; standard FITS science is unaffected. The accepted
+comparator-visible STEP science is retained, while complete optional historical
+verbose formatting for nonzero `lprint` is characterized rather than claimed
+bit-for-bit complete. `loopcontrol` accepts `0..30000`: zero means standalone,
+and positive values are preserved as 1-based XSTAR2XSPEC job identities.
+
+See [`docs/developer/xstar_parameter_contract_0_6_82.md`](docs/developer/xstar_parameter_contract_0_6_82.md)
+for the source-level contract and known documentation/source discrepancies.
+
+## 3.2 XSTAR2TABLE compatibility
+
+The native `xstar-xspec-table` converter reads ordinary `xout_spect1.fits` and
+produces `xout_ain.fits`, `xout_aout.fits`, `xout_mtable.fits`, and
+`xout_etable.fits`. Its implementation is explicitly source-concordant with
+XSTAR Manual Chapter 6, `src/xstar2table/xstar2table.c`, and
+`xstarlib/src/xstartablelib.c`. The sealed 0.6.81.1 canonical 2x3 MPI_XSTAR
+fixture is bit-exact for energy bins, `PARAMVAL`, and all four `INTPSPEC`
+payloads. Native `xstinitable` is not yet part of 0.6.82.
 
 ## 4. Atomic-data setup
 
@@ -259,3 +297,7 @@ For the exact software identity used in a run:
 ```bash
 xstar-tools version
 ```
+### Realistic multi-element native example
+
+`examples/xstar_example.par` is a ready-to-run broad-composition parameter file for `xstar-cpp`.  It enables H, He, C, N, O, Ne, Mg, Al, Si, S, Ar, Ca, Cr, Fe, and Ni and exercises the general native ATDB lowering path rather than a single-metal smoke case.  See `examples/README.md` for the command.
+

@@ -137,3 +137,16 @@ include tools/qualification/check_xstar2table_canonical_grid_closure_0_6_81_1.py
 include tools/qualification/reference/xstar2table_mpi_grid_0_6_81_1.tar.gz
 include tools/qualification/reference/xstar2table_mpi_grid_compare_0_6_81_1.c
 include tests/test_xstar2table_canonical_grid_closure_0_6_81_1.py
+
+# 0.6.82 XSTAR public parameter-contract closure.
+include tools/qualification/check_xstar_parameter_contract_0_6_82.py
+include qualification/xstar_parameter_contract_0_6_82.json
+include docs/developer/xstar_parameter_contract_0_6_82.md
+include tests/test_xstar_parameter_contract_0_6_82.py
+
+# 0.6.82.1 full multi-element native ATDB/lowering closure.
+include qualification/multi_element_atdb_lowering_0_6_82_1.json
+include tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
+include docs/developer/multi_element_atdb_lowering_0_6_82_1.md
+include tests/test_multi_element_atdb_lowering_0_6_82_1.py
+include examples/xstar_example.par

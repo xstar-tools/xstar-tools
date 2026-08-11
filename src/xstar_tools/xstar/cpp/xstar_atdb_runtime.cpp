@@ -15,9 +15,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <regex>
 #include <set>
@@ -67,6 +69,77 @@ const std::array<double,31> kAtomicMass = {{
     44.955912, 47.867, 50.9415, 51.9961, 54.938045, 55.845, 58.933195,
     58.6934, 63.546, 65.38
 }};
+
+
+// XSTAR 2.59g xstarsetup.f90 abundance bases.  These are not new atomic
+// physics: xstarsetup selects one 30-element cosmic table and multiplies it by
+// the public habund..znabund factors before any rate calculation is entered.
+// The manual spells the Lodders et al. (2009) tables lpgp/lpgs, while the
+// supplied source uses lgpp/lgps.  Accept both spellings as compatibility
+// aliases for the same two source arrays.
+using AbundanceBase = std::array<double,30>;
+const AbundanceBase kAbundXdef = {{
+    1.00e0,1.00e-1,1.00e-10,1.00e-10,1.00e-10,3.70e-4,1.10e-4,6.80e-4,3.98e-8,2.80e-5,
+    1.78e-6,3.50e-5,2.45e-6,3.50e-5,3.31e-7,1.60e-5,3.98e-7,4.50e-6,8.91e-8,2.10e-6,
+    1.66e-9,1.35e-7,2.51e-8,7.08e-7,2.51e-7,2.50e-5,1.26e-7,2.00e-6,3.16e-8,1.58e-8}};
+const AbundanceBase kAbundAngr = {{
+    1.00e0,9.77e-2,1.45e-11,1.41e-11,3.98e-10,3.63e-4,1.12e-4,8.51e-4,3.63e-8,1.23e-4,
+    2.14e-6,3.80e-5,2.95e-6,3.55e-5,2.82e-7,1.62e-5,3.16e-7,3.63e-6,1.32e-7,2.29e-6,
+    1.26e-9,9.77e-8,1.00e-8,4.68e-7,2.45e-7,4.68e-5,8.32e-8,1.78e-6,1.62e-8,3.98e-8}};
+const AbundanceBase kAbundAspl = {{
+    1.00e0,8.51e-2,1.12e-11,2.40e-11,5.01e-10,2.69e-4,6.76e-5,4.90e-4,3.63e-8,8.51e-5,
+    1.74e-6,3.98e-5,2.82e-6,3.24e-5,2.57e-7,1.32e-5,3.16e-7,2.51e-6,1.07e-7,2.19e-6,
+    1.41e-9,8.91e-8,8.51e-9,4.37e-7,2.69e-7,3.16e-5,9.77e-8,1.66e-6,1.55e-8,3.63e-8}};
+const AbundanceBase kAbundFeld = {{
+    1.00e0,9.77e-2,1.26e-11,2.51e-11,3.55e-10,3.98e-4,1.00e-4,8.51e-4,3.63e-8,1.29e-4,
+    2.14e-6,3.80e-5,2.95e-6,3.55e-5,2.82e-7,1.62e-5,3.16e-7,4.47e-6,1.32e-7,2.29e-6,
+    1.48e-9,1.05e-7,1.00e-8,4.68e-7,2.45e-7,3.24e-5,8.32e-8,1.78e-6,1.62e-8,3.98e-8}};
+const AbundanceBase kAbundAneb = {{
+    1.00e0,8.01e-2,2.19e-9,2.87e-11,8.82e-10,4.45e-4,9.12e-5,7.39e-4,3.10e-8,1.38e-4,
+    2.10e-6,3.95e-5,3.12e-6,3.68e-5,3.82e-7,1.89e-5,1.93e-7,3.82e-6,1.39e-7,2.25e-6,
+    1.24e-9,8.82e-8,1.08e-8,4.93e-7,3.50e-7,3.31e-5,8.27e-8,1.81e-6,1.89e-8,4.63e-8}};
+const AbundanceBase kAbundGrsa = {{
+    1.00e0,8.51e-2,1.26e-11,2.51e-11,3.55e-10,3.31e-4,8.32e-5,6.76e-4,3.63e-8,1.20e-4,
+    2.14e-6,3.80e-5,2.95e-6,3.55e-5,2.82e-7,2.14e-5,3.16e-7,2.51e-6,1.32e-7,2.29e-6,
+    1.48e-9,1.05e-7,1.00e-8,4.68e-7,2.45e-7,3.16e-5,8.32e-8,1.78e-6,1.62e-8,3.98e-8}};
+const AbundanceBase kAbundWilm = {{
+    1.00e0,9.77e-2,0.0,0.0,0.0,2.40e-4,7.59e-5,4.90e-4,0.0,8.71e-5,
+    1.45e-6,2.51e-5,2.14e-6,1.86e-5,2.63e-7,1.23e-5,1.32e-7,2.57e-6,0.0,1.58e-6,
+    0.0,6.46e-8,0.0,3.24e-7,2.19e-7,2.69e-5,8.32e-8,1.12e-6,0.0,0.0}};
+const AbundanceBase kAbundLodd = {{
+    1.00e0,7.92e-2,1.90e-9,2.57e-11,6.03e-10,2.45e-4,6.76e-5,4.90e-4,2.88e-8,7.41e-5,
+    1.99e-6,3.55e-5,2.88e-6,3.47e-5,2.88e-7,1.55e-5,1.82e-7,3.55e-6,1.29e-7,2.19e-6,
+    1.17e-9,8.32e-8,1.00e-8,4.47e-7,3.16e-7,2.95e-5,8.13e-8,1.66e-6,1.82e-8,4.27e-8}};
+const AbundanceBase kAbundLpgp = {{
+    1.00e0,8.41e-2,1.26e-11,2.40e-11,5.01e-10,2.45e-4,7.24e-5,5.37e-4,3.63e-8,1.12e-4,
+    2.00e-6,3.47e-5,2.95e-6,3.31e-5,2.88e-7,1.38e-5,3.16e-7,3.16e-6,1.32e-7,2.14e-6,
+    1.26e-9,7.94e-8,1.00e-8,4.37e-7,2.34e-7,2.82e-5,8.32e-8,1.70e-6,1.62e-8,4.17e-8}};
+const AbundanceBase kAbundLpgs = {{
+    1.00e0,9.69e-2,2.15e-9,2.36e-11,7.26e-10,2.78e-4,8.19e-5,6.06e-4,3.10e-8,1.27e-4,
+    2.23e-6,3.98e-5,3.27e-6,3.86e-5,3.20e-7,1.63e-5,2.00e-7,3.58e-6,1.45e-7,2.33e-6,
+    1.33e-9,9.54e-8,1.11e-8,5.06e-7,3.56e-7,3.27e-5,9.07e-8,1.89e-6,2.09e-8,5.02e-8}};
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Resolve the public abundtbl selector to the xstarsetup.f90 cosmic abundance base used before applying element multipliers.
+// Reference context: XSTAR Manual Ch. 4 abundance-table input; xstarsetup.f90 select case(abndtbl).
+// XSTAR-FUNCTION-COMMENT-END
+const AbundanceBase& source_abundance_base(std::string name) {
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    if (name.size() > 4u) name.resize(4u);
+    if (name == "angr") return kAbundAngr;
+    if (name == "aspl") return kAbundAspl;
+    if (name == "feld") return kAbundFeld;
+    if (name == "aneb") return kAbundAneb;
+    if (name == "grsa") return kAbundGrsa;
+    if (name == "wilm") return kAbundWilm;
+    if (name == "lodd") return kAbundLodd;
+    if (name == "lpgp" || name == "lgpp") return kAbundLpgp;
+    if (name == "lpgs" || name == "lgps") return kAbundLpgs;
+    if (!name.empty() && name != "xdef") {
+        std::cerr << "Invalid abundance table - using default (xdef): " << name << "\n";
+    }
+    return kAbundXdef;
+}
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Load file into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
@@ -707,8 +780,19 @@ int row_for_local(const Layout& l,int ion,int local) {
 // Purpose: Provide row for idest as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-int row_for_idest(const Layout& l,const Block& b,int idest) {
-    int row=b.compact_start+idest-1; if (row<1 || row>l.n_rows) throw std::runtime_error("destination outside compact element basis"); return row;
+int row_for_idest(const Layout&,const Block& b,int idest) {
+    // Source calc_hmc_ion keeps idest values relative to the current ion and
+    // calc_hmc_element shifts them by ipmat2.  The resulting matrix endpoint
+    // may lie above the element's active compact dimension; msolvelucy.f90
+    // aliases such endpoints to the final compact row with min(ipmat,indb).
+    // Preserve the raw shifted endpoint here and defer that aliasing to the
+    // matrix-consumption boundary instead of rejecting a source-valid record
+    // during ATDB lowering.
+    if (idest <= 0) throw std::runtime_error("ATDB destination endpoint is non-positive");
+    const long long row = static_cast<long long>(b.compact_start) + static_cast<long long>(idest) - 1LL;
+    if (row < 1LL || row > static_cast<long long>(std::numeric_limits<int>::max()))
+        throw std::runtime_error("ATDB destination endpoint overflows native compact index");
+    return static_cast<int>(row);
 }
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide row for source endpoint as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
@@ -802,6 +886,34 @@ const LevelValue* find_level(const Layout& l,int ion,int local) {
 // XSTAR-FUNCTION-COMMENT-END
 const LevelValue* find_snapshot(const Layout& l,int ion,int column) {
     auto ti=l.snapshots.find(ion); if (ti==l.snapshots.end()) return nullptr; auto vi=ti->second.find(column); return vi==ti->second.end()?nullptr:&vi->second;
+}
+
+// Resolve the mutable source leveltemp value visible to UCalc for an idest
+// column.  This is intentionally separate from the compact matrix row: source
+// idest values above the active matrix dimension may still refer to a live (or
+// retained) leveltemp column, while msolvelucy later clamps the matrix endpoint.
+const LevelValue* source_endpoint_level(const Layout& l,const Block& b,int idest) {
+    if (idest <= 0) return nullptr;
+    if (const auto* v=find_snapshot(l,b.ion_index,idest)) return v;
+    if (const auto* v=find_level(l,b.ion_index,idest)) return v;
+    return nullptr;
+}
+
+double source_endpoint_energy(const Layout& l,const Block& b,int idest,int raw_row) {
+    // Preserve every previously qualified in-bounds compact-row value exactly.
+    // Only an endpoint that lies beyond ipmat needs the retained source
+    // leveltemp workspace; msolvelucy aliases its matrix row later.
+    if (raw_row >= 1 && raw_row <= l.n_rows) return row_energy(l,raw_row);
+    if (const auto* v=source_endpoint_level(l,b,idest)) return v->energy;
+    const int clamped=std::min(std::max(raw_row,1),l.n_rows);
+    return row_energy(l,clamped);
+}
+
+double source_endpoint_weight(const Layout& l,const Block& b,int idest,int raw_row) {
+    if (raw_row >= 1 && raw_row <= l.n_rows) return row_weight(l,raw_row);
+    if (const auto* v=source_endpoint_level(l,b,idest)) return std::max(v->weight,1.0e-300);
+    const int clamped=std::min(std::max(raw_row,1),l.n_rows);
+    return row_weight(l,clamped);
 }
 
 // v82 patch 5.20.7: literal ucalc/deleafnd Type-50 damping ownership.
@@ -903,8 +1015,8 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     if (dt==1) { need(rr.size()>=2,"short payload"); out.reals.assign(rr.begin(),rr.begin()+2); out.ints.clear(); matrix=false; }
     else if (dt==2) { need(rr.size()>=4,"short payload"); lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==7) { need(rr.size()>=4,"short payload"); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); matrix=false; }
-    else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
-    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(source_endpoint_energy(l,b,(ii.size()>1?b.nlev+static_cast<int>(ii[1])-1:b.nlev),upper)-source_endpoint_energy(l,b,(ii.size()>1?static_cast<int>(ii[0]):1),lower)); }
+    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(source_endpoint_energy(l,b,b.nlev,upper)-source_endpoint_energy(l,b,id1,lower)); }
     else if (dt==30) { need(!ii.empty(),"missing nmax"); out.reals.clear(); out.ints={ii[0]}; matrix=false; }
     else if (dt==38 || dt==39) { need((dt==38&&rr.size()>=4)||(dt==39&&rr.size()>=2),"short payload"); out.ints.clear(); matrix=false; }
     // Types 50 and 91 are bound-bound radiative line records: wavelength and
@@ -946,7 +1058,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             energy=rr[0];
         }
         const double gglo=row_weight(l,row_for_local(l,ion,1));
-        const double ggup=source_zero?1.0:row_weight(l,upper);
+        const double ggup=source_zero?1.0:source_endpoint_weight(l,b,id2,upper);
         out.reals=rr;
         out.reals.push_back(gglo);
         out.reals.push_back(ggup);
@@ -999,15 +1111,15 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         auto set_pair = [&](int id1, int id2, bool enabled=true) {
             if (!enabled || id1 <= 0 || id2 <= 0) { lower=upper=0; matrix=false; return; }
             lower=row_for_idest(l,b,id1); upper=row_for_idest(l,b,id2);
-            energy=std::abs(row_energy(l,upper)-row_energy(l,lower));
+            energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower));
         };
         auto energy_order_pair = [&](int a, int c) {
             int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
-            if (row_energy(l,ra) <= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
+            if (source_endpoint_energy(l,b,a,ra) <= source_endpoint_energy(l,b,c,rc)) set_pair(a,c); else set_pair(c,a);
         };
         auto upper_lower_pair = [&](int a, int c) {
             int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
-            if (row_energy(l,ra) >= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
+            if (source_endpoint_energy(l,b,a,ra) >= source_endpoint_energy(l,b,c,rc)) set_pair(a,c); else set_pair(c,a);
         };
         switch (dt) {
             case 3: set_pair(1,1); break;
@@ -1074,7 +1186,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==74) { need(ii.size()>=2,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-2]);upper=row_for_local(l,ion,b.nlev);out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     // Type 86 stores K-vacancy Auger/radiative widths and level identities.
     // These widths contribute to damping/lifetime handling rather than a PI grid.
-    else if (dt==86) { need(ii.size()>=5&&rr.size()>=2,"short payload");int id1=ii[ii.size()-4],id2=b.nlev+ii[ii.size()-5]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);out.reals={rr[1]};out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==86) { need(ii.size()>=5&&rr.size()>=2,"short payload");int id1=ii[ii.size()-4],id2=b.nlev+ii[ii.size()-5]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);out.reals={rr[1]};out.ints.clear();energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower)); }
     // Type 88 stores the damped excess photoionization cross section to a
     // K-shell superlevel as energy/cross-section pairs; ucalc extrapolates from
     // the source threshold and applies the inner-shell photoabsorption ownership.
@@ -1094,7 +1206,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         out.ints={static_cast<std::int64_t>(rr.size()/2),owner,local,calc_emis_idest2};energy=threshold; }
     // Type 95 is the level collisional-ionization fit: threshold energy,
     // temperature scale, and tabulated effective-collision-strength values.
-    else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);}else lower=upper=row_for_local(l,ion,1);out.ints.push_back(row_for_local(l,ion,b.nlev));energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower));}else {lower=upper=row_for_local(l,ion,1);energy=0.0;}out.ints.push_back(row_for_local(l,ion,b.nlev)); }
     // Type 99 is the newer superlevel recombination/photoionization table.
     // Like Type 70 it combines density/temperature recombination data with a
     // photoionization grid, but Appendix A records the updated coefficient layout.
@@ -1185,7 +1297,12 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     for(std::size_t i=0;i<physical.size()&&i<30;++i) if(physical[i]>0) p.abundances_by_z[static_cast<int>(i)+1]=physical[i];
     if(p.abundances_by_z.empty()) {
         static const std::array<const char*,30> keys={{"habund","heabund","liabund","beabund","babund","cabund","nabund","oabund","fabund","neabund","naabund","mgabund","alabund","siabund","pabund","sabund","clabund","arabund","kabund","caabund","scabund","tiabund","vabund","crabund","mnabund","feabund","coabund","niabund","cuabund","znabund"}};
-        for(int z=1;z<=30;++z){double a=json_number(p.raw_json,keys[static_cast<std::size_t>(z-1)],0.0);if(a>0)p.abundances_by_z[z]=a;}
+        const auto& base = source_abundance_base(json_string(p.raw_json,"abundtbl","xdef"));
+        for(int z=1;z<=30;++z){
+            const double multiplier=json_number(p.raw_json,keys[static_cast<std::size_t>(z-1)],0.0);
+            const double a=multiplier*base[static_cast<std::size_t>(z-1)];
+            if(a>0)p.abundances_by_z[z]=a;
+        }
     }
     if(p.abundances_by_z.empty()) throw std::runtime_error("parameters contain no positive physical abundances");
     return p;

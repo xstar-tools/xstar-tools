@@ -10694,10 +10694,22 @@ Result write_historical_science_products(
     std::filesystem::create_directories(output_dir);
     const auto elements = read_elements(state, program_dir);
     const auto rows = read_rows(state, program_dir);
-    write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
-    write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
-    write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
-    write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+
+    // Source contract: xstar.f90 opens and writes fstepr/fstepr2/fstepr3/
+    // fstepr4 detail products only when lwrite>0 or a multipass calculation
+    // (npass>1) requires the detail stream.  The XSTAR Manual Chapter 5 output
+    // descriptions summarize the common npass=1 case as "only produced for
+    // lwrite=1".  Preserve the literal source condition here so native
+    // zone-cpp/zone-all/xstar-cpp publication matches the public parameter.
+    const int lwrite = static_cast<int>(std::llround(parameter_value(state, "lwrite", 0.0)));
+    const int npass = static_cast<int>(std::llround(parameter_value(state, "npass", 1.0)));
+    const bool write_detail_products = (lwrite > 0) || (npass > 1);
+    if (write_detail_products) {
+        write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
+        write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
+        write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
+        write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+    }
     write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
     state.xout_lines1_computed_from_native_state = true;
     write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows);
@@ -10710,7 +10722,7 @@ Result write_historical_science_products(
     state.xout_abund1_computed_from_native_state = false;
 
     Result result;
-    result.files_written = 8;
+    result.files_written = write_detail_products ? 8u : 4u;
     result.schema_complete = true;
     result.computed_from_native_state = true;
     result.continuum_and_spectrum_paths_separate = true;
@@ -10720,8 +10732,12 @@ Result write_historical_science_products(
     result.all_fits_products_byte_exact = false;
     result.benchmark_archive_materialized = false;
     result.generalized_product_reduction_qualified = false;
-    result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
-        "xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
+    if (write_detail_products) {
+        result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
+            "xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
+    } else {
+        result.filenames = {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
+    }
     return result;
 }
 

@@ -4223,6 +4223,11 @@ const TrajectoryRow* find_reference_row(
     return nullptr;
 }
 
+// Forward declaration: publication-count contract helper is defined with the
+// other retained-product helpers below and is used by the fixed-DSEC
+// qualification path as well as the public standalone publisher.
+std::size_t required_native_fits_products(const xstar_run_state::ProductWritingState& product);
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement command run fixed dsec in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
@@ -5029,8 +5034,7 @@ int command_run_fixed_dsec(const Options& options) {
             << (controller_qualification_complete ? "ACCEPT" : "REJECT") << "\",\n"
             << "  \"production_promotion_ready\": false\n}\n";
 
-    const bool abundance_enabled = xstar_science_fits::abundance_product_enabled();
-    const std::size_t required_science_files = abundance_enabled ? 9u : 8u;
+    const std::size_t required_science_files = required_native_fits_products(product_writing_state);
     const bool accepted = controller_qualification_complete && cumulative.calls == 61 &&
         cumulative.records_unsupported == 0 && cumulative.python_callbacks == 0 &&
         cumulative.records_evaluated == 61 * info.record_count && cumulative.elements_solved == 61 * info.element_count &&
@@ -10225,6 +10229,37 @@ std::size_t count_native_fits_products(const std::filesystem::path& output) {
     return count;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Read one public XSTAR control value from retained ProductWritingState parameter bits without changing the scientific state.
+// Reference context: XSTAR Manual Ch. 4 public controls; xstar.f90 publication switches are evaluated after the physical solution.
+// XSTAR-FUNCTION-COMMENT-END
+double retained_public_parameter_number(
+    const xstar_run_state::ProductWritingState& product,
+    const std::string& name,
+    double fallback) {
+    for (const auto& row : product.parameter_rows) {
+        if (row.parameter != name) continue;
+        float value = 0.0f;
+        static_assert(sizeof(value) == sizeof(row.value_bits));
+        const std::uint32_t bits = row.value_bits;
+        std::memcpy(&value, &bits, sizeof(value));
+        if (std::isfinite(value)) return static_cast<double>(value);
+    }
+    return fallback;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the number of FITS products required by the literal XSTAR lwrite/npass publication contract for a retained native run.
+// Reference context: XSTAR Manual Ch. 5 output descriptions and xstar.f90, where detail FITS are emitted for lwrite>0 or npass>1.
+// XSTAR-FUNCTION-COMMENT-END
+std::size_t required_native_fits_products(const xstar_run_state::ProductWritingState& product) {
+    const int lwrite = static_cast<int>(std::llround(retained_public_parameter_number(product, "lwrite", 0.0)));
+    const int npass = static_cast<int>(std::llround(retained_public_parameter_number(product, "npass", 1.0)));
+    const bool detail = (lwrite > 0) || (npass > 1);
+    const std::size_t public_non_abundance = detail ? 8u : 4u;
+    return public_non_abundance + (xstar_science_fits::abundance_product_enabled() ? 1u : 0u);
+}
+
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement fill retained product surface arrays in the standalone controller/front-end workflow without duplicating the scientific kernels.
@@ -10593,7 +10628,7 @@ ProductPublicationResultV172524 publish_full61_products(
         result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
             regular_file_size_or_zero(output / "xout_step.log") > 0;
         result.step_log_lines = step.lines_written;
-        result.ok = result.fits_count == 9 && result.step_log_written;
+        result.ok = result.fits_count == required_native_fits_products(product) && result.step_log_written;
         std::ofstream manifest(publication_manifest);
         manifest << std::boolalpha
                  << "{\n"
@@ -10914,7 +10949,7 @@ ProductPublicationResultV172524 publish_true_production_products(
         result.fits_count = count_native_fits_products(output);
         result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
             regular_file_size_or_zero(output / "xout_step.log") > 0;
-        result.ok = result.fits_count == 9 && result.step_log_written;
+        result.ok = result.fits_count == required_native_fits_products(product) && result.step_log_written;
         if (!result.ok) throw std::runtime_error("true production did not write all ten public products");
         std::set<std::string> allowed = {
             "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
@@ -18908,8 +18943,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
         const std::size_t fits_count = count_native_fits_products(output);
         const bool step_ok = std::filesystem::is_regular_file(output / "xout_step.log") &&
             regular_file_size_or_zero(output / "xout_step.log") > 0;
-        if (fits_count != 9 || !step_ok || step.lines_written == 0) {
-            throw std::runtime_error("publication did not create all ten public products");
+        const std::size_t required_fits_count = required_native_fits_products(product);
+        if (fits_count != required_fits_count || !step_ok || step.lines_written == 0) {
+            throw std::runtime_error("publication did not create the XSTAR control-required public products");
         }
         if (!artifacts.any()) {
             const std::set<std::string> allowed = {
@@ -18949,7 +18985,8 @@ int command_run_standalone_production(const Options& options, const std::filesys
                   << prefix << "QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=ACCEPT\n"
                   << prefix << "CONTROLLER_EVALUATIONS=" << evaluations << "\n"
                   << prefix << "CONTROLLER_SECONDS=" << std::fixed << std::setprecision(6) << controller_seconds << "\n"
-                  << prefix << "FITS_PRODUCTS_WRITTEN=9\n"
+                  << prefix << "FITS_PRODUCTS_WRITTEN=" << fits_count << "\n"
+                  << prefix << "FITS_PRODUCTS_REQUIRED=" << required_fits_count << "\n"
                   << prefix << "XOUT_STEP_LOG_WRITTEN=1\n"
                   << prefix << "PRODUCTION_PROMOTION=ACCEPT\n"
                   << prefix << "RESULT=ACCEPT_PRODUCTION_BASELINE\n";

@@ -1,3 +1,20 @@
+// XSTAR2XSPEC table-writer source concordance
+// -------------------------------------------
+// This file implements the native XSPEC table-FITS assembly stage of the
+// XSTAR2XSPEC workflow described in Chapter 6 of the XSTAR Manual.  It was
+// developed by direct comparison with the canonical XSTAR sources
+// src/xstar2table/xstar2table.c and xstarlib/src/xstartablelib.c.  Those files
+// define the PARAMETERS, ENERGIES, and SPECTRA extensions, interpolated versus
+// additive parameter ordering, PARAMVAL/INTPSPEC/ADDSPnnn placement, ADDMODEL
+// semantics, LASTSPEC sequencing, and the loopcontrol-to-row/column mapping.
+//
+// This code intentionally reproduces those table-model semantics while using
+// CFITSIO directly and adding one fail-closed improvement: every spectrum after
+// the first must have exactly the same selected energy grid.  It does not alter
+// XSTAR physics; it serializes already-computed xout_spect1.fits products.  The
+// 0.6.81.1 canonical MPI_XSTAR 2x3 fixture requires ENERG_LO/HI, PARAMVAL, and
+// AIN/AOUT/MTABLE/ETABLE spectral payloads to be bit-exact to XSTAR 2.59g.
+
 #include "xstar_xspec_table_internal.hpp"
 #include "xstar_xspec_table.h"
 
@@ -23,6 +40,7 @@ namespace fs = std::filesystem;
 namespace xstar_xspec {
 namespace {
 
+// Trim whitespace from one metadata-file token.
 std::string trim(std::string value) {
     const auto first = value.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return {};
@@ -30,6 +48,7 @@ std::string trim(std::string value) {
     return value.substr(first, last - first + 1);
 }
 
+// Split a metadata-field list while applying the same whitespace normalization.
 std::vector<std::string> split(const std::string &value, char delim) {
     std::vector<std::string> out;
     std::stringstream ss(value);
@@ -38,6 +57,7 @@ std::vector<std::string> split(const std::string &value, char delim) {
     return out;
 }
 
+// Parse one metadata scalar as float32, matching the historical table columns.
 float as_float(const std::string &text, const char *field) {
     char *end = nullptr;
     errno = 0;
@@ -48,6 +68,7 @@ float as_float(const std::string &text, const char *field) {
     return value;
 }
 
+// Parse a bounded native integer from the characterization metadata format.
 int as_int(const std::string &text, const char *field) {
     char *end = nullptr;
     errno = 0;
@@ -58,18 +79,21 @@ int as_int(const std::string &text, const char *field) {
     return static_cast<int>(value);
 }
 
+// Convert a CFITSIO status to a readable exception message.
 std::string fits_error(int status) {
     char text[FLEN_STATUS] = {0};
     fits_get_errstatus(status, text);
     return std::string(text);
 }
 
+// Raise on a failed CFITSIO operation while preserving operation context.
 void fits_check(int status, const std::string &what) {
     if (status != 0) throw std::runtime_error(what + ": " + fits_error(status));
 }
 
 struct OpenFits {
     fitsfile *ptr = nullptr;
+    // Close a CFITSIO handle on all normal and exceptional exits.
     ~OpenFits() {
         if (ptr != nullptr) {
             int status = 0;
@@ -78,6 +102,8 @@ struct OpenFits {
     }
 };
 
+// Return XSPEC parameters in canonical xstartablelib order: all interpolated
+// parameters first, then all additive parameters.
 std::vector<Parameter> ordered_parameters(const Config &config) {
     std::vector<Parameter> out;
     for (const auto &p : config.parameters) if (p.kind == ParameterKind::interpolated) out.push_back(p);
@@ -85,18 +111,22 @@ std::vector<Parameter> ordered_parameters(const Config &config) {
     return out;
 }
 
+// Count interpolated parameters written to NINTPARM and PARAMVAL.
 size_t nint(const Config &config) {
     return static_cast<size_t>(std::count_if(config.parameters.begin(), config.parameters.end(), [](const Parameter &p) {
         return p.kind == ParameterKind::interpolated;
     }));
 }
 
+// Count additive parameters written to NADDPARM and ADDSPnnn columns.
 size_t nadd(const Config &config) {
     return static_cast<size_t>(std::count_if(config.parameters.begin(), config.parameters.end(), [](const Parameter &p) {
         return p.kind == ParameterKind::additive;
     }));
 }
 
+// Compute the Cartesian product of interpolated VALUE axes; canonical
+// XSTAR2XSPEC requires one base spectrum row for each such combination.
 size_t ncombos(const Config &config) {
     size_t count = 1;
     for (const auto &p : config.parameters) {
@@ -109,6 +139,8 @@ size_t ncombos(const Config &config) {
     return count;
 }
 
+// Create the primary HDU and PARAMETERS extension using the OGIP/XSPEC table
+// metadata emitted by canonical Create_FITS_ParmTable/xstartablelib routines.
 void write_primary_and_parameters(const std::string &path, const Config &config, bool additive_model) {
     OpenFits file;
     int status = 0;
@@ -231,6 +263,8 @@ void write_primary_and_parameters(const std::string &path, const Config &config,
     fits_check(status, "write PARAMETERS keywords");
 }
 
+// Append the canonical ENERGIES and SPECTRA extensions.  The SPECTRA schema
+// contains PARAMVAL, INTPSPEC, and one ADDSPnnn vector per additive parameter.
 void write_energies_and_spectra_headers(fitsfile *fptr, const std::vector<float> &elow_kev, const std::vector<float> &ehigh_kev,
                                         size_t combos, size_t nint_value, size_t nadd_value, bool additive_model) {
     int status = 0;
@@ -272,6 +306,7 @@ void write_energies_and_spectra_headers(fitsfile *fptr, const std::vector<float>
     fits_check(status, "write SPECTRA header");
 }
 
+// Open one partially created table and append its energy/spectrum extensions.
 void append_headers(const std::string &path, const std::vector<float> &elow_kev, const std::vector<float> &ehigh_kev,
                     size_t combos, size_t nint_value, size_t nadd_value, bool additive_model) {
     OpenFits file;
@@ -280,6 +315,8 @@ void append_headers(const std::string &path, const std::vector<float> &elow_kev,
     write_energies_and_spectra_headers(file.ptr, elow_kev, ehigh_kev, combos, nint_value, nadd_value, additive_model);
 }
 
+// Insert one converted spectrum at the canonical loopcontrol-derived row/column.
+// 0.6.81/0.6.82 compatibility retains historical LASTSPEC sequential ordering.
 void write_spectrum_row(const std::string &path, size_t loopcontrol, size_t row, size_t column,
                         const std::vector<float> &paramvals, const std::vector<float> &spectrum) {
     OpenFits file;
@@ -301,6 +338,7 @@ void write_spectrum_row(const std::string &path, size_t loopcontrol, size_t row,
     fits_check(status, "update LASTSPEC");
 }
 
+// Read one XSTAR run parameter through the shared xout_spect1 PARAMETERS reader.
 float read_param(const std::string &path, const std::string &name) {
     float value = 0.0f;
     char message[512] = {0};
@@ -312,6 +350,8 @@ float read_param(const std::string &path, const std::string &name) {
 
 }  // namespace
 
+// Parse the 0.6.81 characterization metadata representation of the table grid.
+// This temporary compatibility format is replaced later by native xstinitable.
 Config parse_config(const std::string &path) {
     std::ifstream in(path);
     if (!in) throw std::runtime_error("cannot open metadata config: " + path);
@@ -375,6 +415,10 @@ Config parse_config(const std::string &path) {
     return config;
 }
 
+// Reproduce the canonical xstar2table assembly loop for the four XSTAR2XSPEC
+// outputs.  Grid rows/columns use (loopcontrol-1)/(NADDPARM+1) and modulo,
+// exactly as in xstar2table.c; all spectra are additionally required to share
+// the first spectrum's selected energy grid.
 void build_tables(const Config &config, const std::vector<std::string> &spectra, const std::string &output_dir) {
     const size_t nint_value = nint(config);
     const size_t nadd_value = nadd(config);

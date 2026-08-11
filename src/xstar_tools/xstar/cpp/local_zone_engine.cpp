@@ -3985,9 +3985,12 @@ void validate_program(Program& p) {
         if (r.next_index < -1 || r.next_index >= static_cast<int>(p.records.size())) throw std::runtime_error("record next_index out of range");
         if (r.real_offset + r.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
         if (r.int_offset + r.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
-        const auto& e = p.elements[static_cast<std::size_t>(r.element_index)];
         if (r.matrix_enabled) {
-            if (r.lower_row < 1 || r.lower_row > e.n_rows || r.upper_row < 1 || r.upper_row > e.n_rows) throw std::runtime_error("record endpoint out of compact element range");
+            // Source calc_hmc_element may retain raw idest endpoints above the
+            // compact element dimension.  msolvelucy.f90 applies
+            // min(ipmat,indb(...)) when the matrix is consumed, so only
+            // non-positive endpoints are invalid at program-load time.
+            if (r.lower_row < 1 || r.upper_row < 1) throw std::runtime_error("record endpoint is non-positive");
         } else if (r.lower_row != 0 || r.upper_row != 0) {
             throw std::runtime_error("scalar-only record endpoints must be zero");
         }
@@ -6616,8 +6619,12 @@ EvaluatedRecord evaluate_record(
     const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
     const auto* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
     const ElementRow scalar_dummy{};
-    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
-    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
+    // Preserve source raw idest values on the record, but evaluate any compact
+    // row fallback through the same terminal-row alias used by msolvelucy.
+    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
+    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
     const double delta_ev = record.line_energy_ev > 0.0 ? record.line_energy_ev : (record.matrix_enabled ? std::abs(upper.energy_ev - lower.energy_ev) : 0.0);
     const double ne = rate_context.ne;
     const double t4 = rate_context.t4;
@@ -8783,8 +8790,12 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     if (record.real_offset + record.real_count > program.reals.size()) return shadow;
     const double* r = program.reals.data() + record.real_offset;
     const ElementRow scalar_dummy{};
-    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
-    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
+    // Preserve source raw idest values on the record, but evaluate any compact
+    // row fallback through the same terminal-row alias used by msolvelucy.
+    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
+    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
     Type53RecordContext record_context = evaluated.bound_free_record_context_v064895;
     const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
     if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
@@ -9185,8 +9196,8 @@ void apply_magnesium_type99_persistent_leveltemp(
                 !(resolved.threshold_ev > 0.0)) {
                 throw std::runtime_error("Mg Type-99 resolved energy/weight context is invalid");
             }
-            const ElementRow& lower = row_at(element, record.lower_row);
-            const ElementRow& upper = row_at(element, record.upper_row);
+            const ElementRow& lower = row_at(element, std::min(record.lower_row, element.n_rows));
+            const ElementRow& upper = row_at(element, std::min(record.upper_row, element.n_rows));
             xstar_element_contribution_v1 corrected = contribution;
             Type99SourceShadow corrected_shadow{};
             if (!evaluate_type99_source_faithful(

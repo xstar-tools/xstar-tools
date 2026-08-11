@@ -1,3 +1,24 @@
+// XSTAR2XSPEC source concordance
+// --------------------------------
+// This translation unit is the native xstar_tools compatibility port of the
+// spectrum-reading and spectral-transformation part of the XSTAR2XSPEC
+// workflow described in Chapter 6 of the XSTAR Manual.  In canonical XSTAR,
+// the Perl xstar2xspec driver asks xstinitable to define a model grid, runs
+// XSTAR at each grid point, and then calls src/xstar2table/xstar2table.c to
+// read each xout_spect1.fits and convert its XSTAR_SPECTRA arrays into XSPEC
+// additive, multiplicative, and exponential table spectra.
+//
+// The implementation below was developed by direct source concordance with:
+//   * XSTAR src/xstar2table/xstar2table.c
+//   * XSTAR xstarlib/src/xstartablelib.c
+//   * XSTAR Manual, Chapter 6, ``XSTAR2XSPEC``
+// It is a compatibility/serialization layer, not a new XSTAR scientific
+// kernel.  In particular it deliberately preserves the historical TFLOAT
+// reads, SliceEnergySpectra edge convention, 8.356e-7 normalization arithmetic,
+// zero-incident MTABLE behavior, and 1e-32 ETABLE transmission floor.  The
+// 0.6.81.1 canonical 2x3 MPI_XSTAR regression requires the resulting energy
+// bins and all four table-model spectral arrays to be bit-exact to XSTAR 2.59g.
+
 #include "xstar_xspec_table.h"
 
 #include <fitsio.h>
@@ -21,6 +42,7 @@ struct xstar_xspec_spectrum_handle_v1 {
 
 namespace {
 
+// Copy a diagnostic/status string into the caller-owned C ABI message buffer.
 void set_message(char *message, size_t message_size, const std::string &text) {
     if (message == nullptr || message_size == 0) {
         return;
@@ -28,12 +50,15 @@ void set_message(char *message, size_t message_size, const std::string &text) {
     std::snprintf(message, message_size, "%s", text.c_str());
 }
 
+// Translate a CFITSIO status code into the text used by native API errors.
 std::string fits_error(int status) {
     char text[FLEN_STATUS] = {0};
     fits_get_errstatus(status, text);
     return std::string(text);
 }
 
+// Validate an in-memory XSTAR spectrum view before applying source-derived
+// SliceEnergySpectra or xstar2table transforms.
 void require_view(const xstar_xspec_spectrum_v1 *spectrum) {
     if (spectrum == nullptr || spectrum->struct_size < sizeof(*spectrum) ||
         spectrum->abi_version != XSTAR_XSPEC_TABLE_ABI_VERSION ||
@@ -44,6 +69,8 @@ void require_view(const xstar_xspec_spectrum_v1 *spectrum) {
     }
 }
 
+// Read one XSTAR_SPECTRA column as TFLOAT.  The float32 read is intentional:
+// canonical xstar2table.c reads these five columns as REAL*4/float values.
 void read_float_column(fitsfile *fptr, const char *name, long nrows, std::vector<float> &out) {
     int status = 0;
     int colnum = 0;
@@ -61,6 +88,9 @@ void read_float_column(fitsfile *fptr, const char *name, long nrows, std::vector
 
 }  // namespace
 
+// Open canonical xout_spect1.fits, locate XSTAR_SPECTRA, and expose the five
+// arrays consumed by xstar2table.c: energy, incident, transmitted, inward
+// emission, and outward emission.  Ownership remains with the returned handle.
 extern "C" int xstar_xspec_spectrum_open_v1(
     const char *path,
     xstar_xspec_spectrum_handle_v1 **handle,
@@ -126,10 +156,14 @@ extern "C" int xstar_xspec_spectrum_open_v1(
     }
 }
 
+// Release storage created by xstar_xspec_spectrum_open_v1.
 extern "C" void xstar_xspec_spectrum_close_v1(xstar_xspec_spectrum_handle_v1 *handle) {
     delete handle;
 }
 
+// Reproduce canonical xstar2table.c SliceEnergySpectra selection for ELOW/EHIGH.
+// The historical high index denotes an energy edge, so the number of output
+// intervals is high-low rather than an inclusive high-low+1 count.
 extern "C" int xstar_xspec_slice_energy_v1(
     const xstar_xspec_spectrum_v1 *spectrum,
     float elow_ev,
@@ -217,6 +251,9 @@ extern "C" int xstar_xspec_slice_energy_v1(
     }
 }
 
+// Apply the four canonical xstar2table.c spectral transforms for a selected
+// energy range: AIN, AOUT, MTABLE, and ETABLE.  The double 8.356e-7 literal
+// and float32 destination projection intentionally match the historical C code.
 extern "C" int xstar_xspec_transform_v1(
     const xstar_xspec_spectrum_v1 *spectrum,
     xstar_xspec_slice_v1 slice,
@@ -265,6 +302,9 @@ extern "C" int xstar_xspec_transform_v1(
     }
 }
 
+// Read a named XSTAR run parameter from the PARAMETERS extension of an
+// ordinary xout_spect1.fits.  The table writer uses this for rlrad38,
+// loopcontrol, and each interpolated/additive grid parameter.
 extern "C" int xstar_xspec_read_parameter_v1(
     const char *path,
     const char *name,
