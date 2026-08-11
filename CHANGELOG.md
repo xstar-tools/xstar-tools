@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.18 - 2026-08-11
+
+- Fix the 0.6.82.17 publication regression that aborted after the final physical STEP row with `missing terminal boundary for patch5.20.14.5 final writer recompute`.
+- Keep the 0.6.82.17 memory reduction: the temporary terminal `FixedDsecSnapshot` is still released after transfer.
+- Rebind the final writer recompute to the canonical retained terminal boundary in `whole.radial_zones.back().accepted_controller.evaluation` and its exact `source_workspace`, including retained continuum `tau_in/tau_out`.
+- No science-kernel, DSEC, atomic-rate, science-revision, or ABI change. `ntotit` remains diagnostic-only; STEP/FITS material acceptance remains <1% (percentage STEP fields <1 percentage point).
+
 ## 0.6.82.17 - 2026-08-11
 
 - Fix the generic standalone end-of-run memory spike that caused long low-ionization `xstar-cpp` runs to be SIGKILLed with return code 137 after the final physical STEP row but before `final print`, `xout_step.log`, and FITS publication. This is a production memory/ownership correction; it does not change the scientific kernels, DSEC arithmetic, accepted radial states, or source constants.

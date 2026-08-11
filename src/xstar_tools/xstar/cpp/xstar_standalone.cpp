@@ -18188,10 +18188,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // opacity/luminosity arrays from the completed third transport
             // interval while using this recompute's local zrems/opakc state.
             const double final_writer_delr = static_cast<double>(static_cast<float>(1.0e-15));
-            if (!terminal_transport_boundary_v82_patch520144) {
-                throw std::runtime_error("missing terminal boundary for patch5.20.14.5 final writer recompute");
+            // 0.6.82.18: generic production releases the temporary terminal
+            // FixedDsecSnapshot after terminal-zone transfer to avoid the end-of-run
+            // memory spike fixed in 0.6.82.17.  The exact terminal source
+            // workspace is already owned canonically by radial_zones.back();
+            // final publication must consume that retained boundary instead
+            // of requiring the released duplicate snapshot.
+            if (whole.radial_zones.empty()) {
+                throw std::runtime_error("missing retained terminal radial boundary for final writer recompute");
             }
-            const auto& terminal_writer_state = *terminal_transport_boundary_v82_patch520144;
+            const auto& terminal_writer_evaluation =
+                whole.radial_zones.back().accepted_controller.evaluation;
+            const auto& terminal_writer_state = terminal_writer_evaluation.source_workspace;
             // The source post-loop HEATT starts from the final transported
             // zremso/zrems state.  The fixed-state evaluator above does not own
             // those caller arrays.  Seed both retained continuum workspaces
@@ -18213,8 +18221,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             final_pprint.elumab = terminal_writer_state.elumab;
             final_pprint.dpthc = terminal_writer_state.dpthc;
             final_pprint.dpthcont = terminal_writer_state.dpthcont;
-            final_pprint.continuum_tau_in = terminal_writer_state.continuum_tau_in;
-            final_pprint.continuum_tau_out = terminal_writer_state.continuum_tau_out;
+            final_pprint.continuum_tau_in = terminal_writer_evaluation.continuum_tau_in;
+            final_pprint.continuum_tau_out = terminal_writer_evaluation.continuum_tau_out;
             if (final_pprint_data.accumulated_zremsz.size() == final_pprint.radiation_energy_ev.size()) {
                 final_pprint.zremsz = final_pprint_data.accumulated_zremsz;
             } else if (terminal_writer_state.zremsz.size() == final_pprint.radiation_energy_ev.size()) {

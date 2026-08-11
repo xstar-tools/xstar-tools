@@ -284,3 +284,10 @@ include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_17.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_17.py
 include tests/test_standalone_publication_memory_0_6_82_17.py
 include docs/developer/standalone_publication_memory_0_6_82_17.md
+
+# 0.6.82.18 terminal writer retained-boundary ownership repair
+include qualification/standalone_terminal_writer_0_6_82_18.json
+include tools/qualification/check_standalone_terminal_writer_0_6_82_18.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_18.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_18.py
+include tests/test_standalone_terminal_writer_0_6_82_18.py

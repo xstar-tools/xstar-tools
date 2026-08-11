@@ -2,7 +2,9 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.17`  
+**Distribution:** `0.6.82.18`  
+
+**0.6.82.18 terminal-writer ownership repair:** `0.6.82.17` successfully removed the end-of-run duplicate-history memory spike, but released the temporary terminal `FixedDsecSnapshot` before the legacy patch5.20.14.5 final writer recompute consumed it. `0.6.82.18` keeps that snapshot released and reads the exact terminal publication workspace from the already-retained canonical `radial_zones.back().accepted_controller.evaluation`. This is publication ownership only; science kernels, frozen science revision, and ABIs are unchanged.
 
 
 **0.6.82.17 publication-memory completion and qualification policy:** generic native production now releases non-publication DSEC histories and transferred accepted-boundary snapshots instead of retaining/deep-copying the complete low-`xi` controller history at end of run. `WholeRunAccumulatedState` is moved into product-writing state, removing the memory spike that caused return code 137 after the final physical STEP row but before `xout_step.log`/FITS publication. This release intentionally makes no science-kernel change. For the current broad FORTRAN campaign, `ntotit` is diagnostic-only; material STEP/FITS quantities must remain within the established `<1%` criterion, and percentage-valued STEP columns use `<1` absolute percentage point. The exact 0.6.82.16 `rlogxi=-3` host run produced all 77 physical rows with max printed `h-c` difference 0.10 percentage point and only three isolated `ntotit` differences before the publication SIGKILL. FITS closure is pending the 0.6.82.17 host run. Science revision and public ABIs remain frozen.
