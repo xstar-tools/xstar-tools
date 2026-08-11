@@ -7911,18 +7911,28 @@ EvaluatedRecord evaluate_record(
             // was invisible at cfrac=1 because the pumping channel is zero.
             const double pumping_energy_ev = endpoint_energy_ev;
             if (!high_wavelength_zero && cover != 0.0) {
-                if (input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3) {
+                // FORTRAN xstarcalc calls calc_hmc_all with the fixed 999-bin
+                // epim/bremsam workspace.  Type-50 DSEC pumping must therefore
+                // sample the caller-owned reduced calc_hmc_input, not the full
+                // call-start radiation arrays held by input.
+                if (calc_hmc_input.dsec_radiation_energy_ev && calc_hmc_input.dsec_bremsa &&
+                    calc_hmc_input.dsec_radiation_bin_count >= 3) {
                     nb1_one_based = type99_nbinc_fortran_value(
-                        pumping_energy_ev, input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
-                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <= input.dsec_radiation_bin_count) {
-                        bremsa_nb1 = input.dsec_bremsa[static_cast<std::size_t>(nb1_one_based - 1)];
+                        pumping_energy_ev, calc_hmc_input.dsec_radiation_energy_ev,
+                        calc_hmc_input.dsec_radiation_bin_count);
+                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <=
+                        calc_hmc_input.dsec_radiation_bin_count) {
+                        bremsa_nb1 = calc_hmc_input.dsec_bremsa[static_cast<std::size_t>(nb1_one_based - 1)];
                         used_dsec_radiation = true;
                     }
-                } else if (input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count >= 3) {
+                } else if (calc_hmc_input.radiation_energy_ev && calc_hmc_input.radiation_flux &&
+                           calc_hmc_input.radiation_bin_count >= 3) {
                     nb1_one_based = type99_nbinc_fortran_value(
-                        pumping_energy_ev, input.radiation_energy_ev, input.radiation_bin_count);
-                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <= input.radiation_bin_count) {
-                        bremsa_nb1 = input.radiation_flux[static_cast<std::size_t>(nb1_one_based - 1)];
+                        pumping_energy_ev, calc_hmc_input.radiation_energy_ev,
+                        calc_hmc_input.radiation_bin_count);
+                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <=
+                        calc_hmc_input.radiation_bin_count) {
+                        bremsa_nb1 = calc_hmc_input.radiation_flux[static_cast<std::size_t>(nb1_one_based - 1)];
                     }
                 }
                 photo = 0.02655 * oscillator * stored_wavelength_a * 1.0e-8 *
@@ -7939,20 +7949,26 @@ EvaluatedRecord evaluate_record(
             int full_nb1_one_based = 0;
             double full_photo = photo;
             bool full_grid_available = false;
+            // calc_emis_ion calls ucalc again on the live transported full
+            // epi/bremsa pair.  input.radiation_flux is the incident/controller
+            // spectrum and is not the FORTRAN bremsa owner at this stage.
+            const double* full_source_energy_ev = rate_context.type59_full_source_energy_ev;
+            const double* full_source_bremsa = rate_context.type59_full_source_bremsa;
+            const std::size_t full_source_count = rate_context.type59_full_source_count;
             if (!high_wavelength_zero && cover != 0.0 &&
-                input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count >= 3) {
+                full_source_energy_ev && full_source_bremsa && full_source_count >= 3) {
                 full_nb1_one_based = type99_nbinc_fortran_value(
-                    pumping_energy_ev, input.radiation_energy_ev, input.radiation_bin_count);
+                    pumping_energy_ev, full_source_energy_ev, full_source_count);
                 if (full_nb1_one_based > 0 &&
-                    static_cast<std::size_t>(full_nb1_one_based) <= input.radiation_bin_count) {
-                    full_bremsa_nb1 = input.radiation_flux[static_cast<std::size_t>(full_nb1_one_based - 1)];
+                    static_cast<std::size_t>(full_nb1_one_based) <= full_source_count) {
+                    full_bremsa_nb1 = full_source_bremsa[static_cast<std::size_t>(full_nb1_one_based - 1)];
                     full_photo = 0.02655 * oscillator * stored_wavelength_a * 1.0e-8 *
                         full_bremsa_nb1 / 3.0e10 * cover;
                     full_grid_available = true;
                 }
             } else if (cover == 0.0 || high_wavelength_zero) {
                 full_photo = 0.0;
-                full_grid_available = input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count >= 3;
+                full_grid_available = full_source_energy_ev && full_source_bremsa && full_source_count >= 3;
             }
 
             // Literal ucalc.f90 Type-50 post-swap answer convention.

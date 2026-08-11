@@ -12231,9 +12231,10 @@ void fill_standalone_input(
                   << "V0648117_CPP_ZONE_CALL1_EVAL1_XH0=" << input.neutral_h_density_cm3 << "\n"
                   << "V0648117_CPP_ZONE_CALL1_EVAL1_XH1=" << input.ionized_h_density_cm3 << "\n";
     }
-    // Source calc_hmc_all uses emult for the local emissivity/escape covering
-    // factor.  cfrac is transported separately to DSEC line/RRC escape.
-    input.covering_fraction = params.emission_multiplier;
+    // Canonical FORTRAN keeps cfrac and emult independent: cfrac owns
+    // emission/escape/thermal physics, while emult is only the radial STEP
+    // Courant multiplier.  Fixed-state science must therefore use cfrac.
+    input.covering_fraction = params.covering_fraction;
     input.turbulent_velocity_km_s = params.turbulent_velocity_km_s;
     input.radiation_energy_ev = data.energy.data();
     input.radiation_flux = data.flux.data();

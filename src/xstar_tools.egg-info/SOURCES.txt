@@ -7,6 +7,7 @@ build_support.py
 pyproject.toml
 setup.cfg
 setup.py
+xstar_tools-0.6.82.20_host_validation.md
 .github/workflows/ci-tier0.yml
 .github/workflows/ci-tier1-science-smoke.yml
 .github/workflows/ci-tier2-backend-parity.yml
@@ -68,6 +69,7 @@ docs/developer/standalone_publication_memory_0_6_82_17.md
 docs/developer/test_namespace_cleanup.md
 docs/developer/type49_all_element_source_faithful_0_6_82_11.md
 docs/developer/type50_cfrac_full_grid_0_6_82_19.md
+docs/developer/type50_cfrac_source_ownership_0_6_82_20.md
 docs/developer/type50_source_element_mass_0_6_82_15.md
 docs/developer/type51_all_element_production_0_6_82_12.md
 docs/developer/type51_broad_element_closure_0_6_82_2.md
@@ -219,6 +221,7 @@ qualification/standalone_terminal_writer_0_6_82_18.json
 qualification/test_history_cleanup_0_6_62.json
 qualification/type49_all_element_source_faithful_0_6_82_11.json
 qualification/type50_cfrac_full_grid_0_6_82_19.json
+qualification/type50_cfrac_source_ownership_0_6_82_20.json
 qualification/type50_source_element_mass_0_6_82_15.json
 qualification/type51_all_element_production_0_6_82_12.json
 qualification/type51_broad_element_closure_0_6_82_2.json
@@ -532,6 +535,7 @@ tests/test_standalone_terminal_writer_0_6_82_18.py
 tests/test_test_history_cleanup.py
 tests/test_type49_all_element_source_faithful_0_6_82_11.py
 tests/test_type50_cfrac_full_grid_0_6_82_19.py
+tests/test_type50_cfrac_source_ownership_0_6_82_20.py
 tests/test_type50_profile_provenance.py
 tests/test_type50_source_element_mass_0_6_82_15.py
 tests/test_type51_all_element_production_0_6_82_12.py
@@ -634,6 +638,7 @@ tools/qualification/check_standalone_terminal_writer_0_6_82_18.py
 tools/qualification/check_test_history_cleanup.py
 tools/qualification/check_type49_all_element_source_faithful_0_6_82_11.py
 tools/qualification/check_type50_cfrac_full_grid_0_6_82_19.py
+tools/qualification/check_type50_cfrac_source_ownership_0_6_82_20.py
 tools/qualification/check_type50_source_element_mass_0_6_82_15.py
 tools/qualification/check_type51_all_element_production_0_6_82_12.py
 tools/qualification/check_type51_broad_element_closure_0_6_82_2.py
@@ -649,6 +654,7 @@ tools/qualification/cpp_tree_consolidation_compat.py
 tools/qualification/function_comment_overlay.py
 tools/qualification/host_compat_overlay.py
 tools/qualification/local_zone_naming_compat.py
+tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_cfrac_wide_rlogxi_host_smoke_0_6_82_19.py
 tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
@@ -661,6 +667,7 @@ tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_16.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_17.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_18.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_19.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
@@ -675,6 +682,7 @@ tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_16.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_17.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_18.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_19.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py

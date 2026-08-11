@@ -300,3 +300,13 @@ include tools/qualification/run_c5_cfrac_wide_rlogxi_host_smoke_0_6_82_19.py
 include docs/developer/type50_cfrac_full_grid_0_6_82_19.md
 include tests/test_type50_cfrac_full_grid_0_6_82_19.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_19.py
+
+# 0.6.82.20 cfrac<1 Type-50 radiation ownership and emult separation.
+include qualification/type50_cfrac_source_ownership_0_6_82_20.json
+include tools/qualification/check_type50_cfrac_source_ownership_0_6_82_20.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_20.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_20.py
+include tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py
+include docs/developer/type50_cfrac_source_ownership_0_6_82_20.md
+include tests/test_type50_cfrac_source_ownership_0_6_82_20.py
+include xstar_tools-0.6.82.20_host_validation.md

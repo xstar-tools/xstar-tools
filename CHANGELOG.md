@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.20 - 2026-08-11
+- Qualification harness correction: the focused `cfrac=0.4`, `rlogxi=-3` host runner now applies its local `-3` default instead of inheriting the wide-grid `-5..5` default. No science or ABI change.
+
+- Correct Type-50 DSEC continuum pumping to sample the canonical 999-bin `calc_hmc_input` (`epim/bremsam`) workspace.
+- Correct the Type-50 `calc_emis` revisit to sample the live transported full `epi/bremsa` state rather than the incident controller spectrum.
+- Remove `emult` from fixed-state covering-fraction semantics; `cfrac` now owns emission/escape/thermal physics in standalone and Python/native final recompute paths, while `emult` remains a radial STEP multiplier only.
+- Add independent `cfrac`/`emult` contract tests and a one-point H+He+C `cfrac=0.4`, `rlogxi=-3` host qualification gate.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, and production-zone ABI `6048110` frozen pending broad qualification.
+
+# Changelog
+
 ## 0.6.82.19 - 2026-08-11
 
 - Reopen the covering-fraction science axis after the exact 0.6.82.18 H+He+C, `ne=1e12`, `column=1e20`, `cfrac=1`, `rlogxi=-5..5` grid closed 11/11 under the established <1% material policy. Fresh stock-FORTRAN `cfrac=0.4` runs exposed large transmitted/reflected Option-1 and heating/cooling discrepancies that the `cfrac=1` endpoint could not exercise.
