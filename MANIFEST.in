@@ -260,3 +260,11 @@ include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_14.py
 include docs/developer/pescl_source_pi_0_6_82_14.md
 include tests/test_pescl_source_pi_0_6_82_14.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_14.py
+
+# 0.6.82.15 source-parent Type-50 element-mass repair.
+include qualification/type50_source_element_mass_0_6_82_15.json
+include tools/qualification/check_type50_source_element_mass_0_6_82_15.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_15.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_15.py
+include docs/developer/type50_source_element_mass_0_6_82_15.md
+include tests/test_type50_source_element_mass_0_6_82_15.py

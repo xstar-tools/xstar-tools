@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.15 - 2026-08-11
+
+- Restore canonical Type-50 nuclear-mass ownership. Literal `ucalc.f90` and `binemislin.f90` walk `line -> ion -> element` and read the second REAL from the rate-type-11 element record; the port had substituted a hard-coded modern periodic-table mass by `Z`.
+- C++ ATDB lowering now reads the source parent-element mass for every applicable ion and carries the same value into line-publication metadata. The Z=1--30 table remains only as a guarded fallback for compact synthetic fixtures that omit the source parent topology.
+- Python Type-50 provenance, compact/native lowering, and public line metadata now use the same source-parent mass first, with the historical tables retained only as fixture fallbacks.
+- Preserve the 0.6.82.14 source-faithful high-tau `pescl` pi repair and the complete 0.6.82.13 all-element atomic-data-type generalization.
+- Host motivation: 0.6.82.14 moved the first serious H+He+C `rlogxi=-3` trajectory divergence from row 3 to row 12; row 3 now has canonical `h-c=0.30` with `ntotit=63` versus FORTRAN `62`. The remaining pre-transport H Ly-alpha opacity is still ppm-low even though the H I ground population is slightly high, directly implicating Type-50 profile construction.
+- Do not claim low-`xi` closure before host reruns. `rlogxi=-3` and `-2` remain the immediate gates; `-5` remains a later exact-`ntotit` cleanup. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` remain frozen.
+
 ## 0.6.82.14 - 2026-08-11
 
 - Restore the canonical high-optical-depth `pescl.f90` line escape probability constant. FORTRAN declares `real(8) pi` but initializes it from the default-REAL literal `3.1415927`, i.e. the source-rounded binary value `3.1415927410125732` when promoted to double.

@@ -863,6 +863,37 @@ std::pair<int,int> local_pair(const Layout& l,int ion,int a,int b) {
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
 double mass_for_z(int z) { return z>0 && z<static_cast<int>(kAtomicMass.size()) ? kAtomicMass[static_cast<std::size_t>(z)] : std::max(1.0,2.0*z); }
+
+double source_atomic_mass_from_element_reals(const std::vector<double>& values,int z) {
+    if (values.size() >= 2 && std::isfinite(values[1]) && values[1] > 0.0)
+        return values[1];
+    return mass_for_z(z);
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the nuclear mass through the same line -> ion -> element
+// parent traversal used by literal ucalc.f90 Type-50 and binemislin.f90.
+// Reference context: ucalc.f90 label 50 reads nilin=npar(line),
+// nelin=npar(nilin), then a=rdat1(element_record+1); setptrs.f90 establishes
+// that rate-type-11 element parent.  The ATDB REALS column is REAL(4), so the
+// AtdbReader double value already has the source float-to-double promotion.
+// XSTAR-FUNCTION-COMMENT-END
+double source_atomic_mass_for_ion(AtdbReader& db,const Derived& d,int ion,int z) {
+    if (ion > 0 && ion < static_cast<int>(d.ion_records.size())) {
+        const int ion_record = d.ion_records[static_cast<std::size_t>(ion)];
+        const int element_record =
+            ion_record > 0 && ion_record < static_cast<int>(d.npar.size())
+                ? d.npar[static_cast<std::size_t>(ion_record)] : 0;
+        if (element_record > 0) {
+            const auto values = db.reals(element_record);
+            return source_atomic_mass_from_element_reals(values,z);
+        }
+    }
+    // Compact synthetic fixtures predating the complete rate-type-11 parent
+    // tree may not carry an element record.  Keep a guarded fallback for such
+    // tests only; production ATDB lowering reaches the source value above.
+    return mass_for_z(z);
+}
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide ion label as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
@@ -1276,7 +1307,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     out.record.source_position=0; out.record.record=rec; out.record.next_index=-1; out.record.element_index=element_index;
     out.record.opcode=(dt==91?XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE:(dt==52?XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE:(kLegacyActiveTypes.count(dt)?dt:XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC))); out.record.data_type=dt; out.record.rate_type=rt; out.record.ion_index=b.ion_counter; out.record.ion_stage=stage;
     out.record.lower_row=lower; out.record.upper_row=upper; out.record.density_scale=1.0; out.record.line_energy_ev=energy;
-    out.record.atomic_mass_amu=mass_for_z(b.element_z); out.record.natural_width_ev=width;
+    out.record.atomic_mass_amu=source_atomic_mass_for_ion(db,d,ion,b.element_z); out.record.natural_width_ev=width;
     out.record.line_index_one_based=d.nplini[rec]; out.record.continuum_index_one_based=d.npconi2[rec]; out.record.matrix_enabled=matrix?1u:0u;
     return out;
 }
@@ -1569,7 +1600,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
             const auto& h=db.header(rec);const int parent=d.npar[rec];const int ion=ion_record_to_index[parent];const auto& b=block_for(l,ion);auto iv=db.ints(rec);auto rv=db.reals(rec);
-            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=mass_for_z(z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
+            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=source_atomic_mass_for_ion(db,d,ion,z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
             if(d.npconi2[rec]>0){
                 // Literal pprint.f90/writespectra4.f90 identity metadata is
                 // distinct from the UCalc physical threshold used by the

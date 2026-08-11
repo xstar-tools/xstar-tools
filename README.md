@@ -2,8 +2,10 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.14`  
+**Distribution:** `0.6.82.15`  
 
+
+**0.6.82.15 source-parent Type-50 mass repair:** canonical FORTRAN obtains the nuclear mass used by Type-50 Doppler broadening from the rate-type-11 element parent reached through `line -> ion -> element`; C++ and Python previously replaced that source-owned value with hard-coded periodic-table masses. Production lowering/profile metadata now use the ATDB parent value for every applicable element, with the old tables retained only for incomplete synthetic fixtures. This is the next focused correction after 0.6.82.14 moved the serious `rlogxi=-3` divergence from row 3 to row 12. `rlogxi=-3,-2` remain host gates; the accepted science revision and public ABIs remain frozen.
 
 **0.6.82.14 source-faithful `pescl` high-tau repair:** canonical `pescl.f90` stores `pi` from the default-REAL literal `3.1415927`; native C++ accidentally used `3.145165358979...`, biasing every `tau >= 1` line escape probability by about -5.68e-4. The correction uses the source-rounded default-REAL value in C++ and Python. H+He+C host qualification remains required at `rlogxi=-3,-2` before low-xi closure is claimed. Science revision and public ABIs remain frozen.
 

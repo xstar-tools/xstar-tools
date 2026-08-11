@@ -1234,6 +1234,17 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         if ion <= 0:
             continue
         z = int(derived.ion_element_z[ion])
+        source_atomic_mass = float(ATOMIC_MASS[z - 1])
+        try:
+            ion_record = int(derived.ion_records[ion])
+            element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
+            element_reals = master.record_reals(element_record) if element_record > 0 else ()
+            if len(element_reals) >= 2:
+                candidate_mass = float(element_reals[1])
+                if np.isfinite(candidate_mass) and candidate_mass > 0.0:
+                    source_atomic_mass = candidate_mass
+        except Exception:
+            pass
         low = int(lower[pos])
         up = int(upper[pos])
         low_row = levels_by_key.get((ion, low))
@@ -1252,7 +1263,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 upper_level=(up_row.level_label if up_row else f"level_{up}"),
                 rate_type=int(line_rows[pos, 2]),
                 data_type=int(line_rows[pos, 1]),
-                atomic_mass=float(ATOMIC_MASS[z - 1]),
+                atomic_mass=source_atomic_mass,
                 natural_rate_s=binemis_natural_rate,
                 auger_rate_s=binemis_auger_rate,
                 source_record=int(line_records[pos]),

@@ -959,7 +959,24 @@ def _lower_record(
     element_z = int(derived.ion_element_z[ion_index])
     if element_z not in ATOMIC_MASS_AMU:
         raise ValueError(f"unsupported atomic mass for Z={element_z}; native ATDB lowering supports Z=1..30")
-    mass = ATOMIC_MASS_AMU[element_z]
+    # Literal ucalc.f90 Type-50 and binemislin.f90 obtain the nuclear mass by
+    # following line -> ion -> element and reading rdat1(np1r+1) from the
+    # rate-type-11 element record.  Do not replace this source-owned value
+    # with a modern periodic-table constant in production lowering.
+    mass = None
+    try:
+        ion_record = int(derived.npar[int(rec)])
+        element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
+        element_reals = master.record_reals(element_record) if element_record > 0 else ()
+        if len(element_reals) >= 2:
+            candidate_mass = float(element_reals[1])
+            if np.isfinite(candidate_mass) and candidate_mass > 0.0:
+                mass = candidate_mass
+    except Exception:
+        mass = None
+    if mass is None:
+        # Synthetic qualification fixtures may omit the topology record.
+        mass = float(ATOMIC_MASS_AMU[element_z])
 
     if dt == 1:
         if len(raw_reals) < 2:
