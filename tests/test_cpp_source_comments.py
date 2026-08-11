@@ -67,7 +67,24 @@ def test_all_active_cpp_h_hpp_files_have_source_correspondence_blocks():
     frontend = "src/xstar_tools/xstar/cpp/xstar_cpp_frontend.cpp"
     historical_files = sorted(current_rel(rel) for rel in (set(overlay) - archived_originals))
     assert len(historical_files) == 45
-    assert files == sorted(historical_files + [frontend])
+
+    # 0.6.81 introduces five separately-qualified, science-neutral XSPEC
+    # table-conversion C++ files.  Keep the immutable 0.6.54 comment overlay
+    # unchanged and admit only the exact files pinned by the 0.6.81 manifest.
+    xspec_manifest = ROOT / "qualification/xstar2table_characterization_0_6_81.json"
+    xspec_files: list[str] = []
+    if xspec_manifest.is_file():
+        xspec = json.loads(xspec_manifest.read_text())
+        assert xspec.get("science_change") is False
+        xspec_files = sorted(xspec.get("additional_xstar_source_files", []))
+        assert len(xspec_files) == 5
+        current_hashes = xspec.get("current_source_sha256", {})
+        for rel in xspec_files:
+            path = ROOT / rel
+            assert path.is_file()
+            assert _sha(path.read_bytes()) == current_hashes[rel] or current_path_is_approved(path)
+
+    assert files == sorted(historical_files + [frontend] + xspec_files)
     for rel in historical_files:
         text = (ROOT / rel).read_text(errors="replace")[:3000]
         assert text.startswith("// XSTAR-SOURCE-CORRESPONDENCE-BEGIN\n")

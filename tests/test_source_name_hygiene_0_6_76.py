@@ -8,6 +8,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools" / "qualification"))
+from source_name_hygiene_compat import additional_versioned_callables
 MANIFEST = ROOT / "qualification/source_name_hygiene_0_6_76.json"
 
 
@@ -75,6 +77,9 @@ def test_remaining_versioned_cpp_callables_are_exact_abi_allowlist():
     allow = set()
     for values in data["allowed_versioned_cpp_callables"].values():
         allow.update(values)
+    # Preserve the immutable 0.6.76 ABI allowlist and add only versioned
+    # callables from separately-qualified later ABIs (0.6.81 XSPEC table ABI).
+    allow.update(additional_versioned_callables())
     rx = re.compile(r"\b([A-Za-z_]\w*(?:_v\d\w*|_patch\d\w*))\s*\(")
     actual = set()
     cpp = ROOT / "src/xstar_tools/xstar/cpp"

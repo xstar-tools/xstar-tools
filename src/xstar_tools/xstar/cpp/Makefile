@@ -58,7 +58,7 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.80.1
+PACKAGE_VERSION ?= 0.6.81.1
 
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so
@@ -69,6 +69,8 @@ THERMAL_TARGET := libxstar_thermal.so
 LOCAL_ZONE_TARGET := libxstar_local_zone.so
 FINAL_RECOMPUTE_TARGET := libxstar_final_recompute.so
 PRODUCTION_ZONE_TARGET := libxstar_production_zone.so
+XSPEC_TABLE_TARGET := libxstar_xspec_table.so
+XSPEC_TABLE_EXECUTABLE := xstar-xspec-table
 ENGINE_TARGET := libxstar_engine.so
 API_TARGET := libxstar_api.so
 CPP_BACKEND_TARGET := libxstar_backend_cpp.so
@@ -79,11 +81,11 @@ PUBLIC_EXECUTABLE_SOURCE := xstar_cpp_frontend.cpp
 EXECUTABLE_OBJECTS := xstar_standalone.o xstar_science_fits.o xstar_run_state.o xstar_step_log.o xstar_atdb_runtime.o
 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
-	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(LOCAL_ZONE_TARGET) $(FINAL_RECOMPUTE_TARGET) $(PRODUCTION_ZONE_TARGET)
-STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_TARGET)
+	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(LOCAL_ZONE_TARGET) $(FINAL_RECOMPUTE_TARGET) $(PRODUCTION_ZONE_TARGET) $(XSPEC_TABLE_TARGET)
+STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_TARGET) $(XSPEC_TABLE_EXECUTABLE)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 
-PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h
+PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
 INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
 
 .PHONY: all physics standalone test clean install print-config
@@ -121,6 +123,12 @@ $(FINAL_RECOMPUTE_TARGET): final_recompute_bridge.cpp xstar_final_recompute_brid
 
 $(PRODUCTION_ZONE_TARGET): xstar_standalone.cpp xstar_production_zone_bridge.h xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_api.h xstar_local_zone_engine.h xstar_thermal_engine.h $(API_TARGET) $(LOCAL_ZONE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp -L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+
+$(XSPEC_TABLE_TARGET): xstar_xspec_table.cpp xstar_xspec_table.h
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ xstar_xspec_table.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH)
+
+$(XSPEC_TABLE_EXECUTABLE): xstar_xspec_table_cli.cpp xstar_xspec_table_writer.cpp xstar_xspec_table_internal.hpp xstar_xspec_table.cpp xstar_xspec_table.h
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_table_cli.cpp xstar_xspec_table_writer.cpp xstar_xspec_table.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS)
 
 $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SO_LDFLAGS) \

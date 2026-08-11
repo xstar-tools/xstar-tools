@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.80.1"
+version = "0.6.81.1"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -77,7 +77,7 @@ where = ["src"]
   "v06486_qualification_reference_v0472/trajectory.csv",
   "v0648724_call1_thermal_leaf_reference/*",
 ]
-"xstar_tools.xstar" = ["data/coheat.dat", "cpp/constants.def", "cpp/xstar_api.h", "cpp/xstar_production_zone_bridge.h"]
+"xstar_tools.xstar" = ["data/coheat.dat", "cpp/constants.def", "cpp/xstar_api.h", "cpp/xstar_production_zone_bridge.h", "cpp/xstar_xspec_table.h"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

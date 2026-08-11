@@ -19,6 +19,7 @@ include tools/qualification/check_python_source_comments.py
 include tools/qualification/check_python_history_cleanup.py
 include tools/qualification/check_cpp_non_science_refactor.py
 prune historical
+prune src/xstar_tools.egg-info
 
 include .github/workflows/parity-freeze.yml
 include tools/qualification/check_cpp_history_cleanup.py
@@ -117,3 +118,22 @@ include qualification/zone_python_console_cleanup_0_6_80_1.json
 include tools/qualification/check_zone_python_console_cleanup_0_6_80_1.py
 include tests/test_zone_python_console_cleanup_0_6_80_1.py
 include docs/developer/zone_python_console_cleanup.md
+
+# 0.6.81 XSTAR2XSPEC / xstar2table characterization.
+include src/xstar_tools/xstar/cpp/xstar_xspec_table.h
+include src/xstar_tools/xstar/cpp/xstar_xspec_table_internal.hpp
+include src/xstar_tools/xstar/cpp/xstar_xspec_table.cpp
+include src/xstar_tools/xstar/cpp/xstar_xspec_table_writer.cpp
+include src/xstar_tools/xstar/cpp/xstar_xspec_table_cli.cpp
+include docs/developer/xstar2xspec_source_concordance.md
+include tools/qualification/check_xstar2table_characterization_0_6_81.py
+include qualification/xstar2table_characterization_0_6_81.json
+include tests/test_xstar2table_characterization_0_6_81.py
+recursive-include tools/qualification/reference xstar2table_*_0_6_81.c xstar2table_*_0_6_81.cpp
+
+# 0.6.81.1 canonical XSTAR2TABLE 2x3-grid closure.
+include qualification/xstar2table_canonical_grid_closure_0_6_81_1.json
+include tools/qualification/check_xstar2table_canonical_grid_closure_0_6_81_1.py
+include tools/qualification/reference/xstar2table_mpi_grid_0_6_81_1.tar.gz
+include tools/qualification/reference/xstar2table_mpi_grid_compare_0_6_81_1.c
+include tests/test_xstar2table_canonical_grid_closure_0_6_81_1.py

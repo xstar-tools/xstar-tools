@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.81.1 — canonical XSTAR2TABLE 2x3-grid closure - 2026-08-10
+
+- Correct the historical `SliceEnergySpectra` edge interpretation: the reported high index is an energy edge, so the selected table-bin count is `high-low`, not `high-low+1`.
+- Restore canonical C floating-point evaluation for additive AIN/AOUT normalization by using the historical double literal `8.356e-7` and storing the final result as `float`; do not force the normalization constant itself to `float`.
+- Add the exact six-spectrum XSTAR 2.59g / MPI_XSTAR 2x3 grid supplied by the user as a compressed permanent regression fixture.
+- Require bit-exact `ENERG_LO`, `ENERG_HI`, `PARAMVAL`, and `INTPSPEC` parity for all four canonical outputs (`xout_ain.fits`, `xout_aout.fits`, `xout_mtable.fits`, `xout_etable.fits`) on that grid.
+- Preserve XSPEC-table ABI 1 and all frozen XSTAR science/production ABIs; this hotfix changes only the table-conversion characterization layer.
+
 # 0.6.80.1 — zone-python legacy console cleanup - 2026-08-10
 
 - Suppress six historical parity-campaign `V...` console markers during normal public `zone-python` execution.
