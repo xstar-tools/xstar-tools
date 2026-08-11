@@ -15553,10 +15553,21 @@ int standalone_iteration_evaluator(
         if (!call1_sweep_native_root_v82_patch512.empty()) {
             append_call1_dsec_population_sweep(*data, snapshot, call1_sweep_native_root_v82_patch512);
         }
-        if (data->retain_prefix_diagnostics && snapshot.sequence <= 8u) {
-            data->snapshots.push_back(snapshot);
-        } else {
-            data->snapshots.push_back(lightweight_snapshot(snapshot));
+        // 0.6.82.17: generic production does not need to retain every DSEC
+        // trial after its controller decision.  Retaining thousands of even
+        // lightweight snapshots and then copying them into product state
+        // caused low-xi runs to be OOM-killed (exit 137) after the final
+        // physical STEP row, before xout_step/FITS publication.  Historical
+        // reference/diagnostic trajectories keep their exact retention.
+        const bool retain_controller_history_v068217 =
+            data->reference_trajectory_mode || data->reference_diagnostics_enabled ||
+            data->retain_prefix_diagnostics || data->diagnostic_full_trajectory_continue;
+        if (retain_controller_history_v068217) {
+            if (data->retain_prefix_diagnostics && snapshot.sequence <= 8u) {
+                data->snapshots.push_back(snapshot);
+            } else {
+                data->snapshots.push_back(lightweight_snapshot(snapshot));
+            }
         }
         data->last_iteration = std::move(snapshot);
         evaluation->hmctot = output.hmctot;
@@ -17645,7 +17656,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (call == 2u && data.reference_diagnostics_enabled) {
                 write_mg_type53_source_native_opacity_record_attribution(data);
             }
-            data.snapshots.push_back(pretransport_boundary_v82_patch520145);
+            if (data.reference_trajectory_mode || data.reference_diagnostics_enabled ||
+                data.diagnostic_full_trajectory_continue) {
+                data.snapshots.push_back(pretransport_boundary_v82_patch520145);
+            }
             finals.push_back(std::move(pretransport_boundary_v82_patch520145));
             const double zone_seconds_v0648110 = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - shared_zone_started_v0648110).count();
@@ -17908,8 +17922,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         data.writing_final_snapshot = false;
 
-        for (const auto& snapshot : data.snapshots) {
-            whole.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
+        if (data.reference_trajectory_mode || data.reference_diagnostics_enabled ||
+            data.diagnostic_full_trajectory_continue) {
+            whole.fixed_evaluations.reserve(data.snapshots.size());
+            for (const auto& snapshot : data.snapshots) {
+                whole.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
+            }
         }
         const std::size_t radial_event_count = finals.size() + 1u;
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
@@ -17919,7 +17937,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             accepted.accepted_sequence = snapshot.sequence;
             accepted.acceptance_reason = reason;
             accepted.evaluation = copy_real_native_snapshot(snapshot, 0.0);
-            whole.accepted_controller_states.push_back(accepted);
+            if (data.reference_trajectory_mode || data.reference_diagnostics_enabled) {
+                whole.accepted_controller_states.push_back(accepted);
+            }
             xstar_run_state::RadialZoneState zone;
             const std::size_t ordinal = whole.radial_zones.size() + 1u;
             zone.zone_index = ordinal;
@@ -17946,8 +17966,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             zone.provisional_from_controller = false;
             zone.accepted_boundary_exact = true;
             zone.boundary_provenance = "standalone C++ naturally terminated controller boundary";
-            zone.accepted_controller = accepted;
-            whole.radial_zones.push_back(zone);
+            zone.accepted_controller = std::move(accepted);
             xstar_run_state::AbundanceRadialRowState abundance;
             abundance.row_index = ordinal;
             abundance.radius_cm = zone.radius_cm;
@@ -17959,15 +17978,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             abundance.temperature_t4 = zone.temperature_t4;
             // Preserve the exact source/controller pprint option-17 thermal
             // balance quantity instead of reconstructing (H-C)/abs(H).
-            abundance.fractional_heat_error = std::isfinite(accepted.evaluation.hmctot)
-                ? accepted.evaluation.hmctot : 0.0;
+            const double accepted_hmctot_v068217 = zone.accepted_controller.evaluation.hmctot;
+            abundance.fractional_heat_error = std::isfinite(accepted_hmctot_v068217)
+                ? accepted_hmctot_v068217 : 0.0;
             abundance.terminal_row = ordinal == radial_event_count;
-            whole.abundance_radial_rows.push_back(abundance);
+            whole.radial_zones.push_back(std::move(zone));
+            whole.abundance_radial_rows.push_back(std::move(abundance));
         };
         for (std::size_t i = 0; i < finals.size(); ++i) {
             const std::size_t ntotit = i < actual_dsec_ntotit.size() ? actual_dsec_ntotit[i] : 0u;
             append_zone(finals[i], "qualification_free_native_call_final_pretransport",
                         source_boundary_depth_cm[i], ntotit);
+            // Release the source snapshot immediately after its publication
+            // state has been transferred.  This keeps peak memory roughly
+            // constant with radial depth instead of retaining two full copies
+            // of every accepted boundary.
+            if (!data.reference_trajectory_mode && !data.reference_diagnostics_enabled) {
+                finals[i] = FixedDsecSnapshot{};
+            }
         }
         // Source saves a distinct terminal row after the last radial transfer.
         // Keep the actual transported call-4 workspace rather than duplicating
@@ -17988,6 +18016,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 *terminal_transport_boundary_v82_patch520144, params,
                 data.cumulative_depth_cm,
                 actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
+        }
+        if (!data.reference_trajectory_mode && !data.reference_diagnostics_enabled) {
+            terminal_transport_boundary_v82_patch520144.reset();
+        }
+        // Product writers use accepted radial boundaries as the canonical
+        // physical trajectory. Keep a single fixed-evaluation compatibility
+        // copy in generic production for incident-grid consumers; per-sequence
+        // product lookup already falls back to radial_zones.
+        if (!data.reference_trajectory_mode && whole.fixed_evaluations.empty() &&
+            !whole.radial_zones.empty()) {
+            whole.fixed_evaluations.push_back(
+                whole.radial_zones.front().accepted_controller.evaluation);
         }
         retain_controller_owned_product_workspaces(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
@@ -18225,8 +18265,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 std::string("v82 patch5.16 diagnostic full-trajectory continuation completed after latched scientific failure: ") +
                 data.diagnostic_first_failure_reason);
         }
+        const bool whole_product_state_complete_v068217 =
+            whole.product_schema_complete && whole.radial_state_complete &&
+            whole.native_product_inputs_complete && whole.exact_source_metadata_retained &&
+            whole.exact_source_workspaces_retained && whole.exact_accepted_radial_boundaries_retained;
+        const bool whole_controller_trajectory_qualified_v068217 = whole.controller_trajectory_qualified;
         const auto product_state_build_started_v064890 = std::chrono::steady_clock::now();
-        auto product = xstar_run_state::build_product_writing_state(whole);
+        auto product = xstar_run_state::build_product_writing_state(std::move(whole));
         if (g_performance_v064890) {
             g_performance_v064890->product_state_build_seconds += performance_elapsed_seconds(product_state_build_started_v064890);
         }
@@ -18261,12 +18306,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                   << "V048746255172582_PATCH520172_PUBLIC_LINE_COUNT="
                   << product.retained_product_arrays.at(public_line_key).size() << "\n";
 
-        product.product_state_complete = whole.product_schema_complete && whole.radial_state_complete &&
-            whole.native_product_inputs_complete && whole.exact_source_metadata_retained &&
-            whole.exact_source_workspaces_retained && whole.exact_accepted_radial_boundaries_retained;
+        product.product_state_complete = whole_product_state_complete_v068217;
         product.product_parity_qualified = false;
         if (!product.product_state_complete) throw std::runtime_error("standalone product state failed completeness gate");
-        if (!whole.controller_trajectory_qualified) {
+        if (!whole_controller_trajectory_qualified_v068217) {
             throw std::runtime_error("5.20.17 product publication blocked by trajectory qualification");
         }
         std::cout << "V048746255172582_PATCH52017_PRODUCT_PUBLICATION_GATE=ACCEPT\n"

@@ -276,3 +276,11 @@ include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_16.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_16.py
 include docs/developer/ispec4_source_ergsev_0_6_82_16.md
 include tests/test_ispec4_source_ergsev_0_6_82_16.py
+
+# 0.6.82.17 generic standalone publication-memory closure
+include qualification/standalone_publication_memory_0_6_82_17.json
+include tools/qualification/check_standalone_publication_memory_0_6_82_17.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_17.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_17.py
+include tests/test_standalone_publication_memory_0_6_82_17.py
+include docs/developer/standalone_publication_memory_0_6_82_17.md

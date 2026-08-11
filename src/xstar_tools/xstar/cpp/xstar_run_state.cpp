@@ -664,6 +664,55 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Move an accumulated run state into the product-writing representation without duplicating large accepted-boundary workspaces.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); ownership-transfer helper only.
+// XSTAR-FUNCTION-COMMENT-END
+ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state) {
+    ProductWritingState product;
+    product.release = std::move(state.release);
+    product.backend = std::move(state.backend);
+    product.parameters_path = std::move(state.parameters_path);
+    product.atomic_database_path = std::move(state.atomic_database_path);
+    product.schema_path = std::move(state.product_schema_path);
+    product.product_metadata_path = std::move(state.product_metadata_path);
+    product.native_diagnostics_path = std::move(state.native_diagnostics_path);
+    product.native_run_id = std::move(state.native_run_id);
+    product.fixed_evaluations = std::move(state.fixed_evaluations);
+    product.final_writer_evaluation = std::move(state.final_writer_evaluation);
+    product.radial_zones = std::move(state.radial_zones);
+    product.parameter_rows = std::move(state.parameter_rows);
+    product.element_metadata = std::move(state.element_metadata);
+    product.row_metadata = std::move(state.row_metadata);
+    product.abundance_radial_rows = std::move(state.abundance_radial_rows);
+    product.level_identities = std::move(state.level_identities);
+    product.detail_level_identities = std::move(state.detail_level_identities);
+    product.line_identities = std::move(state.line_identities);
+    product.rrc_identities = std::move(state.rrc_identities);
+    product.source_rrc_identities = std::move(state.source_rrc_identities);
+    product.legacy_pprint = std::move(state.legacy_pprint);
+    product.embedded_public_fits_payloads_absent = state.embedded_public_fits_payloads_absent;
+    product.embedded_full_xout_step_payload_absent = state.embedded_full_xout_step_payload_absent;
+    product.run_state_layers_distinct = true;
+    product.product_schema_complete = state.product_schema_complete;
+    product.radial_state_complete = state.radial_state_complete;
+    product.native_detail_state_retained = state.native_detail_state_retained;
+    product.continuum_depths_derived_from_native_opacity = state.continuum_depths_derived_from_native_opacity;
+    product.native_product_inputs_complete = state.native_product_inputs_complete;
+    product.exact_source_metadata_retained = state.exact_source_metadata_retained;
+    product.exact_source_workspaces_retained = state.exact_source_workspaces_retained;
+    product.exact_accepted_radial_boundaries_retained = state.exact_accepted_radial_boundaries_retained;
+    product.exact_legacy_pprint_state_retained = state.exact_legacy_pprint_state_retained;
+    product.product_state_complete = state.native_product_inputs_complete;
+    product.product_parity_qualified = false;
+    product.diagnostic_preview_partial = state.diagnostic_preview_partial;
+    product.physical_radial_boundaries_expected = state.physical_radial_boundaries_expected;
+    product.physical_radial_boundaries_retained = state.physical_radial_boundaries_retained;
+    product.physical_transport_intervals_completed = state.physical_transport_intervals_completed;
+    product.terminal_synthetic_row_present = state.terminal_synthetic_row_present;
+    return product;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Write run state manifest from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END

@@ -478,6 +478,7 @@ void prepare_native_product_state(
     WholeRunAccumulatedState& state,
     const std::filesystem::path& diagnostics_path);
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state);
+ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state);
 void write_run_state_manifest(
     const std::filesystem::path& path,
     const WholeRunAccumulatedState& whole,

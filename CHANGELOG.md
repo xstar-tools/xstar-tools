@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.17 - 2026-08-11
+
+- Fix the generic standalone end-of-run memory spike that caused long low-ionization `xstar-cpp` runs to be SIGKILLed with return code 137 after the final physical STEP row but before `final print`, `xout_step.log`, and FITS publication. This is a production memory/ownership correction; it does not change the scientific kernels, DSEC arithmetic, accepted radial states, or source constants.
+- Generic production no longer retains every DSEC trial after its controller decision. Full controller history remains unchanged for explicit reference-trajectory and qualification-diagnostic modes.
+- Transfer each accepted boundary into canonical `radial_zones` and release the source snapshot immediately afterward. Generic production no longer duplicates every accepted boundary into `accepted_controller_states`; reference/diagnostic paths retain the historical copies.
+- Add move-based `WholeRunAccumulatedState -> ProductWritingState` construction so large per-zone source workspaces are transferred rather than deep-copied immediately before publication. A single fixed-evaluation compatibility entry remains for incident-grid consumers; per-sequence publication falls back to the canonical accepted radial zones.
+- Update the wide-rlogxi host comparator policy: `ntotit` is a convergence diagnostic and no longer vetoes science acceptance. Material STEP/FITS quantities remain subject to the established `<1%` numerical criterion; percentage-valued STEP columns such as `h-c(%)` are compared by `<1` absolute percentage point.
+- Host evidence from exact 0.6.82.16 at H+He+C, density `1e12`, column `1e20`, `cfrac=1`, `rlogxi=-3`: C++ produced all 77 physical STEP rows before exit 137. All printed STEP fields except the first `h-c(%)` column matched FORTRAN at printed precision; max `|Delta h-c|` was `0.10` percentage point. Only three `ntotit` rows differed (max absolute delta 6), now diagnostic-only. FITS/material acceptance remains pending because 0.6.82.16 was killed before publication.
+- Preserve/freeze the 0.6.82.13 all-element atomic-data generalization, 0.6.82.14 source-faithful high-tau `pescl` pi, 0.6.82.15 ATDB source-parent Type-50 mass, and 0.6.82.16 canonical `ispec4` normalization. Science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`/`6048110` remain unchanged.
+
 ## 0.6.82.16 - 2026-08-11
 
 - Restore canonical `ispec4.f90` power-law erg/eV normalization in Python and native C++. `ispec4` imports `ergsev` from `constants.f90`, where `real(8), parameter :: ergsev = 1.602176634e-12`; the unsuffixed initializer is default-REAL-rounded before promotion, giving approximately `1.602176616204154e-12`.
