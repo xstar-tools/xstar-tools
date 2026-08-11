@@ -1193,8 +1193,9 @@ magnesium_primary_cooling_order_state() {
     return found->second;
 }
 
-// Literal v0.6.47.2 Python translation of pescl.f90.  The accepted source
-// reference uses Python binary64 math.pi and libm exp/log/sqrt semantics.
+// Literal pescl.f90 line escape probability.  Source declares REAL(8) pi
+// but initializes it from the default-REAL literal 3.1415927, so canonical
+// execution promotes the source-rounded binary32 value to REAL(8).
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement pescl as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
@@ -1210,8 +1211,8 @@ double pescl(double tau) {
         }
     } else {
         const double bb = 0.5 * std::sqrt(std::max(std::log(tau), 0.0)) / (1.0 + tau / 1.0e5);
-        constexpr double kPythonPi = 3.1451653589793238462643383279502884;
-        value = 1.0 / (tau * std::sqrt(kPythonPi) * (1.2 + bb));
+        constexpr double kSourcePesclPi = static_cast<double>(3.1415927f);
+        value = 1.0 / (tau * std::sqrt(kSourcePesclPi) * (1.2 + bb));
     }
     return value / 2.0;
 }

@@ -53,6 +53,7 @@ docs/developer/multi_element_atdb_lowering_0_6_82_1.md
 docs/developer/option24_fortran_stale_local_policy.md
 docs/developer/packaging.md
 docs/developer/performance_rules.md
+docs/developer/pescl_source_pi_0_6_82_14.md
 docs/developer/public_python_api.md
 docs/developer/python_cpp_fortran_concordance.md
 docs/developer/python_fortran_source_comments.md
@@ -196,6 +197,7 @@ qualification/option24_comparator_policy_0_6_67.json
 qualification/packaging_milestone_0_6_71.json
 qualification/parity_freeze.json
 qualification/parity_freeze_science_hashes.json
+qualification/pescl_source_pi_0_6_82_14.json
 qualification/public_benchmark_suite_0_6_61.json
 qualification/public_execution_modes_0_6_60.json
 qualification/public_python_api_0_6_66.json
@@ -502,6 +504,7 @@ tests/test_option24_productization_0_6_67.py
 tests/test_package_tree_clean.py
 tests/test_packaging_milestone_0_6_71.py
 tests/test_parity_freeze_boundary.py
+tests/test_pescl_source_pi_0_6_82_14.py
 tests/test_public_benchmark_suite.py
 tests/test_public_execution_modes.py
 tests/test_public_python_api.py
@@ -599,6 +602,7 @@ tools/qualification/check_msolvelucy_fixed_loop_0_6_82_9.py
 tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
 tools/qualification/check_packaging_milestone.py
 tools/qualification/check_parity_freeze.py
+tools/qualification/check_pescl_source_pi_0_6_82_14.py
 tools/qualification/check_public_benchmark_suite.py
 tools/qualification/check_public_execution_modes.py
 tools/qualification/check_public_python_api.py
@@ -631,6 +635,7 @@ tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_12.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_13.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_14.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
@@ -639,6 +644,7 @@ tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_11.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_12.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_13.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_14.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py

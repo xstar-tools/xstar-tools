@@ -15078,6 +15078,43 @@ int standalone_iteration_evaluator(
         snapshot.element_cooling = output.element_cooling;
         snapshot.continuum_heating = output.continuum_heating;
         snapshot.continuum_cooling = output.continuum_cooling;
+        // Diagnostic-only low-xi state/rate capture.  The fixed-state APIs
+        // serialize already-computed state and are never read by production.
+        if (snapshot.call_index <= 3u) {
+            if (const char* trace_root_text = std::getenv("XSTAR_C5_DSEC_TRACE_DIR")) {
+                if (*trace_root_text) {
+                    try {
+                        const std::filesystem::path trace_root(trace_root_text);
+                        std::filesystem::create_directories(trace_root);
+                        const auto budget_csv = trace_root / "cpp_calls123_thermal_budget.csv";
+                        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diag_message{};
+                        const int budget_rc = xstar_fixed_state_write_last_thermal_budget_v1(
+                            data->fixed_context, budget_csv.string().c_str(), snapshot.sequence,
+                            snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                            diag_message.data(), diag_message.size());
+                        if (budget_rc != 0) {
+                            throw std::runtime_error(std::string("C5 DSEC thermal-budget capture failed: ") +
+                                diag_message.data());
+                        }
+                        if (snapshot.call_index == 3u && snapshot.evaluation_index == 1u) {
+                            const auto record_root = trace_root / "cpp_call3_eval1_records";
+                            std::filesystem::create_directories(record_root);
+                            diag_message.fill('\0');
+                            const int record_rc = xstar_fixed_state_write_last_diagnostics_v1(
+                                data->fixed_context, record_root.string().c_str(), snapshot.sequence,
+                                diag_message.data(), diag_message.size());
+                            if (record_rc != 0) {
+                                throw std::runtime_error(std::string("C5 call3/eval1 record capture failed: ") +
+                                    diag_message.data());
+                            }
+                        }
+                    } catch (const std::exception& diag_exc) {
+                        set_callback_error(error, error_size, diag_exc.what());
+                        return 1;
+                    }
+                }
+            }
+        }
         if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
             std::cerr << std::setprecision(17)
                       << "V0648117_CPP_ZONE_CALL1_EVAL1_T4=" << snapshot.temperature_t4 << "\n"
@@ -17216,6 +17253,29 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             xstar_spectral_perf_v064892 spectral_perf_before_v064892{};
             xstar_spectral_perf_init_v064892(&spectral_perf_before_v064892);
             (void)xstar_spectral_perf_snapshot_v064892(&spectral_perf_before_v064892);
+            // Diagnostic-only C5 low-xi DSEC audit.  These environment
+            // variables are inert unless explicitly set on a host diagnostic run.
+            // They never participate in normal production science.
+            if (call == 3u) {
+                if (const char* force_t4 = std::getenv("XSTAR_C5_DIAG_FORCE_CALL3_T4")) {
+                    char* end = nullptr;
+                    const double value = std::strtod(force_t4, &end);
+                    if (end && *end == '\0' && std::isfinite(value) && value > 0.0) {
+                        state.temperature_t4 = value;
+                    } else {
+                        throw std::runtime_error("invalid XSTAR_C5_DIAG_FORCE_CALL3_T4");
+                    }
+                }
+                if (const char* force_xee = std::getenv("XSTAR_C5_DIAG_FORCE_CALL3_XEE")) {
+                    char* end = nullptr;
+                    const double value = std::strtod(force_xee, &end);
+                    if (end && *end == '\0' && std::isfinite(value) && value >= 0.0) {
+                        state.electron_fraction_xee = value;
+                    } else {
+                        throw std::runtime_error("invalid XSTAR_C5_DIAG_FORCE_CALL3_XEE");
+                    }
+                }
+            }
             const auto controller_call_started_v064890 = std::chrono::steady_clock::now();
             rc = xstar_thermal_run_evaluation_loop_v1(
                 thermal, &config, &state, standalone_iteration_evaluator, &data,
@@ -17239,6 +17299,37 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 g_performance_v064890->fixed_total_seconds[slot] += data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds;
                 g_performance_v064890->fixed_record_evaluations[slot] +=
                     data.cumulative_stats.records_evaluated - fixed_stats_before_v064890.records_evaluated;
+            }
+            if (call <= 3u) {
+                if (const char* trace_root_text = std::getenv("XSTAR_C5_DSEC_TRACE_DIR")) {
+                    if (*trace_root_text) {
+                        const std::filesystem::path trace_root(trace_root_text);
+                        std::filesystem::create_directories(trace_root);
+                        const auto trace_path = trace_root / "cpp_dsec_calls123.csv";
+                        if (call == 1u) {
+                            std::error_code trace_remove_error;
+                            std::filesystem::remove(trace_path, trace_remove_error);
+                        }
+                        const bool new_file = !std::filesystem::exists(trace_path);
+                        std::ofstream trace_out(trace_path, std::ios::app);
+                        if (!trace_out) throw std::runtime_error("cannot open C5 DSEC trace CSV");
+                        if (new_file) {
+                            trace_out << "call,event_sequence,event_code,evaluation_index,ntotit,nnt,nntt,nnx,nnxx,lnerr,temperature_t4,electron_fraction_xee,hmctot,elcter,normalized_charge_residual,temperature_stagnation_metric\n";
+                        }
+                        trace_out << std::setprecision(17);
+                        const std::size_t retained = std::min(trace_count, trace.size());
+                        for (std::size_t ti = 0; ti < retained; ++ti) {
+                            const auto& ev = trace[ti];
+                            trace_out << call << ',' << ti + 1u << ',' << ev.event_code << ','
+                                      << ev.evaluation_index << ',' << ev.ntotit << ',' << ev.nnt << ','
+                                      << ev.nntt << ',' << ev.nnx << ',' << ev.nnxx << ',' << ev.lnerr << ','
+                                      << ev.temperature_t4 << ',' << ev.electron_fraction_xee << ','
+                                      << ev.hmctot << ',' << ev.elcter << ','
+                                      << ev.normalized_charge_residual << ','
+                                      << ev.temperature_stagnation_metric << '\n';
+                        }
+                    }
+                }
             }
             if (rc != 0) {
                 throw std::runtime_error(std::string("qualification-free controller call ") +

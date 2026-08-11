@@ -252,3 +252,11 @@ include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_13.py
 include docs/developer/atomic_type_all_element_generalization_0_6_82_13.md
 include tests/test_atomic_type_all_element_generalization_0_6_82_13.py
 include qualification/atomic_data_type_all_element_audit_0_6_82_13.csv
+
+# 0.6.82.14 source-faithful high-tau pescl constant repair.
+include qualification/pescl_source_pi_0_6_82_14.json
+include tools/qualification/check_pescl_source_pi_0_6_82_14.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_14.py
+include docs/developer/pescl_source_pi_0_6_82_14.md
+include tests/test_pescl_source_pi_0_6_82_14.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_14.py

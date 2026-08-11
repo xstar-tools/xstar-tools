@@ -765,7 +765,11 @@ def pescl(tau: float) -> float:
             value = (1.0 - math.exp(-aa)) / aa
     else:
         bb = 0.5 * math.sqrt(max(math.log(tau), 0.0)) / (1.0 + tau / tauw)
-        value = 1.0 / (tau * math.sqrt(math.pi) * (1.2 + bb))
+        # pescl.f90 declares REAL(8) pi but DATA-initializes it from the
+        # default-REAL literal 3.1415927.  Preserve the promoted binary32
+        # source value rather than substituting mathematical pi.
+        source_pi = 3.1415927410125732
+        value = 1.0 / (tau * math.sqrt(source_pi) * (1.2 + bb))
     return value / 2.0
 
 

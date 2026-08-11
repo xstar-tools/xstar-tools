@@ -2,7 +2,10 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.13`  
+**Distribution:** `0.6.82.14`  
+
+
+**0.6.82.14 source-faithful `pescl` high-tau repair:** canonical `pescl.f90` stores `pi` from the default-REAL literal `3.1415927`; native C++ accidentally used `3.145165358979...`, biasing every `tau >= 1` line escape probability by about -5.68e-4. The correction uses the source-rounded default-REAL value in C++ and Python. H+He+C host qualification remains required at `rlogxi=-3,-2` before low-xi closure is claimed. Science revision and public ABIs remain frozen.
 
 **0.6.82.13 all-element atomic-data-type generalization:** the production atomic-rate contract removes remaining H/He/C/Mg target-element selection where FORTRAN is generic while preserving genuine source ion-sequence/data-family applicability. C++ covers all 78 physical labels (including 44/44 generic opcode-200 evaluators), and the Python compact/native lowerer now accepts the same 78/78 labels with Z=1-30 mass/`xdef` defaults. Type-99 persistent `leveltemp` state is extended through Z=30, Type-70 now keys its H-only density cap to global source `jkion==1`, and Python's legacy Mg-only product accelerators are retired from science ownership. The thermal ledger is a separate open milestone. H+He+C `rlogxi=-3,-2,-5` remain host qualification gates; this release does not claim broad science closure.
 

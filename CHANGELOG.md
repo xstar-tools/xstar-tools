@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.14 - 2026-08-11
+
+- Restore the canonical high-optical-depth `pescl.f90` line escape probability constant. FORTRAN declares `real(8) pi` but initializes it from the default-REAL literal `3.1415927`, i.e. the source-rounded binary value `3.1415927410125732` when promoted to double.
+- Remove the erroneous C++ constant `3.145165358979...`, which biased every `tau >= 1` `pescl` result by about `-5.681e-4` (-0.0568%).
+- Use the same source-rounded `pi` in Python `element_equilibrium.pescl`; the previous `math.pi` difference was tiny, but the source contract is now identical across Python/C++.
+- Add a direct threshold/high-tau regression gate at `tau < 1`, `tau = 1`, and the H Type-50 row-3 optical depths near `2.1811229` and `4.3623470`.
+- Evidence motivating the repair: at H+He+C `rlogxi=-3` call3/eval1, FORTRAN/C++ H Type-50 records 186/187 differed by about 0.055%; substituting the actual FORTRAN/C++ `tau` values and the two `pi` constants predicts the observed ans2 ratio to within about 0.03 ppm.
+- Keep the 0.6.82.13 all-element atomic-data generalization, accepted science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, and production-zone ABI `6048110` unchanged. `rlogxi=-3,-2` remain host qualification gates until rerun.
+
 ## 0.6.82.13 - 2026-08-11
 
 - Generalize the atomic-data-type science contract across all supported elements wherever canonical FORTRAN XSTAR 2.59g is target-element independent.
