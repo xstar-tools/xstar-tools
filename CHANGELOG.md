@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.19 - 2026-08-11
+
+- Reopen the covering-fraction science axis after the exact 0.6.82.18 H+He+C, `ne=1e12`, `column=1e20`, `cfrac=1`, `rlogxi=-5..5` grid closed 11/11 under the established <1% material policy. Fresh stock-FORTRAN `cfrac=0.4` runs exposed large transmitted/reflected Option-1 and heating/cooling discrepancies that the `cfrac=1` endpoint could not exercise.
+- Restore canonical Type-50 caller-grid ownership. FORTRAN evaluates Type-50 pumping on reduced `epim/bremsam` in `calc_hmc_all`/`calc_emisab_all`, then explicitly calls `ucalc` again from `calc_emis_ion` on full `epi/bremsa` before forming `fline/rcem`. Native C++ had reused the reduced-grid Type-50 answer in final line emissivity.
+- Keep the reduced-grid Type-50 answer for DSEC/matrix ownership and retain a distinct full-grid `calc_emis` Type-50 answer for line publication. Use discrete FORTRAN `nbinc` sampling at the live endpoint separation `abs(eeup-eelo)` rather than a linear interpolation fallback.
+- Correct Python Type-50 caller-grid semantics so `calc_emis` can use full `epi/bremsa`; replace wavelength-derived pumping-bin selection in the pure and compact/native fast paths with the live endpoint energy.
+- Add a version-locked `cfrac=0.4/0.0 x rlogxi=-5..5` host runner that uses original, unmodified FORTRAN XSTAR 2.59g as the qualification oracle and continues after individual C++ failures so a campaign summary is still produced.
+- Preserve 0.6.82.14 `pescl` pi, 0.6.82.15 ATDB Type-50 mass, 0.6.82.16 `ispec4` normalization, and 0.6.82.17/.18 publication-memory/writer repairs. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` remain frozen. The `cfrac=0.4`/`0.0` science gate remains `PENDING_HOST` for this release candidate.
+
 ## 0.6.82.18 - 2026-08-11
 
 - Fix the 0.6.82.17 publication regression that aborted after the final physical STEP row with `missing terminal boundary for patch5.20.14.5 final writer recompute`.

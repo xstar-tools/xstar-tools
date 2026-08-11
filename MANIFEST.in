@@ -291,3 +291,12 @@ include tools/qualification/check_standalone_terminal_writer_0_6_82_18.py
 include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_18.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_18.py
 include tests/test_standalone_terminal_writer_0_6_82_18.py
+
+# 0.6.82.19 Type-50 cfrac<1 full-grid calc_emis ownership.
+include qualification/type50_cfrac_full_grid_0_6_82_19.json
+include tools/qualification/check_type50_cfrac_full_grid_0_6_82_19.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_19.py
+include tools/qualification/run_c5_cfrac_wide_rlogxi_host_smoke_0_6_82_19.py
+include docs/developer/type50_cfrac_full_grid_0_6_82_19.md
+include tests/test_type50_cfrac_full_grid_0_6_82_19.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_19.py

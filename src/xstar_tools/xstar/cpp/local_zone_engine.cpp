@@ -1659,6 +1659,10 @@ struct EvaluatedRecord {
     std::vector<double> generic_bound_free_sigma_cm2_v0648120;
     Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
+    // 0.6.82.19: calc_emis_all revisits Type-50 on the full epi/bremsa
+    // grid after the reduced calc_hmc/calc_emisab stages. Keep that source
+    // lifetime distinct; cfrac=1 hid this because photoexcitation is zero.
+    Type50SourceShadow type50_calc_emis_shadow{};
     Type99SourceShadow type99_shadow{};
 };
 
@@ -7901,20 +7905,54 @@ EvaluatedRecord evaluate_record(
             const bool high_wavelength_zero = stored_wavelength_a > 0.99e9;
             const double cover = std::max(0.0, 1.0 - cfrac);
             double photo = 0.0;
+            // Canonical ucalc label 50 samples the radiation at
+            // ener=abs(eeup-eelo), i.e. the live leveltemp endpoint energy.
+            // The earlier native path used the lowered/static delta_ev. This
+            // was invisible at cfrac=1 because the pumping channel is zero.
+            const double pumping_energy_ev = endpoint_energy_ev;
             if (!high_wavelength_zero && cover != 0.0) {
                 if (input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3) {
                     nb1_one_based = type99_nbinc_fortran_value(
-                        delta_ev, input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+                        pumping_energy_ev, input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
                     if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <= input.dsec_radiation_bin_count) {
                         bremsa_nb1 = input.dsec_bremsa[static_cast<std::size_t>(nb1_one_based - 1)];
                         used_dsec_radiation = true;
                     }
-                } else if (input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count > 0) {
-                    bremsa_nb1 = interp_linear(
-                        input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, delta_ev);
+                } else if (input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count >= 3) {
+                    nb1_one_based = type99_nbinc_fortran_value(
+                        pumping_energy_ev, input.radiation_energy_ev, input.radiation_bin_count);
+                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <= input.radiation_bin_count) {
+                        bremsa_nb1 = input.radiation_flux[static_cast<std::size_t>(nb1_one_based - 1)];
+                    }
                 }
                 photo = 0.02655 * oscillator * stored_wavelength_a * 1.0e-8 *
                     bremsa_nb1 / 3.0e10 * cover;
+            }
+
+            // Source xstarcalc calls calc_hmc_all/calc_emisab_all on the
+            // reduced epim/bremsam grid, then calc_emis_all calls ucalc again
+            // on the full epi/bremsa grid before fline/rcem are formed.
+            // Retain that second Type-50 answer independently. At cfrac=1
+            // full_photo is identically zero, which is why this ownership bug
+            // survived all previous covering-fraction-one qualification.
+            double full_bremsa_nb1 = 0.0;
+            int full_nb1_one_based = 0;
+            double full_photo = photo;
+            bool full_grid_available = false;
+            if (!high_wavelength_zero && cover != 0.0 &&
+                input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count >= 3) {
+                full_nb1_one_based = type99_nbinc_fortran_value(
+                    pumping_energy_ev, input.radiation_energy_ev, input.radiation_bin_count);
+                if (full_nb1_one_based > 0 &&
+                    static_cast<std::size_t>(full_nb1_one_based) <= input.radiation_bin_count) {
+                    full_bremsa_nb1 = input.radiation_flux[static_cast<std::size_t>(full_nb1_one_based - 1)];
+                    full_photo = 0.02655 * oscillator * stored_wavelength_a * 1.0e-8 *
+                        full_bremsa_nb1 / 3.0e10 * cover;
+                    full_grid_available = true;
+                }
+            } else if (cover == 0.0 || high_wavelength_zero) {
+                full_photo = 0.0;
+                full_grid_available = input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count >= 3;
             }
 
             // Literal ucalc.f90 Type-50 post-swap answer convention.
@@ -7950,6 +7988,18 @@ EvaluatedRecord evaluate_record(
             out.type50_shadow.line_index_one_based = line_index_one_based;
             out.type50_shadow.line_tau_in = line_tau_in;
             out.type50_shadow.line_tau_out = line_tau_out;
+
+            out.type50_calc_emis_shadow = out.type50_shadow;
+            out.type50_calc_emis_shadow.ans = {
+                full_photo, escaped,
+                -escaped * endpoint_energy_ev * kErgPerEv,
+                -full_photo * endpoint_energy_ev * kErgPerEv,
+                0.0, 0.0};
+            out.type50_calc_emis_shadow.bremsa_nb1 =
+                full_grid_available ? full_bremsa_nb1 : bremsa_nb1;
+            out.type50_calc_emis_shadow.nb1_one_based =
+                full_grid_available ? full_nb1_one_based : nb1_one_based;
+            out.type50_calc_emis_shadow.used_dsec_radiation = false;
 
             const bool use_fixed_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_MANIFOLD_ORACLE");
             const bool use_dsec_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_DSEC_RUNTIME_ORACLE");
@@ -13207,6 +13257,16 @@ int run_impl(
             }
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;
+            // 0.6.82.19: calc_emis_all performs a second Type-50 UCalc call
+            // on full epi/bremsa. fline/rcem must consume that answer, not
+            // the earlier reduced-grid calc_hmc answer retained in rec.ans*.
+            if (!evaluated[k].bound_free_spectral &&
+                evaluated[k].type50_calc_emis_shadow.valid) {
+                sc.ans1 = evaluated[k].type50_calc_emis_shadow.ans[0];
+                sc.ans2 = evaluated[k].type50_calc_emis_shadow.ans[1];
+                sc.ans3 = evaluated[k].type50_calc_emis_shadow.ans[2];
+                sc.ans4 = evaluated[k].type50_calc_emis_shadow.ans[3];
+            }
             // v82 patch 5.20.9.4: the broad bound-free spectral commit is
             // exactly the calc_emisab_all phase.  Both Type-53 and Type-49
             // therefore publish their reduced epim/bremsam answers into
