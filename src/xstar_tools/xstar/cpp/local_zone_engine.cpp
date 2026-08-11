@@ -304,9 +304,7 @@ bool native_promoted_flag(const char* name) {
         "XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL",
         "XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD",
         "XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY",
-        "XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL",
         "XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL",
-        "XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL",
         "XSTAR_QUALIFICATION_SOLVE_RESPONSE",
         "XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER",
         "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE",
@@ -8091,21 +8089,20 @@ EvaluatedRecord evaluate_record(
                     legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
                 }};
             }
-            // v0.6.48.7.46.21.8: the source Type-51 evaluator contract is
-            // element-independent.  The earlier Mg-only promotion left the
-            // Hydrogen and Helium collision energy channels on the legacy
-            // constants/path even during independent Thermal qualification.
-            // Preserve the old Mg flag as a compatibility alias, while the
-            // general flag promotes the same source-faithful path for H/He/Mg.
+            // v0.6.82.12: canonical ucalc Type-51 is element-independent and
+            // is now the normal native-production contract for every active
+            // element.  Keep the historical qualification flags only as
+            // explicit non-production compatibility controls; do not use
+            // element identity to decide whether the canonical result commits.
             const bool source_faithful_requested =
                 environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL") ||
                 (element.element_z == 12 &&
                  environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL"));
-            // A non-finite legacy sentinel means the compatibility evaluator
-            // cannot represent this source-valid record.  In that case use
-            // the canonical result instead of aborting broad-element runs.
+            // Native production always commits the canonical Burgess-Tully
+            // source result.  A non-finite legacy sentinel also falls through
+            // to the canonical result for old fixture/non-production callers.
             const bool source_faithful_committed =
-                source_faithful_requested || !legacy_valid;
+                native_production_mode() || source_faithful_requested || !legacy_valid;
             const auto& committed = source_faithful_committed ? source_ans : legacy_ans;
             c.ans1 = committed[0]; c.ans2 = committed[1];
             c.ans3 = committed[2]; c.ans4 = committed[3];
@@ -11357,7 +11354,8 @@ int run_impl(
             throw std::runtime_error(
                 "independent Thermal parity requires the generalized Mg primary Thermal correction contract");
         }
-        if (!environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL")) {
+        if (!native_production_mode() &&
+            !environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL")) {
             throw std::runtime_error(
                 "independent Thermal parity requires the all-element source-faithful Type-51 contract");
         }

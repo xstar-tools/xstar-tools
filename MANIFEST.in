@@ -235,3 +235,11 @@ include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_11.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py
 include docs/developer/type49_all_element_source_faithful_0_6_82_11.md
 include tests/test_type49_all_element_source_faithful_0_6_82_11.py
+
+# 0.6.82.12 all-element canonical Type-51 native-production promotion.
+include qualification/type51_all_element_production_0_6_82_12.json
+include tools/qualification/check_type51_all_element_production_0_6_82_12.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_12.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_12.py
+include docs/developer/type51_all_element_production_0_6_82_12.md
+include tests/test_type51_all_element_production_0_6_82_12.py

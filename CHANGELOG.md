@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.12 - 2026-08-11
+
+- Promote the canonical/source-faithful Type-51 Burgess-Tully collision evaluator to the normal native-production path for every active element.
+- Remove the hidden dependence on native-promoted Type-51 qualification flags; production now selects the canonical Type-51 result explicitly.
+- Preserve the historical Type-51 environment flags only as non-production compatibility/diagnostic controls.
+- Keep the science revision and C/production-zone ABIs frozen pending broad FORTRAN closure.
+- Preserve the 0.6.82.10 all-element Type-53 live escape-state, 0.6.82.9 Lucy-loop, 0.6.82.8 rnisi, 0.6.82.7 Type-63, and 0.6.82.6 terminal STEP repairs.
+- Host science status remains open for H+He+C rlogxi=-3,-2,-5; this release does not claim those regimes are fixed until canonical host reruns confirm it.
+
 # 0.6.82.11 — all-element Type-49 source-faithful bound-free promotion - 2026-08-11
 
 - Generalize canonical Type-49 `phint53`/Milne rate commitment to every active element. Earlier production preserved H/He/C/Mg compatibility answers while only Mg and other elements committed the already-computed source-faithful result; canonical `ucalc.f90` has no element split for Type-49.
