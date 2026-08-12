@@ -75,7 +75,11 @@ from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
 from .emissivity import CalcEmisabContext
 from .free_free import FreeFreeContext, freef_continuum_result
-from .local_zone import FixedStateCalcHMCAllResult, FixedStateElementRequest
+from .local_zone import (
+    FixedStateCalcHMCAllResult,
+    FixedStateElementRequest,
+    resolve_calc_hmc_all_density,
+)
 from .output_writers import (
     LevelOutputMetadata,
     LineOutputMetadata,
@@ -1561,6 +1565,18 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         n = int(state.control["ncn2m"])
         opakc = runtime.work_arrays.get("opakc")
         brcems = runtime.work_arrays.get("brcems")
+        # calc_hmc_all mutates xpx at entry before comp2/freef/bremem.
+        # Build the immutable continuum contexts from that same source-resolved
+        # density; otherwise lcdd=0 precomputes freef with the rread1 trial
+        # density while calc_hmc_all executes freef with p/(REAL4(1.38e-12)*T4),
+        # and bremem's incoming opakc no longer matches the preceding freef.
+        continuum_xpx = resolve_calc_hmc_all_density(
+            temperature_k=runtime.temperature_k,
+            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
+            electron_fraction_xee=runtime.electron_fraction_xee,
+            pressure=runtime.pressure,
+            lcdd=runtime.lcdd,
+        )
         if opakc is None:
             opakc = np.zeros(n, dtype=float)
         if brcems is None:
@@ -1584,7 +1600,7 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         comp_result, _ = comp2_continuum_result(
             comp,
             temperature_k=runtime.temperature_k,
-            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
+            hydrogen_density_cm3=continuum_xpx,
             electron_fraction_xee=runtime.electron_fraction_xee,
         )
 
@@ -1598,7 +1614,7 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         free_result, _ = freef_continuum_result(
             free,
             temperature_k=runtime.temperature_k,
-            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
+            hydrogen_density_cm3=continuum_xpx,
             electron_fraction_xee=runtime.electron_fraction_xee,
         )
 
@@ -1612,7 +1628,7 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         bremem_result, _ = bremem_continuum_result(
             bremem,
             temperature_k=runtime.temperature_k,
-            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
+            hydrogen_density_cm3=continuum_xpx,
             electron_fraction_xee=runtime.electron_fraction_xee,
         )
 

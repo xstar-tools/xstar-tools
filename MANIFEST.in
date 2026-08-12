@@ -401,3 +401,11 @@ include tests/test_lcpres_pressure_hotfix_0_6_82_25_1.py
 include docs/developer/lcpres_pressure_hotfix_0_6_82_25_1.md
 include xstar_tools-0.6.82.25.1_host_validation.md
 include xstar_tools_conversation_handoff_through_0.6.82.25.1_lcpres_hotfix.md
+
+# 0.6.82.25.2 Python pressure continuum + backend-safe compare hotfix
+include qualification/lcpres_pressure_0_6_82_25_2/lcpres_pressure_python_compare_0_6_82_25_2.json
+include tools/qualification/check_lcpres_pressure_python_compare_0_6_82_25_2.py
+include tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_2.py
+include tests/test_lcpres_pressure_python_compare_0_6_82_25_2.py
+include docs/developer/lcpres_pressure_python_compare_0_6_82_25_2.md
+include xstar_tools-0.6.82.25.2_host_validation.md

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.82.25.2 - 2026-08-12
+
+- Preserve the `0.6.82.25` constant-pressure equations and the `0.6.82.25.1` native STEP/xcol/tau and Python BREMSMAP-tail repairs, but correct a newly exposed pure-Python continuum-context ownership defect. `_calc_kwargs_factory()` now prebuilds `comp2`/`freef`/`bremem` with the same source-resolved `xpx` that `calc_hmc_all` obtains from `pressure/[REAL4(1.38e-12)*T4]` under `lcdd=0`; constant-density `lcdd=1` is unchanged.
+- Make the pressure host comparator backend-independent. A failed backend directory is no longer treated as a complete candidate: comparison requires the actual `xout_step.log` and `xout_abund1.fits` products, and `--backend cpp|python` permits explicit per-backend qualification.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487` / `6048110` / `60488` frozen. No C++ science, DSEC, atomic-rate, matrix, pressure-controller, cfrac, niter, or transport arithmetic changes are included.
+
 ## 0.6.82.25.1 - 2026-08-12
 
 - Keep the `0.6.82.25` constant-pressure equations/controller arithmetic frozen, but repair the two host-exposed native STEP publication mismatches: publish the retained source cumulative column `xcol` (`RadialZoneState::column_density_cm2`) instead of reconstructing `current_density*cumulative_depth`, and apply the literal FORTRAN `log10(max(dpthc,1e-10))` optical-depth floor in live and persisted STEP rows.
