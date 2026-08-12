@@ -410,8 +410,11 @@ void append_native_radial_summary(std::ofstream& out,
         for (std::size_t zi = 0; zi < physical_rows; ++zi) {
             const auto& zone = state.radial_zones[zi];
             double logxi = zone.log_ionization_parameter;
+            const bool terminal_posttransport_v0682261 =
+                state.terminal_synthetic_row_present && zi + 1u == physical_rows;
             const double r19 = zone.radius_cm * source_radius_scale;
-            if (xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
+            if (!terminal_posttransport_v0682261 &&
+                xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
                 const double skse = xlum / (zone.density_cm3 * r19 * r19);
                 logxi = std::log10(std::max(1.0e-24, skse));
             }

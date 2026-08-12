@@ -1,13 +1,13 @@
-> **Current 0.6.82.26 qualification note:** `0.6.82.25.4` closed the `lcpres`/pressure milestone on the host, including the constant-density `cd_xi1` control (`27/1/1` STEP `ntotit` matching FORTRAN/C++). `0.6.82.26` is the host candidate for source-faithful analytic `radexp` and hidden `radexp<-99` `density.dat` radial-density semantics. Science revision and ABIs remain frozen; low-ionization performance work remains deferred to `0.6.82.31`-`0.6.82.33`.
+> **Current 0.6.82.26.1 qualification note:** `0.6.82.25.4` closed the `lcpres`/pressure milestone on the host. `0.6.82.26` correctly evolved live analytic/table radial density but host qualification exposed retained-publication, `density.dat` artifact-policy, and comparator defects. `0.6.82.26.1` is the narrow corrective host candidate. Science revision and ABIs remain frozen; low-ionization performance work remains deferred to `0.6.82.31`-`0.6.82.33`.
 
 # xstar-tools
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.26`  
+**Distribution:** `0.6.82.26.1`  
 
 
-**0.6.82.26 radexp/density.dat candidate:** native production now carries the live `lcpres=0` radial density through `n=n0*(R/R0)^radexp`, while the Python public controller explicitly retains the first-shell source baseline. Both public runners expose the hidden FORTRAN `radexp < -99` branch using fixed-name `density.dat`, including row-1 initialization, post-shell geometry replacement, monotonic-radius failure and EOF/iostat termination. Stock analytic `radexp` validation remains `[-3,3]`; only the disjoint `<-99` source sentinel is additionally admitted.
+**0.6.82.26.1 radexp/density.dat corrective candidate:** native production now carries the live `lcpres=0` radial density through `n=n0*(R/R0)^radexp`, while the Python public controller explicitly retains the first-shell source baseline. Both public runners expose the hidden FORTRAN `radexp < -99` branch using fixed-name `density.dat`, including row-1 initialization, post-shell geometry replacement, monotonic-radius failure and EOF/iostat termination. Stock analytic `radexp` validation remains `[-3,3]`; only the disjoint `<-99` source sentinel is additionally admitted.
 
 **0.6.82.25.4 lcpres closure:** the pure-Python `msolvelucy` `diff2>=1e3` control-flow defect was corrected and host `cd_xi1` moved from `26/9/9` to the canonical FORTRAN/C++ `27/1/1`, with the full `.25.4` case comparator ACCEPT. The pressure/density-control milestone is therefore the frozen predecessor for `.26`.
 

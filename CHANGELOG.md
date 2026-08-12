@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.26.1 - 2026-08-12
+
+- Repair host-exposed `0.6.82.26` publication ownership without changing the radial controller: for `lcpres=0, radexp!=0`, retain source-owned live density, recomputed radial xi, and cumulative `xcol` instead of restoring the input constant density/rlogxi/`density*depth`.
+- Make live STEP/pprint(9)-style rows use the source initial radius and retained cumulative column for variable-density analytic/table paths.
+- Treat canonical `density.dat` as source input rather than a generated artifact in hidden `radexp<-99` table mode; the host runner also separates input and output directories.
+- Fix the host analytic-law self-check to ignore XSTAR's terminal all-zero ABUNDANCES row, preventing false `radexp=0` rejection and `0**negative` failures.
+- Preserve the source-stale terminal ionization scalar through live and persisted STEP publication after the final variable-density geometry update.
+- Preserve `.25.4` msolvelucy closure, `.26` radial update arithmetic, science revision `0.6.48.12.3.45.3.3.8`, and ABIs `60487`, `6048110`, `60488`.
+
 ## 0.6.82.26 - 2026-08-12
 
 - Close the `radexp` radial-density plumbing against canonical `xstar.f90`: public `lcpres=0`/source `lcdd=1` now carries the live analytic density `n=n0*(R/R0)^radexp` through C++ production evolution, with Python explicitly capturing the first-shell `xpx0,r0` source baseline.

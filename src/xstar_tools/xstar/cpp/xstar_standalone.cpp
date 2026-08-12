@@ -2896,21 +2896,28 @@ void print_xstar_style_live_header() {
 void print_xstar_style_live_zone(
     const FixedDsecSnapshot& snapshot,
     const xstar_atdb_runtime::ProductionParameters& params,
+    double source_initial_radius_cm,
     double source_depth_cm,
     double cumulative_column_cm2,
-    std::size_t dsec_evaluations) {
+    std::size_t dsec_evaluations,
+    std::optional<double> source_logxi_override = std::nullopt) {
     auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
-    const double radius = params.initial_radius_cm + source_depth_cm;
+    const double radius = source_initial_radius_cm + source_depth_cm;
     const double depth = std::max(0.0, source_depth_cm);
+    const bool variable_density_v0682261 =
+        xstar_atdb_runtime::source_lcdd_from_lcpres(params.pressure_mode) == 1 &&
+        params.radial_density_exponent != 0.0;
     const double column = std::max(0.0,
-        params.pressure_mode == 1
+        (params.pressure_mode == 1 || variable_density_v0682261)
             ? cumulative_column_cm2
             : params.density_cm3 * depth);
     const double log_rel = radius > 0.0 && depth > 0.0 ? std::log10(depth / radius) : -36.0;
     const double r19 = radius * static_cast<double>(static_cast<float>(1.0e-19));
     const double live_xi = (r19 > 0.0 && snapshot.hydrogen_density_cm3 > 0.0)
         ? params.luminosity_1e38 / (r19 * r19 * snapshot.hydrogen_density_cm3) : 0.0;
-    const double log_xi = live_xi > 0.0 ? std::log10(live_xi) : -10.0;
+    const double log_xi = source_logxi_override.has_value()
+        ? *source_logxi_override
+        : (live_xi > 0.0 ? std::log10(live_xi) : -10.0);
     const double log_temp = snapshot.temperature_t4 > 0.0
         ? 4.0 + std::log10(snapshot.temperature_t4) : -10.0;
 
@@ -10251,6 +10258,10 @@ void retain_controller_owned_product_workspaces(
     const double rlogxi = json_number_value(json, "rlogxi", 0.0);
     const int lcpres = static_cast<int>(json_number_value(json, "lcpres", 0.0));
     const bool constant_pressure_v068225 = lcpres == 1;
+    const double radial_density_exponent_v0682261 =
+        json_number_value(json, "radexp", 0.0);
+    const bool variable_density_v0682261 =
+        lcpres == 0 && radial_density_exponent_v0682261 != 0.0;
     const bool generic_all_element_publication_v0648123 = std::any_of(
         whole.element_metadata.begin(), whole.element_metadata.end(),
         [](const xstar_run_state::ElementMetadataState& e) {
@@ -10364,7 +10375,11 @@ void retain_controller_owned_product_workspaces(
             if (std::isfinite(accepted_density) && accepted_density > 0.0) {
                 zone.density_cm3 = accepted_density;
             }
-        } else {
+        } else if (!variable_density_v0682261) {
+            // 0.6.82.26.1: only the literal radexp=0 constant-density branch
+            // may be reconstructed from the public input density.  Analytic
+            // radexp and density.dat rows already carry source-owned live xpx,
+            // including the terminal post-geometry density.
             zone.density_cm3 = density;
         }
         zone.pressure_dyn_cm2 = pressure;
@@ -10374,7 +10389,11 @@ void retain_controller_owned_product_workspaces(
         // 1.1e21-cm boundary where source XSTAR/Python recompute ~1.92.
         // Recompute from the retained live radius using the source default-REAL
         // 1.e-19 constant, exactly as the production append-zone path does.
-        if (generic_all_element_publication_v0648123 || constant_pressure_v068225) {
+        if (variable_density_v0682261) {
+            // 0.6.82.26.1: append_zone already owns the exact source scalar.
+            // Preserve it verbatim so the terminal post-geometry row keeps
+            // xstar.f90's intentionally stale pre-geometry xi/zeta value.
+        } else if (generic_all_element_publication_v0648123 || constant_pressure_v068225) {
             const double r19_v0648123 = zone.radius_cm *
                 static_cast<double>(static_cast<float>(1.0e-19));
             const double live_xi_v0648123 = (r19_v0648123 > 0.0 && zone.density_cm3 > 0.0)
@@ -10390,7 +10409,10 @@ void retain_controller_owned_product_workspaces(
             zone.log_ionization_parameter = rlogxi;
             zone.ionization_parameter = rlogxi;
         }
-        if (!constant_pressure_v068225) {
+        if (!constant_pressure_v068225 && !variable_density_v0682261) {
+            // 0.6.82.26.1: source xcol for variable density is accumulated
+            // with the post-geometry xpx and must not be reconstructed as
+            // input_density * depth.
             zone.column_density_cm2 = density * std::max(source_rdel[i], 0.0);
         }
         zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
@@ -10499,8 +10521,10 @@ void retain_controller_owned_product_workspaces(
         row.row_index = i + 1u;
         row.radius_cm = zone.radius_cm;
         row.delta_radius_cm = source_rdel[i];
-        row.log_ionization_parameter = (generic_all_element_publication_v0648123 || constant_pressure_v068225)
-            ? zone.log_ionization_parameter : rlogxi;
+        row.log_ionization_parameter =
+            (generic_all_element_publication_v0648123 || constant_pressure_v068225 ||
+             variable_density_v0682261)
+                ? zone.log_ionization_parameter : rlogxi;
         row.electron_fraction = zone.electron_fraction;
         row.density_cm3 = zone.density_cm3;
         row.pressure_dyn_cm2 = pressure;
@@ -11280,6 +11304,10 @@ ProductPublicationResultV172524 publish_true_production_products(
             "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits",
             "xout_spect1.fits", "xout_step.log"};
+        const std::string publication_json_v0682261 = read_text_file(options.parameters_path);
+        if (json_number_value(publication_json_v0682261, "radexp", 0.0) < -99.0) {
+            allowed.insert("density.dat");
+        }
         for (const auto& entry : std::filesystem::directory_iterator(output)) {
             if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
                 throw std::runtime_error("true production created a non-product artifact: " + entry.path().filename().string());
@@ -18031,8 +18059,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 call, finals.back(), dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
             if (live_text_zone_progress_enabled()) {
                 print_xstar_style_live_zone(
-                    finals.back(), params, source_boundary_depth_cm.back(),
-                    source_boundary_column_cm2.back(),
+                    finals.back(), params, source_initial_radius_cm_v068226,
+                    source_boundary_depth_cm.back(), source_boundary_column_cm2.back(),
                     static_cast<std::size_t>(std::max(stats.ntotit, 0)));
             }
 
@@ -18409,8 +18437,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         if (live_text_zone_progress_enabled()) {
             print_xstar_style_live_zone(
                 *terminal_transport_boundary_v82_patch520144, params,
-                data.cumulative_depth_cm, data.cumulative_column_cm2,
-                actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
+                source_initial_radius_cm_v068226, data.cumulative_depth_cm,
+                data.cumulative_column_cm2,
+                actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back(),
+                terminal_source_logxi_v068226);
         }
         if (!data.reference_trajectory_mode && !data.reference_diagnostics_enabled) {
             terminal_transport_boundary_v82_patch520144.reset();
@@ -19698,10 +19728,17 @@ int command_run_standalone_production(const Options& options, const std::filesys
             throw std::runtime_error("publication did not create the XSTAR control-required public products");
         }
         if (!artifacts.any()) {
-            const std::set<std::string> allowed = {
+            std::set<std::string> allowed = {
                 "xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
                 "xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits",
                 "xout_spect1.fits","xout_step.log"};
+            // 0.6.82.26.1: density.dat is canonical source input for the
+            // hidden radexp<-99 table branch.  When input and output are the
+            // same directory it must not be misclassified as generated output.
+            const std::string publication_json_v0682261 = read_text_file(options.parameters_path);
+            if (json_number_value(publication_json_v0682261, "radexp", 0.0) < -99.0) {
+                allowed.insert("density.dat");
+            }
             for (const auto& entry : std::filesystem::directory_iterator(output)) {
                 if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
                     throw std::runtime_error("file-silent production created a non-product artifact: " + entry.path().filename().string());

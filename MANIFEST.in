@@ -434,3 +434,12 @@ include tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26.py
 include tests/test_radexp_density_0_6_82_26.py
 include docs/developer/radexp_density_0_6_82_26.md
 include xstar_tools-0.6.82.26_host_validation.md
+
+# 0.6.82.26.1 radexp/density.dat host publication + comparator hotfix
+include qualification/radexp_density_0_6_82_26_1/radexp_density_hotfix_0_6_82_26_1.json
+include qualification/radexp_density_0_6_82_26_1/README.md
+include tools/qualification/check_radexp_density_hotfix_0_6_82_26_1.py
+include tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26_1.py
+include tests/test_radexp_density_0_6_82_26_1.py
+include docs/developer/radexp_density_hotfix_0_6_82_26_1.md
+include xstar_tools-0.6.82.26.1_host_validation.md
