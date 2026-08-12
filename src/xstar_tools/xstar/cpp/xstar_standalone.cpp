@@ -5514,7 +5514,7 @@ std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_fro
     const std::filesystem::path& parameters_path) {
     const std::string json = read_text_file(parameters_path);
     std::vector<xstar_run_state::ParameterRowState> rows;
-    rows.reserve(56);
+    rows.reserve(59);
     const auto num = [&](const char* key, double fallback) { return json_number_value(json, key, fallback); };
     const auto str = [&](const char* key, const char* fallback) { return json_string_value(json, key, fallback); };
     const auto add_real = [&](const char* key, double fallback, const char* comment = "") {
@@ -5527,22 +5527,22 @@ std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_fro
         rows.push_back(public_parameter_row(static_cast<std::uint16_t>(rows.size() + 1), key, 0.0, "string", str(key, fallback)));
     };
 
-    add_real("cfrac", 1.0);
-    add_real("temperature", 100.0, "Units of 10**4 K");
+    add_real("cfrac", 0.0);
+    add_real("temperature", 400.0, "Units of 10**4 K");
     add_integer("lcpres", 0.0, "1=yes, 0=no");
     add_real("pressure", 0.03, "dynes/cm**2");
-    add_real("density", 1.0e8, "cm**(-3)");
+    add_real("density", 1.0e4, "cm**(-3)");
     add_string("spectrum", "pow");
-    add_string("spectrum_file", "spect.dat");
+    add_string("spectrum_file", "spct.dat");
     add_integer("spectun", 0.0, "0=energy, 1=photons");
     add_real("trad", -1.0, "or alpha");
-    add_real("rlrad38", 1.0e6, "/10**38 erg/sec");
-    add_real("column", 1.0e20, "cm**(-2)");
-    add_real("rlogxi", 1.5);
-    add_integer("nsteps", 10.0);
-    add_integer("niter", 99.0);
-    add_integer("lwrite", 1.0, "1=yes, 0=no");
-    add_integer("lprint", 1.0, "1=yes, 0=no");
+    add_real("rlrad38", 1.0e-6, "/10**38 erg/sec");
+    add_real("column", 1.0e17, "cm**(-2)");
+    add_real("rlogxi", 5.0);
+    add_integer("nsteps", 3.0);
+    add_integer("niter", 0.0);
+    add_integer("lwrite", 0.0, "1=yes, 0=no");
+    add_integer("lprint", 0.0, "1=yes, 0=no");
     add_integer("lstep", 0.0);
     add_string("abundtbl", "xdef");
     add_real("habund", 1.0);
@@ -5550,39 +5550,45 @@ std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_fro
     add_real("liabund", 0.0);
     add_real("beabund", 0.0);
     add_real("babund", 0.0);
-    add_real("cabund", 0.0);
-    add_real("nabund", 0.0);
-    add_real("oabund", 0.0);
-    add_real("fabund", 0.0);
-    add_real("neabund", 0.0);
-    add_real("naabund", 0.0);
+    add_real("cabund", 1.0);
+    add_real("nabund", 1.0);
+    add_real("oabund", 1.0);
+    add_real("fabund", 1.0);
+    add_real("neabund", 1.0);
+    add_real("naabund", 1.0);
     add_real("mgabund", 1.0);
-    add_real("alabund", 0.0);
-    add_real("siabund", 0.0);
-    add_real("pabund", 0.0);
-    add_real("sabund", 0.0);
-    add_real("clabund", 0.0);
-    add_real("arabund", 0.0);
-    add_real("kabund", 0.0);
-    add_real("caabund", 0.0);
-    add_real("scabund", 0.0);
-    add_real("tiabund", 0.0);
-    add_real("vabund", 0.0);
-    add_real("crabund", 0.0);
-    add_real("mnabund", 0.0);
-    add_real("feabund", 0.0);
-    add_real("coabund", 0.0);
-    add_real("niabund", 0.0);
-    add_real("cuabund", 0.0);
-    add_real("znabund", 0.0);
+    add_real("alabund", 1.0);
+    add_real("siabund", 1.0);
+    add_real("pabund", 1.0);
+    add_real("sabund", 1.0);
+    add_real("clabund", 1.0);
+    add_real("arabund", 1.0);
+    add_real("kabund", 1.0);
+    add_real("caabund", 1.0);
+    add_real("scabund", 1.0);
+    add_real("tiabund", 1.0);
+    add_real("vabund", 1.0);
+    add_real("crabund", 1.0);
+    add_real("mnabund", 1.0);
+    add_real("feabund", 1.0);
+    add_real("coabund", 1.0);
+    add_real("niabund", 1.0);
+    add_real("cuabund", 1.0);
+    add_real("znabund", 1.0);
     add_real("emult", 0.5);
     add_real("taumax", 5.0);
     add_real("xeemin", 0.1);
-    add_real("critf", 1.0e-6);
-    add_real("vturbi", 100.0);
+    add_real("critf", 1.0e-7);
+    add_real("vturbi", 1.0);
     add_integer("npass", 1.0);
-    add_string("modelname", "xstar_atomic_mg11_xi1p5_ne1e8");
+    add_string("modelname", "XSTAR Default");
     add_integer("loopcontrol", 0.0);
+    // 0.6.82.23 public provenance extension beyond FORTRAN's historical 56
+    // fparmlist rows.  Preserve the first 56 source order, append the three
+    // xstar.par inputs that were previously absent from product metadata.
+    add_real("radexp", 0.0);
+    add_integer("ncn2", 9999.0);
+    add_string("mode", "ql");
     return rows;
 }
 
@@ -10655,8 +10661,8 @@ void ensure_retained_native_public_metadata(xstar_run_state::WholeRunAccumulated
     const auto& ws = representative_ws ? *representative_ws : empty_ws;
 
     auto native_parameter_rows = native_public_parameter_rows_from_json(whole.parameters_path);
-    if (native_parameter_rows.size() == 56u &&
-        (whole.parameter_rows.size() != 56u || whole.parameter_rows.empty() ||
+    if (native_parameter_rows.size() >= 56u &&
+        (whole.parameter_rows.size() != native_parameter_rows.size() || whole.parameter_rows.empty() ||
          whole.parameter_rows.front().parameter != "cfrac")) {
         whole.parameter_rows = std::move(native_parameter_rows);
     } else if (whole.parameter_rows.size() < 56u) {

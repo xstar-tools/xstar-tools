@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.23 - 2026-08-12
+
+- Establish the authoritative Table-1/public-parameter contract layer without changing atomic, thermal, matrix, transport, DSEC, or publication science. Science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`/`6048110` remain frozen.
+- Add a machine-readable 59-parameter ledger combining XSTAR Manual Table 1, detailed section 4.3 defaults, stock `xstar.par` defaults/ranges/modes, `rread1`/FORTRAN consumers, native C++ consumers, Python consumers, and science/radial/output/metadata classifications. Preserve documented conflicts explicitly rather than silently reconciling them.
+- Make the supplied stock XSTAR 2.59g `xstar.par`/XPI envelope the executable validation/default authority for this milestone. Record manual/source conflicts including `cfrac`, `column`, `nsteps`, `loopcontrol`, `lwrite=-1`, `radexp<-100`, `spectun=2`, and the Table-1 omissions `naabund`/`lstep`. Runtime default conflicts remain `PENDING_HOST_HEASOFT` because HEASoft is unavailable in the build environment; provide an isolated-PFILES host probe.
+- Remove qualification-model values from native production fallbacks. Canonical public defaults now include `density=1e4`, `rlrad38=1e-6`, `column=1e17`, `rlogxi=5`, `nsteps=3`, `niter=0` requested, `critf=1e-7`, `vturbi=1`, `spectrum_file=spct.dat`, and the complete Z=1..30 abundance multiplier defaults from stock `xstar.par`.
+- Centralize Python and C++ validation. Public ranges now reject rather than silently clamp, including `ncn2=999..999999`, `cfrac=0..1`, `nsteps=1..1000`, stock-XPI `lprint/lwrite/loopcontrol/spectun/radexp` ranges, and all abundance multipliers. Partial `xstar-cpp` commands receive the stock public defaults before validation.
+- Expand public provenance from the historical 56 FORTRAN `fparmlist` rows to all 59 stock public parameters by appending `radexp`, `ncn2`, and `mode`; native JSON provenance records the complete normalized parameter envelope.
+- Add source/contract sensitivity tests proving representative active parameters reach their intended consumers while metadata/interface controls remain outside local science kernels. `niter` physics semantics are deliberately deferred to 0.6.82.24: `.23` preserves the requested value separately while retaining the pre-existing native effective floor so this milestone does not mix in a science/controller change.
+- Preserve the accepted 0.6.82.22 C5 `cfrac=0/0.4/1` and `emult=0.1/0.25/0.5/1.0` science results as frozen regression/performance baselines. Low-ionization speed work remains scheduled for 0.6.82.31-0.6.82.33.
+
 ## 0.6.82.22 - 2026-08-11
 
 - Prioritize low-ionization native performance and memory after the C5 covering-fraction axis closed at `cfrac=0`, `0.4`, and `1.0`. No science equation, controller arithmetic, rate ordering, matrix ordering, transport equation, science revision, or ABI is changed.

@@ -37,7 +37,7 @@ def test_type85_uses_photoionization_heating_not_recombination_cooling() -> None
     end = text.index("if (dt != 64 && dt != 85)", start)
     block = text[start:end]
     version_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    if any(f'version = "{version}"' in version_text for version in ("0.6.82.5", "0.6.82.6", "0.6.82.7", "0.6.82.8", "0.6.82.9", "0.6.82.10", "0.6.82.11", "0.6.82.12", "0.6.82.13", "0.6.82.14", "0.6.82.15", "0.6.82.16")):
+    if any(f'version = "{version}"' in version_text for version in ("0.6.82.5", "0.6.82.6", "0.6.82.7", "0.6.82.8", "0.6.82.9", "0.6.82.10", "0.6.82.11", "0.6.82.12", "0.6.82.13", "0.6.82.14", "0.6.82.15", "0.6.82.16", "0.6.82.17", "0.6.82.18", "0.6.82.19", "0.6.82.20", "0.6.82.21", "0.6.82.22", "0.6.82.23")):
         # 0.6.82.5 corrected the second Type-85 post-phintfo rearrangement;
         # 0.6.82.6 is a publication-only successor and must preserve it.
         assert "c.ans4=-ph.ans[2]" in block

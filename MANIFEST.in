@@ -336,3 +336,14 @@ include docs/developer/low_xi_memory_performance_0_6_82_22.md
 include xstar_tools-0.6.82.22_host_validation.md
 include xstar_tools_emult_profile_0.6.82.21.md
 include xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
+
+# 0.6.82.23 Table-1 parameter contract/default/range/provenance foundation.
+include qualification/table1_parameter_contract_0_6_82_23.json
+include qualification/table1_parameter_contract_0_6_82_23_manifest.json
+include tools/qualification/check_table1_parameter_contract_0_6_82_23.py
+include tools/qualification/probe_stock_xstar_defaults_0_6_82_23.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_23.py
+include docs/TABLE1_PARAMETER_CONTRACT_0_6_82_23.md
+include tests/test_table1_parameter_contract_0_6_82_23.py
+include xstar_tools-0.6.82.23_host_validation.md
+include xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md

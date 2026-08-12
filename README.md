@@ -1,4 +1,4 @@
-> **Current 0.6.82.21 qualification note:** generic C++ production now follows canonical FORTRAN DSEC post-return ownership: a successful `dsec` return is accepted without an extra wrapper veto on diagnostic charge/thermal flags. The first host gate is H+He+C, `cfrac=0`, `rlogxi=-2`; do not run the wide `cfrac=0` or `emult` sweep until that point passes.
+> **Current 0.6.82.23 qualification note:** the C5 covering-fraction axis is closed at `cfrac=0`, `0.4`, and `1.0`, and the practical `emult=0.1/0.25/0.5/1.0` science sweep is ACCEPT under 0.6.82.22. 0.6.82.23 changes only the public Table-1 parameter contract: stock `xstar.par`/XPI defaults and ranges, complete 59-parameter provenance, and consumer/sensitivity gates. The low-ionization speed baseline remains frozen for 0.6.82.31-0.6.82.33.
 
 # xstar-tools
 

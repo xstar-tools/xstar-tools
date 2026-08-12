@@ -38,6 +38,11 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 
 from .abundance_tables import resolve_abundance_table
+from .parameter_contract import (
+    ABUNDANCE_PARAMETER_NAMES as CONTRACT_ABUNDANCE_PARAMETER_NAMES,
+    XSTAR_PAR_DEFAULTS,
+    coerce_and_validate_parameter,
+)
 from .source_real_energy_grid import source_ener_grid
 
 from .. import __version__ as XSTAR_ATOMIC_VERSION
@@ -299,6 +304,8 @@ ELEMENT_SYMBOLS = (
     "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
 )
 ABUNDANCE_PARAMETER_NAMES = tuple(symbol.lower() + "abund" for symbol in ELEMENT_SYMBOLS)
+if ABUNDANCE_PARAMETER_NAMES != CONTRACT_ABUNDANCE_PARAMETER_NAMES:
+    raise RuntimeError("0.6.82.23 parameter contract abundance order mismatch")
 ATOMIC_MASS = (
     1.008, 4.003, 6.94, 9.012, 10.81, 12.011, 14.007, 15.999, 18.998, 20.180,
     22.990, 24.305, 26.982, 28.085, 30.974, 32.06, 35.45, 39.948, 39.098, 40.078,
@@ -347,42 +354,16 @@ _XSTAR_OUTPUT_PARAMETER_ROWS: tuple[tuple[str, str, str], ...] = (
     ("npass", "integer", " "),
     ("modelname", "string", " "),
     ("loopcontrol", "integer", " "),
+    # 0.6.82.23 provenance extension: public xstar.par inputs omitted from the
+    # historical 56-row fparmlist array are appended without disturbing the
+    # canonical first-56 ordering.
+    ("radexp", "real", "density distribution power law index"),
+    ("ncn2", "integer", "number of continuum bins"),
+    ("mode", "string", "XPI interface mode"),
 )
 
-XSTAR_PARAMETER_DEFAULTS: Mapping[str, Any] = {
-    "spectrum": "pow",
-    "spectrum_file": "spct.dat",
-    "spectun": 0,
-    "nsteps": 3,
-    "niter": 0,
-    "lwrite": 0,
-    "lprint": 0,
-    "lstep": 0,
-    "npass": 1,
-    "lcpres": 0,
-    "emult": 0.5,
-    "taumax": 5.0,
-    "xeemin": 0.1,
-    "critf": 1.0e-7,
-    "radexp": 0.0,
-    "ncn2": 9999,
-    "modelname": "xstar-python",
-    "abundtbl": "xdef",
-    "trad": -1.0,
-    "cfrac": 0.0,
-    "temperature": 400.0,
-    "pressure": 0.03,
-    "density": 1.0e4,
-    "rlrad38": 1.0e-6,
-    "column": 1.0e17,
-    "rlogxi": 5.0,
-    "vturbi": 1.0,
-    "loopcontrol": 0,
-    **{
-        name: (0.0 if name in {"liabund", "beabund", "babund"} else 1.0)
-        for name in ABUNDANCE_PARAMETER_NAMES
-    },
-}
+XSTAR_PARAMETER_DEFAULTS: Mapping[str, Any] = dict(XSTAR_PAR_DEFAULTS)
+
 
 
 @dataclass(frozen=True)
@@ -625,11 +606,23 @@ def normalize_xstar_parameters(
         for name in ABUNDANCE_PARAMETER_NAMES:
             values[name] = 0.0
     values.update(supplied)
+    # 0.6.82.23: apply the stock xstar.par type/range envelope before any
+    # implementation-specific science dispatch.  Unknown internal keys are
+    # retained for lower-level orchestration but public keys are source-validated.
+    for _name in tuple(values):
+        if _name in XSTAR_PAR_DEFAULTS:
+            try:
+                values[_name] = coerce_and_validate_parameter(_name, values[_name])
+            except (TypeError, ValueError) as exc:
+                raise XSTARPythonRunnerError(str(exc)) from exc
     if abundances:
         by_symbol = {str(k).strip().lower(): float(v) for k, v in abundances.items()}
         for symbol, name in zip(ELEMENT_SYMBOLS, ABUNDANCE_PARAMETER_NAMES):
             if symbol.lower() in by_symbol:
-                values[name] = by_symbol[symbol.lower()]
+                try:
+                    values[name] = coerce_and_validate_parameter(name, by_symbol[symbol.lower()])
+                except (TypeError, ValueError) as exc:
+                    raise XSTARPythonRunnerError(str(exc)) from exc
 
     spectrum = str(values["spectrum"]).strip().lower()
     if spectrum not in {"pow", "powerlaw", "power-law"}:
@@ -641,46 +634,23 @@ def normalize_xstar_parameters(
     abundance_table, baseline_abundances = resolve_abundance_table(values["abundtbl"])
     values["abundtbl"] = abundance_table
 
-    # XPI constrains these three public control parameters before rread1 sees
-    # them.  Mirror the canonical xstar.par ranges here so every public mode
-    # has the same contract even when it is invoked without HEASoft/XPI.
+    # 0.6.82.23 public values above already passed the literal xstar.par/XPI
+    # envelope.  Physics branches that are not yet complete remain explicit
+    # successor milestones rather than being silently clamped here.
     lwrite = int(values["lwrite"])
-    if lwrite not in (0, 1):
-        raise XSTARPythonRunnerError("lwrite must be 0 or 1")
-    values["lwrite"] = lwrite
     lprint = int(values["lprint"])
-    if not -1 <= lprint <= 6:
-        raise XSTARPythonRunnerError("lprint must be in the XSTAR range -1..6")
-    values["lprint"] = lprint
     loopcontrol = int(values["loopcontrol"])
-    if not 0 <= loopcontrol <= 30000:
-        raise XSTARPythonRunnerError("loopcontrol must be in the XSTAR range 0..30000")
-    values["loopcontrol"] = loopcontrol
     radexp = float(values["radexp"])
-    if radexp < -99.0:
-        raise UnsupportedXSTARParameterError(
-            "run_xstar_python currently requires the analytic radial-density branch; "
-            "tabulated density execution remains available through the lower-level radial API"
-        )
-    ncn2 = max(999, min(999_999, int(values["ncn2"])))
-    values["ncn2"] = ncn2
+    ncn2 = int(values["ncn2"])
     nsteps = int(values["nsteps"])
-    if nsteps < 1:
-        raise XSTARPythonRunnerError("nsteps must be positive")
     npass = int(values["npass"])
-    if npass <= 0:
-        npass = 1
-    values["npass"] = npass
     niter = int(values["niter"])
-    values["niter"] = niter
     lcpres = int(values["lcpres"])
-    lcdd = 1 - lcpres if lcpres <= 1 else lcpres
-    if lcdd not in (0, 1, 2):
-        raise UnsupportedXSTARParameterError(f"unsupported lcpres/lcdd branch: {lcpres}/{lcdd}")
+    lcdd = 1 - lcpres
 
     t4 = float(values["temperature"])
-    if not math.isfinite(t4) or t4 <= 0.0:
-        raise XSTARPythonRunnerError("temperature must be positive in units of 1e4 K")
+    if not math.isfinite(t4):
+        raise XSTARPythonRunnerError("temperature must be finite in units of 1e4 K")
     pressure = float(values["pressure"])
     density = float(values["density"])
     xee_trial = 1.2
@@ -2617,7 +2587,7 @@ def prepare_xstar_python_cache(
 # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
 # XSTAR-FUNCTION-COMMENT-END
 def _output_parameters(parameters: NormalizedXSTARParameters) -> tuple[OutputParameter, ...]:
-    """Build the literal 56-row xstar.f90/fparmlist parameter table."""
+    """Build the canonical 56-row fparmlist table plus 3 public provenance rows."""
     rows: list[OutputParameter] = []
     for name, parameter_type, comment in _XSTAR_OUTPUT_PARAMETER_ROWS:
         value = parameters.get(name)
@@ -2625,8 +2595,8 @@ def _output_parameters(parameters: NormalizedXSTARParameters) -> tuple[OutputPar
             rows.append(OutputParameter(name, 0.0, parameter_type, str(value)))
         else:
             rows.append(OutputParameter(name, float(value), parameter_type, comment))
-    if len(rows) != 56:
-        raise XSTARPythonRunnerError(f"source fparmlist requires 56 rows; built {len(rows)}")
+    if len(rows) != 59:
+        raise XSTARPythonRunnerError(f"0.6.82.23 public parameter provenance requires 59 rows; built {len(rows)}")
     return tuple(rows)
 
 

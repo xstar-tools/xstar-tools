@@ -203,7 +203,7 @@ double source_default_real_literal(double value) {
 double source_rread1_initial_radius_cm(const std::string& text) {
     const int lcpres = static_cast<int>(json_number(text, "lcpres", 0.0));
     const int lcdd = lcpres <= 1 ? 1 - lcpres : lcpres;
-    const double t4 = source_uclgsr8(text, "temperature", 100.0);
+    const double t4 = source_uclgsr8(text, "temperature", 400.0);
     const double pressure = source_uclgsr8(text, "pressure", 0.03);
     double density = source_uclgsr8(text, "density", 1.0e4);
     const double xlum = source_uclgsr8(text, "rlrad38", 1.0e-6);
@@ -1351,38 +1351,80 @@ xstar_fixed_program_bundle_v1 ProgramStorage::bundle() const {
 // XSTAR-FUNCTION-COMMENT-END
 ProductionParameters read_production_parameters(const std::filesystem::path& path) {
     ProductionParameters p; p.source_path=path; p.raw_json=read_file(path);
-    p.density_cm3=json_number(p.raw_json,"density",p.density_cm3); p.pressure_dyn_cm2=json_number(p.raw_json,"pressure",p.pressure_dyn_cm2);
-    p.temperature_k=json_number(p.raw_json,"temperature_k",json_number(p.raw_json,"temperature",100.0)*1.0e4);
-    // Source input parameters are read by uclgsr8 through REAL(4) and then
-    // promoted.  Column was already normalized that way by Python, but enforce
-    // it here independently as well.
-    p.column_cm2=source_uclgsr8(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
-    p.initial_radius_cm=source_rread1_initial_radius_cm(p.raw_json); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
-    p.emission_multiplier=json_number(p.raw_json,"emult",p.emission_multiplier);
-    p.maximum_optical_depth=json_number(p.raw_json,"taumax",p.maximum_optical_depth);
-    p.turbulent_velocity_km_s=json_number(p.raw_json,"vturbi",p.turbulent_velocity_km_s);
-    // xeemin is a lower bound used by the source charge controller, not the
-    // initial charge iterate.  Unless parameters explicitly provide xee or
-    // initial_electron_fraction, native XSTAR starts at xee=1.
-    p.minimum_electron_fraction=json_number(p.raw_json,"xeemin",p.minimum_electron_fraction);
+    auto has_key = [&](const char* key) {
+        const std::regex pattern("\\\"" + std::string(key) + "\\\"\\s*:");
+        return std::regex_search(p.raw_json, pattern);
+    };
+    auto public_number = [&](const char* key, double fallback) {
+        const std::regex pattern("\\\"" + std::string(key) + "\\\"\\s*:\\s*(?:\\\")?([-+0-9.eE]+)(?:\\\")?");
+        std::smatch match;
+        double value=fallback;
+        if (std::regex_search(p.raw_json,match,pattern)) {
+            try { value=std::stod(match[1].str()); }
+            catch (...) { throw std::runtime_error(std::string(key)+" is not numeric"); }
+        } else if (has_key(key)) {
+            throw std::runtime_error(std::string(key)+" is not a valid numeric XSTAR parameter");
+        }
+        if (const auto* rule=xstar_parameter_contract::find(key)) xstar_parameter_contract::validate_numeric(*rule,value);
+        return value;
+    };
+    auto public_string = [&](const char* key, const char* fallback) {
+        const std::regex pattern("\\\"" + std::string(key) + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
+        std::smatch match;
+        if (std::regex_search(p.raw_json,match,pattern)) return match[1].str();
+        if (has_key(key)) throw std::runtime_error(std::string(key)+" is not a valid string XSTAR parameter");
+        return std::string(fallback);
+    };
+
+    p.density_cm3=public_number("density",p.density_cm3);
+    p.pressure_dyn_cm2=public_number("pressure",p.pressure_dyn_cm2);
+    const double input_t4=public_number("temperature",400.0);
+    p.temperature_k=json_number(p.raw_json,"temperature_k",input_t4*1.0e4);
+    // Source uclgsr8 reads REAL input through REAL(4), then promotes it.
+    p.column_cm2=static_cast<double>(static_cast<float>(public_number("column",p.column_cm2)));
+    p.log_xi=public_number("rlogxi",p.log_xi);
+    p.covering_fraction=public_number("cfrac",p.covering_fraction);
+    p.emission_multiplier=public_number("emult",p.emission_multiplier);
+    p.maximum_optical_depth=public_number("taumax",p.maximum_optical_depth);
+    p.turbulent_velocity_km_s=public_number("vturbi",p.turbulent_velocity_km_s);
+    p.minimum_electron_fraction=public_number("xeemin",p.minimum_electron_fraction);
     p.initial_electron_fraction=json_number(
         p.raw_json,"initial_electron_fraction",
         json_number(p.raw_json,"xee",p.initial_electron_fraction));
-    p.luminosity_1e38=json_number(p.raw_json,"rlrad38",p.luminosity_1e38); p.spectral_index=json_number(p.raw_json,"trad",p.spectral_index);
-    p.radial_density_exponent=json_number(p.raw_json,"radexp",p.radial_density_exponent); p.pressure_mode=static_cast<int>(json_number(p.raw_json,"lcpres",p.pressure_mode));
-    p.spectrum_units=static_cast<int>(json_number(p.raw_json,"spectun",p.spectrum_units)); p.spectrum_file=json_string(p.raw_json,"spectrum_file",p.spectrum_file);
-    p.critical_fraction=json_number(p.raw_json,"critf",p.critical_fraction);
+    p.luminosity_1e38=public_number("rlrad38",p.luminosity_1e38);
+    p.spectral_index=public_number("trad",p.spectral_index);
+    p.radial_density_exponent=public_number("radexp",p.radial_density_exponent);
+    p.pressure_mode=static_cast<int>(public_number("lcpres",p.pressure_mode));
+    p.spectrum_units=static_cast<int>(public_number("spectun",p.spectrum_units));
+    p.spectrum_file=public_string("spectrum_file","spct.dat");
+    p.critical_fraction=public_number("critf",p.critical_fraction);
     p.controller_charge_tolerance=json_number(p.raw_json,"standalone_charge_tolerance",0.0);
     p.controller_thermal_tolerance=json_number(p.raw_json,"standalone_thermal_tolerance",0.0);
-    p.ncn2=std::max(4,static_cast<int>(json_number(p.raw_json,"ncn2",p.ncn2)));
-    p.nsteps=std::max(1,static_cast<int>(json_number(p.raw_json,"nsteps",p.nsteps))); p.npass=std::max(1,static_cast<int>(json_number(p.raw_json,"npass",p.npass))); p.niter=std::max(1,static_cast<int>(json_number(p.raw_json,"niter",p.niter))); p.spectrum=json_string(p.raw_json,"spectrum",p.spectrum);
+    p.ncn2=static_cast<int>(public_number("ncn2",p.ncn2));
+    p.nsteps=static_cast<int>(public_number("nsteps",p.nsteps));
+    p.npass=static_cast<int>(public_number("npass",p.npass));
+    p.requested_niter=static_cast<int>(public_number("niter",p.niter));
+    // Dedicated 0.6.82.24 will implement niter=0/negative source physics.
+    // 0.6.82.23 only records the requested value and removes benchmark defaults.
+    p.niter=std::max(1,p.requested_niter);
+    p.lwrite=static_cast<int>(public_number("lwrite",0.0));
+    p.lprint=static_cast<int>(public_number("lprint",0.0));
+    p.lstep=static_cast<int>(public_number("lstep",0.0));
+    p.loopcontrol=static_cast<int>(public_number("loopcontrol",0.0));
+    p.model_name=public_string("modelname","XSTAR Default");
+    p.abundance_table=public_string("abundtbl","xdef");
+    p.mode=public_string("mode","ql");
+    p.spectrum=public_string("spectrum","pow");
+    p.initial_radius_cm=source_rread1_initial_radius_cm(p.raw_json);
+
     auto physical=json_number_array(p.raw_json,"physical_abundances");
     for(std::size_t i=0;i<physical.size()&&i<30;++i) if(physical[i]>0) p.abundances_by_z[static_cast<int>(i)+1]=physical[i];
     if(p.abundances_by_z.empty()) {
         static const std::array<const char*,30> keys={{"habund","heabund","liabund","beabund","babund","cabund","nabund","oabund","fabund","neabund","naabund","mgabund","alabund","siabund","pabund","sabund","clabund","arabund","kabund","caabund","scabund","tiabund","vabund","crabund","mnabund","feabund","coabund","niabund","cuabund","znabund"}};
-        const auto& base = source_abundance_base(json_string(p.raw_json,"abundtbl","xdef"));
+        const auto& base = source_abundance_base(p.abundance_table);
         for(int z=1;z<=30;++z){
-            const double multiplier=json_number(p.raw_json,keys[static_cast<std::size_t>(z-1)],0.0);
+            const double source_default_multiplier = (z==3 || z==4 || z==5) ? 0.0 : 1.0;
+            const double multiplier=public_number(keys[static_cast<std::size_t>(z-1)],source_default_multiplier);
             const double a=multiplier*base[static_cast<std::size_t>(z-1)];
             if(a>0)p.abundances_by_z[z]=a;
         }

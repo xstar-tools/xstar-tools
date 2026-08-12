@@ -10,7 +10,9 @@ setup.py
 xstar_tools-0.6.82.20_host_validation.md
 xstar_tools-0.6.82.21_host_validation.md
 xstar_tools-0.6.82.22_host_validation.md
+xstar_tools-0.6.82.23_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
+xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
 xstar_tools_emult_profile_0.6.82.21.md
 .github/workflows/ci-tier0.yml
 .github/workflows/ci-tier1-science-smoke.yml
@@ -22,6 +24,7 @@ xstar_tools_emult_profile_0.6.82.21.md
 .github/workflows/parity-freeze.yml
 .github/workflows/performance.yml
 .github/workflows/release-candidate.yml
+docs/TABLE1_PARAMETER_CONTRACT_0_6_82_23.md
 docs/conf.py
 docs/index.md
 docs/api/index.md
@@ -226,6 +229,8 @@ qualification/source_name_hygiene_0_6_76.json
 qualification/source_root_history_cleanup_0_6_64.json
 qualification/standalone_publication_memory_0_6_82_17.json
 qualification/standalone_terminal_writer_0_6_82_18.json
+qualification/table1_parameter_contract_0_6_82_23.json
+qualification/table1_parameter_contract_0_6_82_23_manifest.json
 qualification/test_history_cleanup_0_6_62.json
 qualification/type49_all_element_source_faithful_0_6_82_11.json
 qualification/type50_cfrac_full_grid_0_6_82_19.json
@@ -405,6 +410,7 @@ src/xstar_tools/xstar/native_fixed_program.py
 src/xstar_tools/xstar/opacity.py
 src/xstar_tools/xstar/original_parity_gate.py
 src/xstar_tools/xstar/output_writers.py
+src/xstar_tools/xstar/parameter_contract.py
 src/xstar_tools/xstar/performance.py
 src/xstar_tools/xstar/physical_benchmark_suite.py
 src/xstar_tools/xstar/physical_output_parity.py
@@ -474,6 +480,7 @@ src/xstar_tools/xstar/cpp/xstar_element_engine.h
 src/xstar_tools/xstar/cpp/xstar_engine.cpp
 src/xstar_tools/xstar/cpp/xstar_final_recompute_bridge.h
 src/xstar_tools/xstar/cpp/xstar_local_zone_engine.h
+src/xstar_tools/xstar/cpp/xstar_parameter_contract.hpp
 src/xstar_tools/xstar/cpp/xstar_production_zone_bridge.h
 src/xstar_tools/xstar/cpp/xstar_python_bridge.h
 src/xstar_tools/xstar/cpp/xstar_run_state.cpp
@@ -542,6 +549,7 @@ tests/test_source_name_hygiene_0_6_76.py
 tests/test_source_root_history_cleanup.py
 tests/test_standalone_publication_memory_0_6_82_17.py
 tests/test_standalone_terminal_writer_0_6_82_18.py
+tests/test_table1_parameter_contract_0_6_82_23.py
 tests/test_test_history_cleanup.py
 tests/test_type49_all_element_source_faithful_0_6_82_11.py
 tests/test_type50_cfrac_full_grid_0_6_82_19.py
@@ -647,6 +655,7 @@ tools/qualification/check_source_name_hygiene_0_6_76.py
 tools/qualification/check_source_root_history_cleanup.py
 tools/qualification/check_standalone_publication_memory_0_6_82_17.py
 tools/qualification/check_standalone_terminal_writer_0_6_82_18.py
+tools/qualification/check_table1_parameter_contract_0_6_82_23.py
 tools/qualification/check_test_history_cleanup.py
 tools/qualification/check_type49_all_element_source_faithful_0_6_82_11.py
 tools/qualification/check_type50_cfrac_full_grid_0_6_82_19.py
@@ -666,6 +675,7 @@ tools/qualification/cpp_tree_consolidation_compat.py
 tools/qualification/function_comment_overlay.py
 tools/qualification/host_compat_overlay.py
 tools/qualification/local_zone_naming_compat.py
+tools/qualification/probe_stock_xstar_defaults_0_6_82_23.py
 tools/qualification/run_c5_cfrac00_staged_0_6_82_21.py
 tools/qualification/run_c5_cfrac00_staged_0_6_82_22.py
 tools/qualification/run_c5_cfrac00_xim2_host_smoke_0_6_82_21.py
@@ -688,6 +698,7 @@ tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_19.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_21.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_22.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_23.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
