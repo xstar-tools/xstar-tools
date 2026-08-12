@@ -2690,7 +2690,7 @@ def run_xstar_from_parameters(
         emissivity_backend=emissivity_backend,
     )
     install_backend_environment(backend_selection)
-    del input_dir  # Reserved for spectrum/density-file source branches.
+    source_input_dir = Path(input_dir).resolve() if input_dir is not None else Path.cwd().resolve()
     resolved_atdb = _resolve_runner_atdb_path(atdb_path)
     normalized = normalize_xstar_parameters(
         parameters,
@@ -2736,6 +2736,24 @@ def run_xstar_from_parameters(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
     )
+    if float(normalized.get("radexp")) < -99.0:
+        # Literal xstar.f90 source branch: open density.dat and consume row 1
+        # before entering pass 1. The lower-level radial controller already
+        # owns sequential reads, radius monotonicity, retained EOF values, and
+        # the ierr-controlled shell predicate; the public runner now binds the
+        # canonical file name from the caller's source/input directory.
+        from .radial_control import (
+            TabulatedRadialDensityState,
+            initialize_tabulated_radial_density,
+        )
+        density_path = source_input_dir / "density.dat"
+        table = TabulatedRadialDensityState.from_file(density_path)
+        initialize_tabulated_radial_density(state, table)
+        state.provenance["density_dat"] = {
+            "path": str(density_path),
+            "source_threshold": "radexp < -99",
+            "row_count": int(table.row_count),
+        }
     runtime_phase_wall_timing["initialization_atomic_data_loading_seconds"] = float(time.perf_counter() - _initial_state_t0)
     state.control["runtime_phase_wall_timing"] = runtime_phase_wall_timing
     state.control["backend_selection"] = backend_selection.as_dict()
@@ -3190,6 +3208,7 @@ def run_xstar_python_script(
     *,
     atdb_path: str | Path | None = None,
     output_dir: str | Path = ".",
+    input_dir: str | Path | None = None,
     coheat_path: str | Path | None = None,
     overwrite: bool = True,
     cache_dir: str | Path | None = None,
@@ -3219,7 +3238,7 @@ def run_xstar_python_script(
         parsed,
         atdb_path=atdb_path,
         output_dir=output_dir,
-        input_dir=path.parent,
+        input_dir=path.parent if input_dir is None else input_dir,
         coheat_path=coheat_path,
         overwrite=overwrite,
         cache_dir=cache_dir,

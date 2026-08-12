@@ -50,6 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
     source.add_argument("--command-file", help="text file containing a literal XSTAR command")
     parser.add_argument("--atdb", help="atdb.fits path or directory; otherwise use configured resolver")
     parser.add_argument("--coheat-data", help="optional explicit coheat.dat path")
+    parser.add_argument(
+        "--input-dir",
+        help=(
+            "source-side input directory for fixed-name files such as density.dat; "
+            "defaults to the current working directory for --command and to the "
+            "run-script directory for --run-script"
+        ),
+    )
     parser.add_argument("--output-dir", required=True, help="directory for Python XSTAR products")
     parser.add_argument("--original-run-dir", help="directory containing the ten original XSTAR products")
     parser.add_argument("--parity-rtol", type=float, default=5.0e-5)
@@ -660,6 +668,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.run_script,
                 atdb_path=args.atdb,
                 output_dir=args.output_dir,
+                input_dir=args.input_dir,
                 coheat_path=args.coheat_data,
                 overwrite=not args.no_overwrite,
                 cache_dir=args.cache_dir,
@@ -689,6 +698,7 @@ def main(argv: list[str] | None = None) -> int:
                 _load_command(args),
                 atdb_path=args.atdb,
                 output_dir=args.output_dir,
+                input_dir=args.input_dir,
                 coheat_path=args.coheat_data,
                 overwrite=not args.no_overwrite,
                 cache_dir=args.cache_dir,

@@ -1,10 +1,15 @@
-> **Current 0.6.82.25.1 qualification note:** `niter` is closed; the C5 `cfrac` and practical `emult` science axes remain frozen ACCEPT. `0.6.82.25` established the constant-pressure source formulas but was host-REJECT as a final candidate because of two native STEP-publication defects and a pure-Python `ncn2=999` BREMSMAP tail-capacity failure. `0.6.82.25.1` corrects only those issues and must reuse the existing stock-FORTRAN `.25` references. Low-ionization C++ and pure-Python performance work remains deferred to `0.6.82.31`-`0.6.82.33`.
+> **Current 0.6.82.26 qualification note:** `0.6.82.25.4` closed the `lcpres`/pressure milestone on the host, including the constant-density `cd_xi1` control (`27/1/1` STEP `ntotit` matching FORTRAN/C++). `0.6.82.26` is the host candidate for source-faithful analytic `radexp` and hidden `radexp<-99` `density.dat` radial-density semantics. Science revision and ABIs remain frozen; low-ionization performance work remains deferred to `0.6.82.31`-`0.6.82.33`.
 
 # xstar-tools
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.25.1`  
+**Distribution:** `0.6.82.26`  
+
+
+**0.6.82.26 radexp/density.dat candidate:** native production now carries the live `lcpres=0` radial density through `n=n0*(R/R0)^radexp`, while the Python public controller explicitly retains the first-shell source baseline. Both public runners expose the hidden FORTRAN `radexp < -99` branch using fixed-name `density.dat`, including row-1 initialization, post-shell geometry replacement, monotonic-radius failure and EOF/iostat termination. Stock analytic `radexp` validation remains `[-3,3]`; only the disjoint `<-99` source sentinel is additionally admitted.
+
+**0.6.82.25.4 lcpres closure:** the pure-Python `msolvelucy` `diff2>=1e3` control-flow defect was corrected and host `cd_xi1` moved from `26/9/9` to the canonical FORTRAN/C++ `27/1/1`, with the full `.25.4` case comparator ACCEPT. The pressure/density-control milestone is therefore the frozen predecessor for `.26`.
 
 
 **0.6.82.25.1 pressure STEP/minimum-grid hotfix:** stock-XSTAR host qualification rejected `.25` only on two native STEP-publication details (`log(N)` reconstructed from current density instead of retained source `xcol`, and optical depths printed below the canonical `1e-10` floor) plus a pure-Python `ncn2=999` BREMSMAP caller-capacity failure. `.25.1` preserves the `.25` constant-pressure equations and fixes those ownership/capacity defects only. Reuse the existing FORTRAN `.25` references; rerun C++ `cp_xim2`/`cp_xi2` and pure-Python `cp_xim2` first.

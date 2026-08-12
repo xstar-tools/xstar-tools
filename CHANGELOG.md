@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.26 - 2026-08-12
+
+- Close the `radexp` radial-density plumbing against canonical `xstar.f90`: public `lcpres=0`/source `lcdd=1` now carries the live analytic density `n=n0*(R/R0)^radexp` through C++ production evolution, with Python explicitly capturing the first-shell `xpx0,r0` source baseline.
+- Expose the hidden source `radexp < -99` branch in both public runners while preserving the stock XPI analytic interval `[-3,3]`; values in the gap `[-99,-3)` remain invalid. Both ports bind the fixed-name `density.dat` through a source/input directory.
+- Reproduce tabulated source ordering: row 1 initializes radius/density before pass 1; HEATT keeps the STEP width; the post-shell density-file read replaces geometry `delr`, radius and density before `xcol`, STPCUT and the next zone; decreasing radius is `radius error`; EOF terminates via nonzero I/O status with retained last values.
+- Preserve the terminal `pprint(9)` source behavior in native production: terminal radius/density are post-geometry while `xi/zeta` remain the last pre-geometry shell scalar. No artificial cap is added for negative `radexp`; canonical source termination predicates remain authoritative.
+- Retain the accepted `0.6.82.25.4` Python `msolvelucy` correction and keep science revision `0.6.48.12.3.45.3.3.8` plus ABIs `60487`, `6048110`, and `60488` frozen.
+
 ## 0.6.82.25.4 - 2026-08-12
 
 - Restore source-faithful pure-Python `msolvelucy` fixed-point control: cumulative `diff2 >= 1e3` terminates only the ordered per-row difference scan, not the surrounding fixed-point loop.

@@ -12362,8 +12362,14 @@ void fill_standalone_input(
     xstar_fixed_state_input_init_v1(&input);
     const auto& params = *data.parameters;
     input.temperature_k = trial.temperature_t4 * 1.0e4;
-    input.hydrogen_density_cm3 = xstar_atdb_runtime::source_runtime_density_cm3(
-        params, trial.temperature_t4, trial.electron_fraction_xee);
+    const int source_lcdd = xstar_atdb_runtime::source_lcdd_from_lcpres(params.pressure_mode);
+    // For lcdd=1 the caller-owned xpx is live radial state: analytic radexp
+    // and density.dat update it between zones.  Constant pressure (lcdd=0)
+    // still recomputes xpx from pressure/current T4 on every source call.
+    input.hydrogen_density_cm3 = source_lcdd == 1
+        ? trial.hydrogen_density_cm3
+        : xstar_atdb_runtime::source_runtime_density_cm3(
+            params, trial.temperature_t4, trial.electron_fraction_xee);
     input.electron_fraction_xee = std::max(0.0, trial.electron_fraction_xee);
     input.electron_density_cm3 = input.hydrogen_density_cm3 * input.electron_fraction_xee;
     // Literal calc_hmc_all.f90 entry semantics, matched to the accepted
@@ -17056,6 +17062,91 @@ void write_full_trajectory_diagnostic_preview(
         << ((fits_count == 9u && step_written) ? "ACCEPT" : "REJECT") << "\n";
 }
 
+struct SourceDensityTableV068226 {
+    std::filesystem::path path;
+    std::vector<std::pair<double,double>> rows;
+    std::size_t next_index = 0u;
+    double last_radius_cm = 0.0;
+    double last_density_cm3 = 0.0;
+    bool have_last = false;
+    int iostat = 0;
+
+    std::pair<double,double> read_next(bool initial) {
+        if (next_index < rows.size()) {
+            const auto value = rows[next_index++];
+            last_radius_cm = value.first;
+            last_density_cm3 = value.second;
+            have_last = true;
+            iostat = 0;
+            return value;
+        }
+        if (!have_last || initial) {
+            throw std::runtime_error("initial density.dat read failed");
+        }
+        // gfortran/XSTAR source behavior used by the Python source port:
+        // EOF sets iostat nonzero while retaining the preceding rnew/dennew.
+        iostat = -1;
+        return {last_radius_cm,last_density_cm3};
+    }
+};
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Open and validate the fixed-name density.dat input used by the hidden radexp<-99 source branch.
+// Reference context: xstar.f90 inline radial-density file branch; source file ownership only.
+// XSTAR-FUNCTION-COMMENT-END
+SourceDensityTableV068226 read_source_density_table_v068226(
+    const xstar_atdb_runtime::ProductionParameters& params) {
+    SourceDensityTableV068226 table;
+    table.path = std::filesystem::path(params.input_dir.empty() ? "." : params.input_dir) / "density.dat";
+    std::ifstream in(table.path);
+    if (!in) throw std::runtime_error("missing density file: " + table.path.string());
+    std::string line;
+    std::size_t line_number = 0u;
+    while (std::getline(in,line)) {
+        ++line_number;
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) continue;
+        for (char& ch : line) {
+            if (ch == ',' ) ch = ' ';
+            else if (ch == 'D' || ch == 'd') ch = 'E';
+        }
+        std::istringstream row(line);
+        double radius = 0.0, density = 0.0;
+        if (!(row >> radius >> density)) {
+            throw std::runtime_error("invalid density.dat row " + std::to_string(line_number));
+        }
+        if (!std::isfinite(radius) || !std::isfinite(density) || radius <= 0.0 || density <= 0.0) {
+            throw std::runtime_error("density.dat row " + std::to_string(line_number) + " requires finite positive radius and density");
+        }
+        table.rows.emplace_back(radius,density);
+    }
+    if (table.rows.empty()) throw std::runtime_error("initial density.dat read failed");
+    return table;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reproject the retained source continuum to the post-density.dat radius after the source overwrites delr/r.
+// Reference context: xstar.f90 post-savd density.dat ordering followed by the next trnfrc radius normalization.
+// XSTAR-FUNCTION-COMMENT-END
+void project_source_trnfrc_radius_v068226(
+    StandaloneControllerDataV67& data,
+    double radius_cm) {
+    const std::size_t n = data.energy.size();
+    if (n == 0u) return;
+    const double r19 = radius_cm / xstar_constants::kLegacyTrnfrcRadiusScaleCm;
+    const double fpr2 = xstar_constants::kLegacyTrnfrcGeometryFactor * r19 * r19;
+    if (!(fpr2 > 0.0) || !std::isfinite(fpr2)) {
+        throw std::runtime_error("density.dat trnfrc radius normalization is invalid");
+    }
+    data.dsec_bremsa.assign(n,0.0);
+    if (n >= 2u) {
+        for (std::size_t reverse = 1u; reverse <= n - 1u; ++reverse) {
+            const std::size_t i = (n - 1u) - reverse;
+            data.dsec_bremsa[i] = data.accumulated_zrems[i] / fpr2;
+        }
+    }
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Build general standalone product from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
@@ -17104,6 +17195,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         RadiationField radiation = read_general_standalone_radiation(options, params);
         if (radiation.energy_ev.size() != static_cast<std::size_t>(params.ncn2)) {
             throw std::runtime_error("native continuum grid does not match parameters ncn2");
+        }
+        const bool tabulated_density_v068226 = params.radial_density_exponent < -99.0;
+        const bool analytic_variable_density_v068226 =
+            !tabulated_density_v068226 &&
+            xstar_atdb_runtime::source_lcdd_from_lcpres(params.pressure_mode) == 1 &&
+            params.radial_density_exponent != 0.0;
+        std::optional<SourceDensityTableV068226> density_table_v068226;
+        double source_initial_radius_cm_v068226 = params.initial_radius_cm;
+        double source_initial_density_cm3_v068226 = params.density_cm3;
+        if (tabulated_density_v068226) {
+            density_table_v068226 = read_source_density_table_v068226(params);
+            const auto first = density_table_v068226->read_next(true);
+            source_initial_radius_cm_v068226 = first.first;
+            source_initial_density_cm3_v068226 = first.second;
+            std::cout << std::setprecision(17)
+                      << "V068226_DENSITY_DAT_PATH=" << density_table_v068226->path.string() << "\n"
+                      << "V068226_DENSITY_DAT_INITIAL_RADIUS_CM=" << source_initial_radius_cm_v068226 << "\n"
+                      << "V068226_DENSITY_DAT_INITIAL_DENSITY_CM3=" << source_initial_density_cm3_v068226 << "\n";
         }
         StandaloneControllerDataV67 data;
         data.fixed_context = fixed;
@@ -17228,7 +17337,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         data.energy = radiation.energy_ev;
         data.flux = radiation.incident;
         data.dsec_bremsa.assign(data.flux.size(), 0.0);
-        const double radius_19 = params.initial_radius_cm /
+        const double radius_19 = source_initial_radius_cm_v068226 /
             static_cast<double>(static_cast<float>(1.0e19));
         const double source_fpr2 = static_cast<double>(static_cast<float>(12.56)) *
             radius_19 * radius_19;
@@ -17360,7 +17469,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         xstar_thermal_state_init_v1(&state);
         state.temperature_t4 = params.temperature_k / 1.0e4;
         state.electron_fraction_xee = params.initial_electron_fraction > 0.0 ? params.initial_electron_fraction : 1.0;
-        state.hydrogen_density_cm3 = params.density_cm3;
+        state.hydrogen_density_cm3 = source_initial_density_cm3_v068226;
         // 0.6.48.11.0: the first radial pass is naturally terminated by the
         // literal source predicate xcol<xpxcol && xee>xeemin &&
         // t>tinf*0.99 && numrec>0.  nsteps controls STEP geometry; it is not
@@ -17371,6 +17480,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         std::vector<double> source_boundary_column_cm2;
         std::vector<double> source_transport_segment_cm;
         double pending_transport_segment_cm = 0.0;
+        int density_iostat_v068226 = 0;
 
         static constexpr std::array<std::size_t,4> expected_dsec_counts{{20u,1u,17u,16u}};
         std::vector<std::size_t> actual_dsec_counts;
@@ -17570,7 +17680,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             data.writing_final_snapshot = true;
             source_boundary_depth_cm.push_back(data.cumulative_depth_cm);
             source_boundary_column_cm2.push_back(data.cumulative_column_cm2);
-            const double boundary_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
+            const double boundary_radius_cm = source_initial_radius_cm_v068226 + data.cumulative_depth_cm;
             // Retain the local source workspace first.  Radial transport is
             // committed only across the shell selected by the previous
             // source STEP evaluation (call 1 itself has zero thickness).
@@ -17589,6 +17699,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // accepted final xpx as live controller state before HEATT/STEP.
             state.hydrogen_density_cm3 = boundary.hydrogen_density_cm3;
 
+            // STEP's delr is the width consumed by HEATT. In the hidden
+            // density.dat source branch, the post-savd file read later
+            // replaces delr for geometry/xcol/STPCUT/TRNFRN only.
             const double segment = pending_transport_segment_cm;
             if (call == 2u && data.reference_trajectory_mode) {
                 if (data.reference_diagnostics_enabled) {
@@ -17649,22 +17762,58 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 data, boundary, segment, boundary_radius_cm, "post_atomic_pre_stpcut");
             FixedDsecSnapshot pretransport_boundary_v82_patch520145 = boundary;
 
-            if (segment > 0.0) {
+            double source_geometry_segment_v068226 = segment;
+            double post_geometry_radius_cm_v068226 = boundary_radius_cm + source_geometry_segment_v068226;
+            double post_geometry_density_cm3_v068226 = boundary.hydrogen_density_cm3;
+            if (tabulated_density_v068226) {
+                const auto next = density_table_v068226->read_next(false);
+                density_iostat_v068226 = density_table_v068226->iostat;
+                source_geometry_segment_v068226 = next.first - boundary_radius_cm;
+                if (source_geometry_segment_v068226 < 0.0) {
+                    throw std::runtime_error("radius error");
+                }
+                post_geometry_radius_cm_v068226 = next.first;
+                post_geometry_density_cm3_v068226 = next.second;
+                // advance_source_continuum_radiation projected TRNFRC using
+                // STEP's HEATT width. Source density.dat overwrites delr after
+                // HEATT, so restore the literal post-file-read radius projection.
+                project_source_trnfrc_radius_v068226(data,post_geometry_radius_cm_v068226);
+                std::cout << std::setprecision(17)
+                          << "V068226_DENSITY_DAT_CALL=" << call << "\n"
+                          << "V068226_DENSITY_DAT_GEOMETRY_DELTA_CM=" << source_geometry_segment_v068226 << "\n"
+                          << "V068226_DENSITY_DAT_NEXT_RADIUS_CM=" << post_geometry_radius_cm_v068226 << "\n"
+                          << "V068226_DENSITY_DAT_NEXT_DENSITY_CM3=" << post_geometry_density_cm3_v068226 << "\n"
+                          << "V068226_DENSITY_DAT_IOSTAT=" << density_iostat_v068226 << "\n";
+            } else if (analytic_variable_density_v068226) {
+                // xstar.f90: r=r+delr; xpx=xpx0*(r/r0)**radexp.
+                post_geometry_density_cm3_v068226 = source_initial_density_cm3_v068226 *
+                    std::pow(post_geometry_radius_cm_v068226 / source_initial_radius_cm_v068226,
+                             params.radial_density_exponent);
+                if (!(post_geometry_density_cm3_v068226 > 0.0) ||
+                    !std::isfinite(post_geometry_density_cm3_v068226)) {
+                    throw std::runtime_error("analytic radexp produced invalid hydrogen density");
+                }
+            }
+            // The source uses the post-geometry xpx in xcol=xcol+xpx*delr,
+            // and that same live xpx enters the next calc_hmc_all call.
+            state.hydrogen_density_cm3 = post_geometry_density_cm3_v068226;
+            if (source_geometry_segment_v068226 > 0.0) {
                 const auto stpcut_started_v064890 = std::chrono::steady_clock::now();
                 advance_stpcut_depths(
-                    data, boundary, segment, boundary.hydrogen_density_cm3);
+                    data, boundary, source_geometry_segment_v068226, post_geometry_density_cm3_v068226);
                 if (g_performance_v064890) {
                     g_performance_v064890->stpcut_seconds += performance_elapsed_seconds(stpcut_started_v064890);
                 }
             }
             write_transport_commit_probe(
-                data, boundary, segment, boundary_radius_cm, "post_stpcut");
+                data, boundary, source_geometry_segment_v068226, boundary_radius_cm, "post_stpcut");
             // Decide whether the literal first-pass source predicate permits
             // another physical shell.  The Mg XI reference trajectory keeps
             // its accepted four-call boundary exactly; every other model is
             // naturally terminated from live production state.
             const double reconstructed_column_cm2_v064812311 =
-                params.pressure_mode == 0
+                (params.pressure_mode == 0 && !tabulated_density_v068226 &&
+                 params.radial_density_exponent == 0.0)
                     ? params.density_cm3 * data.cumulative_depth_cm
                     : data.cumulative_column_cm2;
             const double current_column_cm2_v0648110 = data.cumulative_column_cm2;
@@ -17684,7 +17833,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 params.nsteps > 0 &&
                 current_column_cm2_v0648110 < params.column_cm2 &&
                 state.electron_fraction_xee > params.minimum_electron_fraction &&
-                state.temperature_t4 > 0.099 * 0.99;
+                state.temperature_t4 > 0.099 * 0.99 &&
+                density_iostat_v068226 == 0;
             if (const char* diag_v064812311 = std::getenv("XSTAR_V064812311_XCOL_DIAGNOSTICS");
                 diag_v064812311 && *diag_v064812311) {
                 std::cerr << "V064812311_XCOL_SOURCE_PREDICATE="
@@ -17697,6 +17847,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (done_after_zone_v0648110) {
                 terminal_shell_entry_bremsa_v064883 = current_shell_entry_bremsa_v0648110;
                 terminal_transport_boundary_v82_patch520144 = boundary;
+                if (tabulated_density_v068226 || analytic_variable_density_v068226) {
+                    terminal_transport_boundary_v82_patch520144->hydrogen_density_cm3 =
+                        post_geometry_density_cm3_v068226;
+                }
                 std::cout << "V064883_TERMINAL_SHELL_ENTRY_BREMSA_HASH="
                           << binary64_vector_hash(terminal_shell_entry_bremsa_v064883) << "\n";
             }
@@ -17712,12 +17866,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // change the accepted trajectory.
             if (continue_after_zone_v0648110) {
                 const std::vector<double>& step_opakc = boundary.opakc;
-                const double step_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
+                const double step_radius_cm = source_initial_radius_cm_v068226 + data.cumulative_depth_cm;
                 const double current_column_cm2 = data.cumulative_column_cm2;
                 const auto step_started_v064890 = std::chrono::steady_clock::now();
                 const auto step_result = source_step(
                     data, step_opakc, step_radius_cm, current_column_cm2,
-                    boundary.hydrogen_density_cm3);
+                    post_geometry_density_cm3_v068226);
                 if (g_performance_v064890) {
                     g_performance_v064890->step_seconds += performance_elapsed_seconds(step_started_v064890);
                 }
@@ -18152,7 +18306,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         const std::size_t radial_event_count = finals.size() + 1u;
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
                                double source_depth, double source_column,
-                               std::size_t dsec_ntotit) {
+                               std::size_t dsec_ntotit,
+                               std::optional<double> source_logxi_override = std::nullopt) {
             xstar_run_state::AcceptedControllerState accepted;
             accepted.call_index = snapshot.call_index;
             accepted.accepted_sequence = snapshot.sequence;
@@ -18165,7 +18320,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             const std::size_t ordinal = whole.radial_zones.size() + 1u;
             zone.zone_index = ordinal;
             zone.pass_index = 1;
-            zone.radius_cm = params.initial_radius_cm + source_depth;
+            zone.radius_cm = source_initial_radius_cm_v068226 + source_depth;
             zone.delta_radius_cm = source_depth;
             zone.outer_radius_cm = zone.radius_cm;
             zone.density_cm3 = snapshot.hydrogen_density_cm3;
@@ -18178,12 +18333,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             const double live_xi = (r19 > 0.0 && zone.density_cm3 > 0.0)
                 ? params.luminosity_1e38 / (r19 * r19 * zone.density_cm3) : 0.0;
             zone.ionization_parameter = live_xi;
-            zone.log_ionization_parameter = live_xi > 0.0
-                ? std::log10(live_xi) : -std::numeric_limits<double>::infinity();
+            zone.log_ionization_parameter = source_logxi_override.has_value()
+                ? *source_logxi_override
+                : (live_xi > 0.0
+                    ? std::log10(live_xi) : -std::numeric_limits<double>::infinity());
+            if (source_logxi_override.has_value() && std::isfinite(*source_logxi_override)) {
+                zone.ionization_parameter = std::pow(10.0,*source_logxi_override);
+            }
             zone.column_density_cm2 = std::max(
-                params.pressure_mode == 1
-                    ? source_column
-                    : params.density_cm3 * source_depth,
+                (params.pressure_mode == 0 && !tabulated_density_v068226 &&
+                 params.radial_density_exponent == 0.0)
+                    ? params.density_cm3 * source_depth
+                    : source_column,
                 0.0);
             zone.temperature_t4 = accepted.evaluation.temperature_t4;
             zone.electron_fraction = accepted.evaluation.electron_fraction_input;
@@ -18228,10 +18389,19 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         if (!terminal_transport_boundary_v82_patch520144) {
             throw std::runtime_error("missing patch5.20.14.4 terminal post-transport boundary");
         }
+        // xstar.f90 performs the terminal pprint(9) after the post-shell
+        // radius/density update without recomputing xi/zeta. Preserve that
+        // stale source scalar for variable-density and density.dat paths even
+        // though the terminal row's radius/density are post-geometry values.
+        const std::optional<double> terminal_source_logxi_v068226 =
+            !whole.radial_zones.empty()
+                ? std::optional<double>(whole.radial_zones.back().log_ionization_parameter)
+                : std::nullopt;
         append_zone(*terminal_transport_boundary_v82_patch520144,
                     "qualification_free_native_terminal_posttransport",
                     data.cumulative_depth_cm, data.cumulative_column_cm2,
-                    actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
+                    actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back(),
+                    terminal_source_logxi_v068226);
         // Canonical xstar.f90 executes `pprint(9,...)` once more after the
         // radial loop.  Mirror that live-console row as well as retaining it
         // for xout_step.log.  No new HMC/DSEC evaluation is performed here,
@@ -18384,7 +18554,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             auto final_pprint = evaluate_full_boundary(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
-                params.initial_radius_cm + data.cumulative_depth_cm, 0u);
+                source_initial_radius_cm_v068226 + data.cumulative_depth_cm, 0u);
             if (final_thermal_diagnostic_requested) {
                 const auto parent = final_thermal_diagnostic_path.parent_path();
                 if (!parent.empty()) std::filesystem::create_directories(parent);
@@ -18439,7 +18609,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             advance_source_continuum_radiation(
                 final_pprint_data, final_pprint, final_writer_delr,
-                params.initial_radius_cm + data.cumulative_depth_cm);
+                source_initial_radius_cm_v068226 + data.cumulative_depth_cm);
             final_pprint.tau0 = terminal_writer_state.tau0;
             final_pprint.elum = terminal_writer_state.elum;
             final_pprint.tauc = terminal_writer_state.tauc;

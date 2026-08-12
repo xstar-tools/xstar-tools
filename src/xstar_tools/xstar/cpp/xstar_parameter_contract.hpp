@@ -75,7 +75,10 @@ inline std::string string_default(const std::string& name) { const auto* r=find(
 inline void validate_numeric(const Rule& r,double value) {
     if(!std::isfinite(value)) throw std::runtime_error(std::string(r.name)+" must be finite");
     if(r.kind==ParameterKind::Integer && value!=std::trunc(value)) throw std::runtime_error(std::string(r.name)+" must be an integer");
-    if(r.has_min && value<r.minimum) throw std::runtime_error(std::string(r.name)+" below stock XSTAR minimum");
+    const bool source_density_table_sentinel =
+        std::string(r.name) == "radexp" && value < -99.0;
+    if(r.has_min && value<r.minimum && !source_density_table_sentinel)
+        throw std::runtime_error(std::string(r.name)+" below stock XSTAR minimum");
     if(r.has_max && value>r.maximum) throw std::runtime_error(std::string(r.name)+" above stock XSTAR maximum");
 }
 inline void validate_text(const std::string& name,const std::string& text) {

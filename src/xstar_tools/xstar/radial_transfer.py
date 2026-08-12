@@ -1683,6 +1683,16 @@ def run_bounded_radial_pass(
     # density unit itself remains at its current file position.
     state.control["density_iostat"] = 0
     initialize_bounded_radial_pass_state(state)
+    # xstar.f90 first-pass shell entry:
+    #   if ((kk.eq.1).and.(lcdd.eq.1).and.(jkp.eq.0)) then
+    #     xpx0=xpx; r0=r
+    #   endif
+    # Capture these before the first analytic STEP/geometry update.  The
+    # tabulated branch also reaches this source assignment but does not consume
+    # xpx0/r0; retaining it is harmless and keeps ownership literal.
+    if kk == 1 and int(state.control.get("lcdd", 1)) == 1:
+        state.control["xpx0"] = float(state.plasma.xpx)
+        state.control["r0"] = float(state.transfer.radius)
     if bool(state.control.get("pprint_legacy_enabled", False)):
         from .pprint_legacy import legacy_pprint_begin_pass
 

@@ -235,6 +235,7 @@ void usage(std::ostream& out) {
         "Standard input options:\n"
         "  --input PATH           HEASoft/IRAF-style .par parameter file\n"
         "  --data-dir DIR         directory containing atdb.fits and coheat.dat\n"
+        "  --input-dir DIR        source-side directory for fixed-name files such as density.dat\n"
         "  --output DIR           output directory (alias: --output-dir)\n"
         "  --atomic-db PATH       explicit atdb.fits path\n"
         "  --coheat PATH          explicit coheat.dat path\n\n"
@@ -333,6 +334,7 @@ void load_par_file(const std::filesystem::path& path,
 struct FrontendInput {
     std::filesystem::path input_file;
     std::filesystem::path data_dir;
+    std::filesystem::path input_dir{"."};
     std::filesystem::path output_dir{"."};
     std::filesystem::path parameters_out;
     std::filesystem::path json_summary;
@@ -365,6 +367,7 @@ bool parse_frontend(int argc, char** argv, int start, FrontendInput& input, std:
         };
         if(arg=="--input") { const char* v=value_after("--input"); if(!v) return false; input.input_file=v; }
         else if(arg=="--data-dir") { const char* v=value_after("--data-dir"); if(!v) return false; input.data_dir=v; }
+        else if(arg=="--input-dir") { const char* v=value_after("--input-dir"); if(!v) return false; input.input_dir=v; }
         else if(arg=="--output" || arg=="--output-dir") { const char* v=value_after(arg.c_str()); if(!v) return false; input.output_dir=v; }
         else if(arg=="--atomic-db") { const char* v=value_after("--atomic-db"); if(!v) return false; input.atomic_db=v; }
         else if(arg=="--coheat") { const char* v=value_after("--coheat"); if(!v) return false; input.coheat=v; }
@@ -419,7 +422,7 @@ bool parse_frontend(int argc, char** argv, int start, FrontendInput& input, std:
                 static const std::set<std::string> extensions = {
                     "atomic_database","atomic_db","atdb","coheat_file","coheat",
                     "temperature_k","initial_radius_cm","initial_electron_fraction","xee",
-                    "standalone_charge_tolerance","standalone_thermal_tolerance"
+                    "standalone_charge_tolerance","standalone_thermal_tolerance","input_dir"
                 };
                 if (!extensions.count(item.first)) throw std::runtime_error("unknown XSTAR parameter: "+item.first);
             }
@@ -466,6 +469,7 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
         out << "  \"" << json_escape(key) << "\": \"" << json_escape(value) << "\"";
     };
     for(const auto& item:input.parameters) emit(item.first,item.second);
+    emit("input_dir", std::filesystem::absolute(input.input_dir).string());
     if(!input.atomic_db.empty()) emit("atomic_database",input.atomic_db);
     if(!input.coheat.empty()) emit("coheat_file",input.coheat);
     out << "\n}\n";

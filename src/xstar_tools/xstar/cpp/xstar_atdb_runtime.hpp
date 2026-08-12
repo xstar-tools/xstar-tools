@@ -56,6 +56,7 @@ struct ProductionParameters {
     int pressure_mode = 0;
     int spectrum_units = 0;
     std::string spectrum_file = "spct.dat";
+    std::string input_dir = ".";
     double critical_fraction = 1.0e-7;
     double controller_charge_tolerance = 0.0;
     double controller_thermal_tolerance = 0.0;

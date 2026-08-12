@@ -425,3 +425,12 @@ include tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_4.py
 include tests/test_msolvelucy_python_fixed_loop_0_6_82_25_4.py
 include docs/developer/msolvelucy_python_fixed_loop_0_6_82_25_4.md
 include xstar_tools-0.6.82.25.4_host_validation.md
+
+# 0.6.82.26 radexp / density.dat radial-density source semantics
+include qualification/radexp_density_0_6_82_26/radexp_density_0_6_82_26.json
+include qualification/radexp_density_0_6_82_26/README.md
+include tools/qualification/check_radexp_density_0_6_82_26.py
+include tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26.py
+include tests/test_radexp_density_0_6_82_26.py
+include docs/developer/radexp_density_0_6_82_26.md
+include xstar_tools-0.6.82.26_host_validation.md

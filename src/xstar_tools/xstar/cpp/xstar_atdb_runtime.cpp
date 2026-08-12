@@ -1435,6 +1435,7 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     }
     p.spectrum_units=static_cast<int>(public_number("spectun",p.spectrum_units));
     p.spectrum_file=public_string("spectrum_file","spct.dat");
+    p.input_dir=json_string(p.raw_json,"input_dir",".");
     p.critical_fraction=public_number("critf",p.critical_fraction);
     p.controller_charge_tolerance=json_number(p.raw_json,"standalone_charge_tolerance",0.0);
     p.controller_thermal_tolerance=json_number(p.raw_json,"standalone_thermal_tolerance",0.0);

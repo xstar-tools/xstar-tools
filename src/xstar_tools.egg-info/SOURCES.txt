@@ -20,6 +20,7 @@ xstar_tools-0.6.82.25.2_host_validation.md
 xstar_tools-0.6.82.25.3_host_validation.md
 xstar_tools-0.6.82.25.4_host_validation.md
 xstar_tools-0.6.82.25_host_validation.md
+xstar_tools-0.6.82.26_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
 xstar_tools_conversation_handoff_through_0.6.82.24.1_niter_hotfix.md
@@ -93,6 +94,7 @@ docs/developer/python_hc1_stage_0_6_82_24_3.md
 docs/developer/python_namespace_cleanup.md
 docs/developer/python_production_diagnostics.md
 docs/developer/qualification.md
+docs/developer/radexp_density_0_6_82_26.md
 docs/developer/reference_data_and_release_candidate.md
 docs/developer/source_name_hygiene.md
 docs/developer/source_root_namespace_cleanup.md
@@ -295,6 +297,8 @@ qualification/lcpres_pressure_0_6_82_25/lcpres_pressure_0_6_82_25.json
 qualification/lcpres_pressure_0_6_82_25_1/lcpres_pressure_hotfix_0_6_82_25_1.json
 qualification/lcpres_pressure_0_6_82_25_2/lcpres_pressure_python_compare_0_6_82_25_2.json
 qualification/lcpres_pressure_0_6_82_25_3/lcpres_pressure_leveltemp_0_6_82_25_3.json
+qualification/radexp_density_0_6_82_26/README.md
+qualification/radexp_density_0_6_82_26/radexp_density_0_6_82_26.json
 qualification/type63_source_cutoff_0_6_82_7/fortran_zero_cpp_nonzero_records_xi1p2.json
 qualification/type63_source_cutoff_0_6_82_7/reference_step_ne1e12_rlogxi_1p0_1p5.json
 references/current/README.md
@@ -582,6 +586,7 @@ tests/test_python_hc1_stage_0_6_82_24_3.py
 tests/test_python_history_cleanup.py
 tests/test_python_production_diagnostics_0_6_80.py
 tests/test_python_source_comments.py
+tests/test_radexp_density_0_6_82_26.py
 tests/test_reference_normalization_0_6_79.py
 tests/test_source_characterization_current.py
 tests/test_source_concordance_gate.py
@@ -698,6 +703,7 @@ tools/qualification/check_python_hc1_stage_0_6_82_24_3.py
 tools/qualification/check_python_history_cleanup.py
 tools/qualification/check_python_production_diagnostics_0_6_80.py
 tools/qualification/check_python_source_comments.py
+tools/qualification/check_radexp_density_0_6_82_26.py
 tools/qualification/check_reference_normalization_0_6_79.py
 tools/qualification/check_source_concordance.py
 tools/qualification/check_source_function_comments.py
@@ -742,6 +748,7 @@ tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_4.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_1.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_2.py
+tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26.py
 tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py

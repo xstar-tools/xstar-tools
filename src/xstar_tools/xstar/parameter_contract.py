@@ -47,7 +47,12 @@ def coerce_and_validate_parameter(name: str, value: Any) -> Any:
         result=float(value)
         if not math.isfinite(result):
             raise ValueError(f"{key} must be finite")
-    if rule.minimum is not None and result < rule.minimum:
+    # XSTAR 2.59g source has a hidden density.dat branch at radexp < -99.
+    # Keep the stock XPI analytic envelope (-3..3), but admit that literal
+    # source sentinel domain through the public runtime. Values in the gap
+    # [-99,-3) remain invalid.
+    source_density_table_sentinel = key == "radexp" and result < -99.0
+    if rule.minimum is not None and result < rule.minimum and not source_density_table_sentinel:
         raise ValueError(f"{key} must be >= {rule.minimum}")
     if rule.maximum is not None and result > rule.maximum:
         raise ValueError(f"{key} must be <= {rule.maximum}")
