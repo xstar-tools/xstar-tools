@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.82.25.4 - 2026-08-12
+
+- Restore source-faithful pure-Python `msolvelucy` fixed-point control: cumulative `diff2 >= 1e3` terminates only the ordered per-row difference scan, not the surrounding fixed-point loop.
+- Add direct regressions for the `1e3` row-scan boundary and continuation to the next fixed-point iteration.
+- Preserve the accepted science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`, `6048110`, and `60488`.
+
 ## 0.6.82.25.3 - 2026-08-12
 
 - Keep `0.6.82.25.2` C++ and pressure-controller science frozen, but correct a source-ownership defect exposed by pure-Python `cd_xi1`: FORTRAN owns one mutable `leveltemp` workspace across repeated DSEC `calc_hmc_all` trials, the unconditional final `calc_hmc_all`, `calc_emisab_all`, `calc_emis_all`, `heatt`, and the following radial zone.

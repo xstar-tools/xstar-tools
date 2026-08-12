@@ -8816,8 +8816,11 @@ def msolvelucy(
                 break
             x /= 1.0e-24 + total
 
-            # Source loop stops immediately when either cumulative diff2 or
-            # the current ratio reaches 1.e3.
+            # Canonical msolvelucy.f90 uses ``diff2 < 1.e3`` only to stop
+            # the ordered per-row difference scan for the current fixed-point
+            # iteration.  A cumulative diff2 >= 1.e3 does *not* terminate the
+            # surrounding fixed-point loop; that loop remains controlled only
+            # by nitmx2 and crit2.
             fixed_diff = _source_fixed_difference(xold, x, epsilon=eps2)
             if trace is not None:
                 for i in range(n):
@@ -8838,8 +8841,6 @@ def msolvelucy(
                             "fixed_difference": float(fixed_diff),
                         }
                     )
-            if fixed_diff >= 1.0e3:
-                break
 
         _fixed_point_seconds += time.perf_counter() - _fixed_point_t0
         if trace is not None:

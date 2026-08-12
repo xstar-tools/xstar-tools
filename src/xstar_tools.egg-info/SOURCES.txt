@@ -18,6 +18,7 @@ xstar_tools-0.6.82.24_host_validation.md
 xstar_tools-0.6.82.25.1_host_validation.md
 xstar_tools-0.6.82.25.2_host_validation.md
 xstar_tools-0.6.82.25.3_host_validation.md
+xstar_tools-0.6.82.25.4_host_validation.md
 xstar_tools-0.6.82.25_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
@@ -78,6 +79,7 @@ docs/developer/live_zone_progress_0_6_82_3.md
 docs/developer/low_xi_memory_performance_0_6_82_22.md
 docs/developer/lte_rnisi_workspace_0_6_82_8.md
 docs/developer/msolvelucy_fixed_loop_0_6_82_9.md
+docs/developer/msolvelucy_python_fixed_loop_0_6_82_25_4.md
 docs/developer/multi_element_atdb_lowering_0_6_82_1.md
 docs/developer/niter_semantics_0_6_82_24.md
 docs/developer/option24_fortran_stale_local_policy.md
@@ -230,6 +232,7 @@ qualification/local_zone_naming_cleanup_0_6_59.json
 qualification/low_xi_memory_performance_0_6_82_22.json
 qualification/lte_rnisi_workspace_0_6_82_8.json
 qualification/msolvelucy_fixed_loop_0_6_82_9.json
+qualification/msolvelucy_python_fixed_loop_0_6_82_25_4.json
 qualification/multi_element_atdb_lowering_0_6_82_1.json
 qualification/niter_semantics_0_6_82_24.json
 qualification/niter_semantics_0_6_82_24_1.json
@@ -559,6 +562,7 @@ tests/test_local_zone_naming_cleanup.py
 tests/test_low_xi_memory_performance_0_6_82_22.py
 tests/test_lte_rnisi_workspace_0_6_82_8.py
 tests/test_msolvelucy_fixed_loop_0_6_82_9.py
+tests/test_msolvelucy_python_fixed_loop_0_6_82_25_4.py
 tests/test_multi_element_atdb_lowering_0_6_82_1.py
 tests/test_niter_publication_xee_0_6_82_24_2.py
 tests/test_niter_semantics_0_6_82_24.py
@@ -679,6 +683,7 @@ tools/qualification/check_local_zone_naming_cleanup.py
 tools/qualification/check_low_xi_memory_performance_0_6_82_22.py
 tools/qualification/check_lte_rnisi_workspace_0_6_82_8.py
 tools/qualification/check_msolvelucy_fixed_loop_0_6_82_9.py
+tools/qualification/check_msolvelucy_python_fixed_loop_0_6_82_25_4.py
 tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
 tools/qualification/check_niter_publication_xee_0_6_82_24_2.py
 tools/qualification/check_niter_semantics_0_6_82_24.py
@@ -733,6 +738,7 @@ tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25.py
 tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_1.py
 tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_2.py
 tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_3.py
+tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_4.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_1.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_2.py
