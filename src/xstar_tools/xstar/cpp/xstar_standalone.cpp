@@ -2928,7 +2928,7 @@ void print_xstar_style_live_zone(
               << std::setw(7) << log_rel
               << std::setw(7) << safe_log(column, -10.0)
               << std::setw(7) << log_xi
-              << std::setw(7) << snapshot.computed_electron_fraction
+              << std::setw(7) << snapshot.electron_fraction_input
               << std::setw(7) << safe_log(params.density_cm3, -10.0)
               << std::setw(7) << log_temp
               << std::setw(7) << std::clamp(100.0 * snapshot.hmctot, -99.99, 99.99)
@@ -2959,7 +2959,7 @@ void production_zone_mark_complete(
     result.dsec_evaluations = dsec_evaluations;
     result.seconds = seconds;
     result.temperature_t4 = snapshot.temperature_t4;
-    result.electron_fraction = snapshot.computed_electron_fraction;
+    result.electron_fraction = snapshot.electron_fraction_input;
     result.hmctot = snapshot.hmctot;
     result.heating_minus_cooling_percent = 100.0 * snapshot.hmctot;
     result.source_sequence = snapshot.sequence;
@@ -13570,8 +13570,11 @@ void advance_source_continuum_radiation(
     workspace.radius_cm = radius_cm;
     workspace.covering_fraction = data.parameters->covering_fraction;
     workspace.zone_thickness_cm = delta_radius_cm;
-    workspace.electron_fraction_xee = std::isfinite(boundary.computed_electron_fraction) && boundary.computed_electron_fraction > 0.0
-        ? boundary.computed_electron_fraction : boundary.electron_fraction_input;
+    // 0.6.82.24.1: source xstar.f90 passes the live controller xee into
+    // heatt.  calc_hmc_all computes enelec only for the charge residual and
+    // does not overwrite xee.  Therefore the fixed-state computed electron
+    // fraction is diagnostic-only here, especially for niter=0 and niter=1.
+    workspace.electron_fraction_xee = boundary.electron_fraction_input;
     workspace.hydrogen_density_cm3 = data.parameters->density_cm3;
     workspace.epi_eV = data.energy.data();
     workspace.bremsa = data.dsec_bremsa.data();
@@ -16776,7 +16779,7 @@ void write_sequence23_diagnostic_preview(
             ? std::log10(live_xi) : -std::numeric_limits<double>::infinity();
         zone.column_density_cm2 = params.density_cm3 * std::max(depth_cm, 0.0);
         zone.temperature_t4 = accepted.evaluation.temperature_t4;
-        zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
+        zone.electron_fraction = accepted.evaluation.electron_fraction_input;
         zone.provisional_from_controller = !exact_controller_boundary;
         zone.accepted_boundary_exact = exact_controller_boundary;
         zone.boundary_provenance = provenance;
@@ -18134,7 +18137,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 ? std::log10(live_xi) : -std::numeric_limits<double>::infinity();
             zone.column_density_cm2 = params.density_cm3 * std::max(source_depth, 0.0);
             zone.temperature_t4 = accepted.evaluation.temperature_t4;
-            zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
+            zone.electron_fraction = accepted.evaluation.electron_fraction_input;
             zone.dsec_ntotit = dsec_ntotit;
             zone.provisional_from_controller = false;
             zone.accepted_boundary_exact = true;

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.24.1 - 2026-08-12
+
+- Correct accepted electron-fraction ownership for the `niter=0` and one-iteration `niter=1` source branches.  The fixed-state computed electron fraction is a charge diagnostic (`enelec`-derived); canonical `calc_hmc_all` does not overwrite the live `xee` argument.
+- Pass the accepted controller/source `xee` into native HEATT/transport and publish that same accepted value in live STEP/progress and generic radial/FITS state.
+- Preserve the computed electron fraction as a diagnostic field only; converged negative/positive `niter` branches remain numerically unchanged when accepted and computed `xee` coincide.
+- Repair the niter host runner's obsolete STEP row-key names so completed pure-Python products can be compared without rerunning them.
+
 ## 0.6.82.24 - 2026-08-12
 
 - Restore literal FORTRAN `niter` ownership in native production. `xstar_atdb_runtime.cpp` no longer clamps the requested value to `>=1`; `niter=0`, negative values, and positive values reach the controller unchanged.
