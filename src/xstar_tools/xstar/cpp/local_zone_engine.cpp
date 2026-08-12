@@ -11725,10 +11725,23 @@ int run_impl(
     const bool mg_type53_kernel_audit_v82_patch512 = !defer_product_projection &&
         source_sequence_v82_patch511 == 59 && mg_type53_kernel_path_v82_patch512 && *mg_type53_kernel_path_v82_patch512;
     std::vector<MgType53OpacityKernelRowV82Patch512> mg_type53_kernel_rows_v82_patch512;
-    std::vector<OpacityProducerTopV82Patch511> bound_free_top(input.radiation_bin_count);
-    std::vector<OpacityProducerTopV82Patch511> line_top(input.radiation_bin_count);
-    std::vector<double> producer_temp_opacity(input.radiation_bin_count, 0.0);
-    std::vector<double> producer_temp_rrc(2 * input.radiation_bin_count, 0.0);
+    // 0.6.82.22: these large producer-attribution buffers are diagnostic-only.
+    // The old production path allocated/zero-filled them on every fixed-state
+    // evaluation even when no producer/absorption audit was enabled.  Low-xi
+    // models execute thousands of evaluations, so that generated substantial
+    // allocator and memory-bandwidth overhead with zero science effect.
+    std::vector<OpacityProducerTopV82Patch511> bound_free_top;
+    std::vector<OpacityProducerTopV82Patch511> line_top;
+    std::vector<double> producer_temp_opacity;
+    std::vector<double> producer_temp_rrc;
+    if (opacity_producer_audit_v82_patch511 || exact_absorption_audit_v82_patch5203) {
+        producer_temp_opacity.assign(input.radiation_bin_count, 0.0);
+        producer_temp_rrc.assign(2u * input.radiation_bin_count, 0.0);
+    }
+    if (opacity_producer_audit_v82_patch511) {
+        bound_free_top.resize(input.radiation_bin_count);
+        line_top.resize(input.radiation_bin_count);
+    }
     std::size_t phint53_records_mapped_v82_patch57 = 0;
     std::size_t phint53_bins_accumulated_v82_patch57 = 0;
     std::optional<SourceCompactOracle> source_compact_oracle;

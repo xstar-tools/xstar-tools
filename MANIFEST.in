@@ -322,3 +322,17 @@ include tools/qualification/run_c5_emult_sweep_0_6_82_21.py
 include docs/developer/dsec_source_return_acceptance_0_6_82_21.md
 include tests/test_dsec_source_return_acceptance_0_6_82_21.py
 include xstar_tools-0.6.82.21_host_validation.md
+
+# 0.6.82.22 low-xi memory/performance optimization.
+include qualification/low_xi_memory_performance_0_6_82_22.json
+include tools/qualification/check_low_xi_memory_performance_0_6_82_22.py
+include tools/qualification/run_c5_emult_sweep_0_6_82_22.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_22.py
+include tools/qualification/run_c5_cfrac00_xim2_host_smoke_0_6_82_22.py
+include tools/qualification/run_c5_cfrac00_staged_0_6_82_22.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_22.py
+include tests/test_low_xi_memory_performance_0_6_82_22.py
+include docs/developer/low_xi_memory_performance_0_6_82_22.md
+include xstar_tools-0.6.82.22_host_validation.md
+include xstar_tools_emult_profile_0.6.82.21.md
+include xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md

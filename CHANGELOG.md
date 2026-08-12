@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.22 - 2026-08-11
+
+- Prioritize low-ionization native performance and memory after the C5 covering-fraction axis closed at `cfrac=0`, `0.4`, and `1.0`. No science equation, controller arithmetic, rate ordering, matrix ordering, transport equation, science revision, or ABI is changed.
+- Profile the 0.6.82.21 H+He+C, `ne=1e12`, `column=1e20`, `cfrac=0`, `rlogxi=-3` emult sweep. FORTRAN/C++ zone counts are 150/150 at `emult=0.25`, 78/78 at `0.5`, and 42/42 at `1.0`; the corresponding C++/FORTRAN runtime ratios from native total-time logs are about 2.37x, 2.41x, and 2.15x. At `emult=0.1`, FORTRAN completes 367 zones while C++ is killed with return code 137 after 289 live zones.
+- Identify the dominant memory scaling as retained per-zone product/source workspaces. Retained product-array payload alone is 1.720 GB at 150 zones (`emult=0.25`), 894.8 MB at 78 zones, and 482.2 MB at 42 zones, implying multi-GB growth at the 367-zone `emult=0.1` endpoint.
+- Compact only completed, nonterminal sparse RRC source-address planes (`cemab`, `elumab`, `cabab`, `opakab`, `tauc`) into the exact RRC identity order already consumed by generic publication. The newest/terminal accepted boundary remains full source-indexed; reference/diagnostic trajectories are never compacted. The retained-workspace normalization path recognizes compact intermediates and does not re-expand them through the legacy sparse continuum geometry.
+- Remove a science-neutral per-evaluation CPU cost: opacity-producer/absorption diagnostic scratch arrays are now allocated only when those diagnostics are enabled instead of on every fixed-state evaluation.
+- Add all-evaluation native timing counters (`V068222_PERF_ALL_FIXED_*`) and RRC compaction counters, fixing the historical instrumentation blind spot that timed only early controller slots.
+- Fix the emult qualification CSV schema so an early failed `emult=0.1` row cannot prevent reporting later ACCEPT cases. The runner now records `/usr/bin/time -v` maximum RSS and native performance markers in addition to STEP/material/Option-1 science.
+- Host performance gate remains pending: first validate `emult=0.25` science plus memory/timing reduction, then require `emult=0.1` to complete instead of exit 137, then run the full `0.1,0.25,0.5,1.0` sweep.
+
 ## 0.6.82.21 - 2026-08-11
 
 - Restore canonical FORTRAN DSEC post-return ownership in generic C++ production. A successful native DSEC return is now accepted exactly as `xstarcalc.f90` accepts `dsec.f90`; the port no longer adds a second rejection solely because the diagnostic `charge_converged`/`thermal_converged` flags are false or `lnerr` is nonzero.

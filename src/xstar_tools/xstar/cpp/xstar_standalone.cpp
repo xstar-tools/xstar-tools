@@ -236,6 +236,21 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t retained_array_count = 0u;
     std::uint64_t retained_array_values = 0u;
     std::uint64_t retained_array_bytes = 0u;
+    // 0.6.82.22: all-zone fixed-state accounting.  The historical four-slot
+    // counters above are retained for regression, but low-emult runs can have
+    // hundreds of radial zones and therefore need cumulative attribution.
+    std::uint64_t all_fixed_calls = 0u;
+    std::uint64_t all_fixed_records_seen = 0u;
+    std::uint64_t all_fixed_records_evaluated = 0u;
+    double all_fixed_traversal_seconds = 0.0;
+    double all_fixed_rate_seconds = 0.0;
+    double all_fixed_element_seconds = 0.0;
+    double all_fixed_continuum_seconds = 0.0;
+    double all_fixed_spectral_seconds = 0.0;
+    double all_fixed_total_seconds = 0.0;
+    std::uint64_t compacted_rrc_zones = 0u;
+    std::uint64_t compacted_rrc_values_before = 0u;
+    std::uint64_t compacted_rrc_values_after = 0u;
     std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
 };
 
@@ -2734,6 +2749,66 @@ struct FixedDsecSnapshot {
     std::vector<xstar_run_state::ContinuumProductDiagnosticState> continuum_product_diagnostics;
     std::vector<xstar_run_state::ElementThermalProductState> element_thermal_products;
 };
+
+// 0.6.82.22: intermediate accepted zones do not need the sparse 301301-slot
+// RRC source address space after their local source calculation and transport
+// are complete.  Preserve exact values in the immutable publication identity
+// order instead.  The newest/terminal snapshot remains source-indexed and is
+// never compacted, so STEP options 19/24 and final public RRC publication keep
+// the literal FORTRAN source-pointer workspace.
+std::vector<double> compact_rrc_two_plane_v068222(
+    const std::vector<double>& source,
+    const std::vector<xstar_run_state::RrcIdentityState>& identities) {
+    const std::size_t count = identities.size();
+    if (count == 0u || source.empty()) return {};
+    if (source.size() == 2u * count) return source;
+    if (source.size() < 2u || source.size() % 2u != 0u) return {};
+    const std::size_t stride = source.size() / 2u;
+    std::vector<double> out(2u * count, 0.0);
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto ci = identities[i].continuum_index;
+        if (ci <= 0) continue;
+        const auto direct = static_cast<std::size_t>(ci);
+        if (direct >= stride) continue;
+        out[i] = std::isfinite(source[direct]) ? source[direct] : 0.0;
+        out[count + i] = std::isfinite(source[stride + direct]) ? source[stride + direct] : 0.0;
+    }
+    return out;
+}
+
+std::vector<double> compact_rrc_scalar_v068222(
+    const std::vector<double>& source,
+    const std::vector<xstar_run_state::RrcIdentityState>& identities) {
+    const std::size_t count = identities.size();
+    if (count == 0u || source.empty()) return {};
+    if (source.size() == count) return source;
+    std::vector<double> out(count, 0.0);
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto ci = identities[i].continuum_index;
+        if (ci <= 0) continue;
+        const auto direct = static_cast<std::size_t>(ci);
+        if (direct < source.size()) out[i] = std::isfinite(source[direct]) ? source[direct] : 0.0;
+    }
+    return out;
+}
+
+std::pair<std::uint64_t,std::uint64_t> compact_completed_snapshot_rrc_v068222(
+    FixedDsecSnapshot& snapshot,
+    const std::vector<xstar_run_state::RrcIdentityState>& identities) {
+    auto values = [](const std::vector<double>& v) -> std::uint64_t {
+        return static_cast<std::uint64_t>(v.size());
+    };
+    const std::uint64_t before = values(snapshot.cemab) + values(snapshot.elumab) +
+        values(snapshot.cabab) + values(snapshot.opakab) + values(snapshot.tauc);
+    snapshot.cemab = compact_rrc_two_plane_v068222(snapshot.cemab, identities);
+    snapshot.elumab = compact_rrc_two_plane_v068222(snapshot.elumab, identities);
+    snapshot.tauc = compact_rrc_two_plane_v068222(snapshot.tauc, identities);
+    snapshot.cabab = compact_rrc_scalar_v068222(snapshot.cabab, identities);
+    snapshot.opakab = compact_rrc_scalar_v068222(snapshot.opakab, identities);
+    const std::uint64_t after = values(snapshot.cemab) + values(snapshot.elumab) +
+        values(snapshot.cabab) + values(snapshot.opakab) + values(snapshot.tauc);
+    return {before, after};
+}
 
 
 // 0.6.82.3 live textual progress.  This is an observability-only surface:
@@ -6262,9 +6337,17 @@ std::vector<double> rrc_plane_values(const xstar_run_state::ProductWritingState&
                                      const std::vector<double>& fallback,
                                      std::size_t plane) {
     std::vector<double> out(product.rrc_identities.size(), 0.0);
+    const std::size_t identity_count = product.rrc_identities.size();
+    const bool primary_compact = primary.size() == 2u * identity_count;
+    const bool fallback_compact = fallback.size() == 2u * identity_count;
     const std::size_t primary_stride = primary.size() >= 2u ? primary.size() / 2u : 0u;
     const std::size_t fallback_stride = fallback.size() >= 2u ? fallback.size() / 2u : 0u;
-    for (std::size_t i = 0; i < product.rrc_identities.size(); ++i) {
+    for (std::size_t i = 0; i < identity_count; ++i) {
+        if (primary_compact) {
+            out[i] = std::isfinite(primary[plane * identity_count + i])
+                ? primary[plane * identity_count + i] : 0.0;
+            continue;
+        }
         const auto continuum_index = product.rrc_identities[i].continuum_index;
         if (continuum_index <= 0) continue;
         // Native spectral workspaces use the source one-based continuum pointer
@@ -6274,6 +6357,11 @@ std::vector<double> rrc_plane_values(const xstar_run_state::ProductWritingState&
             out[i] = std::isfinite(primary[plane * primary_stride + direct])
                 ? primary[plane * primary_stride + direct] : 0.0;
             continue; // preserve a physical exact zero; do not fill it from another index space
+        }
+        if (fallback_compact) {
+            out[i] = std::isfinite(fallback[plane * identity_count + i])
+                ? fallback[plane * identity_count + i] : 0.0;
+            continue;
         }
         if (fallback_stride > direct && plane * fallback_stride + direct < fallback.size()) {
             out[i] = std::isfinite(fallback[plane * fallback_stride + direct])
@@ -6292,11 +6380,17 @@ std::vector<double> rrc_scalar_values(const xstar_run_state::ProductWritingState
                                       [[maybe_unused]] const xstar_run_state::ExactSourceWorkspaceState& ws,
                                       const std::vector<double>& primary,
                                       const std::vector<double>& fallback) {
-    std::vector<double> out(product.rrc_identities.size(), 0.0);
-    for (std::size_t i = 0; i < product.rrc_identities.size(); ++i) {
+    const std::size_t identity_count = product.rrc_identities.size();
+    std::vector<double> out(identity_count, 0.0);
+    const bool primary_compact = primary.size() == identity_count;
+    const bool fallback_compact = fallback.size() == identity_count;
+    for (std::size_t i = 0; i < identity_count; ++i) {
+        if (primary_compact) {
+            out[i] = std::isfinite(primary[i]) ? primary[i] : 0.0;
+            continue;
+        }
         // Native opakab/cabab arrays use the source one-based continuum
         // pointer as the actual vector slot; slot zero is intentionally unused.
-        // Do not prefer the compact public ordinal and do not subtract one.
         std::size_t direct = 0;
         if (product.rrc_identities[i].continuum_index > 0) {
             direct = static_cast<std::size_t>(product.rrc_identities[i].continuum_index);
@@ -6304,6 +6398,10 @@ std::vector<double> rrc_scalar_values(const xstar_run_state::ProductWritingState
         if (direct < primary.size()) {
             out[i] = std::isfinite(primary[direct]) ? primary[direct] : 0.0;
             continue; // a retained zero is semantic, not a missing compact cell
+        }
+        if (fallback_compact) {
+            out[i] = std::isfinite(fallback[i]) ? fallback[i] : 0.0;
+            continue;
         }
         if (direct < fallback.size()) {
             out[i] = std::isfinite(fallback[direct]) ? fallback[direct] : 0.0;
@@ -7097,11 +7195,20 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         append_native_array(inventory, product, hdu, "dpthcont", resize_or_zero(ws.dpthcont, 2 * n));
         append_native_array(inventory, product, hdu, "zrems", resize_or_zero(ws.zrems, 5 * n));
         append_native_array(inventory, product, hdu, "zremsz", resize_or_zero(ws.zremsz.empty() ? eval.radiation_flux : ws.zremsz, n));
-        const std::size_t source_continuum_count = std::max<std::size_t>(n, ws.native_continuum_count);
-        append_native_array(inventory, product, hdu, "tauc",
-            source_zero_based_continuum_planes(ws.tauc, source_continuum_count));
-        append_native_array(inventory, product, hdu, "elumab",
-            source_zero_based_continuum_planes(ws.elumab.empty() ? ws.rccemis : ws.elumab, source_continuum_count));
+        // 0.6.82.22: generic production publishes detailed RRCs from the
+        // compact identity-mapped product_write_detail_rrc_* arrays below.
+        // Retaining source-continuum-sized tauc/elumab here duplicated up to
+        // 2*301301 doubles per plane per zone and made memory O(Nzone*source
+        // continuum).  Keep the historical raw bridge only for non-generic
+        // reference/replay modes; the terminal live source workspace remains
+        // full in all modes for public STEP/RRC writers.
+        if (product.backend != "cpp-general-standalone") {
+            const std::size_t source_continuum_count = std::max<std::size_t>(n, ws.native_continuum_count);
+            append_native_array(inventory, product, hdu, "tauc",
+                source_zero_based_continuum_planes(ws.tauc, source_continuum_count));
+            append_native_array(inventory, product, hdu, "elumab",
+                source_zero_based_continuum_planes(ws.elumab.empty() ? ws.rccemis : ws.elumab, source_continuum_count));
+        }
 
         const std::size_t line_count = line_indices_all.size();
         const std::size_t native_line_stride = native_line_plane_stride(ws);
@@ -10289,18 +10396,24 @@ void retain_controller_owned_product_workspaces(
                         local_plane(previous.rcem, line_stride, plane, slot) * delr * fpr2);
                 }
             }
-            for (std::size_t slot = 0; slot < continuum_stride; ++slot) {
-                const double opacity = slot < previous.opakab.size() && std::isfinite(previous.opakab[slot])
-                    ? previous.opakab[slot] : 0.0;
-                // As for tau0, stpcut advances only tauc(lind,slot) for the
-                // current pass direction.
-                cumulative_tauc[lind * continuum_stride + slot] += opacity * delr;
-                const double total_cemab = local_plane(previous.cemab, continuum_stride, 0u, slot) +
-                    local_plane(previous.cemab, continuum_stride, 1u, slot);
-                const double delta_lum = total_cemab * delr * fpr2 * 0.5;
-                cumulative_elumab[slot] = std::max(0.0, cumulative_elumab[slot] + delta_lum);
-                cumulative_elumab[continuum_stride + slot] = std::max(0.0,
-                    cumulative_elumab[continuum_stride + slot] + delta_lum);
+            const bool previous_rrc_compact_v068222 =
+                !whole.rrc_identities.empty() &&
+                previous.opakab.size() == whole.rrc_identities.size() &&
+                previous.cemab.size() == 2u * whole.rrc_identities.size();
+            if (!previous_rrc_compact_v068222) {
+                for (std::size_t slot = 0; slot < continuum_stride; ++slot) {
+                    const double opacity = slot < previous.opakab.size() && std::isfinite(previous.opakab[slot])
+                        ? previous.opakab[slot] : 0.0;
+                    // As for tau0, stpcut advances only tauc(lind,slot) for the
+                    // current pass direction.
+                    cumulative_tauc[lind * continuum_stride + slot] += opacity * delr;
+                    const double total_cemab = local_plane(previous.cemab, continuum_stride, 0u, slot) +
+                        local_plane(previous.cemab, continuum_stride, 1u, slot);
+                    const double delta_lum = total_cemab * delr * fpr2 * 0.5;
+                    cumulative_elumab[slot] = std::max(0.0, cumulative_elumab[slot] + delta_lum);
+                    cumulative_elumab[continuum_stride + slot] = std::max(0.0,
+                        cumulative_elumab[continuum_stride + slot] + delta_lum);
+                }
             }
         }
 
@@ -10310,14 +10423,30 @@ void retain_controller_owned_product_workspaces(
         // reconstruction whenever they have the expected source shape.
         if (ws.tau0.size() == 2u * line_stride) cumulative_tau0 = ws.tau0;
         if (ws.elum.size() == 2u * line_stride) cumulative_elum = ws.elum;
-        if (ws.tauc.size() == 2u * continuum_stride) cumulative_tauc = ws.tauc;
-        if (ws.elumab.size() == 2u * continuum_stride) cumulative_elumab = ws.elumab;
+        const bool ws_rrc_compact_v068222 =
+            !whole.rrc_identities.empty() &&
+            ws.opakab.size() == whole.rrc_identities.size() &&
+            ws.cemab.size() == 2u * whole.rrc_identities.size() &&
+            ws.tauc.size() == 2u * whole.rrc_identities.size() &&
+            ws.elumab.size() == 2u * whole.rrc_identities.size();
+        if (!ws_rrc_compact_v068222) {
+            if (ws.tauc.size() == 2u * continuum_stride) cumulative_tauc = ws.tauc;
+            if (ws.elumab.size() == 2u * continuum_stride) cumulative_elumab = ws.elumab;
+        }
         ws.tau0 = cumulative_tau0;
-        ws.tauc = cumulative_tauc;
+        // A compact 0.6.82.22 intermediate RRC workspace already contains the
+        // exact controller-owned cumulative values in publication identity
+        // order.  Do not re-expand/reconstruct it through the legacy sparse
+        // source-pointer geometry path.
+        if (!ws_rrc_compact_v068222) {
+            ws.tauc = cumulative_tauc;
+            ws.elumab = cumulative_elumab;
+        }
         ws.elum = cumulative_elum;
-        ws.elumab = cumulative_elumab;
         ws.native_line_count = line_stride > 0u ? line_stride - 1u : 0u;
-        ws.native_continuum_count = continuum_stride > 0u ? continuum_stride - 1u : 0u;
+        if (!ws_rrc_compact_v068222) {
+            ws.native_continuum_count = continuum_stride > 0u ? continuum_stride - 1u : 0u;
+        }
         ws.line_tau_workspace_exact = true;
         ws.rrc_tau_workspace_exact = true;
         // This aggregate flag also covers the continuum transport workspaces
@@ -17660,6 +17789,21 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 data.snapshots.push_back(pretransport_boundary_v82_patch520145);
             }
             finals.push_back(std::move(pretransport_boundary_v82_patch520145));
+            // 0.6.82.22 memory scaling: once a later accepted boundary exists,
+            // the previous boundary is immutable publication state.  Compact
+            // only its sparse RRC source-address planes; never compact the
+            // newest/terminal snapshot or any reference/diagnostic trajectory.
+            if (!data.reference_trajectory_mode && !data.reference_diagnostics_enabled &&
+                !data.diagnostic_full_trajectory_continue && finals.size() > 1u) {
+                auto& completed = finals[finals.size() - 2u];
+                const auto counts_v068222 = compact_completed_snapshot_rrc_v068222(
+                    completed, program.rrc_identities);
+                if (g_performance_v064890 && counts_v068222.first > counts_v068222.second) {
+                    ++g_performance_v064890->compacted_rrc_zones;
+                    g_performance_v064890->compacted_rrc_values_before += counts_v068222.first;
+                    g_performance_v064890->compacted_rrc_values_after += counts_v068222.second;
+                }
+            }
             const double zone_seconds_v0648110 = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - shared_zone_started_v0648110).count();
             shared_zone_seconds_v0648110.push_back(zone_seconds_v0648110);
@@ -17681,6 +17825,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                       << " HMCTOT=" << std::setprecision(9) << stats.final_hmctot
                       << " ELCTER=" << stats.final_elcter << "\n";
             if (done_after_zone_v0648110) break;
+        }
+
+        if (g_performance_v064890) {
+            g_performance_v064890->all_fixed_calls = data.cumulative_stats.calls;
+            g_performance_v064890->all_fixed_records_seen = data.cumulative_stats.records_seen;
+            g_performance_v064890->all_fixed_records_evaluated = data.cumulative_stats.records_evaluated;
+            g_performance_v064890->all_fixed_traversal_seconds = data.cumulative_stats.traversal_seconds;
+            g_performance_v064890->all_fixed_rate_seconds = data.cumulative_stats.rate_seconds;
+            g_performance_v064890->all_fixed_element_seconds = data.cumulative_stats.element_seconds;
+            g_performance_v064890->all_fixed_continuum_seconds = data.cumulative_stats.continuum_seconds;
+            g_performance_v064890->all_fixed_spectral_seconds = data.cumulative_stats.spectral_seconds;
+            g_performance_v064890->all_fixed_total_seconds = data.cumulative_stats.total_seconds;
         }
 
         const char* v064894_force_legacy = std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
@@ -18730,7 +18886,21 @@ void emit_controller_performance_instrumentation(
             << "V064890_PERF_PUBLICATION_SECONDS=" << perf.publication_seconds << "\n"
             << "V064890_PERF_RETAINED_ARRAY_COUNT=" << perf.retained_array_count << "\n"
             << "V064890_PERF_RETAINED_ARRAY_VALUES=" << perf.retained_array_values << "\n"
-            << "V064890_PERF_RETAINED_ARRAY_BYTES=" << perf.retained_array_bytes << "\n";
+            << "V064890_PERF_RETAINED_ARRAY_BYTES=" << perf.retained_array_bytes << "\n"
+            << "V068222_PERF_ALL_FIXED_CALLS=" << perf.all_fixed_calls << "\n"
+            << "V068222_PERF_ALL_FIXED_RECORDS_SEEN=" << perf.all_fixed_records_seen << "\n"
+            << "V068222_PERF_ALL_FIXED_RECORDS_EVALUATED=" << perf.all_fixed_records_evaluated << "\n"
+            << "V068222_PERF_ALL_FIXED_TRAVERSAL_SECONDS=" << perf.all_fixed_traversal_seconds << "\n"
+            << "V068222_PERF_ALL_FIXED_RATE_SECONDS=" << perf.all_fixed_rate_seconds << "\n"
+            << "V068222_PERF_ALL_FIXED_ELEMENT_SECONDS=" << perf.all_fixed_element_seconds << "\n"
+            << "V068222_PERF_ALL_FIXED_CONTINUUM_SECONDS=" << perf.all_fixed_continuum_seconds << "\n"
+            << "V068222_PERF_ALL_FIXED_SPECTRAL_SECONDS=" << perf.all_fixed_spectral_seconds << "\n"
+            << "V068222_PERF_ALL_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
+            << "V068222_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"
+            << "V068222_PERF_RRC_VALUES_BEFORE=" << perf.compacted_rrc_values_before << "\n"
+            << "V068222_PERF_RRC_VALUES_AFTER=" << perf.compacted_rrc_values_after << "\n"
+            << "V068222_PERF_RRC_ESTIMATED_BYTES_SAVED="
+            << 8u * (perf.compacted_rrc_values_before - perf.compacted_rrc_values_after) << "\n";
         for (std::size_t i = 0; i < family_types.size(); ++i) {
             out << "V064890_PERF_RECORD_TYPE" << family_types[i] << "_COUNT=" << perf.record_family_counts[i] << "\n";
         }
