@@ -1,11 +1,13 @@
-> **Current 0.6.82.24.3 qualification note:** the C5 covering-fraction axis is closed at `cfrac=0`, `0.4`, and `1.0`, and the practical `emult=0.1/0.25/0.5/1.0` science sweep is ACCEPT under 0.6.82.22. 0.6.82.23 established the public Table-1 parameter contract: stock `xstar.par`/XPI defaults and ranges, complete 59-parameter provenance, and consumer/sensitivity gates. The low-ionization speed baseline remains frozen for 0.6.82.31-0.6.82.33.
+> **Current 0.6.82.25.1 qualification note:** `niter` is closed; the C5 `cfrac` and practical `emult` science axes remain frozen ACCEPT. `0.6.82.25` established the constant-pressure source formulas but was host-REJECT as a final candidate because of two native STEP-publication defects and a pure-Python `ncn2=999` BREMSMAP tail-capacity failure. `0.6.82.25.1` corrects only those issues and must reuse the existing stock-FORTRAN `.25` references. Low-ionization C++ and pure-Python performance work remains deferred to `0.6.82.31`-`0.6.82.33`.
 
 # xstar-tools
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.24.3`  
+**Distribution:** `0.6.82.25.1`  
 
+
+**0.6.82.25.1 pressure STEP/minimum-grid hotfix:** stock-XSTAR host qualification rejected `.25` only on two native STEP-publication details (`log(N)` reconstructed from current density instead of retained source `xcol`, and optical depths printed below the canonical `1e-10` floor) plus a pure-Python `ncn2=999` BREMSMAP caller-capacity failure. `.25.1` preserves the `.25` constant-pressure equations and fixes those ownership/capacity defects only. Reuse the existing FORTRAN `.25` references; rerun C++ `cp_xim2`/`cp_xi2` and pure-Python `cp_xim2` first.
 
 **0.6.82.24.3 pure-Python first `h-c(%)` stage:** the `niter` parameter campaign is closed after C++ `0/-99/1/99` and pure-Python `0/-99/1/99` reproduce stock FORTRAN science. This successor changes only the first legacy STEP/progress `h-c(%)` display value in pure Python: it now publishes `hmctot` from `xstarcalc`'s unconditional final `calc_hmc_all`, matching FORTRAN `pprint(9)`. The second `h-c(%)` transport residual and all physical products are frozen.
 

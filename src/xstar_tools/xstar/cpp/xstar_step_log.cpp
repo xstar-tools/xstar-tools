@@ -360,7 +360,7 @@ bool source_option17_radiation_balance_percent(
 void append_native_radial_summary(std::ofstream& out,
                                   const std::filesystem::path& output_dir,
                                   const xstar_run_state::ProductWritingState& state) {
-    struct Row { double radius=0, dr=0, logxi=0, xee=0, density=0, temperature=0, heat_error=0; };
+    struct Row { double radius=0, dr=0, column=0, logxi=0, xee=0, density=0, temperature=0, heat_error=0; };
     std::vector<Row> rows;
     fitsfile* af = nullptr;
     int status = 0;
@@ -377,6 +377,7 @@ void append_native_radial_summary(std::ofstream& out,
                 Row r; int any=0, st=0;
                 auto rd=[&](int c){ double v=0; if(c>0) fits_read_col(af,TDOUBLE,c,i,1,1,nullptr,&v,&any,&st); return st==0?v:0.0; };
                 r.radius=rd(cr); r.dr=rd(cd); r.logxi=rd(cx); r.xee=rd(ce); r.density=rd(cn); r.temperature=rd(ct); r.heat_error=rd(ch);
+                r.column=r.density*r.dr;
                 if (r.radius>0.0 || r.density>0.0) rows.push_back(r);
             }
         }
@@ -385,7 +386,7 @@ void append_native_radial_summary(std::ofstream& out,
     if (rows.empty()) {
         for (const auto& r : state.abundance_radial_rows) {
             if (r.radius_cm<=0.0 && r.density_cm3<=0.0) continue;
-            rows.push_back({r.radius_cm,r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,r.density_cm3,r.temperature_t4,r.fractional_heat_error});
+            rows.push_back({r.radius_cm,r.delta_radius_cm,r.density_cm3 * r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,r.density_cm3,r.temperature_t4,r.fractional_heat_error});
         }
     }
     // v0.6.48.12.3.12: native pprint must consume the controller-owned radial
@@ -415,7 +416,7 @@ void append_native_radial_summary(std::ofstream& out,
                 logxi = std::log10(std::max(1.0e-24, skse));
             }
             rows.push_back({zone.radius_cm, zone.delta_radius_cm,
-                logxi, zone.electron_fraction,
+                zone.column_density_cm2, logxi, zone.electron_fraction,
                 zone.density_cm3, zone.temperature_t4,
                 zone.accepted_controller.evaluation.hmctot});
         }
@@ -432,7 +433,7 @@ void append_native_radial_summary(std::ofstream& out,
         rows.reserve(state.radial_zones.size());
         for (const auto& zone : state.radial_zones) {
             rows.push_back({zone.radius_cm, zone.delta_radius_cm,
-                zone.log_ionization_parameter, zone.electron_fraction,
+                zone.column_density_cm2, zone.log_ionization_parameter, zone.electron_fraction,
                 zone.density_cm3, zone.temperature_t4,
                 zone.accepted_controller.evaluation.hmctot});
         }
@@ -517,8 +518,8 @@ void append_native_radial_summary(std::ofstream& out,
             }
             const double reference_fwd=reference_bin<local_fwd.size()?local_fwd[reference_bin]:0.0;
             const double reference_bck=reference_bin<local_bck.size()?local_bck[reference_bin]:0.0;
-            depth_logs.push_back({reference_fwd>0?std::log10(reference_fwd):-10.0,
-                                  reference_bck>0?std::log10(reference_bck):-10.0});
+            depth_logs.push_back({std::log10(std::max(reference_fwd, 1.0e-10)),
+                                  std::log10(std::max(reference_bck, 1.0e-10))});
             reference_depths.push_back({reference_fwd,reference_bck});
         }
         int cs=0;fits_close_file(df,&cs);
@@ -559,8 +560,8 @@ void append_native_radial_summary(std::ofstream& out,
         const std::size_t reference_bin = source_option17_reference_bin_zero_based(energy);
         const double fwd = std::max(0.0, dpthc[reference_bin]);
         const double rev = std::max(0.0, dpthc[n + reference_bin]);
-        retained_depth_logs.push_back({fwd > 0.0 ? std::log10(fwd) : -10.0,
-                                       rev > 0.0 ? std::log10(rev) : -10.0});
+        retained_depth_logs.push_back({std::log10(std::max(fwd, 1.0e-10)),
+                                       std::log10(std::max(rev, 1.0e-10))});
         retained_reference_depths.push_back({fwd, rev});
     }
     if (retained_depth_complete && retained_depth_logs.size() >= rows.size()) {
@@ -651,7 +652,7 @@ void append_native_radial_summary(std::ofstream& out,
         out<<std::fixed<<std::setprecision(2)
            <<std::setw(8)<<safe_log(r.radius,-10.0)
            <<std::setw(7)<<(r.radius>0&&r.dr>0?std::log10(r.dr/r.radius):-36.0)
-           <<std::setw(7)<<safe_log(r.density*r.dr,-10.0)
+           <<std::setw(7)<<safe_log(r.column,-10.0)
            <<std::setw(7)<<r.logxi<<std::setw(7)<<r.xee
            <<std::setw(7)<<safe_log(r.density,-10.0)
            <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)

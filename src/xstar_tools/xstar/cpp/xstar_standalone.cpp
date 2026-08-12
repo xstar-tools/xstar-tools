@@ -2920,8 +2920,10 @@ void print_xstar_style_live_zone(
         const std::size_t rb = live_option17_reference_bin_zero_based(energy);
         const double fwd = std::max(0.0, snapshot.dpthc[rb]);
         const double rev = std::max(0.0, snapshot.dpthc[energy.size() + rb]);
-        log_fwd = fwd > 0.0 ? std::log10(fwd) : -10.0;
-        log_rev = rev > 0.0 ? std::log10(rev) : -10.0;
+        // pprint.f90 option 9 prints log10(max(dpthc,1.d-10)); tiny
+        // positive depths must therefore remain at the canonical -10 floor.
+        log_fwd = std::log10(std::max(fwd, 1.0e-10));
+        log_rev = std::log10(std::max(rev, 1.0e-10));
     }
     double radiation_balance = 0.0;
     (void)live_radiation_balance_percent(snapshot, radiation_balance);
@@ -18866,8 +18868,8 @@ void print_xstar_style_progress(const xstar_run_state::ProductWritingState& stat
             const std::size_t rb = source_option17_reference_bin_zero_based(energy);
             const double fwd = std::max(0.0, dpthc[rb]);
             const double rev = std::max(0.0, dpthc[energy.size() + rb]);
-            log_fwd = fwd > 0.0 ? std::log10(fwd) : -10.0;
-            log_rev = rev > 0.0 ? std::log10(rev) : -10.0;
+            log_fwd = std::log10(std::max(fwd, 1.0e-10));
+            log_rev = std::log10(std::max(rev, 1.0e-10));
         }
         double radiation_balance = 0.0;
         (void)source_option17_radiation_balance_percent(eval, radiation_balance);

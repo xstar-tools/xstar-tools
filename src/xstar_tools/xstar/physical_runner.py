@@ -2428,8 +2428,12 @@ def _build_initial_state(
     # full high-resolution 1:ncn2 range, while bremsmap also reads the
     # reduced-grid boundary row ncn2m+1.  Preserve that shared full-capacity
     # source array and let ucalc expose only the active 1:ncn2m views.
-    state.radiation.bremsam = np.zeros(ncn2, dtype=float)
-    state.radiation.bremsint = np.zeros(ncn2, dtype=float)
+    state.radiation.bremsam = np.zeros(max(ncn2, ncn2m), dtype=float)
+    # FORTRAN allocates bremsint(ncn), where ncn is global capacity rather
+    # than the active ncn2 grid.  bremsmap reads the caller-owned boundary
+    # row ncn2m+1, so the minimum public ncn2=999 still needs slot 1000.
+    bremsint_capacity = max(ncn2, ncn2m + 1)
+    state.radiation.bremsint = np.zeros(bremsint_capacity, dtype=float)
     state.radiation.zrems = workspace.zrems
     state.radiation.zremso = workspace.zremso
     state.plasma.temperature = parameters.temperature_k

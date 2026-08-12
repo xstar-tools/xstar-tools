@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.25.1 - 2026-08-12
+
+- Keep the `0.6.82.25` constant-pressure equations/controller arithmetic frozen, but repair the two host-exposed native STEP publication mismatches: publish the retained source cumulative column `xcol` (`RadialZoneState::column_density_cm2`) instead of reconstructing `current_density*cumulative_depth`, and apply the literal FORTRAN `log10(max(dpthc,1e-10))` optical-depth floor in live and persisted STEP rows.
+- Repair pure-Python minimum-grid BREMSMAP capacity at public `ncn2=999`: allocate caller-owned `bremsint(ncn2m+1)` tail storage as FORTRAN's global `ncn` array does, while full-grid emissivity consumers slice only the active first `ncn2` rows.
+- Add a permanent `.25.1` source gate, direct `ncn2=999` BREMSMAP regression, and host runner that reuses existing FORTRAN `.25` references. `0.6.82.25` is host-science REJECT; `.25.1` is the corrective host candidate.
+- Preserve frozen science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487` / `6048110` / `60488`; no constant-pressure formula, DSEC, rate, matrix, cfrac, or niter science changes are mixed into this hotfix.
+
 ## 0.6.82.25 - 2026-08-12
 
 - Implement the public `lcpres` / `pressure` contract directly from the attached unmodified FORTRAN XSTAR 2.59g source. Public `lcpres=0` maps to source `lcdd=1` (constant density); public `lcpres=1` maps to `lcdd=0` (constant pressure).

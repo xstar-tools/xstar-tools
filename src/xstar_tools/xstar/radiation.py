@@ -68,8 +68,11 @@ class BremsMapContext:
         epim = np.asarray(self.epim_eV, dtype=float).reshape(-1)
         bam = np.asarray(self.bremsam_before, dtype=float).reshape(-1)
         bint = np.asarray(self.bremsint_before, dtype=float).reshape(-1)
-        if epi.size < n or brem.size < n:
-            raise BremsMapPortError("high-resolution arrays are shorter than ncn2")
+        required_high_capacity = max(n, nm + 1)
+        if epi.size < required_high_capacity or brem.size < required_high_capacity:
+            raise BremsMapPortError(
+                "high-resolution arrays must include the bremsmap jk+1 caller tail"
+            )
         if epim.size < nm or bam.size < nm:
             raise BremsMapPortError("reduced-grid arrays are shorter than ncn2m")
         if bint.size < nm + 1:
@@ -224,10 +227,23 @@ def apply_bremsmap_to_state(state: XSTARPythonState) -> BremsMapResult:
     before = rad.bremsam
     if before is None:
         before = np.zeros(max(ncn2m, len(np.asarray(rad.epim).reshape(-1))), dtype=float)
+    # xstar.f90 allocates epi/bremsa at global ncn capacity while ncn2 is
+    # only the active grid length.  bremsmap's descending loop reads jk+1,
+    # so ncn2==ncn2m==999 still has a caller-owned tail row.  The Python
+    # public state keeps only the active epi/bremsa grid; materialize the
+    # source-capacity tail locally (bremsa is zeroed by init.f90; the unused
+    # epi tail is zero in the stock allocation observed by this branch).
+    high_capacity = max(ncn2, ncn2m + 1)
+    epi_for_map = np.zeros(high_capacity, dtype=float)
+    bremsa_for_map = np.zeros(high_capacity, dtype=float)
+    epi_active = np.asarray(rad.epi, dtype=float).reshape(-1)
+    bremsa_active = np.asarray(rad.bremsa, dtype=float).reshape(-1)
+    epi_for_map[: min(epi_active.size, high_capacity)] = epi_active[:high_capacity]
+    bremsa_for_map[: min(bremsa_active.size, high_capacity)] = bremsa_active[:high_capacity]
     result = bremsmap(
-        rad.bremsa,
+        bremsa_for_map,
         rad.bremsint,
-        rad.epi,
+        epi_for_map,
         rad.epim,
         ncn2=ncn2,
         ncn2m=ncn2m,

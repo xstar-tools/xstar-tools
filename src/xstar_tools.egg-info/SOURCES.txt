@@ -15,6 +15,7 @@ xstar_tools-0.6.82.24.1_host_validation.md
 xstar_tools-0.6.82.24.2_host_validation.md
 xstar_tools-0.6.82.24.3_host_validation.md
 xstar_tools-0.6.82.24_host_validation.md
+xstar_tools-0.6.82.25.1_host_validation.md
 xstar_tools-0.6.82.25_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
@@ -22,6 +23,7 @@ xstar_tools_conversation_handoff_through_0.6.82.24.1_niter_hotfix.md
 xstar_tools_conversation_handoff_through_0.6.82.24.2_niter_publication.md
 xstar_tools_conversation_handoff_through_0.6.82.24.3_python_hc1.md
 xstar_tools_conversation_handoff_through_0.6.82.24_niter.md
+xstar_tools_conversation_handoff_through_0.6.82.25.1_lcpres_hotfix.md
 xstar_tools_conversation_handoff_through_0.6.82.25_lcpres_pressure.md
 xstar_tools_emult_profile_0.6.82.21.md
 .github/workflows/ci-tier0.yml
@@ -66,6 +68,7 @@ docs/developer/host_compatibility_0_6_74.md
 docs/developer/index.md
 docs/developer/ispec4_source_ergsev_0_6_82_16.md
 docs/developer/lcpres_pressure_0_6_82_25.md
+docs/developer/lcpres_pressure_hotfix_0_6_82_25_1.md
 docs/developer/legacy_source_port_cli_cleanup.md
 docs/developer/live_zone_progress_0_6_82_3.md
 docs/developer/low_xi_memory_performance_0_6_82_22.md
@@ -282,6 +285,7 @@ qualification/frozen/option15/compare_step_log_science.py
 qualification/frozen/option23/compare_step_log_science.py
 qualification/frozen/option23/selftest_option23_comparator.py
 qualification/lcpres_pressure_0_6_82_25/lcpres_pressure_0_6_82_25.json
+qualification/lcpres_pressure_0_6_82_25_1/lcpres_pressure_hotfix_0_6_82_25_1.json
 qualification/type63_source_cutoff_0_6_82_7/fortran_zero_cpp_nonzero_records_xi1p2.json
 qualification/type63_source_cutoff_0_6_82_7/reference_step_ne1e12_rlogxi_1p0_1p5.json
 references/current/README.md
@@ -540,6 +544,7 @@ tests/test_example_history_cleanup.py
 tests/test_host_compat_benchmark_semantics_0_6_74.py
 tests/test_ispec4_source_ergsev_0_6_82_16.py
 tests/test_lcpres_pressure_0_6_82_25.py
+tests/test_lcpres_pressure_hotfix_0_6_82_25_1.py
 tests/test_legacy_source_port_cli_cleanup.py
 tests/test_live_zone_progress_0_6_82_3.py
 tests/test_local_zone_naming_cleanup.py
@@ -657,6 +662,7 @@ tools/qualification/check_example_history_cleanup.py
 tools/qualification/check_host_compat_benchmark_semantics_0_6_74.py
 tools/qualification/check_ispec4_source_ergsev_0_6_82_16.py
 tools/qualification/check_lcpres_pressure_0_6_82_25.py
+tools/qualification/check_lcpres_pressure_hotfix_0_6_82_25_1.py
 tools/qualification/check_legacy_source_port_cli_cleanup.py
 tools/qualification/check_live_zone_progress_0_6_82_3.py
 tools/qualification/check_local_zone_naming_cleanup.py
@@ -714,6 +720,7 @@ tools/qualification/run_c5_cfrac_wide_rlogxi_host_smoke_0_6_82_19.py
 tools/qualification/run_c5_emult_sweep_0_6_82_21.py
 tools/qualification/run_c5_emult_sweep_0_6_82_22.py
 tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25.py
+tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_1.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_1.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_2.py

@@ -337,8 +337,10 @@ def _high_resolution_radiation(radiation: Any) -> tuple[np.ndarray, np.ndarray, 
     epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=float).reshape(-1)
     bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=float).reshape(-1)
     bremsint = np.asarray(getattr(radiation, "bremsint", ()), dtype=float).reshape(-1)
-    if epi.size < 4 or bremsa.size != epi.size or bremsint.size != epi.size:
-        raise CalcEmisPortError("calc_emis_all requires matching epi/bremsa/bremsint arrays")
+    if epi.size < 4 or bremsa.size < epi.size or bremsint.size < epi.size:
+        raise CalcEmisPortError("calc_emis_all requires epi-sized bremsa/bremsint active capacity")
+    bremsa = bremsa[: epi.size]
+    bremsint = bremsint[: epi.size]
     if np.any(epi <= 0.0) or np.any(np.diff(epi) <= 0.0):
         raise CalcEmisPortError("calc_emis_all photon grid must be positive and increasing")
     if not all(np.all(np.isfinite(arr)) for arr in (epi, bremsa, bremsint)):
