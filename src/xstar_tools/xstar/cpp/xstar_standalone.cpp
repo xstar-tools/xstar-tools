@@ -17371,16 +17371,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                            << " prefix_terminated=" << stats.prefix_terminated;
                     throw std::runtime_error(detail.str());
                 }
-            } else if (!stats.charge_converged || (!stats.thermal_converged && stats.lnerr != -2)) {
-                std::ostringstream detail;
-                detail << "controller did not converge at call=" << call
-                       << " charge=" << stats.charge_converged
-                       << " thermal=" << stats.thermal_converged
-                       << " lnerr=" << stats.lnerr
-                       << " hmctot=" << stats.final_hmctot
-                       << " elcter=" << stats.final_elcter
-                       << " evaluations=" << dsec_count;
-                throw std::runtime_error(detail.str());
+            } else {
+                // Canonical xstarcalc.f90 continues after dsec.f90 returns.
+                // dsec may leave the inner charge loop by reaching nlimxx and
+                // may return lnerr=-2 or lnerr=2 as source diagnostics; none
+                // of those conditions is followed by a second production
+                // rejection gate in FORTRAN.  The native controller status
+                // fields remain available for diagnostics, but a successful
+                // source return (rc == 0 above) owns production acceptance.
             }
 
             data.writing_final_snapshot = true;

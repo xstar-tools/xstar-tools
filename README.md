@@ -1,3 +1,5 @@
+> **Current 0.6.82.21 qualification note:** generic C++ production now follows canonical FORTRAN DSEC post-return ownership: a successful `dsec` return is accepted without an extra wrapper veto on diagnostic charge/thermal flags. The first host gate is H+He+C, `cfrac=0`, `rlogxi=-2`; do not run the wide `cfrac=0` or `emult` sweep until that point passes.
+
 # xstar-tools
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.

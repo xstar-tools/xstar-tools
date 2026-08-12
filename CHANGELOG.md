@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.21 - 2026-08-11
+
+- Restore canonical FORTRAN DSEC post-return ownership in generic C++ production. A successful native DSEC return is now accepted exactly as `xstarcalc.f90` accepts `dsec.f90`; the port no longer adds a second rejection solely because the diagnostic `charge_converged`/`thermal_converged` flags are false or `lnerr` is nonzero.
+- Preserve `charge_converged`, `thermal_converged`, `lnerr`, `hmctot`, `elcter`, and `ntotit` as diagnostics. Reference-trajectory qualification assertions remain strict and unchanged.
+- Add Python `DsecResult.source_accepted` to distinguish canonical source-return acceptance from the existing stricter `converged` diagnostic property.
+- Add a focused H+He+C `cfrac=0`, `rlogxi=-2` host gate. Wide `cfrac=0` and `emult` sweeps remain blocked until this case closes against original unmodified FORTRAN XSTAR 2.59g.
+- Keep the 0.6.82.20 Type-50/cfrac ownership fixes, science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, and production-zone ABI `6048110` frozen.
+
 ## 0.6.82.20 - 2026-08-11
 - Qualification harness correction: the focused `cfrac=0.4`, `rlogxi=-3` host runner now applies its local `-3` default instead of inheriting the wide-grid `-5..5` default. No science or ABI change.
 

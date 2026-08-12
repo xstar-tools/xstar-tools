@@ -8,6 +8,7 @@ pyproject.toml
 setup.cfg
 setup.py
 xstar_tools-0.6.82.20_host_validation.md
+xstar_tools-0.6.82.21_host_validation.md
 .github/workflows/ci-tier0.yml
 .github/workflows/ci-tier1-science-smoke.yml
 .github/workflows/ci-tier2-backend-parity.yml
@@ -40,6 +41,7 @@ docs/developer/cpp_fortran_source_comments.md
 docs/developer/cpp_namespace_cleanup.md
 docs/developer/cpp_warning_cleanup.md
 docs/developer/documentation_policy.md
+docs/developer/dsec_source_return_acceptance_0_6_82_21.md
 docs/developer/example_namespace_cleanup.md
 docs/developer/execution_modes.md
 docs/developer/fortran_source_map.md
@@ -191,6 +193,7 @@ qualification/cpp_tree_consolidation_0_6_74.json
 qualification/cpp_unused_function_cleanup_0_6_77.json
 qualification/cpp_warning_cleanup_0_6_58.json
 qualification/documentation_milestone_0_6_70.json
+qualification/dsec_source_return_acceptance_0_6_82_21.json
 qualification/example_history_cleanup_0_6_63.json
 qualification/host_compat_benchmark_semantics_0_6_74.json
 qualification/ispec4_source_ergsev_0_6_82_16.json
@@ -501,6 +504,7 @@ tests/test_cpp_unused_function_cleanup_0_6_77.py
 tests/test_cpp_warning_cleanup.py
 tests/test_documentation_history_cleanup.py
 tests/test_documentation_milestone_0_6_70.py
+tests/test_dsec_source_return_acceptance_0_6_82_21.py
 tests/test_example_history_cleanup.py
 tests/test_host_compat_benchmark_semantics_0_6_74.py
 tests/test_ispec4_source_ergsev_0_6_82_16.py
@@ -610,6 +614,7 @@ tools/qualification/check_cpp_tree_consolidation_0_6_74.py
 tools/qualification/check_cpp_unused_function_cleanup_0_6_77.py
 tools/qualification/check_cpp_warning_cleanup.py
 tools/qualification/check_documentation_milestone.py
+tools/qualification/check_dsec_source_return_acceptance_0_6_82_21.py
 tools/qualification/check_example_history_cleanup.py
 tools/qualification/check_host_compat_benchmark_semantics_0_6_74.py
 tools/qualification/check_ispec4_source_ergsev_0_6_82_16.py
@@ -654,8 +659,11 @@ tools/qualification/cpp_tree_consolidation_compat.py
 tools/qualification/function_comment_overlay.py
 tools/qualification/host_compat_overlay.py
 tools/qualification/local_zone_naming_compat.py
+tools/qualification/run_c5_cfrac00_staged_0_6_82_21.py
+tools/qualification/run_c5_cfrac00_xim2_host_smoke_0_6_82_21.py
 tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_cfrac_wide_rlogxi_host_smoke_0_6_82_19.py
+tools/qualification/run_c5_emult_sweep_0_6_82_21.py
 tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py
@@ -668,6 +676,7 @@ tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_17.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_18.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_19.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_20.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_21.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
@@ -683,6 +692,7 @@ tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_17.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_18.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_19.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_20.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_21.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py

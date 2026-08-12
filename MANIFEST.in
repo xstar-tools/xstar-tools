@@ -310,3 +310,15 @@ include tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py
 include docs/developer/type50_cfrac_source_ownership_0_6_82_20.md
 include tests/test_type50_cfrac_source_ownership_0_6_82_20.py
 include xstar_tools-0.6.82.20_host_validation.md
+
+# 0.6.82.21 source-faithful DSEC post-return acceptance.
+include qualification/dsec_source_return_acceptance_0_6_82_21.json
+include tools/qualification/check_dsec_source_return_acceptance_0_6_82_21.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_21.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_21.py
+include tools/qualification/run_c5_cfrac00_xim2_host_smoke_0_6_82_21.py
+include tools/qualification/run_c5_cfrac00_staged_0_6_82_21.py
+include tools/qualification/run_c5_emult_sweep_0_6_82_21.py
+include docs/developer/dsec_source_return_acceptance_0_6_82_21.md
+include tests/test_dsec_source_return_acceptance_0_6_82_21.py
+include xstar_tools-0.6.82.21_host_validation.md
