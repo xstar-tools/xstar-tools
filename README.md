@@ -1,10 +1,13 @@
-> **Current 0.6.82.23 qualification note:** the C5 covering-fraction axis is closed at `cfrac=0`, `0.4`, and `1.0`, and the practical `emult=0.1/0.25/0.5/1.0` science sweep is ACCEPT under 0.6.82.22. 0.6.82.23 changes only the public Table-1 parameter contract: stock `xstar.par`/XPI defaults and ranges, complete 59-parameter provenance, and consumer/sensitivity gates. The low-ionization speed baseline remains frozen for 0.6.82.31-0.6.82.33.
+> **Current 0.6.82.24.3 qualification note:** the C5 covering-fraction axis is closed at `cfrac=0`, `0.4`, and `1.0`, and the practical `emult=0.1/0.25/0.5/1.0` science sweep is ACCEPT under 0.6.82.22. 0.6.82.23 established the public Table-1 parameter contract: stock `xstar.par`/XPI defaults and ranges, complete 59-parameter provenance, and consumer/sensitivity gates. The low-ionization speed baseline remains frozen for 0.6.82.31-0.6.82.33.
 
 # xstar-tools
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.24.2`  
+**Distribution:** `0.6.82.24.3`  
+
+
+**0.6.82.24.3 pure-Python first `h-c(%)` stage:** the `niter` parameter campaign is closed after C++ `0/-99/1/99` and pure-Python `0/-99/1/99` reproduce stock FORTRAN science. This successor changes only the first legacy STEP/progress `h-c(%)` display value in pure Python: it now publishes `hmctot` from `xstarcalc`'s unconditional final `calc_hmc_all`, matching FORTRAN `pprint(9)`. The second `h-c(%)` transport residual and all physical products are frozen.
 
 **0.6.82.24.2 niter publication ownership:** the `niter=0` and finite-iteration `niter=1` source branches retain the accepted controller `xee` through persisted STEP/FITS and pprint(22).  The fixed-state computed electron fraction remains diagnostic only.  This is a narrow publication-state ownership hotfix; DSEC, rates, matrix, cfrac, and convergence arithmetic are unchanged.
 

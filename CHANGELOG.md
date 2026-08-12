@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.24.3 - 2026-08-12
+
+- Close the `niter` campaign after host `0.6.82.24.2` C++ `niter=0/1` ACCEPT and pure-Python `niter=0/-99/1/99` scientific concordance.
+- Correct only the pure-Python legacy STEP/progress **first** `h-c(%)` publication stage. Canonical `xstarcalc.f90` executes one unconditional final `calc_hmc_all` after DSEC, and `xstar.f90` calls `pprint(9)` only after that final fixed-state evaluation and `heatt`; Python had frozen `result.final_hmctot` inside the DSEC handler one stage too early.
+- Make the final Python `calc_hmc_all` handler own `legacy_pprint_hc1_percent = result.hmctot*100`, while the DSEC handler clears any stale display snapshot. The second `h-c(%)` transport residual and all science/FITS quantities remain unchanged.
+- Add a permanent source-order regression that forbids DSEC-return ownership of the first `h-c(%)` column and requires final-`calc_hmc_all` ownership. Science revision and ABIs remain frozen.
+
 ## 0.6.82.24.2 - 2026-08-12
 
 - Complete the `niter=0`/finite-`niter=1` electron-fraction ownership repair in persisted publication.  `retain_controller_owned_product_workspaces()` no longer replaces accepted/source `electron_fraction_input` with diagnostic `computed_electron_fraction`.

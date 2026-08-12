@@ -13,11 +13,13 @@ xstar_tools-0.6.82.22_host_validation.md
 xstar_tools-0.6.82.23_host_validation.md
 xstar_tools-0.6.82.24.1_host_validation.md
 xstar_tools-0.6.82.24.2_host_validation.md
+xstar_tools-0.6.82.24.3_host_validation.md
 xstar_tools-0.6.82.24_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
 xstar_tools_conversation_handoff_through_0.6.82.24.1_niter_hotfix.md
 xstar_tools_conversation_handoff_through_0.6.82.24.2_niter_publication.md
+xstar_tools_conversation_handoff_through_0.6.82.24.3_python_hc1.md
 xstar_tools_conversation_handoff_through_0.6.82.24_niter.md
 xstar_tools_emult_profile_0.6.82.21.md
 .github/workflows/ci-tier0.yml
@@ -75,6 +77,7 @@ docs/developer/pescl_source_pi_0_6_82_14.md
 docs/developer/public_python_api.md
 docs/developer/python_cpp_fortran_concordance.md
 docs/developer/python_fortran_source_comments.md
+docs/developer/python_hc1_stage_0_6_82_24_3.md
 docs/developer/python_namespace_cleanup.md
 docs/developer/python_production_diagnostics.md
 docs/developer/qualification.md
@@ -229,6 +232,8 @@ qualification/pescl_source_pi_0_6_82_14.json
 qualification/public_benchmark_suite_0_6_61.json
 qualification/public_execution_modes_0_6_60.json
 qualification/public_python_api_0_6_66.json
+qualification/python_hc1_stage_0_6_82_24_3.json
+qualification/python_hc1_stage_0_6_82_24_3_pre_fix_evidence.csv
 qualification/python_history_cleanup_0_6_56.json
 qualification/python_production_diagnostics_0_6_80.json
 qualification/python_source_comment_overlay.json
@@ -551,6 +556,7 @@ tests/test_pescl_source_pi_0_6_82_14.py
 tests/test_public_benchmark_suite.py
 tests/test_public_execution_modes.py
 tests/test_public_python_api.py
+tests/test_python_hc1_stage_0_6_82_24_3.py
 tests/test_python_history_cleanup.py
 tests/test_python_production_diagnostics_0_6_80.py
 tests/test_python_source_comments.py
@@ -661,6 +667,7 @@ tools/qualification/check_pescl_source_pi_0_6_82_14.py
 tools/qualification/check_public_benchmark_suite.py
 tools/qualification/check_public_execution_modes.py
 tools/qualification/check_public_python_api.py
+tools/qualification/check_python_hc1_stage_0_6_82_24_3.py
 tools/qualification/check_python_history_cleanup.py
 tools/qualification/check_python_production_diagnostics_0_6_80.py
 tools/qualification/check_python_source_comments.py

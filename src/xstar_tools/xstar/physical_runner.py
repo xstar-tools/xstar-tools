@@ -2230,7 +2230,12 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         # issue to hide.  Keep the printed count identical to the translated raw
         # ntotit until the extra iteration is removed at the source.
         runtime_state.control["legacy_pprint_ntotit"] = int(result.ntotit)
-        runtime_state.control["legacy_pprint_hc1_percent"] = float(result.final_hmctot) * 100.0
+        # 0.6.82.24.3: do not publish the DSEC-return hmctot as pprint(9)'s
+        # first h-c(%) column.  FORTRAN xstarcalc.f90 always executes one
+        # final calc_hmc_all after DSEC, and xstar.f90 calls pprint(9) only
+        # after that final fixed-state evaluation (and after heatt).  The
+        # final calc_hmc_all handler below owns the source-display residual.
+        runtime_state.control.pop("legacy_pprint_hc1_percent", None)
         runtime_state.control["lnerrd"] = int(result.lnerr)
         try:
             terminal_rows = runtime_state.control.setdefault("dsec_terminal_summary", [])
@@ -2310,6 +2315,11 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         result = evaluation.fixed_state_result
         runtime_state.control["physical_dsec_runtime"] = runtime
         _commit_fixed_state(runtime_state, runtime, result)
+        # 0.6.82.24.3: pprint(9) first h-c(%) is source hmctot from the
+        # unconditional final calc_hmc_all in xstarcalc.f90, not the earlier
+        # DSEC-return residual.  Preserve that exact stage for terminal and
+        # xout_step.log publication.
+        runtime_state.control["legacy_pprint_hc1_percent"] = float(result.hmctot) * 100.0
         _bind_emissivity_contexts(runtime_state, parameters, result)
         return result
 
