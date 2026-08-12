@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.24 - 2026-08-12
+
+- Restore literal FORTRAN `niter` ownership in native production. `xstar_atdb_runtime.cpp` no longer clamps the requested value to `>=1`; `niter=0`, negative values, and positive values reach the controller unchanged.
+- Reproduce the three source branches: `niter=0` skips `dsec` entirely in `xstarcalc` and evaluates only the final fixed local state at the input temperature/source electron-fraction assumption; `niter<0` runs charge-neutrality iterations with temperature fixed; `niter>0` runs charge and thermal equilibrium.
+- Keep Python science code source-faithful and add explicit qualification coverage proving `xstarcalc` skips `dsec` for zero while Python `dsec` uses `nlimt=max(nlim,0)` and `nlimx=abs(nlim)` for negative/positive modes.
+- Add a host H+He+C `niter=0,-99,1,99` FORTRAN/C++/pure-Python qualification runner comparing STEP temperature/electron trajectories, ionic columns, heating/cooling, and Option-1 reflected/transmitted lines.
+- Preserve the accepted 0.6.82.22 `cfrac`/`emult` science and memory baseline, the accepted 0.6.82.23 Table-1 contract/default envelope, science revision `0.6.48.12.3.45.3.3.8`, and ABIs `60487`/`6048110`. No atomic-rate, matrix, transport, or performance optimization is mixed into this release.
+
 ## 0.6.82.23 - 2026-08-12
 
 - Establish the authoritative Table-1/public-parameter contract layer without changing atomic, thermal, matrix, transport, DSEC, or publication science. Science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`/`6048110` remain frozen.

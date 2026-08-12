@@ -17430,10 +17430,22 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 }
             }
             const auto controller_call_started_v064890 = std::chrono::steady_clock::now();
-            rc = xstar_thermal_run_evaluation_loop_v1(
-                thermal, &config, &state, standalone_iteration_evaluator, &data,
-                trace.data(), trace.size(), &trace_count, &stats,
-                message.data(), message.size());
+            if (params.niter == 0) {
+                // Canonical xstarcalc.f90: nlimdt==0 skips dsec entirely.
+                // Do not emulate this by calling the controller with nlim=0:
+                // dsec(0) would still execute calc_hmc_all once, after which
+                // xstarcalc executes calc_hmc_all again.  The source branch is
+                // exactly one post-skip final fixed-state evaluation, owned by
+                // evaluate_accepted_boundary() below.  Keep the input T and
+                // source electron-fraction assumption unchanged here.
+                rc = 0;
+                trace_count = 0;
+            } else {
+                rc = xstar_thermal_run_evaluation_loop_v1(
+                    thermal, &config, &state, standalone_iteration_evaluator, &data,
+                    trace.data(), trace.size(), &trace_count, &stats,
+                    message.data(), message.size());
+            }
             xstar_spectral_perf_v064892 spectral_perf_after_v064892{};
             xstar_spectral_perf_init_v064892(&spectral_perf_after_v064892);
             (void)xstar_spectral_perf_snapshot_v064892(&spectral_perf_after_v064892);

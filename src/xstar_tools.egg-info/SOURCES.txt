@@ -11,8 +11,10 @@ xstar_tools-0.6.82.20_host_validation.md
 xstar_tools-0.6.82.21_host_validation.md
 xstar_tools-0.6.82.22_host_validation.md
 xstar_tools-0.6.82.23_host_validation.md
+xstar_tools-0.6.82.24_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
+xstar_tools_conversation_handoff_through_0.6.82.24_niter.md
 xstar_tools_emult_profile_0.6.82.21.md
 .github/workflows/ci-tier0.yml
 .github/workflows/ci-tier1-science-smoke.yml
@@ -61,6 +63,7 @@ docs/developer/low_xi_memory_performance_0_6_82_22.md
 docs/developer/lte_rnisi_workspace_0_6_82_8.md
 docs/developer/msolvelucy_fixed_loop_0_6_82_9.md
 docs/developer/multi_element_atdb_lowering_0_6_82_1.md
+docs/developer/niter_semantics_0_6_82_24.md
 docs/developer/option24_fortran_stale_local_policy.md
 docs/developer/packaging.md
 docs/developer/performance_rules.md
@@ -211,6 +214,7 @@ qualification/low_xi_memory_performance_0_6_82_22.json
 qualification/lte_rnisi_workspace_0_6_82_8.json
 qualification/msolvelucy_fixed_loop_0_6_82_9.json
 qualification/multi_element_atdb_lowering_0_6_82_1.json
+qualification/niter_semantics_0_6_82_24.json
 qualification/option24_comparator_policy_0_6_67.json
 qualification/packaging_milestone_0_6_71.json
 qualification/parity_freeze.json
@@ -527,6 +531,7 @@ tests/test_low_xi_memory_performance_0_6_82_22.py
 tests/test_lte_rnisi_workspace_0_6_82_8.py
 tests/test_msolvelucy_fixed_loop_0_6_82_9.py
 tests/test_multi_element_atdb_lowering_0_6_82_1.py
+tests/test_niter_semantics_0_6_82_24.py
 tests/test_o7_density_grid_type69_mode_compare_reference.py
 tests/test_option15_material_surface.py
 tests/test_option24_fortran_stale_local_policy.py
@@ -639,6 +644,7 @@ tools/qualification/check_low_xi_memory_performance_0_6_82_22.py
 tools/qualification/check_lte_rnisi_workspace_0_6_82_8.py
 tools/qualification/check_msolvelucy_fixed_loop_0_6_82_9.py
 tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
+tools/qualification/check_niter_semantics_0_6_82_24.py
 tools/qualification/check_packaging_milestone.py
 tools/qualification/check_parity_freeze.py
 tools/qualification/check_pescl_source_pi_0_6_82_14.py
@@ -684,6 +690,7 @@ tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_cfrac_wide_rlogxi_host_smoke_0_6_82_19.py
 tools/qualification/run_c5_emult_sweep_0_6_82_21.py
 tools/qualification/run_c5_emult_sweep_0_6_82_22.py
+tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24.py
 tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py
@@ -699,6 +706,7 @@ tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_21.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_22.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_23.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_24.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
@@ -716,6 +724,7 @@ tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_19.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_20.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_21.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_22.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_24.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py

@@ -1404,9 +1404,11 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     p.nsteps=static_cast<int>(public_number("nsteps",p.nsteps));
     p.npass=static_cast<int>(public_number("npass",p.npass));
     p.requested_niter=static_cast<int>(public_number("niter",p.niter));
-    // Dedicated 0.6.82.24 will implement niter=0/negative source physics.
-    // 0.6.82.23 only records the requested value and removes benchmark defaults.
-    p.niter=std::max(1,p.requested_niter);
+    // 0.6.82.24: preserve the literal FORTRAN nlimd contract.
+    //   niter == 0 : xstarcalc skips dsec entirely; fixed input T and source xee.
+    //   niter <  0 : dsec solves charge neutrality only (nlimt=0, nlimx=abs(nlim)).
+    //   niter >  0 : dsec solves charge neutrality and thermal equilibrium.
+    p.niter=p.requested_niter;
     p.lwrite=static_cast<int>(public_number("lwrite",0.0));
     p.lprint=static_cast<int>(public_number("lprint",0.0));
     p.lstep=static_cast<int>(public_number("lstep",0.0));
