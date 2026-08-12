@@ -409,3 +409,11 @@ include tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_2.py
 include tests/test_lcpres_pressure_python_compare_0_6_82_25_2.py
 include docs/developer/lcpres_pressure_python_compare_0_6_82_25_2.md
 include xstar_tools-0.6.82.25.2_host_validation.md
+
+# 0.6.82.25.3 pure-Python persistent leveltemp source ownership
+include qualification/lcpres_pressure_0_6_82_25_3/lcpres_pressure_leveltemp_0_6_82_25_3.json
+include tools/qualification/check_lcpres_pressure_leveltemp_0_6_82_25_3.py
+include tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25_3.py
+include tests/test_lcpres_pressure_leveltemp_0_6_82_25_3.py
+include docs/developer/lcpres_pressure_leveltemp_0_6_82_25_3.md
+include xstar_tools-0.6.82.25.3_host_validation.md

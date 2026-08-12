@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.25.3 - 2026-08-12
+
+- Keep `0.6.82.25.2` C++ and pressure-controller science frozen, but correct a source-ownership defect exposed by pure-Python `cd_xi1`: FORTRAN owns one mutable `leveltemp` workspace across repeated DSEC `calc_hmc_all` trials, the unconditional final `calc_hmc_all`, `calc_emisab_all`, `calc_emis_all`, `heatt`, and the following radial zone.
+- The public Python runner now carries the prior `leveltemp` workspace/ownership state into the next DSEC runtime and no longer resets `leveltemp` between `calc_hmc_all` trials. `calc_emisab_all` hands its updated workspace to `calc_emis_all`; `calc_emis_all` and `heatt` commit the resulting workspace back to the source-wide runtime for the next zone.
+- This is a source-faithful state-lifetime correction, not a tolerance or convergence change. DSEC equations, tolerances, atomic rate formulas, matrix ordering, pressure equations, C++ science, and transport equations are unchanged.
+- Trigger evidence: pure-Python `cd_xi1` under `.25.2` produced `ntotit=26/9/9` versus FORTRAN/C++ `27/1/1`, final `T4=4.67898456` versus FORTRAN `4.66699415`, and Option-1 carbon-line discrepancies up to about 3.81%. The pressure milestone therefore remains open until `.25.3` host validation ACCEPTs.
+- Science revision remains `0.6.48.12.3.45.3.3.8`; C API / production-zone / fixed-state ABIs remain `60487` / `6048110` / `60488`.
+
 ## 0.6.82.25.2 - 2026-08-12
 
 - Preserve the `0.6.82.25` constant-pressure equations and the `0.6.82.25.1` native STEP/xcol/tau and Python BREMSMAP-tail repairs, but correct a newly exposed pure-Python continuum-context ownership defect. `_calc_kwargs_factory()` now prebuilds `comp2`/`freef`/`bremem` with the same source-resolved `xpx` that `calc_hmc_all` obtains from `pressure/[REAL4(1.38e-12)*T4]` under `lcdd=0`; constant-density `lcdd=1` is unchanged.

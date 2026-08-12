@@ -3167,6 +3167,12 @@ def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
     setattr(context, "ucalc_continuum_side_effect_diagnostics", [])
 
     result = calc_emis_all(context)
+    # 0.6.82.25.3: retain the source-wide mutable leveltemp state produced
+    # by calc_emis_all for HEATT and for the next radial xstarcalc call.
+    runtime = state.control.get("physical_dsec_runtime")
+    if runtime is not None:
+        runtime.leveltemp_workspace = result.leveltemp_workspace
+        runtime.last_leveltemp_workspace = result.leveltemp_workspace
     rows = list(getattr(context, "ucalc_continuum_side_effect_diagnostics", ()))
     if rows:
         state.outputs.setdefault(UCALC_SIDE_EFFECT_KEY, []).extend(rows)

@@ -1069,6 +1069,13 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
         leveltemp.levels.clear()
         leveltemp.levels.update(result.leveltemp_workspace.levels)
         leveltemp.nlev = int(result.leveltemp_workspace.nlev)
+    # 0.6.82.25.3: HEATT is the last source routine in the live shell that
+    # mutates leveltemp.  Carry that exact workspace into the next zone's
+    # DSEC/calc_hmc_all sequence.
+    runtime = state.control.get("physical_dsec_runtime")
+    if runtime is not None:
+        runtime.leveltemp_workspace = result.leveltemp_workspace
+        runtime.last_leveltemp_workspace = result.leveltemp_workspace
     state.transfer.source_arrays["heatt"] = result
     state.transfer.provenance["heatt"] = {
         "source_file": result.source_file,

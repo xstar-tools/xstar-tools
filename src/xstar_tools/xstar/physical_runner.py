@@ -2067,10 +2067,13 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             global_bilevg_by_index=None if prior is None else prior.global_bilevg_by_index,
             global_rnisg_by_index=None if prior is None else prior.global_rnisg_by_index,
             global_level_index_by_key={} if prior is None else prior.global_level_index_by_key,
-            leveltemp_workspace=None,
-            leveltemp_owner_by_column={},
+            # 0.6.82.25.3: source leveltemp is one mutable caller-owned
+            # workspace carried through repeated calc_hmc_all evaluations and
+            # radial zones.  Do not discard it at DSEC trial boundaries.
+            leveltemp_workspace=None if prior is None else prior.leveltemp_workspace,
+            leveltemp_owner_by_column={} if prior is None else prior.leveltemp_owner_by_column,
             source_global_alias_writeback=True,
-            reset_leveltemp_each_calc_hmc_all=True,
+            reset_leveltemp_each_calc_hmc_all=False,
             retain_source_arrays=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
         )
 
