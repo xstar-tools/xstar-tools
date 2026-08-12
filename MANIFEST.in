@@ -383,3 +383,12 @@ include tests/test_python_hc1_stage_0_6_82_24_3.py
 include docs/developer/python_hc1_stage_0_6_82_24_3.md
 include xstar_tools-0.6.82.24.3_host_validation.md
 include xstar_tools_conversation_handoff_through_0.6.82.24.3_python_hc1.md
+
+# 0.6.82.25 lcpres/pressure constant-pressure closure.
+include qualification/lcpres_pressure_0_6_82_25/lcpres_pressure_0_6_82_25.json
+include tools/qualification/check_lcpres_pressure_0_6_82_25.py
+include tools/qualification/run_c5_lcpres_pressure_host_smoke_0_6_82_25.py
+include tests/test_lcpres_pressure_0_6_82_25.py
+include docs/developer/lcpres_pressure_0_6_82_25.md
+include xstar_tools-0.6.82.25_host_validation.md
+include xstar_tools_conversation_handoff_through_0.6.82.25_lcpres_pressure.md

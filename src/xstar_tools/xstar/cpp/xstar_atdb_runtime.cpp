@@ -213,7 +213,7 @@ double source_rread1_initial_radius_cm(const std::string& text) {
     if (lcdd == 0) {
         density = pressure / 1.38e-12 / std::max(t4, 1.0e-49);
         const double four_pi = source_default_real_literal(12.56);
-        const double ccc = source_default_real_literal(2.99792458e10);
+        const double ccc = 2.99792458e10; // constants.f90 REAL(8) parameter
         r19 = std::sqrt(xlum / four_pi / ccc / std::max(1.0e-49, pressure * xi));
     } else if (lcdd == 2) {
         const double xee = source_default_real_literal(1.2);
@@ -1349,6 +1349,30 @@ xstar_fixed_program_bundle_v1 ProgramStorage::bundle() const {
 // Purpose: Load production parameters into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
+int source_lcdd_from_lcpres(int lcpres) {
+    return lcpres <= 1 ? 1 - lcpres : lcpres;
+}
+
+double source_runtime_density_cm3(
+    const ProductionParameters& parameters,
+    double temperature_t4,
+    double electron_fraction_xee) {
+    const int lcdd = source_lcdd_from_lcpres(parameters.pressure_mode);
+    if (lcdd == 0) {
+        // calc_hmc_all.f90 / calc_emis*_all.f90 use the unsuffixed
+        // default-REAL 1.38e-12 literal, promoted to REAL(8), and a REAL(8)
+        // 1.d-24 temperature floor.
+        const double coefficient = source_default_real_literal(1.38e-12);
+        return parameters.pressure_dyn_cm2 / coefficient /
+            std::max(temperature_t4, 1.0e-24);
+    }
+    if (lcdd == 2) {
+        return parameters.pressure_dyn_cm2 /
+            (electron_fraction_xee + source_default_real_literal(1.0e-34));
+    }
+    return parameters.input_density_cm3;
+}
+
 ProductionParameters read_production_parameters(const std::filesystem::path& path) {
     ProductionParameters p; p.source_path=path; p.raw_json=read_file(path);
     auto has_key = [&](const char* key) {
@@ -1377,6 +1401,7 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     };
 
     p.density_cm3=public_number("density",p.density_cm3);
+    p.input_density_cm3=p.density_cm3;
     p.pressure_dyn_cm2=public_number("pressure",p.pressure_dyn_cm2);
     const double input_t4=public_number("temperature",400.0);
     p.temperature_k=json_number(p.raw_json,"temperature_k",input_t4*1.0e4);
@@ -1395,6 +1420,19 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     p.spectral_index=public_number("trad",p.spectral_index);
     p.radial_density_exponent=public_number("radexp",p.radial_density_exponent);
     p.pressure_mode=static_cast<int>(public_number("lcpres",p.pressure_mode));
+    if (source_lcdd_from_lcpres(p.pressure_mode) == 0) {
+        // rread1 reads pressure/temperature through uclgsr8 (REAL(4) ->
+        // REAL(8)), then uses the double-precision 1.38d-12 coefficient for
+        // its initial trial density.  The per-evaluation coefficient differs
+        // slightly and is handled by source_runtime_density_cm3().
+        p.pressure_dyn_cm2=source_uclgsr8(p.raw_json,"pressure",p.pressure_dyn_cm2);
+        const double source_t4=source_uclgsr8(p.raw_json,"temperature",input_t4);
+        // Under lcdd=0 this same uclgsr8-promoted T4 is the live controller
+        // input.  Keep the promotion local to constant pressure so frozen
+        // constant-density trajectories are byte-for-byte unaffected.
+        p.temperature_k=source_t4*1.0e4;
+        p.density_cm3=p.pressure_dyn_cm2/1.38e-12/std::max(source_t4,1.0e-49);
+    }
     p.spectrum_units=static_cast<int>(public_number("spectun",p.spectrum_units));
     p.spectrum_file=public_string("spectrum_file","spct.dat");
     p.critical_fraction=public_number("critf",p.critical_fraction);

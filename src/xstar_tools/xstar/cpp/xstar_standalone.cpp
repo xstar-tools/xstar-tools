@@ -2663,6 +2663,9 @@ struct FixedDsecSnapshot {
     std::size_t call_index = 0;
     std::size_t evaluation_index = 0;
     double temperature_t4 = 0.0;
+    // Live source xpx at this exact fixed-state evaluation.  This is dynamic
+    // under public lcpres=1 and must accompany T4 through STEP/publication.
+    double hydrogen_density_cm3 = 0.0;
     double electron_fraction_input = 0.0;
     double spectral_covering_fraction = 0.0;
     double entry_neutral_h_density_cm3 = 0.0;
@@ -2894,15 +2897,19 @@ void print_xstar_style_live_zone(
     const FixedDsecSnapshot& snapshot,
     const xstar_atdb_runtime::ProductionParameters& params,
     double source_depth_cm,
+    double cumulative_column_cm2,
     std::size_t dsec_evaluations) {
     auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
     const double radius = params.initial_radius_cm + source_depth_cm;
     const double depth = std::max(0.0, source_depth_cm);
-    const double column = params.density_cm3 * depth;
+    const double column = std::max(0.0,
+        params.pressure_mode == 1
+            ? cumulative_column_cm2
+            : params.density_cm3 * depth);
     const double log_rel = radius > 0.0 && depth > 0.0 ? std::log10(depth / radius) : -36.0;
     const double r19 = radius * static_cast<double>(static_cast<float>(1.0e-19));
-    const double live_xi = (r19 > 0.0 && params.density_cm3 > 0.0)
-        ? params.luminosity_1e38 / (r19 * r19 * params.density_cm3) : 0.0;
+    const double live_xi = (r19 > 0.0 && snapshot.hydrogen_density_cm3 > 0.0)
+        ? params.luminosity_1e38 / (r19 * r19 * snapshot.hydrogen_density_cm3) : 0.0;
     const double log_xi = live_xi > 0.0 ? std::log10(live_xi) : -10.0;
     const double log_temp = snapshot.temperature_t4 > 0.0
         ? 4.0 + std::log10(snapshot.temperature_t4) : -10.0;
@@ -2929,7 +2936,7 @@ void print_xstar_style_live_zone(
               << std::setw(7) << safe_log(column, -10.0)
               << std::setw(7) << log_xi
               << std::setw(7) << snapshot.electron_fraction_input
-              << std::setw(7) << safe_log(params.density_cm3, -10.0)
+              << std::setw(7) << safe_log(snapshot.hydrogen_density_cm3, -10.0)
               << std::setw(7) << log_temp
               << std::setw(7) << std::clamp(100.0 * snapshot.hmctot, -99.99, 99.99)
               << std::setw(7) << std::clamp(radiation_balance, -99.99, 99.99)
@@ -2994,6 +3001,7 @@ FixedDsecSnapshot lightweight_snapshot(const FixedDsecSnapshot& source) {
     out.call_index = source.call_index;
     out.evaluation_index = source.evaluation_index;
     out.temperature_t4 = source.temperature_t4;
+    out.hydrogen_density_cm3 = source.hydrogen_density_cm3;
     out.electron_fraction_input = source.electron_fraction_input;
     out.spectral_covering_fraction = source.spectral_covering_fraction;
     out.entry_neutral_h_density_cm3 = source.entry_neutral_h_density_cm3;
@@ -5913,6 +5921,7 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     target.call_index = source.call_index;
     target.evaluation_index = source.evaluation_index;
     target.temperature_t4 = source.temperature_t4;
+    target.hydrogen_density_cm3 = source.hydrogen_density_cm3;
     target.electron_fraction_input = source.electron_fraction_input;
     target.computed_electron_fraction = source.computed_electron_fraction;
     target.charge_residual = source.charge_residual;
@@ -10238,6 +10247,8 @@ void retain_controller_owned_product_workspaces(
     const double pressure = json_number_value(json, "pressure", 0.0);
     const double column = json_number_value(json, "column", 0.0);
     const double rlogxi = json_number_value(json, "rlogxi", 0.0);
+    const int lcpres = static_cast<int>(json_number_value(json, "lcpres", 0.0));
+    const bool constant_pressure_v068225 = lcpres == 1;
     const bool generic_all_element_publication_v0648123 = std::any_of(
         whole.element_metadata.begin(), whole.element_metadata.end(),
         [](const xstar_run_state::ElementMetadataState& e) {
@@ -10342,7 +10353,18 @@ void retain_controller_owned_product_workspaces(
         zone.radius_cm = radius0 + std::max(source_rdel[i], 0.0);
         zone.outer_radius_cm = zone.radius_cm;
         zone.delta_radius_cm = source_rdel[i];
-        zone.density_cm3 = density;
+        if (constant_pressure_v068225) {
+            // 0.6.82.25: exact live controller geometry already carries the
+            // xpx returned by the final calc_hmc_all at this boundary.  Do not
+            // replace it with the public density parameter, which stock rread1
+            // does not even read for lcpres=1.
+            const double accepted_density = zone.accepted_controller.evaluation.hydrogen_density_cm3;
+            if (std::isfinite(accepted_density) && accepted_density > 0.0) {
+                zone.density_cm3 = accepted_density;
+            }
+        } else {
+            zone.density_cm3 = density;
+        }
         zone.pressure_dyn_cm2 = pressure;
         // v0.6.48.12.3: retain_controller_owned_product_workspaces used
         // to overwrite the live radial xi with the input rlogxi.  That made
@@ -10350,7 +10372,7 @@ void retain_controller_owned_product_workspaces(
         // 1.1e21-cm boundary where source XSTAR/Python recompute ~1.92.
         // Recompute from the retained live radius using the source default-REAL
         // 1.e-19 constant, exactly as the production append-zone path does.
-        if (generic_all_element_publication_v0648123) {
+        if (generic_all_element_publication_v0648123 || constant_pressure_v068225) {
             const double r19_v0648123 = zone.radius_cm *
                 static_cast<double>(static_cast<float>(1.0e-19));
             const double live_xi_v0648123 = (r19_v0648123 > 0.0 && zone.density_cm3 > 0.0)
@@ -10366,7 +10388,9 @@ void retain_controller_owned_product_workspaces(
             zone.log_ionization_parameter = rlogxi;
             zone.ionization_parameter = rlogxi;
         }
-        zone.column_density_cm2 = density * std::max(source_rdel[i], 0.0);
+        if (!constant_pressure_v068225) {
+            zone.column_density_cm2 = density * std::max(source_rdel[i], 0.0);
+        }
         zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
         // 0.6.82.24.2: publication must preserve the accepted source/controller
         // electron fraction.  computed_electron_fraction is a fixed-state
@@ -10473,10 +10497,10 @@ void retain_controller_owned_product_workspaces(
         row.row_index = i + 1u;
         row.radius_cm = zone.radius_cm;
         row.delta_radius_cm = source_rdel[i];
-        row.log_ionization_parameter = generic_all_element_publication_v0648123
+        row.log_ionization_parameter = (generic_all_element_publication_v0648123 || constant_pressure_v068225)
             ? zone.log_ionization_parameter : rlogxi;
         row.electron_fraction = zone.electron_fraction;
-        row.density_cm3 = density;
+        row.density_cm3 = zone.density_cm3;
         row.pressure_dyn_cm2 = pressure;
         row.temperature_t4 = zone.temperature_t4;
         const auto& eval = zone.accepted_controller.evaluation;
@@ -12336,7 +12360,8 @@ void fill_standalone_input(
     xstar_fixed_state_input_init_v1(&input);
     const auto& params = *data.parameters;
     input.temperature_k = trial.temperature_t4 * 1.0e4;
-    input.hydrogen_density_cm3 = params.density_cm3;
+    input.hydrogen_density_cm3 = xstar_atdb_runtime::source_runtime_density_cm3(
+        params, trial.temperature_t4, trial.electron_fraction_xee);
     input.electron_fraction_xee = std::max(0.0, trial.electron_fraction_xee);
     input.electron_density_cm3 = input.hydrogen_density_cm3 * input.electron_fraction_xee;
     // Literal calc_hmc_all.f90 entry semantics, matched to the accepted
@@ -12923,7 +12948,7 @@ void audit_sequence58_lte(
     std::cout << std::setprecision(17)
               << "V048746255172582_SEQUENCE58_LTE_INPUT_TEMPERATURE_T4_NATIVE=" << snapshot.temperature_t4 << "\n"
               << "V048746255172582_SEQUENCE58_LTE_INPUT_XEE_NATIVE=" << snapshot.electron_fraction_input << "\n"
-              << "V048746255172582_SEQUENCE58_LTE_INPUT_HYDROGEN_DENSITY_NATIVE=" << data.parameters->density_cm3 << "\n"
+              << "V048746255172582_SEQUENCE58_LTE_INPUT_HYDROGEN_DENSITY_NATIVE=" << snapshot.hydrogen_density_cm3 << "\n"
               << "V048746255172582_SEQUENCE58_LTE_INPUT_TEMPERATURE_T4_SOURCE=" << source_t4 << "\n"
               << "V048746255172582_SEQUENCE58_LTE_INPUT_XEE_SOURCE=" << source_xee << "\n"
               << "V048746255172582_SEQUENCE58_LTE_INPUT_STATE=" << (lte_input_state ? "ACCEPT" : "REJECT") << "\n"
@@ -13327,7 +13352,8 @@ SourceStepResultV82Patch520111 source_step(
     const StandaloneControllerDataV67& data,
     const std::vector<double>& post_gsmooth_opakc,
     double radius_cm,
-    double cumulative_column_cm2) {
+    double cumulative_column_cm2,
+    double hydrogen_density_cm3) {
     if (!data.parameters) {
         throw std::runtime_error("v82 patch5.20.11.1 STEP requires production parameters");
     }
@@ -13336,7 +13362,7 @@ SourceStepResultV82Patch520111 source_step(
     if (post_gsmooth_opakc.size() != n || data.accumulated_zrems.size() < n) {
         throw std::runtime_error("v82 patch5.20.11.1 STEP input workspace shape mismatch");
     }
-    if (!(params.density_cm3 > 0.0) || !std::isfinite(params.density_cm3) ||
+    if (!(hydrogen_density_cm3 > 0.0) || !std::isfinite(hydrogen_density_cm3) ||
         params.nsteps <= 0 || !(radius_cm > 0.0) || !std::isfinite(radius_cm)) {
         throw std::runtime_error("v82 patch5.20.11.1 STEP invalid scalar input");
     }
@@ -13351,10 +13377,10 @@ SourceStepResultV82Patch520111 source_step(
     // rccemis/dell is evaluated in the source but immediately overwritten by
     // tst=emult/optp2, so it cannot own the selected shell width.
     SourceStepResultV82Patch520111 out;
-    out.column_limit_cm = params.column_cm2 / params.density_cm3;
+    out.column_limit_cm = params.column_cm2 / hydrogen_density_cm3;
     out.radius_limit_cm = radius_cm / static_cast<double>(params.nsteps);
     out.remaining_column_limit_cm = std::max(0.0,
-        (params.column_cm2 - cumulative_column_cm2) / params.density_cm3);
+        (params.column_cm2 - cumulative_column_cm2) / hydrogen_density_cm3);
     out.delta_radius_cm = std::min(out.column_limit_cm, out.radius_limit_cm);
     out.initial_delta_radius_cm = out.delta_radius_cm;
 
@@ -13427,7 +13453,7 @@ void advance_source_continuum_radiation(
     const auto pre_bremsa = data.dsec_bremsa;
     const auto sparse_reduced_brcems = brcems_from_boundary(boundary, n);
     auto brcems = dense_bremem_source(
-        boundary, data.energy, data.parameters->density_cm3);
+        boundary, data.energy, boundary.hydrogen_density_cm3);
     auto smoothed_opakc = boundary.opakc;
     auto smoothed_rccemis = boundary.rccemis;
     auto zrems = data.accumulated_zrems;
@@ -13453,7 +13479,7 @@ void advance_source_continuum_radiation(
     // opakcont owns Thomson + bound-free; fixed-state continuum diagnostics
     // retain literal freef increments; the residual is line-profile opacity.
     const double patch510_thomson_cover = std::max(0.0, 1.0 - boundary.spectral_covering_fraction);
-    const double patch510_thomson_value = data.parameters->density_cm3 * boundary.electron_fraction_input *
+    const double patch510_thomson_value = boundary.hydrogen_density_cm3 * boundary.electron_fraction_input *
         6.6524587321e-25 * patch510_thomson_cover;
     std::vector<double> bound_free_opakc_pre(n, 0.0);
     std::vector<double> free_free_opakc_pre(n, 0.0);
@@ -13579,7 +13605,7 @@ void advance_source_continuum_radiation(
     // does not overwrite xee.  Therefore the fixed-state computed electron
     // fraction is diagnostic-only here, especially for niter=0 and niter=1.
     workspace.electron_fraction_xee = boundary.electron_fraction_input;
-    workspace.hydrogen_density_cm3 = data.parameters->density_cm3;
+    workspace.hydrogen_density_cm3 = boundary.hydrogen_density_cm3;
     workspace.epi_eV = data.energy.data();
     workspace.bremsa = data.dsec_bremsa.data();
     workspace.opakc = boundary.opakc.data();
@@ -13817,7 +13843,7 @@ void advance_source_continuum_radiation(
         for (double value : pre_gsmooth_brcems) if (std::isfinite(value) && value != 0.0) ++bremem_nonzero;
         for (double value : sparse_reduced_brcems) if (std::isfinite(value) && value != 0.0) ++sparse_bremem_nonzero;
         const double source_thomson_cover = std::max(0.0, 1.0 - boundary.spectral_covering_fraction);
-        const double source_thomson = data.parameters->density_cm3 * boundary.electron_fraction_input *
+        const double source_thomson = boundary.hydrogen_density_cm3 * boundary.electron_fraction_input *
             6.6524587321e-25 * source_thomson_cover;
         std::size_t opakcont_zero_bins = 0;
         for (double value : boundary.opakcont) if (std::isfinite(value) && value == 0.0) ++opakcont_zero_bins;
@@ -14526,6 +14552,7 @@ FixedDsecSnapshot make_iteration_snapshot(
     data.current_sequence = snapshot.sequence;
     ++data.evaluations;
     snapshot.temperature_t4 = trial.temperature_t4;
+    snapshot.hydrogen_density_cm3 = trial.hydrogen_density_cm3;
     snapshot.electron_fraction_input = trial.electron_fraction_xee;
     snapshot.populations.assign(static_cast<std::size_t>(data.program_info.population_rows), 0.0);
     snapshot.spectrum.assign(data.energy.size(), 0.0);
@@ -15063,6 +15090,7 @@ int standalone_iteration_evaluator(
         }
         xstar_fixed_state_input_v1 input{};
         fill_standalone_input(*data, *trial, input);
+        snapshot.hydrogen_density_cm3 = input.hydrogen_density_cm3;
         if (data->reference_diagnostics_enabled && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u &&
             input.global_xilevg && input.global_level_count > 0u) {
             data->call1_current_input_global_xilevg.assign(input.global_xilevg, input.global_xilevg + input.global_level_count);
@@ -15961,6 +15989,7 @@ FixedDsecSnapshot evaluate_full_boundary(
     (void)transport_plane;
     xstar_fixed_state_input_v1 input{};
     fill_standalone_input(data, accepted_state, input);
+    snapshot.hydrogen_density_cm3 = input.hydrogen_density_cm3;
     // v82 patch 5.9: the accepted-boundary snapshot must retain the same
     // effective spectral covering fraction that the fixed-state engine sees.
     // Patch 5.8 fixed the physics ownership (DSEC cfrac vs thermal emult), but
@@ -16772,7 +16801,7 @@ void write_sequence23_diagnostic_preview(
         zone.radius_cm = params.initial_radius_cm + std::max(depth_cm, 0.0);
         zone.outer_radius_cm = zone.radius_cm;
         zone.delta_radius_cm = depth_cm;
-        zone.density_cm3 = params.density_cm3;
+        zone.density_cm3 = snapshot.hydrogen_density_cm3 > 0.0 ? snapshot.hydrogen_density_cm3 : params.density_cm3;
         zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
         const double r19 = zone.radius_cm *
             static_cast<double>(static_cast<float>(1.0e-19));
@@ -16781,7 +16810,7 @@ void write_sequence23_diagnostic_preview(
         zone.ionization_parameter = live_xi;
         zone.log_ionization_parameter = live_xi > 0.0
             ? std::log10(live_xi) : -std::numeric_limits<double>::infinity();
-        zone.column_density_cm2 = params.density_cm3 * std::max(depth_cm, 0.0);
+        zone.column_density_cm2 = zone.density_cm3 * std::max(depth_cm, 0.0);
         zone.temperature_t4 = accepted.evaluation.temperature_t4;
         zone.electron_fraction = accepted.evaluation.electron_fraction_input;
         zone.provisional_from_controller = !exact_controller_boundary;
@@ -16796,7 +16825,7 @@ void write_sequence23_diagnostic_preview(
         abundance.delta_radius_cm = depth_cm;
         abundance.log_ionization_parameter = zone.log_ionization_parameter;
         abundance.electron_fraction = zone.electron_fraction;
-        abundance.density_cm3 = params.density_cm3;
+        abundance.density_cm3 = zone.density_cm3;
         abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
         abundance.temperature_t4 = zone.temperature_t4;
         abundance.fractional_heat_error = accepted.evaluation.total_heating != 0.0
@@ -17337,6 +17366,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         // benchmark retains its accepted four-call prefix only when
         // reference_trajectory_mode is active.
         std::vector<double> source_boundary_depth_cm;
+        std::vector<double> source_boundary_column_cm2;
         std::vector<double> source_transport_segment_cm;
         double pending_transport_segment_cm = 0.0;
 
@@ -17537,6 +17567,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
 
             data.writing_final_snapshot = true;
             source_boundary_depth_cm.push_back(data.cumulative_depth_cm);
+            source_boundary_column_cm2.push_back(data.cumulative_column_cm2);
             const double boundary_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
             // Retain the local source workspace first.  Radial transport is
             // committed only across the shell selected by the previous
@@ -17552,6 +17583,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
             }
             data.writing_final_snapshot = false;
+            // calc_hmc_all mutates xpx by reference in FORTRAN.  Preserve the
+            // accepted final xpx as live controller state before HEATT/STEP.
+            state.hydrogen_density_cm3 = boundary.hydrogen_density_cm3;
 
             const double segment = pending_transport_segment_cm;
             if (call == 2u && data.reference_trajectory_mode) {
@@ -17616,7 +17650,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (segment > 0.0) {
                 const auto stpcut_started_v064890 = std::chrono::steady_clock::now();
                 advance_stpcut_depths(
-                    data, boundary, segment, state.hydrogen_density_cm3);
+                    data, boundary, segment, boundary.hydrogen_density_cm3);
                 if (g_performance_v064890) {
                     g_performance_v064890->stpcut_seconds += performance_elapsed_seconds(stpcut_started_v064890);
                 }
@@ -17628,7 +17662,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // its accepted four-call boundary exactly; every other model is
             // naturally terminated from live production state.
             const double reconstructed_column_cm2_v064812311 =
-                params.density_cm3 * data.cumulative_depth_cm;
+                params.pressure_mode == 0
+                    ? params.density_cm3 * data.cumulative_depth_cm
+                    : data.cumulative_column_cm2;
             const double current_column_cm2_v0648110 = data.cumulative_column_cm2;
             if (const char* diag_v064812311 = std::getenv("XSTAR_V064812311_XCOL_DIAGNOSTICS");
                 diag_v064812311 && *diag_v064812311) {
@@ -17678,7 +17714,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 const double current_column_cm2 = data.cumulative_column_cm2;
                 const auto step_started_v064890 = std::chrono::steady_clock::now();
                 const auto step_result = source_step(
-                    data, step_opakc, step_radius_cm, current_column_cm2);
+                    data, step_opakc, step_radius_cm, current_column_cm2,
+                    boundary.hydrogen_density_cm3);
                 if (g_performance_v064890) {
                     g_performance_v064890->step_seconds += performance_elapsed_seconds(step_started_v064890);
                 }
@@ -17839,6 +17876,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (live_text_zone_progress_enabled()) {
                 print_xstar_style_live_zone(
                     finals.back(), params, source_boundary_depth_cm.back(),
+                    source_boundary_column_cm2.back(),
                     static_cast<std::size_t>(std::max(stats.ntotit, 0)));
             }
 
@@ -18111,7 +18149,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         const std::size_t radial_event_count = finals.size() + 1u;
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
-                               double source_depth, std::size_t dsec_ntotit) {
+                               double source_depth, double source_column,
+                               std::size_t dsec_ntotit) {
             xstar_run_state::AcceptedControllerState accepted;
             accepted.call_index = snapshot.call_index;
             accepted.accepted_sequence = snapshot.sequence;
@@ -18127,7 +18166,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             zone.radius_cm = params.initial_radius_cm + source_depth;
             zone.delta_radius_cm = source_depth;
             zone.outer_radius_cm = zone.radius_cm;
-            zone.density_cm3 = params.density_cm3;
+            zone.density_cm3 = snapshot.hydrogen_density_cm3;
             zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
             // Match xstar.f90 / Python radial update exactly: r19 uses the
             // source default-REAL 1.e-19 constant before promotion and xi is
@@ -18139,7 +18178,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             zone.ionization_parameter = live_xi;
             zone.log_ionization_parameter = live_xi > 0.0
                 ? std::log10(live_xi) : -std::numeric_limits<double>::infinity();
-            zone.column_density_cm2 = params.density_cm3 * std::max(source_depth, 0.0);
+            zone.column_density_cm2 = std::max(
+                params.pressure_mode == 1
+                    ? source_column
+                    : params.density_cm3 * source_depth,
+                0.0);
             zone.temperature_t4 = accepted.evaluation.temperature_t4;
             zone.electron_fraction = accepted.evaluation.electron_fraction_input;
             zone.dsec_ntotit = dsec_ntotit;
@@ -18153,7 +18196,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             abundance.delta_radius_cm = source_depth;
             abundance.log_ionization_parameter = zone.log_ionization_parameter;
             abundance.electron_fraction = zone.electron_fraction;
-            abundance.density_cm3 = params.density_cm3;
+            abundance.density_cm3 = zone.density_cm3;
             abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
             abundance.temperature_t4 = zone.temperature_t4;
             // Preserve the exact source/controller pprint option-17 thermal
@@ -18168,7 +18211,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         for (std::size_t i = 0; i < finals.size(); ++i) {
             const std::size_t ntotit = i < actual_dsec_ntotit.size() ? actual_dsec_ntotit[i] : 0u;
             append_zone(finals[i], "qualification_free_native_call_final_pretransport",
-                        source_boundary_depth_cm[i], ntotit);
+                        source_boundary_depth_cm[i], source_boundary_column_cm2[i], ntotit);
             // Release the source snapshot immediately after its publication
             // state has been transferred.  This keeps peak memory roughly
             // constant with radial depth instead of retaining two full copies
@@ -18185,7 +18228,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         append_zone(*terminal_transport_boundary_v82_patch520144,
                     "qualification_free_native_terminal_posttransport",
-                    data.cumulative_depth_cm,
+                    data.cumulative_depth_cm, data.cumulative_column_cm2,
                     actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
         // Canonical xstar.f90 executes `pprint(9,...)` once more after the
         // radial loop.  Mirror that live-console row as well as retaining it
@@ -18194,7 +18237,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         if (live_text_zone_progress_enabled()) {
             print_xstar_style_live_zone(
                 *terminal_transport_boundary_v82_patch520144, params,
-                data.cumulative_depth_cm,
+                data.cumulative_depth_cm, data.cumulative_column_cm2,
                 actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
         }
         if (!data.reference_trajectory_mode && !data.reference_diagnostics_enabled) {
@@ -18831,7 +18874,7 @@ void print_xstar_style_progress(const xstar_run_state::ProductWritingState& stat
         const std::size_t numrec = zone.dsec_ntotit;
         const double radius = zone.radius_cm;
         const double depth = std::max(0.0, radius - (state.radial_zones.empty() ? radius : state.radial_zones.front().radius_cm));
-        const double column = zone.density_cm3 * depth;
+        const double column = zone.column_density_cm2;
         const double log_rel = radius > 0.0 && depth > 0.0 ? std::log10(depth / radius) : -36.0;
         const double log_temp = zone.temperature_t4 > 0.0 ? 4.0 + std::log10(zone.temperature_t4) : -10.0;
         std::cout << std::fixed << std::setprecision(2)

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.25 - 2026-08-12
+
+- Implement the public `lcpres` / `pressure` contract directly from the attached unmodified FORTRAN XSTAR 2.59g source. Public `lcpres=0` maps to source `lcdd=1` (constant density); public `lcpres=1` maps to `lcdd=0` (constant pressure).
+- Reproduce the source mixed-kind initialization for constant pressure: XPI REAL(4)-promoted `pressure`/`temperature`, initial `xpx=p/(1.38d-12*T4)`, and pressure-form input radius from `sqrt(L38/(REAL4(12.56)*c*p*10**rlogxi))`.
+- Recompute constant-pressure hydrogen density on every native fixed-state evaluation from the live temperature using the source default-REAL `1.38e-12` coefficient, then retain that live density through DSEC, HEATT/transport, STEP, STPCUT, cumulative column, terminal state, and FITS publication.
+- Keep the `lcpres=0` density-controlled branch source-faithful and prevent the public `pressure` value from replacing the supplied density in constant-density science.
+- Requalify the existing Python `lcdd` path against the same source ordering and mixed-precision pressure coefficients. No public ABI change; science revision remains frozen pending host FORTRAN/C++/Python pressure qualification.
+- Add a four-case host gate (`lcpres=0` plus pressure-form `log Xi=-2,0,+2`) comparing STEP/material science, Option 1, and `xout_abund1` radius/density/pressure/temperature/electron-fraction trajectories.
+
 ## 0.6.82.24.3 - 2026-08-12
 
 - Close the `niter` campaign after host `0.6.82.24.2` C++ `niter=0/1` ACCEPT and pure-Python `niter=0/-99/1/99` scientific concordance.

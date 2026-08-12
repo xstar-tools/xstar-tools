@@ -148,6 +148,11 @@ XSTAR Manual Chapter 6, `src/xstar2table/xstar2table.c`, and
 fixture is bit-exact for energy bins, `PARAMVAL`, and all four `INTPSPEC`
 payloads. Native `xstinitable` is not yet part of 0.6.82.
 
+## 3.2 Constant-pressure semantics in 0.6.82.25
+
+`lcpres=0` is the canonical density-controlled branch. `lcpres=1` activates the FORTRAN constant-pressure branch: the input `rlogxi` is interpreted as pressure-form Xi for the initial radius, and the live hydrogen density is recomputed from `pressure` and the current temperature inside local evaluations. The accepted live density is retained in radial STEP/FITS products. See `docs/developer/lcpres_pressure_0_6_82_25.md` and the packaged host qualification runner for the source equations and acceptance procedure.
+
+
 ## 4. Atomic-data setup
 
 Runs are local-data-only: they do not silently download scientific data. Point the run at an XSTAR data directory containing at least:

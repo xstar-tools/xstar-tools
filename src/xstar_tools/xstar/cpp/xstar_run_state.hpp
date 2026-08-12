@@ -236,6 +236,7 @@ struct FixedEvaluationState {
     std::size_t call_index = 0;
     std::size_t evaluation_index = 0;
     double temperature_t4 = 0.0;
+    double hydrogen_density_cm3 = 0.0;
     double electron_fraction_input = 0.0;
     double computed_electron_fraction = 0.0;
     double charge_residual = 0.0;

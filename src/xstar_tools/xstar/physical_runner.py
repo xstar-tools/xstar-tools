@@ -655,6 +655,14 @@ def normalize_xstar_parameters(
     density = float(values["density"])
     xee_trial = 1.2
     if lcdd == 0:
+        # rread1 reads pressure and temperature through uclgsr8
+        # (REAL(4) -> REAL(8)) and uses a REAL(8) 1.38d-12 coefficient for
+        # the initial trial density.  Apply the promotion only in the
+        # pressure-controlled branch so the frozen lcdd=1 path is unchanged.
+        pressure = float(np.float32(pressure))
+        t4 = float(np.float32(t4))
+        values["pressure"] = pressure
+        values["temperature"] = t4
         density = pressure / 1.38e-12 / max(t4, 1.0e-49)
     elif lcdd == 2:
         density = pressure / (xee_trial + 1.0e-34)
@@ -663,8 +671,11 @@ def normalize_xstar_parameters(
     xlum = float(values["rlrad38"])
     xi = 10.0 ** float(values["rlogxi"])
     if lcdd == 0:
-        ccc = 2.998e10
-        r19 = math.sqrt(xlum / 12.56 / ccc / max(1.0e-49, pressure * xi))
+        # rread1.f90: 12.56 is default REAL, while constants.f90 ccc is
+        # double precision.  Preserve that mixed-kind expression literally.
+        four_pi = float(np.float32(12.56))
+        ccc = 2.99792458e10
+        r19 = math.sqrt(xlum / four_pi / ccc / max(1.0e-49, pressure * xi))
     elif lcdd == 2:
         r19 = math.sqrt(xlum / max(1.0e-49, pressure * xi))
     else:
