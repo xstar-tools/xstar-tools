@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.24.2 - 2026-08-12
+
+- Complete the `niter=0`/finite-`niter=1` electron-fraction ownership repair in persisted publication.  `retain_controller_owned_product_workspaces()` no longer replaces accepted/source `electron_fraction_input` with diagnostic `computed_electron_fraction`.
+- Make all generic/native radial publication paths keep source/controller `xee`; `computed_electron_fraction` remains diagnostic only.
+- Make `xstar_step_log.cpp` Option 22 publish accepted/source `xee` for `n_e` and pressure `Xi`, with retained radial `r.xee` as fallback.
+- Add a static regression that rejects any future generic radial-zone publication assignment from `computed_electron_fraction` and rejects Option-22 ownership regression.
+- Preserve the accepted C++ `niter=-99/99` results and pure-Python `niter=0/1/-99` results; rerun only native `niter=0/1` against existing FORTRAN references. No DSEC/rate/matrix/Type-50/53/cfrac/convergence arithmetic change.
+
 ## 0.6.82.24.1 - 2026-08-12
 
 - Correct accepted electron-fraction ownership for the `niter=0` and one-iteration `niter=1` source branches.  The fixed-state computed electron fraction is a charge diagnostic (`enelec`-derived); canonical `calc_hmc_all` does not overwrite the live `xee` argument.

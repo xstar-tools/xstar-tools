@@ -366,3 +366,11 @@ include tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_1.py
 include tests/test_niter_xee_ownership_0_6_82_24_1.py
 include xstar_tools-0.6.82.24.1_host_validation.md
 include xstar_tools_conversation_handoff_through_0.6.82.24.1_niter_hotfix.md
+
+# 0.6.82.24.2 niter persisted-publication xee ownership hotfix.
+include qualification/niter_semantics_0_6_82_24_2.json
+include tools/qualification/check_niter_publication_xee_0_6_82_24_2.py
+include tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_2.py
+include tests/test_niter_publication_xee_0_6_82_24_2.py
+include xstar_tools-0.6.82.24.2_host_validation.md
+include xstar_tools_conversation_handoff_through_0.6.82.24.2_niter_publication.md

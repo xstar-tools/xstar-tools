@@ -680,8 +680,12 @@ void append_native_radial_summary(std::ofstream& out,
         const double final_t4 = have_final ? state.legacy_pprint.final_temperature_t4 : r.temperature;
         const double final_heating = have_final ? state.legacy_pprint.final_total_heating : eval.total_heating;
         const double final_cooling = have_final ? state.legacy_pprint.final_total_cooling : eval.total_cooling;
-        const double final_xee = std::isfinite(eval.computed_electron_fraction) && eval.computed_electron_fraction > 0.0
-            ? eval.computed_electron_fraction : r.xee;
+        // 0.6.82.24.2: pprint(22) publishes the accepted/source xee.  The
+        // fixed-state computed electron fraction is diagnostic only and may
+        // differ intentionally when niter=0 or when a finite DSEC iteration
+        // limit returns before charge neutrality is solved.
+        const double final_xee = std::isfinite(eval.electron_fraction_input) && eval.electron_fraction_input > 0.0
+            ? eval.electron_fraction_input : r.xee;
         const double tf=reference_depths.empty()?0.0:reference_depths.back().first;
         const double tb=reference_depths.empty()?0.0:reference_depths.back().second;
         const double source_radius_scale=static_cast<double>(static_cast<float>(1.0e-19));

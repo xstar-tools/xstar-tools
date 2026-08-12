@@ -12,10 +12,12 @@ xstar_tools-0.6.82.21_host_validation.md
 xstar_tools-0.6.82.22_host_validation.md
 xstar_tools-0.6.82.23_host_validation.md
 xstar_tools-0.6.82.24.1_host_validation.md
+xstar_tools-0.6.82.24.2_host_validation.md
 xstar_tools-0.6.82.24_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
 xstar_tools_conversation_handoff_through_0.6.82.24.1_niter_hotfix.md
+xstar_tools_conversation_handoff_through_0.6.82.24.2_niter_publication.md
 xstar_tools_conversation_handoff_through_0.6.82.24_niter.md
 xstar_tools_emult_profile_0.6.82.21.md
 .github/workflows/ci-tier0.yml
@@ -218,6 +220,7 @@ qualification/msolvelucy_fixed_loop_0_6_82_9.json
 qualification/multi_element_atdb_lowering_0_6_82_1.json
 qualification/niter_semantics_0_6_82_24.json
 qualification/niter_semantics_0_6_82_24_1.json
+qualification/niter_semantics_0_6_82_24_2.json
 qualification/option24_comparator_policy_0_6_67.json
 qualification/packaging_milestone_0_6_71.json
 qualification/parity_freeze.json
@@ -534,6 +537,7 @@ tests/test_low_xi_memory_performance_0_6_82_22.py
 tests/test_lte_rnisi_workspace_0_6_82_8.py
 tests/test_msolvelucy_fixed_loop_0_6_82_9.py
 tests/test_multi_element_atdb_lowering_0_6_82_1.py
+tests/test_niter_publication_xee_0_6_82_24_2.py
 tests/test_niter_semantics_0_6_82_24.py
 tests/test_niter_xee_ownership_0_6_82_24_1.py
 tests/test_o7_density_grid_type69_mode_compare_reference.py
@@ -648,6 +652,7 @@ tools/qualification/check_low_xi_memory_performance_0_6_82_22.py
 tools/qualification/check_lte_rnisi_workspace_0_6_82_8.py
 tools/qualification/check_msolvelucy_fixed_loop_0_6_82_9.py
 tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
+tools/qualification/check_niter_publication_xee_0_6_82_24_2.py
 tools/qualification/check_niter_semantics_0_6_82_24.py
 tools/qualification/check_niter_semantics_0_6_82_24_1.py
 tools/qualification/check_packaging_milestone.py
@@ -697,6 +702,7 @@ tools/qualification/run_c5_emult_sweep_0_6_82_21.py
 tools/qualification/run_c5_emult_sweep_0_6_82_22.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_1.py
+tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_2.py
 tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py

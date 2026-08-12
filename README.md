@@ -4,7 +4,10 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.19`  
+**Distribution:** `0.6.82.24.2`  
+
+**0.6.82.24.2 niter publication ownership:** the `niter=0` and finite-iteration `niter=1` source branches retain the accepted controller `xee` through persisted STEP/FITS and pprint(22).  The fixed-state computed electron fraction remains diagnostic only.  This is a narrow publication-state ownership hotfix; DSEC, rates, matrix, cfrac, and convergence arithmetic are unchanged.
+
 
 **0.6.82.19 Type-50 `cfrac<1` full-grid `calc_emis` ownership:** the exact 0.6.82.18 H+He+C, `ne=1e12`, `column=1e20`, `cfrac=1`, `rlogxi=-5..5` campaign is frozen 11/11 ACCEPT under the `<1%` material policy. Fresh original-FORTRAN `cfrac=0.4` qualification exposed large transmitted/reflected Option-1 and heating/cooling differences because Type-50 continuum pumping, proportional to `(1-cfrac)`, had never been exercised at `cfrac=1`. Canonical FORTRAN evaluates Type-50 on reduced `epim/bremsam` during `calc_hmc_all`/`calc_emisab_all` and calls `ucalc` again on full `epi/bremsa` from `calc_emis_ion` before forming `fline/rcem`; C++ had reused the reduced-grid answer and Python had analogous caller-grid/binning errors. 0.6.82.19 restores the reduced-vs-full ownership split and live `abs(eeup-eelo)` `nbinc` sampling. The `cfrac=0.4` and `cfrac=0.0` host gates are pending; use original unmodified FORTRAN XSTAR 2.59g for qualification and patched FORTRAN only for diagnostics. Science revision and ABIs remain frozen.
 

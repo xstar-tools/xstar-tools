@@ -7634,7 +7634,7 @@ void read_source_populations(
         zone.log_ionization_parameter = rlogxi;
         zone.column_density_cm2 = column * static_cast<double>(i + 1) / static_cast<double>(zone_count);
         zone.temperature_t4 = eval.temperature_t4;
-        zone.electron_fraction = eval.computed_electron_fraction;
+        zone.electron_fraction = eval.electron_fraction_input;
         zone.provisional_from_controller = false;
         zone.accepted_boundary_exact = true;
         zone.boundary_provenance = "native C++ controller/product-write retention";
@@ -10368,7 +10368,11 @@ void retain_controller_owned_product_workspaces(
         }
         zone.column_density_cm2 = density * std::max(source_rdel[i], 0.0);
         zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
-        zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
+        // 0.6.82.24.2: publication must preserve the accepted source/controller
+        // electron fraction.  computed_electron_fraction is a fixed-state
+        // diagnostic (enelec) and must never replace the live xee owned by
+        // xstarcalc/dsec for niter=0 or a finite positive iteration limit.
+        zone.electron_fraction = zone.accepted_controller.evaluation.electron_fraction_input;
         zone.provisional_from_controller = false;
         if (!exact_live_geometry) {
             zone.accepted_boundary_exact = false;
@@ -10740,7 +10744,7 @@ void promote_retained_native_product_surface(xstar_run_state::WholeRunAccumulate
         zone.boundary_provenance = "native retained full-61 controller checkpoint surface";
         fill_retained_product_surface_arrays(zone.accepted_controller.evaluation, fallback_energy_count);
         if (zone.temperature_t4 == 0.0) zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
-        if (zone.electron_fraction == 0.0) zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
+        if (zone.electron_fraction == 0.0) zone.electron_fraction = zone.accepted_controller.evaluation.electron_fraction_input;
     }
     whole.legacy_pprint.initialized_from_native_controller = true;
     whole.legacy_pprint.option_sequence_exact = false;
@@ -10851,7 +10855,7 @@ ProductPublicationResultV172524 publish_full61_products(
             zone.provisional_from_controller = true;
             zone.accepted_controller = accepted;
             zone.temperature_t4 = snapshot.temperature_t4;
-            zone.electron_fraction = snapshot.computed_electron_fraction;
+            zone.electron_fraction = snapshot.electron_fraction_input;
             whole.radial_zones.push_back(zone);
         };
         std::vector<const FixedDsecSnapshot*> radial_events_v63;
@@ -11193,7 +11197,7 @@ ProductPublicationResultV172524 publish_true_production_products(
             zone.provisional_from_controller = true;
             zone.accepted_controller = accepted;
             zone.temperature_t4 = snapshot.temperature_t4;
-            zone.electron_fraction = snapshot.computed_electron_fraction;
+            zone.electron_fraction = snapshot.electron_fraction_input;
             whole.radial_zones.push_back(zone);
         };
         std::vector<const FixedDsecSnapshot*> finals;
