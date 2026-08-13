@@ -15,8 +15,8 @@ writers remain outside the bounded Python port.  This module therefore models
 the same caller-visible persistence contract in memory:
 
 * values written by the ``fstepr*`` helpers are rounded through REAL(4);
-* each shell snapshot is inserted after the one-based HDU requested by
-  ``savd(jkp+1, ...)``, preserving CFITSIO insertion/shift semantics;
+* each shell snapshot honors the one-based HDU requested by ``savd(jkp+1, ...)``
+  while CFITSIO creates the new radial extension at the physical file tail;
 * ``unsavd`` restores scalar, population, line, RRC, opacity, and emissivity
   state, but only the direction-owned optical-depth row;
 * the saved ``zrems`` table is deliberately read into a local temporary and is
@@ -195,9 +195,11 @@ class SavedRadialPassState:
     """One pass's in-memory equivalent of the four XSTAR detail FITS files.
 
     Indices 1 and 2 are reserved for the primary/parameter HDUs.  ``savd``
-    calls ``ftmahd(hdunum)`` followed by ``ftcrhd``; insertion after an earlier
-    HDU shifts later shell records.  The list representation below preserves
-    that behavior exactly.
+    calls ``ftmahd(hdunum)`` followed by ``ftcrhd``.  Actual FORTRAN XSTAR
+    detail products show that each new radial extension is placed at the
+    physical tail, including the post-loop terminal save whose ``hdunum`` can
+    point before an already-written shell.  Preserve that observed source
+    behavior; do not shift existing shell records.
     """
 
     pass_index: int
@@ -239,8 +241,12 @@ class SavedRadialPassState:
                 f"cannot insert after HDU {hdu}; current HDU count is {self.hdu_count}"
             )
         snapshot.validate()
-        inserted = hdu + 1
-        self.hdu_snapshots.insert(inserted, snapshot)
+        # 0.6.82.27.1: host FORTRAN detail products establish append-at-tail
+        # semantics for fstepr*/ftcrhd in this caller path.  The source HDU
+        # argument is still validated because SAVD must point at an existing
+        # extension, but it does not define an in-memory insertion position.
+        self.hdu_snapshots.append(snapshot)
+        inserted = self.hdu_count
         self.insertion_log.append(
             {
                 "after_hdu": hdu,

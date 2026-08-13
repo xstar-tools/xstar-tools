@@ -1217,7 +1217,7 @@ def save_radial_shell_state(
     hdunum: int,
     terminal_record: bool = False,
 ) -> int:
-    """Insert one shell record after the source-requested one-based HDU."""
+    """Persist one shell record using source fstepr* append-at-tail semantics."""
     store = _saved_store_from_state(state, create=True)
     pass_state = store.begin_pass(int(state.transfer.pass_index))
     snapshot = capture_saved_shell_snapshot_from_state(
@@ -2453,12 +2453,16 @@ def run_bounded_radial_shell_validation(
     )
     hdu_insertion_ready = bool(
         pass1.saved_hdus == (3, 4, 5)
-        and pass1.terminal_saved_hdu == 4
+        and pass1.terminal_saved_hdu == 5
         and multipass.saved_state.require_pass(1).snapshot_at_hdu(3).zone_index == 1
-        and multipass.saved_state.require_pass(1).snapshot_at_hdu(4).terminal_record
-        and multipass.saved_state.require_pass(1).snapshot_at_hdu(5).zone_index == 2
+        and multipass.saved_state.require_pass(1).snapshot_at_hdu(4).zone_index == 2
+        and not multipass.saved_state.require_pass(1).snapshot_at_hdu(4).terminal_record
+        and multipass.saved_state.require_pass(1).snapshot_at_hdu(5).terminal_record
         and pass2.saved_hdus == (3, 4, 5, 6)
-        and pass2.terminal_saved_hdu == 5
+        and pass2.terminal_saved_hdu == 6
+        and multipass.saved_state.require_pass(2).snapshot_at_hdu(5).zone_index == 3
+        and not multipass.saved_state.require_pass(2).snapshot_at_hdu(5).terminal_record
+        and multipass.saved_state.require_pass(2).snapshot_at_hdu(6).terminal_record
     )
     first_snapshot = multipass.saved_state.require_pass(1).snapshot_at_hdu(3)
     real4_ready = bool(

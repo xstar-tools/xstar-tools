@@ -2893,6 +2893,47 @@ void print_xstar_style_live_header() {
               << std::flush;
 }
 
+// 0.6.82.27.1: pprint(17) is emitted once per pass.  The initial
+// header above is kept unchanged for the frozen npass=1 path; later pass
+// headings are emitted only for true multipass execution.
+void print_xstar_style_live_multipass_heading(
+    std::size_t pass_index, int direction) {
+    std::cerr << "\n pass number=" << std::setw(12) << pass_index
+              << std::setw(12) << direction << "\n"
+              << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
+              << "                                                                  fwd    rev\n"
+              << std::flush;
+}
+
+// Print the exact compact pprint(9) state that is also serialized to
+// xout_step.log.  Multipass live output must not reconstruct radius/depth
+// from final-pass publication state because reverse passes restore shell
+// geometry directly from SAVD/UNSAVD records.
+void print_xstar_style_live_pprint_row_v0682271(
+    const xstar_run_state::LegacyPprintRadialRowState& r) {
+    auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
+    const double radial_ratio = r.radius_cm > 0.0
+        ? std::max(1.0e-36, std::min(99.0, r.radial_depth_cm / r.radius_cm))
+        : 1.0e-36;
+    std::cerr << std::fixed << std::setprecision(2)
+              << std::setw(8) << safe_log(r.radius_cm, -10.0)
+              << std::setw(7) << std::log10(radial_ratio)
+              << std::setw(7) << safe_log(std::max(r.column_density_cm2, 1.0e-10), -10.0)
+              << std::setw(7) << r.log_ionization_parameter
+              << std::setw(7) << r.electron_fraction
+              << std::setw(7) << safe_log(r.density_cm3, -10.0)
+              << std::setw(7) << (r.temperature_t4 > 0.0
+                    ? 4.0 + std::log10(r.temperature_t4) : -10.0)
+              << std::setw(7) << std::clamp(100.0 * r.hmctot, -99.99, 99.99)
+              << std::setw(7) << std::clamp(r.radiation_balance_percent, -99.99, 99.99)
+              << std::setw(7) << std::log10(std::max(r.forward_reference_tau, 1.0e-10))
+              << std::setw(7) << std::log10(std::max(r.reverse_reference_tau, 1.0e-10))
+              << std::setw(3) << r.dsec_ntotit << "\n" << std::flush;
+    std::cerr.unsetf(std::ios::floatfield);
+    std::cerr << std::setprecision(17);
+    ++g_live_zone_rows;
+}
+
 void print_xstar_style_live_zone(
     const FixedDsecSnapshot& snapshot,
     const xstar_atdb_runtime::ProductionParameters& params,
@@ -17250,9 +17291,17 @@ struct NativeSavedPassV068227 {
 
     void insert_after_hdu(std::size_t hdu, NativeSavedShellV068227 shell) {
         if (hdu < 1u || hdu >= hdus.size()) {
-            throw std::runtime_error("0.6.82.27 savd HDU insertion target is invalid");
+            throw std::runtime_error("0.6.82.27.1 savd HDU target is invalid");
         }
-        hdus.insert(hdus.begin() + static_cast<std::ptrdiff_t>(hdu + 1u), std::move(shell));
+        // Source fstepr* calls ftmahd(hdunum) followed by ftcrhd.  Host
+        // FORTRAN detail files prove that the new radial extension is placed
+        // at the physical tail of the file even for the post-loop SAVD call,
+        // whose hdunum points before an already-written shell.  In particular,
+        // pass-1 records are HDU 3=zone1, 4=zone2, 5=terminal.  The old .27
+        // vector insertion shifted zone2 to HDU5, so the first UNSAVD of pass2
+        // restored the wrong shell.  Append to the physical tail while still
+        // validating the caller's one-based source HDU target.
+        hdus.push_back(std::move(shell));
     }
 
     const NativeSavedShellV068227& at_hdu(std::size_t hdu) const {
@@ -17957,6 +18006,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             std::cout << "V068227_NATIVE_PASS_START=" << kk_v068227
                       << " DIRECTION=" << data.radial_direction_v068227
                       << " REQUESTED_PASSES=" << requested_npass_v068227 << "\n";
+            if (effective_npass_v068227 > 1u && kk_v068227 > 1u &&
+                live_text_zone_progress_enabled()) {
+                print_xstar_style_live_multipass_heading(
+                    kk_v068227, data.radial_direction_v068227);
+            }
 
         for (std::size_t call = 1; ; ++call) {
             if (call > 3999u) throw std::runtime_error("too many native radial zones: buffer filled");
@@ -18259,6 +18313,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     kk_v068227, data.radial_direction_v068227, call,
                     boundary_radius_cm, data.cumulative_depth_cm,
                     data.cumulative_column_cm2, source_ntotit_v068227, false));
+            if (effective_npass_v068227 > 1u && live_text_zone_progress_enabled()) {
+                print_xstar_style_live_pprint_row_v0682271(
+                    whole.legacy_pprint.radial_rows.back());
+            }
 
             // xstar.f90 SAVD occurs after HEATT/pprint and before the geometry,
             // STPCUT, and TRNFRN updates.  Multipass execution depends on the
@@ -18558,7 +18616,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             g_shared_zone_dsec_v0648110.push_back(dsec_count);
             production_zone_mark_complete(
                 call, finals.back(), dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
-            if (live_text_zone_progress_enabled()) {
+            if (effective_npass_v068227 == 1u && live_text_zone_progress_enabled()) {
                 print_xstar_style_live_zone(
                     finals.back(), params, source_initial_radius_cm_v068226,
                     source_boundary_depth_cm.back(), source_boundary_column_cm2.back(),
@@ -18588,6 +18646,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     kk_v068227, data.radial_direction_v068227, finals.size(),
                     current_radius_cm_v068227, data.cumulative_depth_cm,
                     data.cumulative_column_cm2, source_ntotit_v068227, true));
+            if (effective_npass_v068227 > 1u && live_text_zone_progress_enabled()) {
+                print_xstar_style_live_pprint_row_v0682271(
+                    whole.legacy_pprint.radial_rows.back());
+            }
             if (effective_npass_v068227 > 1u) {
                 const double terminal_r19_v068227 = current_radius_cm_v068227 *
                     static_cast<double>(static_cast<float>(1.0e-19));
@@ -18977,7 +19039,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         // radial loop.  Mirror that live-console row as well as retaining it
         // for xout_step.log.  No new HMC/DSEC evaluation is performed here,
         // so the final DSEC ntotit is repeated exactly as in FORTRAN.
-        if (live_text_zone_progress_enabled()) {
+        if (effective_npass_v068227 == 1u && live_text_zone_progress_enabled()) {
             print_xstar_style_live_zone(
                 *terminal_transport_boundary_v82_patch520144, params,
                 source_initial_radius_cm_v068226, data.cumulative_depth_cm,

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.27.1 - npass SAVD replay/order hotfix - 2026-08-13
+
+- Rejects `0.6.82.27` as a multipass host-science candidate after host FORTRAN comparison exposed incorrect pass-2+ shell replay.
+- Corrects native and Python SAVD in-memory persistence to match observed CFITSIO/XSTAR behavior: `ftcrhd` creates each new radial extension at the physical tail rather than shifting an already-written later shell.
+- Consequently pass 1 persists HDU 3=zone 1, HDU 4=zone 2, HDU 5=terminal for the focused C5 case, and later `UNSAVD(jk+2)` traversal restores 5,4,3.
+- Corrects native live multipass terminal output so each pass has its own heading and every retained `pprint(9)` row, including the terminal duplicate, is printed from the same compact state serialized to `xout_step.log`.
+- Keeps the `npass=1` numerical path frozen and preserves the science revision and public ABI identifiers.
+- Adds a C++-first host gate for reuse of the already-computed FORTRAN `npass=1,3,5` reference tree; Python qualification remains deliberately second-stage.
+- Extends historical successor-aware qualification gates through `.27.1` without changing their original science assertions; this is qualification compatibility only.
+
 ## 0.6.82.27 - 2026-08-13
 
 - Implement native whole-shell `npass` transport from canonical FORTRAN XSTAR 2.59g instead of treating `npass` as publication-only: execute the requested fresh-run pass count, alternate source `ldir=-1,+1,...`, and retain the complete per-pass `pprint(9)`/Option-17 trajectory.

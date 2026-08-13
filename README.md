@@ -402,3 +402,7 @@ python3 tools/qualification/run_multi_element_host_smoke_0_6_82_4.py \
 The runner compares the broad fixture to the preserved FORTRAN 2.59g STEP and
 thermal oracles, requires material discrepancies below 1%, and reports the
 runtime ratio separately.
+
+### 0.6.82.27.1 npass hotfix
+
+`0.6.82.27.1` corrects the SAVD/UNSAVD radial-record ordering found by host FORTRAN comparison of `npass=3` and `5`. The exact FORTRAN/CFITSIO behavior is append-at-tail for new detail HDUs; later passes then read the previous pass in reverse via `jk=numrec+1-jkp`, `HDU=jk+2`. The candidate also makes live native multipass rows mirror the retained `xout_step.log` rows. Run the C++ host gate first; only after C++ accepts should the pure-Python gate be run.

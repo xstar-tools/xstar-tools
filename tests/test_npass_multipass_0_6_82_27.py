@@ -21,8 +21,10 @@ def _function(text: str, signature: str, next_marker: str) -> str:
 def test_068227_version_and_frozen_identifiers():
     pyproject = (ROOT / "pyproject.toml").read_text()
     makefile = (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
-    assert 'version = "0.6.82.27"' in pyproject
-    assert "PACKAGE_VERSION ?= 0.6.82.27" in makefile
+    current_027 = 'version = "0.6.82.27"' in pyproject
+    current_0271 = 'version = "0.6.82.27.1"' in pyproject
+    assert current_027 or current_0271
+    assert ("PACKAGE_VERSION ?= 0.6.82.27" in makefile) or ("PACKAGE_VERSION ?= 0.6.82.27.1" in makefile)
     # Frozen science/ABI values remain source-visible through the accepted contract.
     all_text = "\n".join(
         p.read_text(errors="ignore")
@@ -45,16 +47,27 @@ def test_068227_numerical_change_scope_is_three_native_files_only():
     ]
     assert manifest["numerical_source_count_predecessor"] == 137
     assert manifest["intentional_numerical_source_changes"] == expected
-    predecessor = manifest["predecessor_sha256"]
-    changed = set(expected)
-    for rel, old_hash in predecessor.items():
-        path = ROOT / rel
-        current = hashlib.sha256(path.read_bytes()).hexdigest()
-        if rel in changed:
-            assert current == manifest["candidate_changed_sha256"][rel]
-            assert current != old_hash
-        else:
-            assert current == old_hash, rel
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    hotfix = 'version = "0.6.82.27.1"' in pyproject
+    if hotfix:
+        successor = json.loads((ROOT / "qualification/npass_0_6_82_27_1/npass_hotfix_source_scope_0_6_82_27_1.json").read_text())
+        # Preserve the historical .27 chain without pretending its rejected
+        # SAVD ordering is still the candidate: the .27 candidate byte hashes
+        # must exactly be the .27.1 predecessor hashes.
+        for rel, old_hash in manifest["predecessor_sha256"].items():
+            expected_027 = manifest["candidate_changed_sha256"].get(rel, old_hash)
+            assert successor["predecessor_sha256"][rel] == expected_027, rel
+    else:
+        predecessor = manifest["predecessor_sha256"]
+        changed = set(expected)
+        for rel, old_hash in predecessor.items():
+            path = ROOT / rel
+            current = hashlib.sha256(path.read_bytes()).hexdigest()
+            if rel in changed:
+                assert current == manifest["candidate_changed_sha256"][rel]
+                assert current != old_hash
+            else:
+                assert current == old_hash, rel
 
 
 def test_068227_native_outer_pass_schedule_and_source_numrec_contract():
@@ -85,7 +98,12 @@ def test_068227_native_unsavd_reverse_hdu_and_direction_owned_tau_restore():
 def test_068227_native_savd_models_real4_and_cfitsio_hdu_insertion():
     text = CPP.read_text()
     saved = _function(text, "struct NativeSavedPassV068227", "void initialize_native_radial_pass_v068227(")
-    assert "hdus.insert(hdus.begin() + static_cast<std::ptrdiff_t>(hdu + 1u)" in saved
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    if 'version = "0.6.82.27.1"' in pyproject:
+        assert "hdus.push_back(std::move(shell));" in saved
+        assert "hdus.insert(hdus.begin()" not in saved
+    else:
+        assert "hdus.insert(hdus.begin() + static_cast<std::ptrdiff_t>(hdu + 1u)" in saved
     assert "static_cast<double>(static_cast<float>(value))" in saved
     for name in (
         "source_global_xilevg", "source_global_rnisg", "rcem", "oplin", "tau0",

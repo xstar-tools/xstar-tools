@@ -53,20 +53,32 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
     hashes = manifest["numerical_source_sha256_from_0_6_82_26_2"]
     assert len(hashes) >= 130
     pyproject = (ROOT / "pyproject.toml").read_text()
-    successor = 'version = "0.6.82.27"' in pyproject
-    declared = set()
-    chain = {}
-    if successor:
+    current_027 = 'version = "0.6.82.27"' in pyproject
+    current_0271 = 'version = "0.6.82.27.1"' in pyproject
+    npass = None
+    hotfix = None
+    if current_027 or current_0271:
         npass = json.loads((ROOT / "qualification/npass_0_6_82_27/npass_source_scope_0_6_82_27.json").read_text())
-        declared = set(npass["intentional_numerical_source_changes"])
-        chain = npass["predecessor_sha256"]
-    for rel, expected in hashes.items():
-        path = ROOT / rel
-        current = hashlib.sha256(path.read_bytes()).hexdigest()
-        if successor and rel in declared:
-            # The .26.3 freeze is not rewritten; .27 must prove its predecessor
-            # hash is exactly the frozen .26.3/.26.2 byte before changing it.
-            assert chain[rel] == expected, rel
-            assert current != expected, rel
+    if current_0271:
+        hotfix = json.loads((ROOT / "qualification/npass_0_6_82_27_1/npass_hotfix_source_scope_0_6_82_27_1.json").read_text())
+    for rel, expected_0263 in hashes.items():
+        current = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
+        if npass is None:
+            assert current == expected_0263, rel
+            continue
+        declared_027 = set(npass["intentional_numerical_source_changes"])
+        if rel in declared_027:
+            assert npass["predecessor_sha256"][rel] == expected_0263, rel
+            expected_027 = npass["candidate_changed_sha256"][rel]
         else:
-            assert current == expected, rel
+            assert npass["predecessor_sha256"][rel] == expected_0263, rel
+            expected_027 = expected_0263
+        if hotfix is None:
+            assert current == expected_027, rel
+            continue
+        assert hotfix["predecessor_sha256"][rel] == expected_027, rel
+        if rel in set(hotfix["intentional_numerical_source_changes"]):
+            assert current == hotfix["candidate_changed_sha256"][rel], rel
+        else:
+            assert current == expected_027, rel
+
