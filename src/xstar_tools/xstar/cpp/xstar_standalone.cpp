@@ -6743,6 +6743,11 @@ std::vector<double> gather_native_line_plane(
     return out;
 }
 
+double public_parameter_real(
+    const xstar_run_state::ProductWritingState& product,
+    const std::string& name,
+    double fallback);
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute reconstruct public line luminosity for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
@@ -6753,6 +6758,34 @@ std::vector<double> reconstruct_public_line_luminosity(
     std::size_t plane) {
     std::vector<double> out(line_indices.size(), 0.0);
     if (plane > 1u || product.radial_zones.size() < 2u) return out;
+
+    // With source density.dat, HEATT integrates over the STEP-selected delr
+    // *before* xstar.f90 reads the next table radius and overwrites delr for
+    // r/xpx/xcol/STPCUT.  Radial-zone geometry differences are therefore not
+    // the HEATT integration widths.  The native controller already carries
+    // the literal cumulative elum through every HEATT/TRNFRN step, including
+    // the final shell before EOF.  Publish that retained source owner instead
+    // of reconstructing luminosity from density-table radius differences.
+    if (public_parameter_real(product, "radexp", 0.0) < -99.0) {
+        const xstar_run_state::FixedEvaluationState* cumulative = nullptr;
+        if (product.final_writer_evaluation.has_value()) {
+            cumulative = &*product.final_writer_evaluation;
+        } else if (product.radial_zones.size() >= 2u) {
+            cumulative = &product.radial_zones[product.radial_zones.size() - 2u]
+                .accepted_controller.evaluation;
+        }
+        if (cumulative) {
+            const auto& ws = cumulative->source_workspace;
+            const std::size_t stride = native_line_plane_stride(ws);
+            if (stride > 0u && ws.elum.size() >= 2u * stride) {
+                for (std::size_t i = 0; i < line_indices.size(); ++i) {
+                    const auto line_index = static_cast<long long>(std::llround(line_indices[i]));
+                    out[i] = native_line_plane(ws.elum, stride, plane, line_index);
+                }
+                return out;
+            }
+        }
+    }
 
     // Literal heatt/trnfrn ownership for lines is
     //   elum(ll,j) = max(0, elumo(ll,j) + rcem(ll,j)*delrl*fpr2)
@@ -18417,19 +18450,15 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         if (!terminal_transport_boundary_v82_patch520144) {
             throw std::runtime_error("missing patch5.20.14.4 terminal post-transport boundary");
         }
-        // xstar.f90 performs the terminal pprint(9) after the post-shell
-        // radius/density update without recomputing xi/zeta. Preserve that
-        // stale source scalar for variable-density and density.dat paths even
-        // though the terminal row's radius/density are post-geometry values.
-        const std::optional<double> terminal_source_logxi_v068226 =
-            !whole.radial_zones.empty()
-                ? std::optional<double>(whole.radial_zones.back().log_ionization_parameter)
-                : std::nullopt;
+        // pprint.f90 option 9 recomputes zeta from the live post-geometry
+        // radius and density.  Do not override it with the previous shell's
+        // scalar; append_zone performs the same source formula when no
+        // override is supplied.
         append_zone(*terminal_transport_boundary_v82_patch520144,
                     "qualification_free_native_terminal_posttransport",
                     data.cumulative_depth_cm, data.cumulative_column_cm2,
                     actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back(),
-                    terminal_source_logxi_v068226);
+                    std::nullopt);
         // Canonical xstar.f90 executes `pprint(9,...)` once more after the
         // radial loop.  Mirror that live-console row as well as retaining it
         // for xout_step.log.  No new HMC/DSEC evaluation is performed here,
@@ -18440,7 +18469,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 source_initial_radius_cm_v068226, data.cumulative_depth_cm,
                 data.cumulative_column_cm2,
                 actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back(),
-                terminal_source_logxi_v068226);
+                std::nullopt);
         }
         if (!data.reference_trajectory_mode && !data.reference_diagnostics_enabled) {
             terminal_transport_boundary_v82_patch520144.reset();

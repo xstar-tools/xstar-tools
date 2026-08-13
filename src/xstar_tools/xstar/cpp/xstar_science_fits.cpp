@@ -9828,15 +9828,25 @@ xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
     //   zeta = log10(max(1.d-24,skse))
     // Use the same default-REAL radius scale already qualified by native STEP.
     row.log_ionization_parameter = geometry_zone.log_ionization_parameter;
+    const int lcpres_v0682262 = static_cast<int>(std::llround(parameter_value(state, "lcpres", 0.0)));
+    const double radexp_v0682262 = parameter_value(state, "radexp", 0.0);
+    const bool variable_density_v0682262 =
+        lcpres_v0682262 == 0 && radexp_v0682262 != 0.0;
+    // The final pprint(12) row is emitted after xstar.f90 has advanced r and
+    // xpx.  Its populations/thermal state still belong to the last evaluated
+    // shell, but its geometry and density belong to the post-geometry state.
+    const double published_density_v0682262 =
+        (final_physical_row && variable_density_v0682262)
+            ? geometry_zone.density_cm3 : zone.density_cm3;
     const double xlum = parameter_value(state, "rlrad38", 0.0);
     const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e-19));
     const double r19 = geometry_zone.radius_cm * source_radius_scale;
-    if (xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
-        const double skse = xlum / (zone.density_cm3 * r19 * r19);
+    if (xlum > 0.0 && published_density_v0682262 > 0.0 && r19 > 0.0) {
+        const double skse = xlum / (published_density_v0682262 * r19 * r19);
         row.log_ionization_parameter = std::log10(std::max(1.0e-24, skse));
     }
     row.electron_fraction = zone.electron_fraction;
-    row.density_cm3 = zone.density_cm3;
+    row.density_cm3 = published_density_v0682262;
     row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
     row.temperature_t4 = zone.temperature_t4;
 

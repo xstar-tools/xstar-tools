@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.26.2 - 2026-08-13
+
+- Correct the host-exposed terminal radial publication semantics from `0.6.82.26.1`: source `pprint(9)` recomputes terminal xi from the live post-geometry radius/density; remove the stale-xi override from live and persisted STEP.
+- Publish the final variable-density abundance row with the post-geometry density and recompute xi with that density, while retaining the last evaluated populations/thermal state.
+- In hidden `density.dat` mode, publish the controller-retained cumulative HEATT `elum` instead of reconstructing line luminosity from table-radius differences; this preserves the final pre-EOF HEATT shell.
+- Remove the obsolete terminal optional-xi override that triggered GCC `-Wmaybe-uninitialized`; no Python science or radial-controller arithmetic changes.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, `60488` frozen.
+
 ## 0.6.82.26.1 - 2026-08-12
 
 - Repair host-exposed `0.6.82.26` publication ownership without changing the radial controller: for `lcpres=0, radexp!=0`, retain source-owned live density, recomputed radial xi, and cumulative `xcol` instead of restoring the input constant density/rlogxi/`density*depth`.

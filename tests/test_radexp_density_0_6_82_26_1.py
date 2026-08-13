@@ -47,12 +47,21 @@ def test_native_publication_preserves_variable_density_state_and_xcol():
 def test_live_step_uses_source_radius_and_retained_column_for_variable_density():
     cpp = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text()
     step = (ROOT / "src/xstar_tools/xstar/cpp/xstar_step_log.cpp").read_text()
+    pyproject = (ROOT / "pyproject.toml").read_text()
     assert 'const double radius = source_initial_radius_cm + source_depth_cm;' in cpp
     assert '(params.pressure_mode == 1 || variable_density_v0682261)' in cpp
     assert 'source_initial_radius_cm_v068226,\n                    source_boundary_depth_cm.back()' in cpp
-    assert 'terminal_source_logxi_v068226);' in cpp
-    assert 'terminal_posttransport_v0682261' in step
-    assert 'if (!terminal_posttransport_v0682261 &&' in step
+    if 'version = "0.6.82.26.1"' in pyproject:
+        assert 'terminal_source_logxi_v068226);' in cpp
+        assert 'terminal_posttransport_v0682261' in step
+        assert 'if (!terminal_posttransport_v0682261 &&' in step
+    else:
+        # 0.6.82.26.2 corrected the .26.1 stale-terminal-xi assumption:
+        # canonical pprint(9) recomputes zeta from the live radius/density.
+        assert 'terminal_source_logxi_v068226' not in cpp
+        assert 'terminal_posttransport_v0682261' not in step
+        assert 'pprint.f90 option 9 recomputes zeta' in cpp
+        assert 'pprint.f90 option 9 recomputes zeta from the live radius' in step
 
 
 def test_density_dat_is_allowed_as_source_input_and_runner_separates_io():
