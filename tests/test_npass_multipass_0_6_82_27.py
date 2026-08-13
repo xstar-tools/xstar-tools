@@ -23,9 +23,9 @@ def test_068227_version_and_frozen_identifiers():
     makefile = (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
     current_027 = 'version = "0.6.82.27"' in pyproject
     current_0271 = 'version = "0.6.82.27.1"' in pyproject
-    current_0272 = 'version = "0.6.82.27.2"' in pyproject
+    current_0272 = 'version = "0.6.82.27.3"' in pyproject
     assert current_027 or current_0271 or current_0272
-    assert any(f"PACKAGE_VERSION ?= {v}" in makefile for v in ("0.6.82.27","0.6.82.27.1","0.6.82.27.2"))
+    assert any(f"PACKAGE_VERSION ?= {v}" in makefile for v in ("0.6.82.27","0.6.82.27.1","0.6.82.27.3"))
     # Frozen science/ABI values remain source-visible through the accepted contract.
     all_text = "\n".join(
         p.read_text(errors="ignore")
@@ -49,13 +49,13 @@ def test_068227_numerical_change_scope_is_three_native_files_only():
     assert manifest["numerical_source_count_predecessor"] == 137
     assert manifest["intentional_numerical_source_changes"] == expected
     pyproject = (ROOT / "pyproject.toml").read_text()
-    hotfix = ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.2"' in pyproject)
+    hotfix = ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.3"' in pyproject)
     if hotfix:
         successor = json.loads((ROOT / "qualification/npass_0_6_82_27_1/npass_hotfix_source_scope_0_6_82_27_1.json").read_text())
         # Preserve the historical .27 chain without pretending its rejected
         # SAVD ordering is still the candidate: the .27 candidate byte hashes
         # must exactly be the .27.1 predecessor hashes.
-        current_0272 = 'version = "0.6.82.27.2"' in pyproject
+        current_0272 = 'version = "0.6.82.27.3"' in pyproject
         successor2 = json.loads((ROOT / "qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json").read_text()) if current_0272 else None
         for rel, old_hash in manifest["predecessor_sha256"].items():
             expected_027 = manifest["candidate_changed_sha256"].get(rel, old_hash)
@@ -105,7 +105,7 @@ def test_068227_native_savd_models_real4_and_cfitsio_hdu_insertion():
     text = CPP.read_text()
     saved = _function(text, "struct NativeSavedPassV068227", "void initialize_native_radial_pass_v068227(")
     pyproject = (ROOT / "pyproject.toml").read_text()
-    if ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.2"' in pyproject):
+    if ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.3"' in pyproject):
         assert "hdus.push_back(std::move(shell));" in saved
         assert "hdus.insert(hdus.begin()" not in saved
     else:

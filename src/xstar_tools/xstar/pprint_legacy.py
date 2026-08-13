@@ -412,7 +412,7 @@ def initialize_legacy_pprint(state: XSTARPythonState) -> LegacyPprintBuffers:
             f"   {float(state.control['ispcg2_u_1_1p8']):.16g}"
             f"        {float(state.control['ispcg2_u_1p8_4']):.16g}"
         )
-        buf.log_lines.append(f" Lbol=   {float(state.control['ispcg2_lbol']):.16g}")
+        buf.log_lines.append(f" Lbol=   {float(state.control['ispcg2_lbol']):.16e}")
     buf.initialized = True
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
     return buf
@@ -432,6 +432,19 @@ def legacy_pprint_begin_pass(state: XSTARPythonState) -> tuple[str, ...]:
     if kk in buf.begun_passes:
         return ()
     ldir = int(state.transfer.direction)
+    # xstar.f90 calls ispcg2 before each pass banner.  Pass 1 was emitted by
+    # initialize_legacy_pprint; repeated passes use the freshly regenerated
+    # source spectrum retained by radial_transfer.
+    if kk > 1:
+        rows = state.control.get("ispcg2_passes_v0682273", ())
+        row = next((item for item in rows if int(item.get("pass_index", 0)) == kk), None)
+        if row is not None:
+            buf.log_lines.append(
+                " U(1-1.8),U(1.8-4):"
+                f"   {float(row['u_1_1p8']):.16g}"
+                f"        {float(row['u_1p8_4']):.16g}"
+            )
+            buf.log_lines.append(f" Lbol=   {float(row['lbol']):.16e}")
     buf.log_lines.append(" ")
     # This is list-directed in xstar.f90; retain the textual contract while
     # avoiding compiler-dependent leading-field padding.

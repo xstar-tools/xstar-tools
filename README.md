@@ -404,9 +404,9 @@ thermal oracles, requires material discrepancies below 1%, and reports the
 runtime ratio separately.
 
 
-### 0.6.82.27.2 npass pass-state/output hotfix
+### 0.6.82.27.3 npass repeated-pass hotfix
 
-`0.6.82.27.2` addresses the remaining host divergence after `.27.1`: pass 2 is now correctly replayed, but pass 3 exposed a source-lifetime mismatch because native UNSAVD recomputed `bilevg` after restoring `xilevg/rnisg`, while FORTRAN leaves caller-owned `bilevg` live. The hotfix preserves that lifetime, updates the analogous Python carried runtime, publishes pass-specific `xo0k_*` detail products from retained REAL(4) SAVD snapshots, and writes the `U/Lbol` diagnostic block once per pass. Run C++ `npass=1,3,5` against the existing FORTRAN references first; run Python only after C++ accepts.
+`0.6.82.27.3` supersedes rejected `.27.2`. Host evidence shows `.27.1` fixed SAVD ordering and pass 2, while `.27.2` still diverges beginning at pass 3. The remaining source mismatch is addressed by reproducing the full repeated-pass lifecycle: additive `ispec4` + `ispecgg` source regeneration before each later pass, source `INIT` level-population reset/level-1 `1/Z` seeding, and sparse `fstepr*` SAVD/UNSAVD row ownership rather than dense checkpoint restoration. The host comparator also reads continuum depth from `detal4` instead of misclassifying `detal3` RRC rows. Per-pass U/Lbol diagnostics are retained from the actual pass spectrum and `Lbol` is printed in scientific notation. Run C++ `npass=1,3,5` against the existing FORTRAN references first; run Python only after C++ accepts.
 
 ### 0.6.82.27.1 npass hotfix
 

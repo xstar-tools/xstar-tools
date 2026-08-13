@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.27.3 - repeated-pass INIT/sparse-SAVD/source-spectrum hotfix - 2026-08-13
+
+- Rejects `0.6.82.27.2` for host `npass` science. `.27.1` fixed CFITSIO SAVD append/reverse replay and brought pass 2 into near-FORTRAN agreement; `.27.2` restored pass-specific `xo0N_*` products and per-pass U/Lbol blocks, but pass 3+ thermal/`ntotit` and final line-tau trajectories still diverged. Its `cont_tau=inf` result was also traced to a comparator reading the wrong detail FITS surface.
+- Reproduce the canonical per-pass source ordering from `xstar.f90`: for repeated passes, rerun the additive `ispec4` source contribution and `ispecgg` normalization before pass `INIT`, retain the resulting pass-local `ispcg2` U/Lbol values, and print `Lbol` in scientific notation.
+- Reproduce the source `INIT + sparse UNSAVD` ownership model rather than treating SAVD as a dense checkpoint. Repeated-pass INIT clears pass-local level populations and seeds each source level-1 row to `1/Z`, while caller-owned `rnist`/`bilevg` remain live. SAVD records only the level/line/RRC rows selected by the source `fstepr/fstepr2/fstepr3` predicates; UNSAVD overwrites only those sparse rows and the source-owned far-side depth plane.
+- Mirror the same repeated source regeneration, level-1 INIT seeding, sparse SAVD selection, and preserved `bilevg` lifetime in pure Python. Python remains a second-stage host gate after C++ ACCEPT.
+- Correct the `.27.2` host detail comparator: line tau comes from `detal2`, RRC tau from `detal3` using `rrc index`, and true continuum forward/back depth from `detal4` using `fwd dpth`/`bck dpth`. This removes the false `cont_tau=inf` rejection for `npass=1`.
+- Preserve `.27.2` pass-specific detail publication, complete live/STEP rows, and per-pass output inventory. Relative to exact rejected `.27.2`, the numerical inventory remains 137 files and exactly five numerical files change: `xstar_run_state.hpp`, `xstar_standalone.cpp`, `xstar_step_log.cpp`, `pprint_legacy.py`, and `radial_transfer.py`.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, and `60488` frozen. No DSEC tolerance, atomic-rate formula, matrix order, Type-50/53 equation, or accepted `cfrac` science is changed.
+
 ## 0.6.82.27.2 - npass pass-state/output hotfix - 2026-08-13
 
 - Rejects `0.6.82.27.1` for `npass>1` host science after the SAVD-order correction brought pass 2 into agreement but the first remaining thermal divergence appeared at pass 3 row 1.

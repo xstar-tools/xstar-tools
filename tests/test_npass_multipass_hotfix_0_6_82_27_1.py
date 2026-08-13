@@ -17,9 +17,9 @@ def _runner():
 def test_0682271_version_and_scope_chain():
     pyproject=(ROOT/'pyproject.toml').read_text(); make=(ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
     current_0271='version = "0.6.82.27.1"' in pyproject
-    current_0272='version = "0.6.82.27.2"' in pyproject
+    current_0272='version = "0.6.82.27.3"' in pyproject
     assert current_0271 or current_0272
-    assert ('PACKAGE_VERSION ?= 0.6.82.27.1' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.2' in make)
+    assert ('PACKAGE_VERSION ?= 0.6.82.27.1' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.3' in make)
     obj=json.loads(MAN.read_text())
     assert obj['predecessor']=='0.6.82.27'
     assert obj['predecessor_status']=='REJECT_NPASS_GT1_HOST_SCIENCE'

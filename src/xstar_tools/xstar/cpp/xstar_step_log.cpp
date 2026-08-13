@@ -628,10 +628,28 @@ void append_native_radial_summary(std::ofstream& out,
     const double ispcg2_lbol = ispcg2_lbol_sum * static_cast<double>(static_cast<float>(1.602197e-12));
 
     out << "\n running ...\n";
-    const auto print_ispcg2_v0682272 = [&]() {
-        out << " U(1-1.8),U(1.8-4):   " << std::setprecision(17) << ispcg2_u_1_1p8
-            << "        " << ispcg2_u_1p8_4 << "\n";
-        out << " Lbol=   " << ispcg2_lbol << "\n";
+    const auto print_ispcg2_v0682273 = [&](std::size_t pass_index) {
+        double u1_v0682273 = ispcg2_u_1_1p8;
+        double u2_v0682273 = ispcg2_u_1p8_4;
+        double lbol_v0682273 = ispcg2_lbol;
+        for (const auto& saved_v0682273 : state.legacy_pprint.ispcg2_passes) {
+            if (saved_v0682273.pass_index != pass_index) continue;
+            u1_v0682273 = saved_v0682273.u_1_1p8;
+            u2_v0682273 = saved_v0682273.u_1p8_4;
+            lbol_v0682273 = saved_v0682273.lbol;
+            break;
+        }
+        const auto flags_v0682273 = out.flags();
+        const auto precision_v0682273 = out.precision();
+        out << std::defaultfloat << std::setprecision(17)
+            << " U(1-1.8),U(1.8-4):   " << u1_v0682273
+            << "        " << u2_v0682273 << "\n";
+        // Match the source's 1P-style scientific presentation consistently
+        // on every pass instead of inheriting stream state from prior output.
+        out << " Lbol=   " << std::scientific << std::setprecision(16)
+            << lbol_v0682273 << "\n";
+        out.flags(flags_v0682273);
+        out.precision(precision_v0682273);
     };
     if (state.diagnostic_preview_partial) {
         out << " diagnostic partial radial trajectory: physical boundaries retained="
@@ -661,7 +679,7 @@ void append_native_radial_summary(std::ofstream& out,
             const int direction = (pass % 2u == 1u) ? -1 : 1;
             // xstar.f90 calls ispec*/ispcg2 at the start of every pass, before
             // pprint(17).  Preserve the repeated U/Lbol block in xout_step.log.
-            print_ispcg2_v0682272();
+            print_ispcg2_v0682273(pass);
             out << "\n pass number= " << pass << ' ' << direction << "\n";
             print_option17_heading();
             for (const auto& r : state.legacy_pprint.radial_rows) {
@@ -687,7 +705,7 @@ void append_native_radial_summary(std::ofstream& out,
         }
     } else {
         // Preserve the already-qualified npass=1 serializer unchanged.
-        print_ispcg2_v0682272();
+        print_ispcg2_v0682273(1u);
         out << "\n pass number= 1 -1\n";
         print_option17_heading();
         // Option 17 owns the complete physical pprint(9) trajectory: ordinary

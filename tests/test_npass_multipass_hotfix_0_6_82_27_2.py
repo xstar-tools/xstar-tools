@@ -14,10 +14,16 @@ def _runner():
 
 def test_0682272_cpp_unsavd_preserves_live_bilevg():
     text=CPP.read_text(); start=text.index('void restore_saved_shell_v068227'); end=text.index('void project_source_trnfrc_direction_v068227',start); block=text[start:end]
-    assert 'data.global_xilevg = snap.source_global_xilevg;' in block
-    assert 'data.global_rnisg = snap.source_global_rnisg;' in block
+    # .27.2 established that UNSAVD must not recompute bilevg.  Successors may
+    # further narrow xilevg/rnisg restoration to the source sparse fstepr rows.
     assert 'recompute_global_bilevg(data)' not in block
-    assert 'UNSAVD restores xilevg/rnisg but not bilevg' in block
+    if 'saved_level_slots_v0682273' in block:
+        assert 'saved.saved_level_slots_v0682273' in block
+        assert 'data.global_xilevg = snap.source_global_xilevg;' not in block
+    else:
+        assert 'data.global_xilevg = snap.source_global_xilevg;' in block
+        assert 'data.global_rnisg = snap.source_global_rnisg;' in block
+    assert 'bilevg' in block
 
 def test_0682272_python_unsavd_updates_restored_dense_state_but_not_bilevg():
     text=PY_TRANSFER.read_text(); start=text.index('physical_runtime = state.control.get("physical_dsec_runtime")'); end=text.index('for key in ("calc_emisab_context"',start); block=text[start:end]
@@ -27,8 +33,13 @@ def test_0682272_python_unsavd_updates_restored_dense_state_but_not_bilevg():
 
 def test_0682272_step_log_repeats_u_lbol_per_pass():
     text=STEP.read_text()
-    assert 'const auto print_ispcg2_v0682272' in text
-    assert text.count('print_ispcg2_v0682272();') >= 2
+    # .27.2 introduced per-pass U/Lbol emission.  .27.3 makes the values
+    # pass-indexed and source-regenerated rather than repeating one scalar.
+    if 'print_ispcg2_v0682273' in text:
+        assert 'print_ispcg2_v0682273(pass)' in text
+    else:
+        assert 'const auto print_ispcg2_v0682272' in text
+        assert text.count('print_ispcg2_v0682272();') >= 2
     r=_runner(); sample=''' U(1-1.8),U(1.8-4):  10 20\n Lbol= 3e-6\n pass number= 1 -1\n U(1-1.8),U(1.8-4):  10 20\n Lbol= 3e-6\n pass number= 2 1\n U(1-1.8),U(1.8-4):  10 20\n Lbol= 3e-6\n pass number= 3 -1\n'''
     from tempfile import TemporaryDirectory
     with TemporaryDirectory() as td:

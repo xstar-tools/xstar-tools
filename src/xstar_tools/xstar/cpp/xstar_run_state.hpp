@@ -167,8 +167,16 @@ struct LegacyPprintRadialRowState {
     bool terminal_row = false;
 };
 
+struct LegacyIspecg2PassState {
+    std::size_t pass_index = 0;
+    double u_1_1p8 = 0.0;
+    double u_1p8_4 = 0.0;
+    double lbol = 0.0;
+};
+
 struct LegacyPprintState {
     std::vector<LegacyPprintEventState> events;
+    std::vector<LegacyIspecg2PassState> ispcg2_passes;
     std::vector<std::string> buffered_lines;
     std::vector<LegacyPprintRadialRowState> radial_rows;
     bool initialized_from_native_controller = false;
@@ -396,7 +404,7 @@ struct WholeRunAccumulatedState {
     std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<AcceptedControllerState> accepted_controller_states;
     std::vector<RadialZoneState> radial_zones;
-    // 0.6.82.27.2: source SAVD detail surfaces retained per whole-shell pass.
+    // 0.6.82.27.3: source SAVD detail surfaces retained per whole-shell pass.
     // Each inner vector is physical FITS-HDU order for pass index outer+1.
     std::vector<std::vector<RadialZoneState>> multipass_detail_radial_zones;
     std::vector<ParameterRowState> parameter_rows;
@@ -451,7 +459,7 @@ struct ProductWritingState {
     std::vector<FixedEvaluationState> fixed_evaluations;
     std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<RadialZoneState> radial_zones;
-    // 0.6.82.27.2: source SAVD detail surfaces retained per whole-shell pass.
+    // 0.6.82.27.3: source SAVD detail surfaces retained per whole-shell pass.
     // Each inner vector is physical FITS-HDU order for pass index outer+1.
     std::vector<std::vector<RadialZoneState>> multipass_detail_radial_zones;
     std::vector<ParameterRowState> parameter_rows;
