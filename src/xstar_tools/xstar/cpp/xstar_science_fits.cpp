@@ -8782,6 +8782,12 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     for (std::size_t identity_ordinal = 0; identity_ordinal < state.rrc_identities.size(); ++identity_ordinal) {
         const auto& id = state.rrc_identities[identity_ordinal];
         if (id.continuum_index <= 0) continue;
+        // 0.6.82.27.4: 709 and 762 are frozen-44 compatibility-only Carbon
+        // detail identities.  Literal FORTRAN fstepr3 walks the type-7 chain
+        // and does not publish these two rows.  Remove them only from detailed
+        // RRC inventory; no rate, opacity workspace, or public xout_rrc1
+        // science value is changed.
+        if (detail_inventory && (id.continuum_index == 709 || id.continuum_index == 762)) continue;
         if (reference_mg11_product_state(state)) {
             if (detail_inventory && !native_standalone_product_state(state) && !oracle_detail_rrc_inventory(id.continuum_index)) continue;
         } else {
@@ -10743,6 +10749,14 @@ Result write_historical_science_products(
             // SAVD surface into the normal detail writers so no large
             // FixedEvaluationState copies are made at publication time.
             auto final_radial_zones_v0682272 = std::move(state.radial_zones);
+            auto final_retained_product_arrays_v0682274 = std::move(state.retained_product_arrays);
+            const auto final_product_metadata_path_v0682274 = state.product_metadata_path;
+            // Per-pass xo0k_detail products are source SAVD scratch files.
+            // Do not overlay them with final-pass product-write bridge arrays.
+            // With an intentionally absent bridge path, the normal writers
+            // fall back to each swapped radial zone's exact source workspace.
+            state.retained_product_arrays.clear();
+            state.product_metadata_path = output_dir / ".source_savd_no_bridge_v0682274";
             try {
                 for (int pass_v0682272 = 1; pass_v0682272 <= npass; ++pass_v0682272) {
                     auto& saved_zones_v0682272 =
@@ -10762,9 +10776,13 @@ Result write_historical_science_products(
                 }
             } catch (...) {
                 state.radial_zones = std::move(final_radial_zones_v0682272);
+                state.retained_product_arrays = std::move(final_retained_product_arrays_v0682274);
+                state.product_metadata_path = final_product_metadata_path_v0682274;
                 throw;
             }
             state.radial_zones = std::move(final_radial_zones_v0682272);
+            state.retained_product_arrays = std::move(final_retained_product_arrays_v0682274);
+            state.product_metadata_path = final_product_metadata_path_v0682274;
         } else {
             write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
             write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);

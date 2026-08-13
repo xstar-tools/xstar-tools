@@ -5822,7 +5822,7 @@ RadiationField source_powerlaw_radiation(const xstar_atdb_runtime::ProductionPar
     return field;
 }
 
-std::vector<double> source_ispec4_powerlaw_component_v0682273(
+std::vector<double> source_ispec4_powerlaw_component_v0682274(
     const std::vector<double>& energy,
     const xstar_atdb_runtime::ProductionParameters& params) {
     std::vector<double> raw(energy.size(), 0.0);
@@ -5837,7 +5837,7 @@ std::vector<double> source_ispec4_powerlaw_component_v0682273(
         total += (raw[i] + raw[i - 1u]) * (energy[i] - energy[i - 1u]) / 2.0;
     }
     if (!(total > 0.0) || !std::isfinite(total)) {
-        throw std::runtime_error("0.6.82.27.3 ispec4 repeat normalization is nonpositive");
+        throw std::runtime_error("0.6.82.27.4 ispec4 repeat normalization is nonpositive");
     }
     constexpr double ergsev = static_cast<double>(static_cast<float>(1.602176634e-12));
     const double scale = params.luminosity_1e38 / total / ergsev;
@@ -11505,6 +11505,17 @@ struct StandaloneControllerDataV67 {
     std::vector<double> accumulated_zremso;
     std::vector<double> accumulated_zremsz;
     std::vector<double> source_incident;
+    // 0.6.82.27.4: literal UNSAVD/RSTEPR2/3/4 caller-owned workspaces.
+    // INIT zeros these before a repeated pass; UNSAVD sparsely restores the
+    // saved shell values before TRNFRC/XSTARCALC.  XSTARCALC subsequently
+    // overwrites the emissivity/opacity workspaces, matching FORTRAN.
+    std::vector<double> unsavd_rcem_v0682274;
+    std::vector<double> unsavd_oplin_v0682274;
+    std::vector<double> unsavd_cemab_v0682274;
+    std::vector<double> unsavd_cabab_v0682274;
+    std::vector<double> unsavd_opakab_v0682274;
+    std::vector<double> unsavd_opakc_v0682274;
+    std::vector<double> unsavd_rccemis_v0682274;
     double cumulative_depth_cm = 0.0;
     // 0.6.48.12.3.11: retain source xstar.f90 xcol as an independent
     // mutable REAL(8) scalar.  Do not reconstruct it as density*depth: the
@@ -11608,7 +11619,7 @@ struct StandaloneControllerDataV67 {
 };
 
 
-void advance_source_powerlaw_pass_v0682273(
+void advance_source_powerlaw_pass_v0682274(
     StandaloneControllerDataV67& data,
     const xstar_atdb_runtime::ProductionParameters& params) {
     std::string mode = params.spectrum;
@@ -11621,32 +11632,39 @@ void advance_source_powerlaw_pass_v0682273(
         return;
     }
     if (data.source_incident.size() != data.energy.size()) {
-        throw std::runtime_error("0.6.82.27.3 repeated source spectrum shape mismatch");
+        throw std::runtime_error("0.6.82.27.4 repeated source spectrum shape mismatch");
     }
-    const auto component = source_ispec4_powerlaw_component_v0682273(data.energy, params);
-    std::vector<double> next = data.source_incident;
-    for (std::size_t i = 0; i < next.size(); ++i) next[i] += component[i];
+    // Literal source order for the repeated spectrum path is
+    //   ispec4(additive zremsz) -> ispecgg(in-place renormalization) -> ispcg2.
+    // Keep every addition and scale in scalar one-bin order.  The previous
+    // component-vector formulation was algebraically equivalent but reached
+    // an exact floating-point fixed point after pass 2, while FORTRAN retains
+    // a few-ulp pass-to-pass drift in U/Lbol.
+    const auto component = source_ispec4_powerlaw_component_v0682274(data.energy, params);
+    for (std::size_t i = 0; i < data.source_incident.size(); ++i) {
+        data.source_incident[i] = data.source_incident[i] + component[i];
+    }
 
-    // ispecgg.f90 renormalizes the accumulated zremsz in the 1--1000 Ry
-    // interval.  The additive ispec4 call happens before this on every pass,
-    // causing the tiny but real U/Lbol pass-to-pass drift seen in FORTRAN.
     double total = 0.0;
-    for (std::size_t i = 1u; i < data.energy.size(); ++i) {
-        if (data.energy[i] >= 13.6 && data.energy[i] <= 1.36e4) {
-            total += (next[i] + next[i - 1u]) * (data.energy[i] - data.energy[i - 1u]) / 2.0;
+    for (std::size_t one = 1u; one <= data.energy.size(); ++one) {
+        const std::size_t i = one - 1u;
+        if (data.energy[i] >= 13.6 && data.energy[i] <= 1.36e4 && one > 1u) {
+            total = total + (data.source_incident[i] + data.source_incident[i - 1u]) *
+                (data.energy[i] - data.energy[i - 1u]) / 2.0;
         }
     }
     if (!(total > 0.0) || !std::isfinite(total)) {
-        throw std::runtime_error("0.6.82.27.3 ispecgg repeat normalization is nonpositive");
+        throw std::runtime_error("0.6.82.27.4 ispecgg repeat normalization is nonpositive");
     }
     constexpr double ergsev = static_cast<double>(static_cast<float>(1.602176634e-12));
     const double scale = params.luminosity_1e38 / total / ergsev;
-    for (double& value : next) value *= scale;
-    data.source_incident = next;
-    data.flux = next;
+    for (std::size_t i = 0; i < data.source_incident.size(); ++i) {
+        data.source_incident[i] = data.source_incident[i] * scale;
+    }
+    data.flux = data.source_incident;
 }
 
-xstar_run_state::LegacyIspecg2PassState source_ispcg2_pass_state_v0682273(
+xstar_run_state::LegacyIspecg2PassState source_ispcg2_pass_state_v0682274(
     const StandaloneControllerDataV67& data,
     std::size_t pass_index) {
     xstar_run_state::LegacyIspecg2PassState out;
@@ -17585,25 +17603,25 @@ void initialize_native_radial_pass_v068227(
     }
 }
 
-void source_init_repeated_global_workspaces_v0682273(
-    StandaloneControllerDataV67& data,
-    const xstar_atdb_runtime::ProgramStorage& program) {
-    // init.f90 zeros xilev on every pass and then seeds local level 1 of each
-    // source ion with 1/nnz.  rnist and bilevg are not arguments to INIT and
-    // must therefore remain live until sparse UNSAVD overwrites saved rnist
-    // rows.  Apply this only for repeated passes so npass=1 remains frozen.
+void source_init_repeated_global_workspaces_v0682274(
+    StandaloneControllerDataV67& data) {
+    // Literal init.f90 behavior: xilev is zeroed, then an unconditional
+    // `go to 9000` skips the old/dead 1/Z level-1 seeding block. rnist and
+    // bilevg are not INIT arguments and remain caller-owned until UNSAVD.
     if (data.global_xilevg.size() != data.global_level_count) {
         data.global_xilevg.assign(data.global_level_count, 0.0);
     } else {
         std::fill(data.global_xilevg.begin(), data.global_xilevg.end(), 0.0);
     }
-    for (const auto& id_v0682273 : program.detail_level_identities) {
-        if (id_v0682273.upper_index != 1 || id_v0682273.global_index <= 0 || id_v0682273.atomic_number <= 0) continue;
-        const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.global_index - 1);
-        if (slot_v0682273 >= data.global_xilevg.size()) continue;
-        data.global_xilevg[slot_v0682273] = 1.0 / static_cast<double>(id_v0682273.atomic_number);
-    }
     data.global_workspace_initialized = !data.global_xilevg.empty();
+
+    std::fill(data.unsavd_rcem_v0682274.begin(), data.unsavd_rcem_v0682274.end(), 0.0);
+    std::fill(data.unsavd_oplin_v0682274.begin(), data.unsavd_oplin_v0682274.end(), 0.0);
+    std::fill(data.unsavd_cemab_v0682274.begin(), data.unsavd_cemab_v0682274.end(), 0.0);
+    std::fill(data.unsavd_cabab_v0682274.begin(), data.unsavd_cabab_v0682274.end(), 0.0);
+    std::fill(data.unsavd_opakab_v0682274.begin(), data.unsavd_opakab_v0682274.end(), 0.0);
+    std::fill(data.unsavd_opakc_v0682274.begin(), data.unsavd_opakc_v0682274.end(), 0.0);
+    std::fill(data.unsavd_rccemis_v0682274.begin(), data.unsavd_rccemis_v0682274.end(), 0.0);
 }
 
 void restore_saved_shell_v068227(
@@ -17641,7 +17659,48 @@ void restore_saved_shell_v068227(
     // UNSAVD does not restore bilevg.  Preserve the caller-owned workspace
     // from the preceding pass exactly; do not derive it from restored arrays.
 
+    // rstepr2.f90 restores rcem/oplin for each sparse line row before the
+    // direction-owned tau0 plane is copied into the live depth workspace.
     const std::size_t line_stride = snap.oplin.size();
+    if (data.unsavd_oplin_v0682274.size() != line_stride)
+        data.unsavd_oplin_v0682274.assign(line_stride, 0.0);
+    if (data.unsavd_rcem_v0682274.size() != snap.rcem.size())
+        data.unsavd_rcem_v0682274.assign(snap.rcem.size(), 0.0);
+    for (const std::size_t source_slot : saved.saved_line_slots_v0682273) {
+        if (source_slot == 0u || source_slot >= line_stride) continue;
+        data.unsavd_oplin_v0682274[source_slot] = snap.oplin[source_slot];
+        if (source_slot < data.unsavd_rcem_v0682274.size() && source_slot < snap.rcem.size())
+            data.unsavd_rcem_v0682274[source_slot] = snap.rcem[source_slot];
+        if (line_stride + source_slot < data.unsavd_rcem_v0682274.size() &&
+            line_stride + source_slot < snap.rcem.size())
+            data.unsavd_rcem_v0682274[line_stride + source_slot] = snap.rcem[line_stride + source_slot];
+    }
+
+    // rstepr3.f90 restores cemab/cabab/opakab for sparse RRC rows.
+    const std::size_t rrc_stride = snap.opakab.size();
+    if (data.unsavd_opakab_v0682274.size() != rrc_stride)
+        data.unsavd_opakab_v0682274.assign(rrc_stride, 0.0);
+    if (data.unsavd_cabab_v0682274.size() != snap.cabab.size())
+        data.unsavd_cabab_v0682274.assign(snap.cabab.size(), 0.0);
+    if (data.unsavd_cemab_v0682274.size() != snap.cemab.size())
+        data.unsavd_cemab_v0682274.assign(snap.cemab.size(), 0.0);
+    for (const std::size_t source_slot : saved.saved_rrc_slots_v0682273) {
+        if (source_slot == 0u || source_slot >= rrc_stride) continue;
+        data.unsavd_opakab_v0682274[source_slot] = snap.opakab[source_slot];
+        if (source_slot < data.unsavd_cabab_v0682274.size() && source_slot < snap.cabab.size())
+            data.unsavd_cabab_v0682274[source_slot] = snap.cabab[source_slot];
+        if (source_slot < data.unsavd_cemab_v0682274.size() && source_slot < snap.cemab.size())
+            data.unsavd_cemab_v0682274[source_slot] = snap.cemab[source_slot];
+        if (rrc_stride + source_slot < data.unsavd_cemab_v0682274.size() &&
+            rrc_stride + source_slot < snap.cemab.size())
+            data.unsavd_cemab_v0682274[rrc_stride + source_slot] = snap.cemab[rrc_stride + source_slot];
+    }
+
+    // rstepr4.f90 restores the complete continuum opakc/rccemis rows.
+    data.unsavd_opakc_v0682274 = snap.opakc;
+    data.unsavd_rccemis_v0682274 = snap.rccemis;
+
+
     if (snap.tau0.size() >= 2u * line_stride) {
         if (data.product_line_tau_in.size() != line_stride) {
             data.product_line_tau_in.assign(line_stride,0.0);
@@ -17659,7 +17718,6 @@ void restore_saved_shell_v068227(
         }
     }
 
-    const std::size_t rrc_stride = snap.opakab.size();
     if (snap.tauc.size() >= 2u * rrc_stride) {
         if (data.product_rrc_tau_in.size() != rrc_stride) {
             data.product_rrc_tau_in.assign(rrc_stride,0.0);
@@ -18215,13 +18273,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             data.radial_pass_index_v068227 = kk_v068227;
             data.radial_direction_v068227 = (kk_v068227 % 2u == 1u) ? -1 : 1;
             if (kk_v068227 > 1u) {
-                advance_source_powerlaw_pass_v0682273(data, params);
+                advance_source_powerlaw_pass_v0682274(data, params);
             }
             initialize_native_radial_pass_v068227(data, fixed, message);
             whole.legacy_pprint.ispcg2_passes.push_back(
-                source_ispcg2_pass_state_v0682273(data, kk_v068227));
+                source_ispcg2_pass_state_v0682274(data, kk_v068227));
             if (kk_v068227 > 1u) {
-                source_init_repeated_global_workspaces_v0682273(data, program);
+                source_init_repeated_global_workspaces_v0682274(data);
             }
             data.cumulative_depth_cm = 0.0;
             data.physical_transport_intervals_completed = 0u;
@@ -18462,8 +18520,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // committed only across the shell selected by the previous
             // source STEP evaluation (call 1 itself has zero thickness).
             const auto boundary_started_v064890 = std::chrono::steady_clock::now();
-            auto boundary = evaluate_accepted_boundary(
-                data, state, 0.0, boundary_radius_cm, 0u);
+            // 0.6.82.27.4: an inward/even pass has nlimdt=0, but source
+            // xstarcalc.f90 still executes calc_hmc_all + calc_emisab_all +
+            // calc_emis_all once.  There is no DSEC boundary to reuse; force a
+            // fresh full fixed-state solve so STPCUT owns newly generated
+            // line/RRC opacities for plane 2.
+            auto boundary = source_nlimdt_v068227 == 0
+                ? evaluate_full_boundary(data, state, 0.0, boundary_radius_cm, 0u)
+                : evaluate_accepted_boundary(data, state, 0.0, boundary_radius_cm, 0u);
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->boundary_projection_seconds[call - 1u] += performance_elapsed_seconds(boundary_started_v064890);
             }
@@ -18472,6 +18536,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
             }
             data.writing_final_snapshot = false;
+            if (source_nlimdt_v068227 == 0) {
+                const auto nz_line = static_cast<std::size_t>(std::count_if(
+                    boundary.oplin.begin(), boundary.oplin.end(), [](double v){ return std::isfinite(v) && v > 0.0; }));
+                const auto nz_rrc = static_cast<std::size_t>(std::count_if(
+                    boundary.opakab.begin(), boundary.opakab.end(), [](double v){ return std::isfinite(v) && v > 0.0; }));
+                std::cout << "V0682274_EVEN_XSTARCALC_PASS=" << kk_v068227
+                          << " CALL=" << call
+                          << " OPLIN_NONZERO=" << nz_line
+                          << " OPAKAB_NONZERO=" << nz_rrc << "\n";
+            }
             // calc_hmc_all mutates xpx by reference in FORTRAN.  Preserve the
             // accepted final xpx as live controller state before HEATT/STEP.
             state.hydrogen_density_cm3 = boundary.hydrogen_density_cm3;
@@ -18899,14 +18973,39 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 const double terminal_zeta_v068227 = terminal_xi_v068227 > 0.0
                     ? std::log10(terminal_xi_v068227)
                     : -std::numeric_limits<double>::infinity();
+                // Source terminal SAVD is after the final STPCUT/TRNFRN.
+                // Refresh the retained boundary's cumulative tau/depth planes
+                // before TFLOAT persistence; the ordinary in-loop SAVD remains
+                // pre-STPCUT by design.
+                FixedDsecSnapshot terminal_saved_boundary_v0682274 =
+                    *terminal_transport_boundary_v82_patch520144;
+                retain_pre_stpcut_cumulative_state(data, terminal_saved_boundary_v0682274);
                 saved_passes_v068227[kk_v068227].insert_after_hdu(
                     finals.size() + 1u,
                     make_saved_shell_v068227(
-                        *terminal_transport_boundary_v82_patch520144, program,
+                        terminal_saved_boundary_v0682274, program,
                         params.pressure_dyn_cm2, current_radius_cm_v068227,
                         data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
                         data.cumulative_column_cm2, state.electron_fraction_xee,
                         state.hydrogen_density_cm3, terminal_zeta_v068227, true));
+            }
+            if (effective_npass_v068227 > 1u) {
+                const auto& terminal_saved_v0682274 = saved_passes_v068227[kk_v068227].at_hdu(
+                    saved_passes_v068227[kk_v068227].hdus.size() - 1u);
+                const auto max_plane = [](const std::vector<double>& values, std::size_t stride, std::size_t plane) {
+                    if (stride == 0u || values.size() < (plane + 1u) * stride) return 0.0;
+                    return *std::max_element(values.begin() + static_cast<std::ptrdiff_t>(plane * stride),
+                                             values.begin() + static_cast<std::ptrdiff_t>((plane + 1u) * stride));
+                };
+                const std::size_t ls = terminal_saved_v0682274.snapshot.oplin.size();
+                const std::size_t rs = terminal_saved_v0682274.snapshot.opakab.size();
+                std::cout << std::setprecision(17)
+                          << "V0682274_TERMINAL_SAVD_PASS=" << kk_v068227
+                          << " LINE_TAU_P1_MAX=" << max_plane(terminal_saved_v0682274.snapshot.tau0, ls, 0u)
+                          << " LINE_TAU_P2_MAX=" << max_plane(terminal_saved_v0682274.snapshot.tau0, ls, 1u)
+                          << " RRC_TAU_P1_MAX=" << max_plane(terminal_saved_v0682274.snapshot.tauc, rs, 0u)
+                          << " RRC_TAU_P2_MAX=" << max_plane(terminal_saved_v0682274.snapshot.tauc, rs, 1u)
+                          << "\n";
             }
             std::cout << "V068227_NATIVE_PASS_DONE=" << kk_v068227
                       << " DIRECTION=" << data.radial_direction_v068227

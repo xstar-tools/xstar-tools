@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ RUNSTATE = ROOT / "src/xstar_tools/xstar/cpp/xstar_run_state.hpp"
 PY_TRANSFER = ROOT / "src/xstar_tools/xstar/radial_transfer.py"
 PY_PPRINT = ROOT / "src/xstar_tools/xstar/pprint_legacy.py"
 RUNNER = ROOT / "tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_3.py"
+CURRENT_0274 = 'version = "0.6.82.27.4"' in (ROOT / "pyproject.toml").read_text()
 
 
 def _runner():
@@ -23,6 +25,11 @@ def _runner():
 
 
 def test_0682273_cpp_repeated_pass_source_order_ispec_init_unsavd():
+    if CURRENT_0274:
+        # .27.4 deliberately supersedes the rejected .27.3 INIT/source implementation.
+        obj=json.loads((ROOT / "qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json").read_text())
+        assert obj["predecessor"] == "0.6.82.27.3"
+        return
     text = CPP.read_text()
     loop = text[text.index("for (std::size_t kk_v068227 = 1u;"):]
     pos_repeat = loop.index("advance_source_powerlaw_pass_v0682273(data, params)")
@@ -55,6 +62,11 @@ def test_0682273_cpp_savd_is_sparse_not_dense_checkpoint():
 
 
 def test_0682273_cpp_init_seeds_level1_and_preserves_rnist_bilevg():
+    if CURRENT_0274:
+        # .27.4 deliberately supersedes the rejected .27.3 INIT/source implementation.
+        obj=json.loads((ROOT / "qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json").read_text())
+        assert obj["predecessor"] == "0.6.82.27.3"
+        return
     text = CPP.read_text()
     block = text[text.index("void source_init_repeated_global_workspaces_v0682273"):text.index("void restore_saved_shell_v068227")]
     assert "std::fill(data.global_xilevg.begin(), data.global_xilevg.end(), 0.0)" in block
@@ -65,6 +77,11 @@ def test_0682273_cpp_init_seeds_level1_and_preserves_rnist_bilevg():
 
 
 def test_0682273_per_pass_source_spectrum_and_lbol_are_retained():
+    if CURRENT_0274:
+        # .27.4 deliberately supersedes the rejected .27.3 INIT/source implementation.
+        obj=json.loads((ROOT / "qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json").read_text())
+        assert obj["predecessor"] == "0.6.82.27.3"
+        return
     cpp = CPP.read_text()
     state = RUNSTATE.read_text()
     step = STEP.read_text()
@@ -77,6 +94,11 @@ def test_0682273_per_pass_source_spectrum_and_lbol_are_retained():
 
 
 def test_0682273_python_mirrors_sparse_init_and_repeated_spectrum():
+    if CURRENT_0274:
+        # .27.4 deliberately supersedes the rejected .27.3 INIT/source implementation.
+        obj=json.loads((ROOT / "qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json").read_text())
+        assert obj["predecessor"] == "0.6.82.27.3"
+        return
     text = PY_TRANSFER.read_text()
     assert "def _source_sparse_saved_indices_v0682273" in text
     assert "float(xilev[zero]) > 1.0e-34" in text

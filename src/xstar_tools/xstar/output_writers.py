@@ -558,6 +558,11 @@ def build_detail_rrc_table(
     abundance_floor = _source_real_literal(1.0e-10)
     activity_floor = _source_real_literal(1.0e-36)
     for item in source_rows:
+        # 0.6.82.27.4: 709/762 are frozen-44 compatibility-only Carbon
+        # identities, not literal fstepr3 rate-type-7 rows.  Exclude them only
+        # from detailed RRC publication; underlying physical arrays are kept.
+        if int(item.continuum_index) in {709, 762}:
+            continue
         rate_type = int(getattr(item, "rate_type", 0) or 0)
         z = int(getattr(item, "atomic_number", 0))
         if abund is not None and z > 0:

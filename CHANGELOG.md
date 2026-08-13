@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.82.27.4 - repeated-pass opacity/depth and UNSAVD ownership hotfix - 2026-08-13
+
+- Treat `0.6.82.27.3` as rejected by host `npass=3,5` thermal/line/RRC depth results.
+- Force the source `nlimdt=0` even-pass path through a fresh post-DSEC `xstarcalc`-equivalent fixed-state evaluation so new `oplin/opakab` reach STPCUT plane 2.
+- Model full sparse `RSTEPR2/RSTEPR3/RSTEPR4` restoration (`rcem/oplin`, `cemab/cabab/opakab`, `opakc/rccemis`) and preserve the source direction-owned tau/depth plane.
+- Refresh the terminal SAVD snapshot after the final STPCUT so pass 2 carries both the restored far-side plane and newly accumulated active plane into pass 3.
+- Remove the source-dead INIT level-1 `1/Z` seed; the unconditional `go to 9000` leaves xilev zero before sparse UNSAVD.
+- Execute repeated `ispec4 -> ispecgg -> ispcg2` in scalar/in-place source order and retain scientific-notation per-pass Lbol diagnostics.
+- Resolve the inherited RRC detail-only rows 709/762 separately by excluding those compatibility identities from literal `fstepr3` detail publication without changing physical workspaces or `xout_rrc1`.
+- Ensure `xo0k_*` detail writers consume each pass's actual SAVD snapshot rather than final-pass bridge overlays.
+- Mirror the source semantics in Python, but continue to defer Python host qualification until C++ accepts.
+
+# Changelog
+
 ## 0.6.82.27.3 - repeated-pass INIT/sparse-SAVD/source-spectrum hotfix - 2026-08-13
 
 - Rejects `0.6.82.27.2` for host `npass` science. `.27.1` fixed CFITSIO SAVD append/reverse replay and brought pass 2 into near-FORTRAN agreement; `.27.2` restored pass-specific `xo0N_*` products and per-pass U/Lbol blocks, but pass 3+ thermal/`ntotit` and final line-tau trajectories still diverged. Its `cont_tau=inf` result was also traced to a comparator reading the wrong detail FITS surface.

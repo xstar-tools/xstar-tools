@@ -436,7 +436,7 @@ def legacy_pprint_begin_pass(state: XSTARPythonState) -> tuple[str, ...]:
     # initialize_legacy_pprint; repeated passes use the freshly regenerated
     # source spectrum retained by radial_transfer.
     if kk > 1:
-        rows = state.control.get("ispcg2_passes_v0682273", ())
+        rows = state.control.get("ispcg2_passes_v0682274", state.control.get("ispcg2_passes_v0682273", ()))
         row = next((item for item in rows if int(item.get("pass_index", 0)) == kk), None)
         if row is not None:
             buf.log_lines.append(

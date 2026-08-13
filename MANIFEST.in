@@ -494,3 +494,11 @@ include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_3.py
 include tests/test_npass_multipass_hotfix_0_6_82_27_3.py
 include npass_multipass_hotfix_0_6_82_27_3.md
 include xstar_tools-0.6.82.27.3_host_validation.md
+
+# 0.6.82.27.4 even-pass opacity/depth + full UNSAVD workspace hotfix.
+recursive-include qualification/npass_0_6_82_27_4 *.json *.md
+include tools/qualification/check_npass_multipass_hotfix_0_6_82_27_4.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_4.py
+include tests/test_npass_multipass_hotfix_0_6_82_27_4.py
+include npass_multipass_hotfix_0_6_82_27_4.md
+include xstar_tools-0.6.82.27.4_host_validation.md
