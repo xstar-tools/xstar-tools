@@ -1,13 +1,13 @@
-> **Current 0.6.82.26.1 qualification note:** `0.6.82.25.4` closed the `lcpres`/pressure milestone on the host. `0.6.82.26` correctly evolved live analytic/table radial density but host qualification exposed retained-publication, `density.dat` artifact-policy, and comparator defects. `0.6.82.26.1` is the narrow corrective host candidate. Science revision and ABIs remain frozen; low-ionization performance work remains deferred to `0.6.82.31`-`0.6.82.33`.
+> **Current 0.6.82.26.3 qualification note:** host `0.6.82.26.2` accepted all six analytic/tabulated `radexp`/`density.dat` science cases in both C++ and pure Python. `.26.3` changes only the failure-policy oracle: missing `density.dat` is documented as a safe-port robustness divergence from legacy FORTRAN unsafe continuation; no `.26.2` numerical XSTAR code changes.
 
 # xstar-tools
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.26.1`  
+**Distribution:** `0.6.82.26.3`
 
 
-**0.6.82.26.1 radexp/density.dat corrective candidate:** native production now carries the live `lcpres=0` radial density through `n=n0*(R/R0)^radexp`, while the Python public controller explicitly retains the first-shell source baseline. Both public runners expose the hidden FORTRAN `radexp < -99` branch using fixed-name `density.dat`, including row-1 initialization, post-shell geometry replacement, monotonic-radius failure and EOF/iostat termination. Stock analytic `radexp` validation remains `[-3,3]`; only the disjoint `<-99` source sentinel is additionally admitted.
+**0.6.82.26.3 radexp/density.dat closure policy:** all six valid radial-density cases are host-accepted in C++ and pure Python against FORTRAN 2.59g. Missing `density.dat` is intentionally safer in the modern ports: FORTRAN is recorded as `LEGACY_UNSAFE_CONTINUE`, while C++ and Python remain `SAFE_REJECT`; this is an accepted documented robustness divergence, not a numerical-science discrepancy. The `.26.2` numerical source tree is hash-frozen.
 
 **0.6.82.25.4 lcpres closure:** the pure-Python `msolvelucy` `diff2>=1e3` control-flow defect was corrected and host `cd_xi1` moved from `26/9/9` to the canonical FORTRAN/C++ `27/1/1`, with the full `.25.4` case comparator ACCEPT. The pressure/density-control milestone is therefore the frozen predecessor for `.26`.
 

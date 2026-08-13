@@ -452,3 +452,13 @@ include tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26_2.py
 include tests/test_radexp_density_0_6_82_26_2.py
 include docs/developer/radexp_density_hotfix_0_6_82_26_2.md
 include xstar_tools-0.6.82.26.2_host_validation.md
+
+# 0.6.82.26.3 radexp/density.dat robustness-policy closure.
+include tools/qualification/check_radexp_density_robustness_policy_0_6_82_26_3.py
+include tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26_3.py
+include qualification/radexp_density_0_6_82_26_3/README.md
+include qualification/radexp_density_0_6_82_26_3/radexp_density_robustness_policy_0_6_82_26_3.json
+include docs/developer/radexp_density_robustness_policy_0_6_82_26_3.md
+include tests/test_radexp_density_0_6_82_26_3.py
+include xstar_tools-0.6.82.26.3_host_validation.md
+include xstar_tools_conversation_summary_through_0.6.82.26.3.md

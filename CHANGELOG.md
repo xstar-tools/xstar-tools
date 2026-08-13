@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.26.3 - 2026-08-13
+
+- Close the `radexp` / `density.dat` failure-policy edge case without changing any `.26.2` numerical XSTAR code. Host `.26.2` qualification accepted all six analytic/tabulated radial cases in both C++ and pure Python.
+- Record canonical FORTRAN XSTAR 2.59g missing-`density.dat` behavior as `LEGACY_UNSAFE_CONTINUE` (zero return with non-finite/overflow-formatted state) instead of requiring a nonexistent `missing density file` error.
+- Retain the safer C++ nonzero `missing density file` rejection and Python `TabulatedRadialDensityError` as `ACCEPT_DOCUMENTED_ROBUSTNESS_DIVERGENCE`, explicitly not a science discrepancy.
+- Keep decreasing-radius `radius error` source-concordant across FORTRAN/C++/Python, allowing FORTRAN `STOP` to return zero while the modern ports return nonzero.
+- Freeze all 137 numerical Python/C++ XSTAR source/data files to their exact `.26.2` SHA-256 values and freeze the six successful case inputs/comparator functions against the packaged `.26.2` runner. Science revision and ABIs remain unchanged.
+
 ## 0.6.82.26.2 - 2026-08-13
 
 - Correct the host-exposed terminal radial publication semantics from `0.6.82.26.1`: source `pprint(9)` recomputes terminal xi from the live post-geometry radius/density; remove the stale-xi override from live and persisted STEP.
