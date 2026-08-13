@@ -13676,24 +13676,45 @@ int run_impl(
             std::unordered_map<int,int> element_z_by_index_v82_patch52010;
             for (const auto& em : ctx.program.elements)
                 element_z_by_index_v82_patch52010[em.element_index] = em.element_z;
-            std::vector<const ProgramRecord*> source_order_v82_patch52010;
-            source_order_v82_patch52010.reserve(ctx.program.records.size());
-            for (const auto& pr : ctx.program.records) source_order_v82_patch52010.push_back(&pr);
-            std::stable_sort(source_order_v82_patch52010.begin(), source_order_v82_patch52010.end(),
-                [](const ProgramRecord* a, const ProgramRecord* b) {
-                    return a->source_position < b->source_position;
-                });
-            for (const ProgramRecord* prp : source_order_v82_patch52010) {
-                if (!prp) continue;
-                const ProgramRecord& pr = *prp;
+            // 0.6.82.27.5: calc_emis_ion.f90 is rate-type-major, not raw
+            // source-position-major.  For one ion it walks the complete rate-7
+            // npfi/npnxt chain first.  kkkl therefore retains the *final*
+            // npconi2 slot of that ion's rate-7 chain when the later rate-42
+            // Type-88 chain starts.  The .27.4 implementation interleaved
+            // rate-7 and rate-42 records by global source_position, causing
+            // different Type-88 records to overwrite different RRC opakab
+            // slots and then STPCUT to accumulate those misplaced values into
+            // tauc.  Resolve the final rate-7 owner once per ion, then replay
+            // only the active/deferred Type-88 records in their own source
+            // order against that single retained kkkl slot.
+            for (const auto& pr : ctx.program.records) {
+                if (pr.rate_type != 7 || pr.continuum_index_one_based <= 0) continue;
                 const auto key = std::make_pair(pr.element_index, pr.ion_index);
-                if (pr.rate_type == 7 && pr.continuum_index_one_based > 0) {
+                const auto found = retained_rate7_v82_patch52010.find(key);
+                if (found == retained_rate7_v82_patch52010.end() ||
+                    pr.source_position > static_cast<std::int64_t>(found->second.source_position)) {
                     retained_rate7_v82_patch52010[key] = RetainedRate7SlotV82Patch52010{
                         pr.continuum_index_one_based, pr.record,
                         static_cast<std::uint64_t>(pr.source_position)};
-                    continue;
                 }
+            }
+            std::vector<const ProgramRecord*> type88_source_order_v0682275;
+            type88_source_order_v0682275.reserve(type88_deferred_v82_patch52010.size());
+            for (const auto& pr : ctx.program.records) {
                 if (pr.rate_type != 42 || pr.opcode != XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) continue;
+                const auto identity = std::make_pair(
+                    static_cast<std::uint64_t>(pr.source_position), pr.record);
+                if (type88_deferred_v82_patch52010.find(identity) != type88_deferred_v82_patch52010.end())
+                    type88_source_order_v0682275.push_back(&pr);
+            }
+            std::stable_sort(type88_source_order_v0682275.begin(), type88_source_order_v0682275.end(),
+                [](const ProgramRecord* a, const ProgramRecord* b) {
+                    return a->source_position < b->source_position;
+                });
+            for (const ProgramRecord* prp : type88_source_order_v0682275) {
+                if (!prp) continue;
+                const ProgramRecord& pr = *prp;
+                const auto key = std::make_pair(pr.element_index, pr.ion_index);
                 const auto dit = type88_deferred_v82_patch52010.find({
                     static_cast<std::uint64_t>(pr.source_position), pr.record});
                 if (dit == type88_deferred_v82_patch52010.end() || !dit->second) continue;

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.82.27.5 - RRC npconi2/opakab/tauc ownership hotfix - 2026-08-13
+
+- Reject `0.6.82.27.4` for multipass host science: pass-3/pass-5 thermal trajectories remain wrong even though the pass-2 line SAVD plane improved.
+- Trace the remaining raw RRC SAVD corruption to the native Type-88/rate-42 stale-`kkkl` side effect in `local_zone_engine.cpp`.
+- Reproduce canonical `calc_emis_ion.f90` rate-type-major lifetime: complete the ion's rate-7 chain first, retain that chain's final `npconi2` slot as `kkkl`, and make every later rate-42 record for the ion reuse that single slot.
+- Remove the source-wrong native source-position interleaving in which Type-88 records could consume different partially advanced rate-7 owners. Keep the existing one-based source `npconi2/opakab` to zero-based runtime `tauc` mapping unchanged.
+- Preserve all `0.6.82.27.4` pass-2 line-plane, sparse UNSAVD, terminal SAVD, per-pass detail, U/Lbol, and publication fixes. Do not change DSEC, thermal convergence, rate equations, or matrix ordering.
+- Leave Python numerical science unchanged: its `calc_emis` traversal already follows rate-type-major ordering and retained-`kkkl` semantics.
+- Add a raw RRC SAVD host gate that compares `opacity`, `tau_in`, and `tau_out` for every material RRC row in every saved HDU, including dedicated ownership sentinels around the host-exposed shifts.
+- Relative to exact `0.6.82.27.4`, audit 137 numerical files and change exactly one numerical file: `src/xstar_tools/xstar/cpp/local_zone_engine.cpp`.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, and `60488` frozen.
+
 ## 0.6.82.27.4 - repeated-pass opacity/depth and UNSAVD ownership hotfix - 2026-08-13
 
 - Treat `0.6.82.27.3` as rejected by host `npass=3,5` thermal/line/RRC depth results.
