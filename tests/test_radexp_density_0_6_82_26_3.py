@@ -55,12 +55,16 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
     pyproject = (ROOT / "pyproject.toml").read_text()
     current_027 = 'version = "0.6.82.27"' in pyproject
     current_0271 = 'version = "0.6.82.27.1"' in pyproject
+    current_0272 = 'version = "0.6.82.27.2"' in pyproject
     npass = None
     hotfix = None
-    if current_027 or current_0271:
+    hotfix2 = None
+    if current_027 or current_0271 or current_0272:
         npass = json.loads((ROOT / "qualification/npass_0_6_82_27/npass_source_scope_0_6_82_27.json").read_text())
-    if current_0271:
+    if current_0271 or current_0272:
         hotfix = json.loads((ROOT / "qualification/npass_0_6_82_27_1/npass_hotfix_source_scope_0_6_82_27_1.json").read_text())
+    if current_0272:
+        hotfix2 = json.loads((ROOT / "qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json").read_text())
     for rel, expected_0263 in hashes.items():
         current = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
         if npass is None:
@@ -77,8 +81,11 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
             assert current == expected_027, rel
             continue
         assert hotfix["predecessor_sha256"][rel] == expected_027, rel
-        if rel in set(hotfix["intentional_numerical_source_changes"]):
-            assert current == hotfix["candidate_changed_sha256"][rel], rel
-        else:
-            assert current == expected_027, rel
+        expected_0271 = hotfix["candidate_changed_sha256"].get(rel, expected_027)
+        if hotfix2 is None:
+            assert current == expected_0271, rel
+            continue
+        assert hotfix2["predecessor_sha256"][rel] == expected_0271, rel
+        expected_0272 = hotfix2["candidate_changed_sha256"].get(rel, expected_0271)
+        assert current == expected_0272, rel
 

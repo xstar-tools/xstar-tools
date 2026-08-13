@@ -396,6 +396,9 @@ struct WholeRunAccumulatedState {
     std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<AcceptedControllerState> accepted_controller_states;
     std::vector<RadialZoneState> radial_zones;
+    // 0.6.82.27.2: source SAVD detail surfaces retained per whole-shell pass.
+    // Each inner vector is physical FITS-HDU order for pass index outer+1.
+    std::vector<std::vector<RadialZoneState>> multipass_detail_radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<ElementMetadataState> element_metadata;
     std::vector<CompactRowMetadataState> row_metadata;
@@ -448,6 +451,9 @@ struct ProductWritingState {
     std::vector<FixedEvaluationState> fixed_evaluations;
     std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<RadialZoneState> radial_zones;
+    // 0.6.82.27.2: source SAVD detail surfaces retained per whole-shell pass.
+    // Each inner vector is physical FITS-HDU order for pass index outer+1.
+    std::vector<std::vector<RadialZoneState>> multipass_detail_radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<ElementMetadataState> element_metadata;
     std::vector<CompactRowMetadataState> row_metadata;

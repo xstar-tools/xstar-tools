@@ -630,6 +630,7 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.fixed_evaluations = state.fixed_evaluations;
     product.final_writer_evaluation = state.final_writer_evaluation;
     product.radial_zones = state.radial_zones;
+    product.multipass_detail_radial_zones = state.multipass_detail_radial_zones;
     product.parameter_rows = state.parameter_rows;
     product.element_metadata = state.element_metadata;
     product.row_metadata = state.row_metadata;
@@ -680,6 +681,7 @@ ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state
     product.fixed_evaluations = std::move(state.fixed_evaluations);
     product.final_writer_evaluation = std::move(state.final_writer_evaluation);
     product.radial_zones = std::move(state.radial_zones);
+    product.multipass_detail_radial_zones = std::move(state.multipass_detail_radial_zones);
     product.parameter_rows = std::move(state.parameter_rows);
     product.element_metadata = std::move(state.element_metadata);
     product.row_metadata = std::move(state.row_metadata);

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.27.2 - npass pass-state/output hotfix - 2026-08-13
+
+- Rejects `0.6.82.27.1` for `npass>1` host science after the SAVD-order correction brought pass 2 into agreement but the first remaining thermal divergence appeared at pass 3 row 1.
+- Restores canonical UNSAVD state lifetime: FORTRAN restores `xilevg` and `rnisg` but does not restore or recompute caller-owned `bilevg`; native C++ no longer recomputes `bilevg` immediately after UNSAVD.
+- Corrects the corresponding Python carried-runtime handoff by updating restored dense `xilevg/rnisg` arrays while deliberately preserving live `bilevg`; Python remains second-stage qualification after C++ ACCEPT.
+- Publishes `xo0k_detail/detal2/detal3/detal4.fits` for every pass from the actual retained source-SAVD REAL(4) snapshots, instead of exposing only `xo01_*`.
+- Emits the source `U(1-1.8),U(1.8-4)` and `Lbol=` block once per pass in `xout_step.log`, and extends the host comparator to require the pass-detail inventory and per-pass diagnostic blocks.
+- Keeps `npass=1` as a frozen regression, preserves all atomic/thermal equations and tolerances, and leaves science revision `0.6.48.12.3.45.3.3.8` plus ABIs `60487`, `6048110`, and `60488` unchanged.
+- Extends historical successor-aware gates through `.27.2` while explicitly validating the `.26.3 -> .27 -> .27.1 -> .27.2` numerical SHA-256 chain.
+
 ## 0.6.82.27.1 - npass SAVD replay/order hotfix - 2026-08-13
 
 - Rejects `0.6.82.27` as a multipass host-science candidate after host FORTRAN comparison exposed incorrect pass-2+ shell replay.

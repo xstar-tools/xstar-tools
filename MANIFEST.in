@@ -478,3 +478,11 @@ include tests/test_npass_multipass_hotfix_0_6_82_27_1.py
 include npass_multipass_hotfix_0_6_82_27_1.md
 include xstar_tools-0.6.82.27.1_host_validation.md
 
+
+# 0.6.82.27.2 npass pass-state/output hotfix.
+recursive-include qualification/npass_0_6_82_27_2 *.json *.md
+include tools/qualification/check_npass_multipass_hotfix_0_6_82_27_2.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_2.py
+include tests/test_npass_multipass_hotfix_0_6_82_27_2.py
+include npass_multipass_hotfix_0_6_82_27_2.md
+include xstar_tools-0.6.82.27.2_host_validation.md

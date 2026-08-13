@@ -10641,10 +10641,23 @@ struct ProductPublicationResultV172524 {
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
 void remove_native_products(const std::filesystem::path& output) {
-    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
-             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
-        std::error_code ec;
-        std::filesystem::remove(output / name, ec);
+    std::error_code iter_ec;
+    if (!std::filesystem::is_directory(output,iter_ec)) return;
+    for (const auto& entry : std::filesystem::directory_iterator(output)) {
+        if (!entry.is_regular_file()) continue;
+        const std::string name = entry.path().filename().string();
+        const bool public_product = name == "xout_abund1.fits" || name == "xout_cont1.fits" ||
+            name == "xout_lines1.fits" || name == "xout_rrc1.fits" || name == "xout_spect1.fits" ||
+            name == "xout_step.log";
+        const bool detail_product = name.rfind("xo",0u) == 0u &&
+            (name.find("_detail.fits") != std::string::npos ||
+             name.find("_detal2.fits") != std::string::npos ||
+             name.find("_detal3.fits") != std::string::npos ||
+             name.find("_detal4.fits") != std::string::npos);
+        if (public_product || detail_product) {
+            std::error_code ec;
+            std::filesystem::remove(entry.path(),ec);
+        }
     }
 }
 
@@ -10654,11 +10667,18 @@ void remove_native_products(const std::filesystem::path& output) {
 // XSTAR-FUNCTION-COMMENT-END
 std::size_t count_native_fits_products(const std::filesystem::path& output) {
     std::size_t count = 0;
-    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
-             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits"}) {
+    for (const auto& entry : std::filesystem::directory_iterator(output)) {
+        if (!entry.is_regular_file()) continue;
+        const std::string name = entry.path().filename().string();
+        const bool public_fits = name == "xout_abund1.fits" || name == "xout_cont1.fits" ||
+            name == "xout_lines1.fits" || name == "xout_rrc1.fits" || name == "xout_spect1.fits";
+        const bool detail_fits = name.size() > 9u && name.rfind("xo",0u) == 0u &&
+            (name.find("_detail.fits") != std::string::npos ||
+             name.find("_detal2.fits") != std::string::npos ||
+             name.find("_detal3.fits") != std::string::npos ||
+             name.find("_detal4.fits") != std::string::npos);
         std::error_code ec;
-        if (std::filesystem::is_regular_file(output / name, ec) &&
-            std::filesystem::file_size(output / name, ec) > 0) ++count;
+        if ((public_fits || detail_fits) && std::filesystem::file_size(entry.path(),ec) > 0u) ++count;
     }
     return count;
 }
@@ -10690,7 +10710,8 @@ std::size_t required_native_fits_products(const xstar_run_state::ProductWritingS
     const int lwrite = static_cast<int>(std::llround(retained_public_parameter_number(product, "lwrite", 0.0)));
     const int npass = static_cast<int>(std::llround(retained_public_parameter_number(product, "npass", 1.0)));
     const bool detail = (lwrite > 0) || (npass > 1);
-    const std::size_t public_non_abundance = detail ? 8u : 4u;
+    const std::size_t detail_count = detail ? 4u * static_cast<std::size_t>(std::max(npass,1)) : 0u;
+    const std::size_t public_non_abundance = 4u + detail_count;
     return public_non_abundance + (xstar_science_fits::abundance_product_enabled() ? 1u : 0u);
 }
 
@@ -11386,9 +11407,23 @@ ProductPublicationResultV172524 publish_true_production_products(
         result.ok = result.fits_count == required_native_fits_products(product) && result.step_log_written;
         if (!result.ok) throw std::runtime_error("true production did not write all ten public products");
         std::set<std::string> allowed = {
-            "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits",
             "xout_spect1.fits", "xout_step.log"};
+        const int publication_npass_v0682272 = static_cast<int>(std::llround(
+            retained_public_parameter_number(product,"npass",1.0)));
+        const int publication_lwrite_v0682272 = static_cast<int>(std::llround(
+            retained_public_parameter_number(product,"lwrite",0.0)));
+        if (publication_lwrite_v0682272 > 0 || publication_npass_v0682272 > 1) {
+            for (int pass_v0682272=1; pass_v0682272<=std::max(publication_npass_v0682272,1); ++pass_v0682272) {
+                const std::string prefix_v0682272 = "xo" +
+                    (pass_v0682272 < 10 ? std::string("0") : std::string()) +
+                    std::to_string(pass_v0682272) + "_";
+                allowed.insert(prefix_v0682272 + "detail.fits");
+                allowed.insert(prefix_v0682272 + "detal2.fits");
+                allowed.insert(prefix_v0682272 + "detal3.fits");
+                allowed.insert(prefix_v0682272 + "detal4.fits");
+            }
+        }
         const std::string publication_json_v0682261 = read_text_file(options.parameters_path);
         if (json_number_value(publication_json_v0682261, "radexp", 0.0) < -99.0) {
             allowed.insert("density.dat");
@@ -17412,7 +17447,11 @@ void restore_saved_shell_v068227(
     data.global_xilevg = snap.source_global_xilevg;
     data.global_rnisg = snap.source_global_rnisg;
     data.global_workspace_initialized = !data.global_xilevg.empty();
-    if (data.global_workspace_initialized) recompute_global_bilevg(data);
+    // 0.6.82.27.2: UNSAVD restores xilevg/rnisg but not bilevg.  The
+    // caller-owned bilevg workspace therefore remains live from the preceding
+    // fixed-state calculation until calc_hmc_all consumes/updates it.  Do not
+    // recompute bilevg from the restored populations here; that source-lifetime
+    // change first shifts the pass-3 thermal solve in the host npass=3/5 cases.
 
     const std::size_t line_stride = snap.oplin.size();
     if (snap.tau0.size() >= 2u * line_stride) {
@@ -18680,6 +18719,52 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         whole.legacy_pprint.radial_pass_trajectory_exact =
             !whole.legacy_pprint.radial_rows.empty();
+
+        // 0.6.82.27.2: retain the literal SAVD surfaces for per-pass detail
+        // publication.  The public science products continue to use only the
+        // final pass, but xstar.f90 creates xo0k_detail/detal2/detal3/detal4
+        // for every pass when npass>1.  Build these rows from the REAL(4)
+        // snapshots that UNSAVD itself consumes rather than from final-pass
+        // reconstructed state.
+        if (effective_npass_v068227 > 1u) {
+            whole.multipass_detail_radial_zones.clear();
+            whole.multipass_detail_radial_zones.resize(effective_npass_v068227);
+            for (std::size_t pass_v0682272 = 1u; pass_v0682272 <= effective_npass_v068227; ++pass_v0682272) {
+                const auto& saved_pass_v0682272 = saved_passes_v068227[pass_v0682272];
+                auto& detail_zones_v0682272 = whole.multipass_detail_radial_zones[pass_v0682272 - 1u];
+                if (saved_pass_v0682272.hdus.size() <= 3u) continue;
+                detail_zones_v0682272.reserve(saved_pass_v0682272.hdus.size() - 3u);
+                for (std::size_t hdu_v0682272 = 3u; hdu_v0682272 < saved_pass_v0682272.hdus.size(); ++hdu_v0682272) {
+                    if (!saved_pass_v0682272.hdus[hdu_v0682272].has_value()) continue;
+                    const auto& saved_v0682272 = *saved_pass_v0682272.hdus[hdu_v0682272];
+                    xstar_run_state::AcceptedControllerState accepted_v0682272;
+                    accepted_v0682272.call_index = saved_v0682272.snapshot.call_index;
+                    accepted_v0682272.accepted_sequence = saved_v0682272.snapshot.sequence;
+                    accepted_v0682272.acceptance_reason = "source SAVD REAL4 pass-detail state";
+                    accepted_v0682272.evaluation = copy_real_native_snapshot(saved_v0682272.snapshot, 0.0);
+
+                    xstar_run_state::RadialZoneState zone_v0682272;
+                    zone_v0682272.zone_index = detail_zones_v0682272.size() + 1u;
+                    zone_v0682272.pass_index = pass_v0682272;
+                    zone_v0682272.radius_cm = saved_v0682272.radius_cm;
+                    zone_v0682272.outer_radius_cm = saved_v0682272.radius_cm;
+                    zone_v0682272.delta_radius_cm = saved_v0682272.radial_depth_cm;
+                    zone_v0682272.density_cm3 = saved_v0682272.hydrogen_density_cm3;
+                    zone_v0682272.pressure_dyn_cm2 = saved_v0682272.pressure_dyn_cm2;
+                    zone_v0682272.log_ionization_parameter = saved_v0682272.zeta;
+                    zone_v0682272.ionization_parameter = std::isfinite(saved_v0682272.zeta)
+                        ? std::pow(10.0, saved_v0682272.zeta) : 0.0;
+                    zone_v0682272.column_density_cm2 = saved_v0682272.column_cm2;
+                    zone_v0682272.temperature_t4 = saved_v0682272.snapshot.temperature_t4;
+                    zone_v0682272.electron_fraction = saved_v0682272.electron_fraction;
+                    zone_v0682272.provisional_from_controller = false;
+                    zone_v0682272.accepted_boundary_exact = true;
+                    zone_v0682272.boundary_provenance = "source SAVD REAL4 per-pass detail surface";
+                    zone_v0682272.accepted_controller = std::move(accepted_v0682272);
+                    detail_zones_v0682272.push_back(std::move(zone_v0682272));
+                }
+            }
+        }
 
         if (g_performance_v064890) {
             g_performance_v064890->all_fixed_calls = data.cumulative_stats.calls;
@@ -20334,9 +20419,23 @@ int command_run_standalone_production(const Options& options, const std::filesys
         }
         if (!artifacts.any()) {
             std::set<std::string> allowed = {
-                "xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
                 "xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits",
                 "xout_spect1.fits","xout_step.log"};
+            const int publication_npass_v0682272 = static_cast<int>(std::llround(
+                retained_public_parameter_number(product,"npass",1.0)));
+            const int publication_lwrite_v0682272 = static_cast<int>(std::llround(
+                retained_public_parameter_number(product,"lwrite",0.0)));
+            if (publication_lwrite_v0682272 > 0 || publication_npass_v0682272 > 1) {
+                for (int pass_v0682272=1; pass_v0682272<=std::max(publication_npass_v0682272,1); ++pass_v0682272) {
+                    const std::string prefix_v0682272 = "xo" +
+                        (pass_v0682272 < 10 ? std::string("0") : std::string()) +
+                        std::to_string(pass_v0682272) + "_";
+                    allowed.insert(prefix_v0682272 + "detail.fits");
+                    allowed.insert(prefix_v0682272 + "detal2.fits");
+                    allowed.insert(prefix_v0682272 + "detal3.fits");
+                    allowed.insert(prefix_v0682272 + "detal4.fits");
+                }
+            }
             // 0.6.82.26.1: density.dat is canonical source input for the
             // hidden radexp<-99 table branch.  When input and output are the
             // same directory it must not be misclassified as generated output.

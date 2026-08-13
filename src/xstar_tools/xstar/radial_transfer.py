@@ -1329,6 +1329,31 @@ def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
     state.plasma.populations = result.xilev_after
     state.local_zone.source_arrays["xilevg"] = result.xilev_after
     state.local_zone.source_arrays["rnisg"] = result.rnist_after
+
+    # 0.6.82.27.2: UNSAVD restores xilevg/rnisg into the caller-owned global
+    # workspaces, but it does not restore bilevg.  The physical runner builds
+    # the next DSEC state from this carried runtime, so update exactly the two
+    # restored dense arrays here and leave global_bilevg_by_index untouched.
+    # Without this handoff Python could silently reuse stale previous-pass
+    # xilevg/rnisg even though the visible radial state had been restored.
+    physical_runtime = state.control.get("physical_dsec_runtime")
+    if physical_runtime is not None:
+        if hasattr(physical_runtime, "global_xilevg_by_index"):
+            physical_runtime.global_xilevg_by_index = np.asarray(
+                result.xilev_after, dtype=float
+            ).copy()
+        if hasattr(physical_runtime, "global_rnisg_by_index"):
+            physical_runtime.global_rnisg_by_index = np.asarray(
+                result.rnist_after, dtype=float
+            ).copy()
+        # source invariant: do NOT assign global_bilevg_by_index here.
+        if hasattr(physical_runtime, "temperature_t4"):
+            physical_runtime.temperature_t4 = float(result.temperature) / 1.0e4
+        if hasattr(physical_runtime, "electron_fraction_xee"):
+            physical_runtime.electron_fraction_xee = float(result.electron_fraction)
+        if hasattr(physical_runtime, "hydrogen_density_cm3"):
+            physical_runtime.hydrogen_density_cm3 = float(result.hydrogen_density)
+
     for key in ("calc_emisab_context", "calc_emis_context"):
         context = state.control.get(key)
         if context is not None:

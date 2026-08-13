@@ -15,8 +15,11 @@ def _runner():
     return mod
 
 def test_0682271_version_and_scope_chain():
-    assert 'version = "0.6.82.27.1"' in (ROOT/'pyproject.toml').read_text()
-    assert 'PACKAGE_VERSION ?= 0.6.82.27.1' in (ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
+    pyproject=(ROOT/'pyproject.toml').read_text(); make=(ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
+    current_0271='version = "0.6.82.27.1"' in pyproject
+    current_0272='version = "0.6.82.27.2"' in pyproject
+    assert current_0271 or current_0272
+    assert ('PACKAGE_VERSION ?= 0.6.82.27.1' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.2' in make)
     obj=json.loads(MAN.read_text())
     assert obj['predecessor']=='0.6.82.27'
     assert obj['predecessor_status']=='REJECT_NPASS_GT1_HOST_SCIENCE'
@@ -30,12 +33,14 @@ def test_0682271_version_and_scope_chain():
         'src/xstar_tools/xstar/radial_transfer.py',
         'src/xstar_tools/xstar/saved_radial_state.py',
     }
+    successor2=json.loads((ROOT/'qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json').read_text()) if current_0272 else None
     for rel,old in obj['predecessor_sha256'].items():
-        now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest()
-        if rel in changed:
-            assert now==obj['candidate_changed_sha256'][rel] and now!=old
+        expected_0271=obj['candidate_changed_sha256'].get(rel,old)
+        if successor2 is None:
+            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest()
+            assert now==expected_0271, rel
         else:
-            assert now==old, rel
+            assert successor2['predecessor_sha256'][rel]==expected_0271, rel
 
 def test_0682271_cpp_savd_appends_tail_and_live_rows_share_step_state():
     text=CPP.read_text()

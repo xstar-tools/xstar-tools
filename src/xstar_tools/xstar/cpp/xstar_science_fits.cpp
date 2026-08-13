@@ -10735,11 +10735,43 @@ Result write_historical_science_products(
     const int lwrite = static_cast<int>(std::llround(parameter_value(state, "lwrite", 0.0)));
     const int npass = static_cast<int>(std::llround(parameter_value(state, "npass", 1.0)));
     const bool write_detail_products = (lwrite > 0) || (npass > 1);
+    std::vector<std::string> detail_filenames_v0682272;
     if (write_detail_products) {
-        write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
-        write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
-        write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
-        write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+        if (npass > 1 && state.multipass_detail_radial_zones.size() >= static_cast<std::size_t>(npass)) {
+            // xstar.f90 opens a distinct fstepr/fstepr2/fstepr3/fstepr4 file
+            // for every whole-shell pass.  Temporarily move each retained
+            // SAVD surface into the normal detail writers so no large
+            // FixedEvaluationState copies are made at publication time.
+            auto final_radial_zones_v0682272 = std::move(state.radial_zones);
+            try {
+                for (int pass_v0682272 = 1; pass_v0682272 <= npass; ++pass_v0682272) {
+                    auto& saved_zones_v0682272 =
+                        state.multipass_detail_radial_zones[static_cast<std::size_t>(pass_v0682272 - 1)];
+                    state.radial_zones = std::move(saved_zones_v0682272);
+                    const std::string prefix_v0682272 =
+                        "xo" + (pass_v0682272 < 10 ? std::string("0") : std::string()) +
+                        std::to_string(pass_v0682272) + "_";
+                    write_population_detail(output_dir / (prefix_v0682272 + "detail.fits"), state, elements, rows);
+                    write_line_detail(output_dir / (prefix_v0682272 + "detal2.fits"), state, elements, rows);
+                    write_rrc_detail(output_dir / (prefix_v0682272 + "detal3.fits"), state, elements, rows);
+                    write_spectrum_detail(output_dir / (prefix_v0682272 + "detal4.fits"), state);
+                    detail_filenames_v0682272.insert(detail_filenames_v0682272.end(), {
+                        prefix_v0682272 + "detail.fits", prefix_v0682272 + "detal2.fits",
+                        prefix_v0682272 + "detal3.fits", prefix_v0682272 + "detal4.fits"});
+                    saved_zones_v0682272 = std::move(state.radial_zones);
+                }
+            } catch (...) {
+                state.radial_zones = std::move(final_radial_zones_v0682272);
+                throw;
+            }
+            state.radial_zones = std::move(final_radial_zones_v0682272);
+        } else {
+            write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
+            write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
+            write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
+            write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+            detail_filenames_v0682272 = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"};
+        }
     }
     write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
     state.xout_lines1_computed_from_native_state = true;
@@ -10753,7 +10785,7 @@ Result write_historical_science_products(
     state.xout_abund1_computed_from_native_state = false;
 
     Result result;
-    result.files_written = write_detail_products ? 8u : 4u;
+    result.files_written = 4u + detail_filenames_v0682272.size();
     result.schema_complete = true;
     result.computed_from_native_state = true;
     result.continuum_and_spectrum_paths_separate = true;
@@ -10763,12 +10795,9 @@ Result write_historical_science_products(
     result.all_fits_products_byte_exact = false;
     result.benchmark_archive_materialized = false;
     result.generalized_product_reduction_qualified = false;
-    if (write_detail_products) {
-        result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
-            "xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
-    } else {
-        result.filenames = {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
-    }
+    result.filenames = detail_filenames_v0682272;
+    result.filenames.insert(result.filenames.end(),
+        {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"});
     return result;
 }
 

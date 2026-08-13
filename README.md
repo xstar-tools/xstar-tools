@@ -403,6 +403,11 @@ The runner compares the broad fixture to the preserved FORTRAN 2.59g STEP and
 thermal oracles, requires material discrepancies below 1%, and reports the
 runtime ratio separately.
 
+
+### 0.6.82.27.2 npass pass-state/output hotfix
+
+`0.6.82.27.2` addresses the remaining host divergence after `.27.1`: pass 2 is now correctly replayed, but pass 3 exposed a source-lifetime mismatch because native UNSAVD recomputed `bilevg` after restoring `xilevg/rnisg`, while FORTRAN leaves caller-owned `bilevg` live. The hotfix preserves that lifetime, updates the analogous Python carried runtime, publishes pass-specific `xo0k_*` detail products from retained REAL(4) SAVD snapshots, and writes the `U/Lbol` diagnostic block once per pass. Run C++ `npass=1,3,5` against the existing FORTRAN references first; run Python only after C++ accepts.
+
 ### 0.6.82.27.1 npass hotfix
 
 `0.6.82.27.1` corrects the SAVD/UNSAVD radial-record ordering found by host FORTRAN comparison of `npass=3` and `5`. The exact FORTRAN/CFITSIO behavior is append-at-tail for new detail HDUs; later passes then read the previous pass in reverse via `jk=numrec+1-jkp`, `HDU=jk+2`. The candidate also makes live native multipass rows mirror the retained `xout_step.log` rows. Run the C++ host gate first; only after C++ accepts should the pure-Python gate be run.
