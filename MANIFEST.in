@@ -462,3 +462,11 @@ include docs/developer/radexp_density_robustness_policy_0_6_82_26_3.md
 include tests/test_radexp_density_0_6_82_26_3.py
 include xstar_tools-0.6.82.26.3_host_validation.md
 include xstar_tools_conversation_summary_through_0.6.82.26.3.md
+
+# 0.6.82.27 true native npass whole-shell multipass transport.
+recursive-include qualification/npass_0_6_82_27 *.json *.md
+include tools/qualification/check_npass_multipass_0_6_82_27.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27.py
+include tests/test_npass_multipass_0_6_82_27.py
+include npass_multipass_0_6_82_27.md
+include xstar_tools-0.6.82.27_host_validation.md

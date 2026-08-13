@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.27 - 2026-08-13
+
+- Implement native whole-shell `npass` transport from canonical FORTRAN XSTAR 2.59g instead of treating `npass` as publication-only: execute the requested fresh-run pass count, alternate source `ldir=-1,+1,...`, and retain the complete per-pass `pprint(9)`/Option-17 trajectory.
+- Reproduce the source SAVD/UNSAVD contract in memory: CFITSIO-style HDU insertion order, REAL(4) persistence of saved floating payloads, reverse `jk=numrec+1-jkp` reads, and direction-owned restoration of only the opposite/far-side line/RRC/continuum optical-depth plane. Saved `zrems` remains intentionally non-restored, as in `unsavd.f90`.
+- Re-run INIT-equivalent pass state on every pass, project TRNFRC by source direction, update STPCUT only on the direction-owned depth plane, and reproduce the source `nlimdt=0` behavior on even repeated passes while retaining caller-owned `ntotit`. Pass 1 replaces `numrec` with `jkp+1`; later passes execute that fixed record count.
+- Keep final public FITS science owned by the final pass while publishing all pass trajectories to `xout_step.log`. Preserve the already-qualified `npass=1` serializer/publication path where possible. Even `npass>1` is source-permitted but emits an explicit warning that an inward final pass does not provide an accurate emergent spectrum; qualification uses odd `npass=1,3,5`.
+- Add a dependency-free source/hash gate, focused `npass` regressions, and a host FORTRAN/C++/pure-Python gate for a finite H+He+C, `cfrac=0` slab. The host gate checks per-pass trajectories, forward/reverse continuum reference depths, final line/RRC optical depths, final public science, and emergent spectrum.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, `60488` frozen. No Python numerical science source is changed; the existing Python multipass implementation remains a secondary oracle after FORTRAN.
+
 ## 0.6.82.26.3 - 2026-08-13
 
 - Close the `radexp` / `density.dat` failure-policy edge case without changing any `.26.2` numerical XSTAR code. Host `.26.2` qualification accepted all six analytic/tabulated radial cases in both C++ and pure Python.

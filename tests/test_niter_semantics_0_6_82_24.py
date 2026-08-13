@@ -12,9 +12,11 @@ def test_cpp_preserves_literal_niter_and_zero_skips_controller() -> None:
     standalone = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text(encoding="utf-8")
     assert "p.niter=p.requested_niter;" in runtime
     assert "p.niter=std::max(1,p.requested_niter)" not in runtime
-    assert "if (params.niter == 0)" in standalone
+    assert ("if (params.niter == 0)" in standalone or
+            "if (source_nlimdt_v068227 == 0)" in standalone)
     assert "Canonical xstarcalc.f90: nlimdt==0 skips dsec entirely" in standalone
-    assert "config.nlim = params.niter;" in standalone
+    assert ("config.nlim = params.niter;" in standalone or
+            "config.nlim = source_nlimdt_v068227;" in standalone)
 
 
 def test_cpp_dsec_negative_contract_is_charge_only() -> None:

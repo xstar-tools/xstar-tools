@@ -50,6 +50,8 @@ ABIs remain intentionally frozen until broad all-element concordance closes.
 
 Product/package versions can advance without changing the frozen science revision. Use `xstar-tools version` to see both.
 
+**0.6.82.27 `npass` candidate:** native standalone execution now contains true repeated whole-shell transport with FORTRAN-style alternating directions and previous-pass far-side optical-depth restoration. The exact `.26.3` predecessor is frozen outside the three native files listed by the `.27` source manifest. Host `npass=1,3,5`, `cfrac=0` FORTRAN/C++/pure-Python qualification is the release-closing gate.
+
 
 ## 1. What `xstar-tools` is
 

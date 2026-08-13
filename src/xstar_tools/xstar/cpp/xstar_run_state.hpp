@@ -144,12 +144,37 @@ struct LegacyPprintEventState {
     std::string payload;
 };
 
+// 0.6.82.27: compact source-pprint(9) trajectory retained across whole-shell
+// passes.  The full FixedEvaluationState for old passes is intentionally not
+// kept here: FORTRAN persists SAVD/UNSAVD detail state in per-pass FITS files,
+// while xout_step.log only needs these scalar/reference-bin surfaces.
+struct LegacyPprintRadialRowState {
+    std::size_t pass_index = 0;
+    int direction = 0;
+    std::size_t zone_index = 0;
+    double radius_cm = 0.0;
+    double radial_depth_cm = 0.0;
+    double column_density_cm2 = 0.0;
+    double log_ionization_parameter = 0.0;
+    double electron_fraction = 0.0;
+    double density_cm3 = 0.0;
+    double temperature_t4 = 0.0;
+    double hmctot = 0.0;
+    double radiation_balance_percent = 0.0;
+    double forward_reference_tau = 0.0;
+    double reverse_reference_tau = 0.0;
+    std::size_t dsec_ntotit = 0;
+    bool terminal_row = false;
+};
+
 struct LegacyPprintState {
     std::vector<LegacyPprintEventState> events;
     std::vector<std::string> buffered_lines;
+    std::vector<LegacyPprintRadialRowState> radial_rows;
     bool initialized_from_native_controller = false;
     bool option_sequence_exact = false;
     bool finalized_from_native_controller = false;
+    bool radial_pass_trajectory_exact = false;
     // Literal xstar.f90 post-radial block: one zero-thickness xstarcalc with
     // nlimd=0, followed by heatt/stpcut and a 4(1pe16.8) scalar write before
     // pprint(22).  These are computed native values, never oracle inputs.

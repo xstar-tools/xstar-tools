@@ -133,7 +133,10 @@ def test_native_analytic_update_and_live_density_are_source_ordered():
     assert 'source_initial_density_cm3_v068226 *' in standalone
     assert 'std::pow(post_geometry_radius_cm_v068226 / source_initial_radius_cm_v068226,' in standalone
     assert 'state.hydrogen_density_cm3 = post_geometry_density_cm3_v068226;' in standalone
-    assert 'advance_stpcut_depths(\n                    data, boundary, source_geometry_segment_v068226, post_geometry_density_cm3_v068226);' in standalone
+    assert (
+        'advance_stpcut_depths(\n                    data, boundary, source_geometry_segment_v068226, post_geometry_density_cm3_v068226);' in standalone
+        or 'advance_stpcut_depths(\n                    data, boundary, source_geometry_segment_v068226, post_geometry_density_cm3_v068226,\n                    data.radial_direction_v068227);' in standalone
+    )
     assert 'source_lcdd == 1\n        ? trial.hydrogen_density_cm3' in standalone
     # Preserve canonical source cap only; no radexp-specific safety cap is introduced.
     assert 'radexp step cap' not in standalone.lower()

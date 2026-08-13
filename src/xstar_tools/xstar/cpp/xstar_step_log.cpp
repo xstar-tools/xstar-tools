@@ -630,7 +630,7 @@ void append_native_radial_summary(std::ofstream& out,
     out << "\n running ...\n";
     out << " U(1-1.8),U(1.8-4):   " << std::setprecision(17) << ispcg2_u_1_1p8
         << "        " << ispcg2_u_1p8_4 << "\n";
-    out << " Lbol=   " << ispcg2_lbol << "\n\n pass number= 1 -1\n";
+    out << " Lbol=   " << ispcg2_lbol << "\n";
     if (state.diagnostic_preview_partial) {
         out << " diagnostic partial radial trajectory: physical boundaries retained="
             << state.physical_radial_boundaries_retained
@@ -639,30 +639,72 @@ void append_native_radial_summary(std::ofstream& out,
             << " terminal synthetic row="
             << (state.terminal_synthetic_row_present ? "reached" : "not reached") << "\n";
     }
-    out << " print option:17\n";
-    out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
-    out << "                                                                  fwd    rev\n";
     auto safe_log=[](double v,double floor){return v>0.0?std::log10(v):floor;};
-    // Option 17 owns the complete physical pprint(9) trajectory: ordinary
-    // radial boundaries plus the canonical post-loop/post-transport endpoint.
-    // The later zero-thickness xstarcalc/pprint(22) evaluation is not stored in
-    // radial_zones and must never expand xout_step.
-    const std::size_t output_rows = rows.size();
-    for(std::size_t i=0;i<output_rows && !rows.empty();++i){
-        const Row& r=rows[i];
-        const auto depths=i<depth_logs.size()?depth_logs[i]:std::pair<double,double>{-10.0,-10.0};
-        const std::size_t ntotit = i < state.radial_zones.size() ? state.radial_zones[i].dsec_ntotit : 0u;
-        out<<std::fixed<<std::setprecision(2)
-           <<std::setw(8)<<safe_log(r.radius,-10.0)
-           <<std::setw(7)<<(r.radius>0&&r.dr>0?std::log10(r.dr/r.radius):-36.0)
-           <<std::setw(7)<<safe_log(r.column,-10.0)
-           <<std::setw(7)<<r.logxi<<std::setw(7)<<r.xee
-           <<std::setw(7)<<safe_log(r.density,-10.0)
-           <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)
-           <<std::setw(7)<<std::clamp(100.0*r.heat_error,-99.99,99.99)
-           <<std::setw(7)<<std::clamp((i<heat_balance_percent.size()?heat_balance_percent[i]:0.0),-99.99,99.99)
-           <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
-           <<std::setw(3)<<ntotit<<"\n";
+    const auto print_option17_heading = [&]() {
+        out << " print option:17\n";
+        out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
+        out << "                                                                  fwd    rev\n";
+    };
+    const std::size_t requested_passes = static_cast<std::size_t>(std::max<long long>(
+        1ll, static_cast<long long>(std::llround(parameter_number(state,"npass",1.0)))));
+    const bool exact_multipass_pprint_v068227 = requested_passes > 1u &&
+        state.legacy_pprint.radial_pass_trajectory_exact &&
+        !state.legacy_pprint.radial_rows.empty();
+    if (exact_multipass_pprint_v068227) {
+        // 0.6.82.27: xstar.f90 calls pprint(17) once per pass and pprint(9)
+        // for every shell plus the post-loop endpoint.  Old passes are kept as
+        // compact source surfaces in LegacyPprintState rather than as full
+        // FixedEvaluationState copies.
+        for (std::size_t pass = 1u; pass <= requested_passes; ++pass) {
+            const int direction = (pass % 2u == 1u) ? -1 : 1;
+            out << "\n pass number= " << pass << ' ' << direction << "\n";
+            print_option17_heading();
+            for (const auto& r : state.legacy_pprint.radial_rows) {
+                if (r.pass_index != pass) continue;
+                const double radial_ratio = (r.radius_cm > 0.0)
+                    ? std::max(1.0e-36,std::min(99.0,r.radial_depth_cm / r.radius_cm))
+                    : 1.0e-36;
+                out << std::fixed << std::setprecision(2)
+                    << std::setw(8) << safe_log(r.radius_cm,-10.0)
+                    << std::setw(7) << std::log10(radial_ratio)
+                    << std::setw(7) << safe_log(std::max(r.column_density_cm2,1.0e-10),-10.0)
+                    << std::setw(7) << r.log_ionization_parameter
+                    << std::setw(7) << r.electron_fraction
+                    << std::setw(7) << safe_log(r.density_cm3,-10.0)
+                    << std::setw(7) << (r.temperature_t4 > 0.0
+                        ? 4.0 + std::log10(r.temperature_t4) : -10.0)
+                    << std::setw(7) << std::clamp(100.0 * r.hmctot,-99.99,99.99)
+                    << std::setw(7) << std::clamp(r.radiation_balance_percent,-99.99,99.99)
+                    << std::setw(7) << std::log10(std::max(r.forward_reference_tau,1.0e-10))
+                    << std::setw(7) << std::log10(std::max(r.reverse_reference_tau,1.0e-10))
+                    << std::setw(3) << r.dsec_ntotit << "\n";
+            }
+        }
+    } else {
+        // Preserve the already-qualified npass=1 serializer unchanged.
+        out << "\n pass number= 1 -1\n";
+        print_option17_heading();
+        // Option 17 owns the complete physical pprint(9) trajectory: ordinary
+        // radial boundaries plus the canonical post-loop/post-transport endpoint.
+        // The later zero-thickness xstarcalc/pprint(22) evaluation is not stored in
+        // radial_zones and must never expand xout_step.
+        const std::size_t output_rows = rows.size();
+        for(std::size_t i=0;i<output_rows && !rows.empty();++i){
+            const Row& r=rows[i];
+            const auto depths=i<depth_logs.size()?depth_logs[i]:std::pair<double,double>{-10.0,-10.0};
+            const std::size_t ntotit = i < state.radial_zones.size() ? state.radial_zones[i].dsec_ntotit : 0u;
+            out<<std::fixed<<std::setprecision(2)
+               <<std::setw(8)<<safe_log(r.radius,-10.0)
+               <<std::setw(7)<<(r.radius>0&&r.dr>0?std::log10(r.dr/r.radius):-36.0)
+               <<std::setw(7)<<safe_log(r.column,-10.0)
+               <<std::setw(7)<<r.logxi<<std::setw(7)<<r.xee
+               <<std::setw(7)<<safe_log(r.density,-10.0)
+               <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)
+               <<std::setw(7)<<std::clamp(100.0*r.heat_error,-99.99,99.99)
+               <<std::setw(7)<<std::clamp((i<heat_balance_percent.size()?heat_balance_percent[i]:0.0),-99.99,99.99)
+               <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
+               <<std::setw(3)<<ntotit<<"\n";
+        }
     }
     out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
     if (state.legacy_pprint.final_zero_thickness_evaluation_present) {

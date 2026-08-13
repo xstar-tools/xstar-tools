@@ -10289,6 +10289,8 @@ void retain_controller_owned_product_workspaces(
     const double pressure = json_number_value(json, "pressure", 0.0);
     const double column = json_number_value(json, "column", 0.0);
     const double rlogxi = json_number_value(json, "rlogxi", 0.0);
+    const int npass_v068227 = static_cast<int>(json_number_value(json, "npass", 1.0));
+    const bool multipass_v068227 = npass_v068227 > 1;
     const int lcpres = static_cast<int>(json_number_value(json, "lcpres", 0.0));
     const bool constant_pressure_v068225 = lcpres == 1;
     const double radial_density_exponent_v0682261 =
@@ -10335,7 +10337,7 @@ void retain_controller_owned_product_workspaces(
         const auto& zone = whole.radial_zones[i];
         const double depth = zone.delta_radius_cm;
         if (!zone.accepted_boundary_exact || !std::isfinite(depth) || depth < 0.0 ||
-            (i > 0u && depth + 1.0e-12 < previous_live_depth)) {
+            (!multipass_v068227 && i > 0u && depth + 1.0e-12 < previous_live_depth)) {
             exact_live_geometry = false;
             break;
         }
@@ -10395,10 +10397,18 @@ void retain_controller_owned_product_workspaces(
     for (std::size_t i = 0; i < whole.radial_zones.size(); ++i) {
         auto& zone = whole.radial_zones[i];
         zone.zone_index = i + 1u;
-        zone.pass_index = 1u;
-        zone.radius_cm = radius0 + std::max(source_rdel[i], 0.0);
-        zone.outer_radius_cm = zone.radius_cm;
-        zone.delta_radius_cm = source_rdel[i];
+        if (!multipass_v068227) {
+            zone.pass_index = 1u;
+            zone.radius_cm = radius0 + std::max(source_rdel[i], 0.0);
+            zone.outer_radius_cm = zone.radius_cm;
+            zone.delta_radius_cm = source_rdel[i];
+        } else {
+            // 0.6.82.27: later passes traverse SAVD/UNSAVD records in source
+            // HDU order, so rdel is not required to be monotonic. Preserve the
+            // exact restored radius/depth/pass identity retained by the native
+            // controller rather than rebuilding a fictitious outward path.
+            zone.outer_radius_cm = zone.radius_cm;
+        }
         if (constant_pressure_v068225) {
             // 0.6.82.25: exact live controller geometry already carries the
             // xpx returned by the final calc_hmc_all at this boundary.  Do not
@@ -10442,7 +10452,7 @@ void retain_controller_owned_product_workspaces(
             zone.log_ionization_parameter = rlogxi;
             zone.ionization_parameter = rlogxi;
         }
-        if (!constant_pressure_v068225 && !variable_density_v0682261) {
+        if (!multipass_v068227 && !constant_pressure_v068225 && !variable_density_v0682261) {
             // 0.6.82.26.1: source xcol for variable density is accumulated
             // with the post-geometry xpx and must not be reconstructed as
             // input_density * depth.
@@ -10473,7 +10483,8 @@ void retain_controller_owned_product_workspaces(
             const auto& previous = whole.radial_zones[i - 1u].accepted_controller.evaluation.source_workspace;
             const double radius = whole.radial_zones[i - 1u].radius_cm;
             const double fpr2 = 12.56 * std::pow(radius * 1.0e-19, 2.0);
-            const std::size_t lind = whole.radial_zones[i - 1u].pass_index > 1u ? 1u : 0u;
+            const std::size_t lind =
+                (whole.radial_zones[i - 1u].pass_index % 2u == 0u) ? 1u : 0u;
             for (std::size_t slot = 0; slot < line_stride; ++slot) {
                 const double opacity = slot < previous.oplin.size() && std::isfinite(previous.oplin[slot])
                     ? previous.oplin[slot] : 0.0;
@@ -11427,6 +11438,12 @@ struct StandaloneControllerDataV67 {
     std::size_t evaluations = 0;
     std::size_t call_index = 1;
     std::size_t evaluation_index = 0;
+    // 0.6.82.27: literal xstar.f90 whole-shell pass identity.  The first
+    // pass uses source ldir=-1; subsequent passes alternate +1/-1.  The
+    // physical radial-order meaning follows SAVD/UNSAVD record ordering, not
+    // the sign label alone.
+    std::size_t radial_pass_index_v068227 = 1u;
+    int radial_direction_v068227 = -1;
     bool writing_final_snapshot = false;
     // v0.6.48.9.4 accepted-boundary reuse accounting.  These counters are
     // production diagnostics only and do not participate in controller state.
@@ -12514,7 +12531,15 @@ void fill_standalone_input(
     // preceded it.  The historical >=3 call guard is correct only for normal
     // physical DSEC evaluations; it incorrectly disabled line escape in final
     // recomputes for one- and two-zone models (notably the xi=2 targets).
-    if (data.call_index >= 3u || data.writing_final_snapshot) {
+    // 0.6.82.27: a repeated pass enters each restored shell with the
+    // opposite/far-side tau plane supplied by UNSAVD.  That optical depth is
+    // physically live even for repeated-pass call 1/2; the historical
+    // call_index>=3 shortcut was only valid for the first outward traversal,
+    // where the first two accepted boundaries precede any accumulated line
+    // depth.  Preserve the npass=1 path byte-for-byte while enabling the
+    // restored tau state immediately on kk>1.
+    if (data.radial_pass_index_v068227 > 1u || data.call_index >= 3u ||
+        data.writing_final_snapshot) {
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE;
     }
     if (data.writing_final_snapshot) {
@@ -13490,6 +13515,9 @@ SourceStepResultV82Patch520111 source_step(
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
+void project_source_trnfrc_direction_v068227(
+    StandaloneControllerDataV67& data, double radius_cm, int radial_direction);
+
 // Purpose: Compute advance source continuum radiation for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
@@ -13732,13 +13760,8 @@ void advance_source_continuum_radiation(
     if (!(trnfrc_fpr2 > 0.0) || !std::isfinite(trnfrc_fpr2)) {
         throw std::runtime_error("v82 patch5.20.11 next-radius trnfrc normalization is invalid");
     }
-    data.dsec_bremsa.assign(n, 0.0);
-    if (n >= 2u) {
-        for (std::size_t reverse = 1u; reverse <= n - 1u; ++reverse) {
-            const std::size_t i = (n - 1u) - reverse;
-            data.dsec_bremsa[i] = data.accumulated_zrems[i] / trnfrc_fpr2;
-        }
-    }
+    project_source_trnfrc_direction_v068227(
+        data, next_radius_cm, data.radial_direction_v068227);
     write_continuum_transfer_stage(data, "19_post_trnfrc_bremsa", data.dsec_bremsa);
     if (data.reference_trajectory_mode && data.call_index == 2u) {
         std::cout << std::setprecision(17)
@@ -14505,7 +14528,8 @@ void advance_stpcut_depths(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
     double delta_radius_cm,
-    double hydrogen_density_cm3) {
+    double hydrogen_density_cm3,
+    int radial_direction) {
     if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
     const std::size_t line_stride = local_boundary.oplin.size();
     if (data.line_tau_in.size() < line_stride) {
@@ -14520,8 +14544,13 @@ void advance_stpcut_depths(
         const double opacity = std::isfinite(local_boundary.oplin[source_slot]) &&
             local_boundary.oplin[source_slot] > 0.0 ? local_boundary.oplin[source_slot] : 0.0;
         const std::size_t runtime_slot = source_slot - 1u;
-        data.line_tau_in[runtime_slot] += opacity * delta_radius_cm;
-        data.product_line_tau_in[source_slot] += opacity * delta_radius_cm;
+        if (radial_direction > 0) {
+            data.line_tau_out[runtime_slot] += opacity * delta_radius_cm;
+            data.product_line_tau_out[source_slot] += opacity * delta_radius_cm;
+        } else {
+            data.line_tau_in[runtime_slot] += opacity * delta_radius_cm;
+            data.product_line_tau_in[source_slot] += opacity * delta_radius_cm;
+        }
     }
 
     const std::size_t continuum_stride = local_boundary.opakab.size();
@@ -14538,8 +14567,13 @@ void advance_stpcut_depths(
         const double opacity = std::isfinite(local_boundary.opakab[source_slot]) &&
             local_boundary.opakab[source_slot] > 0.0 ? local_boundary.opakab[source_slot] : 0.0;
         const std::size_t runtime_slot = source_slot - 1u;
-        data.source_tau_in[runtime_slot] += opacity * delta_radius_cm;
-        data.product_rrc_tau_in[source_slot] += opacity * delta_radius_cm;
+        if (radial_direction > 0) {
+            data.source_tau_out[runtime_slot] += opacity * delta_radius_cm;
+            data.product_rrc_tau_out[source_slot] += opacity * delta_radius_cm;
+        } else {
+            data.source_tau_in[runtime_slot] += opacity * delta_radius_cm;
+            data.product_rrc_tau_in[source_slot] += opacity * delta_radius_cm;
+        }
     }
 
     const std::size_t grid_stride = local_boundary.opakc.size();
@@ -14557,8 +14591,13 @@ void advance_stpcut_depths(
         const double opakcont = i < local_boundary.opakcont.size() &&
             std::isfinite(local_boundary.opakcont[i]) && local_boundary.opakcont[i] > 0.0
             ? local_boundary.opakcont[i] : 0.0;
-        data.grid_tau_in[i] += opakc * delta_radius_cm;
-        data.grid_cont_tau_in[i] += opakcont * delta_radius_cm;
+        if (radial_direction > 0) {
+            data.grid_tau_out[i] += opakc * delta_radius_cm;
+            data.grid_cont_tau_out[i] += opakcont * delta_radius_cm;
+        } else {
+            data.grid_tau_in[i] += opakc * delta_radius_cm;
+            data.grid_cont_tau_in[i] += opakcont * delta_radius_cm;
+        }
     }
     retain_pre_stpcut_cumulative_state(data, local_boundary);
 
@@ -14570,9 +14609,13 @@ void advance_stpcut_depths(
               << "V048746255172582_PATCH52011_TRANSPORT_CUMULATIVE_DEPTH_CM="
               << (data.cumulative_depth_cm + delta_radius_cm) << "\n"
               << "V048746255172582_PATCH52011_DPTHC_MAX="
-              << (data.grid_tau_in.empty() ? 0.0 : *std::max_element(data.grid_tau_in.begin(), data.grid_tau_in.end())) << "\n"
+              << ((radial_direction > 0 ? data.grid_tau_out : data.grid_tau_in).empty() ? 0.0 :
+                  *std::max_element((radial_direction > 0 ? data.grid_tau_out : data.grid_tau_in).begin(),
+                                    (radial_direction > 0 ? data.grid_tau_out : data.grid_tau_in).end())) << "\n"
               << "V048746255172582_PATCH52011_DPTHCONT_MAX="
-              << (data.grid_cont_tau_in.empty() ? 0.0 : *std::max_element(data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end())) << "\n";
+              << ((radial_direction > 0 ? data.grid_cont_tau_out : data.grid_cont_tau_in).empty() ? 0.0 :
+                  *std::max_element((radial_direction > 0 ? data.grid_cont_tau_out : data.grid_cont_tau_in).begin(),
+                                    (radial_direction > 0 ? data.grid_cont_tau_out : data.grid_cont_tau_in).end())) << "\n";
 
     // Literal xstar.f90 geometry/column ownership:
     //   rdel=rdel+delr
@@ -17185,6 +17228,324 @@ SourceDensityTableV068226 read_source_density_table_v068226(
     return table;
 }
 
+// 0.6.82.27 native in-memory equivalent of the fstepr*/rstepr* pass state.
+// The FORTRAN source writes these records through TFLOAT columns, so every
+// value that later UNSAVD can consume is rounded to REAL(4) at save time.
+struct NativeSavedShellV068227 {
+    FixedDsecSnapshot snapshot;
+    double pressure_dyn_cm2 = 0.0;
+    double radius_cm = 0.0;
+    double radial_depth_cm = 0.0;
+    double step_size_cm = 0.0;
+    double column_cm2 = 0.0;
+    double electron_fraction = 0.0;
+    double hydrogen_density_cm3 = 0.0;
+    double zeta = 0.0;
+    bool terminal_record = false;
+};
+
+struct NativeSavedPassV068227 {
+    // One-based HDU semantics: slots 1 and 2 are the primary/parameter HDUs.
+    std::vector<std::optional<NativeSavedShellV068227>> hdus{std::nullopt,std::nullopt,std::nullopt};
+
+    void insert_after_hdu(std::size_t hdu, NativeSavedShellV068227 shell) {
+        if (hdu < 1u || hdu >= hdus.size()) {
+            throw std::runtime_error("0.6.82.27 savd HDU insertion target is invalid");
+        }
+        hdus.insert(hdus.begin() + static_cast<std::ptrdiff_t>(hdu + 1u), std::move(shell));
+    }
+
+    const NativeSavedShellV068227& at_hdu(std::size_t hdu) const {
+        if (hdu < 1u || hdu >= hdus.size() || !hdus[hdu].has_value()) {
+            throw std::runtime_error("0.6.82.27 unsavd requested an unavailable shell HDU");
+        }
+        return *hdus[hdu];
+    }
+};
+
+double source_real4_v068227(double value) {
+    return static_cast<double>(static_cast<float>(value));
+}
+
+void source_real4_vector_v068227(std::vector<double>& values) {
+    for (double& value : values) value = source_real4_v068227(value);
+}
+
+NativeSavedShellV068227 make_saved_shell_v068227(
+    const FixedDsecSnapshot& source,
+    double pressure_dyn_cm2,
+    double radius_cm,
+    double radial_depth_cm,
+    double step_size_cm,
+    double column_cm2,
+    double electron_fraction,
+    double hydrogen_density_cm3,
+    double zeta,
+    bool terminal_record) {
+    NativeSavedShellV068227 out;
+    out.snapshot = source;
+    // savd.f90 persists xilev/rnist, rcem/oplin/tau0, cemab/cabab/opakab/tauc,
+    // zrems/dpthc/opakc/rccemis.  zrems is intentionally saved but UNSAVD
+    // never restores it.  Round exactly those persisted arrays here.
+    source_real4_vector_v068227(out.snapshot.source_global_xilevg);
+    source_real4_vector_v068227(out.snapshot.source_global_rnisg);
+    source_real4_vector_v068227(out.snapshot.rcem);
+    source_real4_vector_v068227(out.snapshot.oplin);
+    source_real4_vector_v068227(out.snapshot.tau0);
+    source_real4_vector_v068227(out.snapshot.cemab);
+    source_real4_vector_v068227(out.snapshot.cabab);
+    source_real4_vector_v068227(out.snapshot.opakab);
+    source_real4_vector_v068227(out.snapshot.tauc);
+    source_real4_vector_v068227(out.snapshot.zrems);
+    source_real4_vector_v068227(out.snapshot.dpthc);
+    source_real4_vector_v068227(out.snapshot.opakc);
+    source_real4_vector_v068227(out.snapshot.rccemis);
+    out.pressure_dyn_cm2 = source_real4_v068227(pressure_dyn_cm2);
+    out.radius_cm = source_real4_v068227(radius_cm);
+    out.radial_depth_cm = source_real4_v068227(radial_depth_cm);
+    out.step_size_cm = source_real4_v068227(step_size_cm);
+    out.column_cm2 = source_real4_v068227(column_cm2);
+    out.electron_fraction = source_real4_v068227(electron_fraction);
+    out.hydrogen_density_cm3 = source_real4_v068227(hydrogen_density_cm3);
+    out.zeta = source_real4_v068227(zeta);
+    out.terminal_record = terminal_record;
+    return out;
+}
+
+void initialize_native_radial_pass_v068227(
+    StandaloneControllerDataV67& data,
+    xstar_fixed_state_context* fixed,
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE>& message) {
+    const std::size_t n = data.energy.size();
+    std::fill(data.source_tau_in.begin(), data.source_tau_in.end(), 0.0);
+    std::fill(data.source_tau_out.begin(), data.source_tau_out.end(), 0.0);
+    std::fill(data.line_tau_in.begin(), data.line_tau_in.end(), 0.0);
+    std::fill(data.line_tau_out.begin(), data.line_tau_out.end(), 0.0);
+    std::fill(data.product_line_tau_in.begin(), data.product_line_tau_in.end(), 0.0);
+    std::fill(data.product_line_tau_out.begin(), data.product_line_tau_out.end(), 0.0);
+    std::fill(data.product_rrc_tau_in.begin(), data.product_rrc_tau_in.end(), 0.0);
+    std::fill(data.product_rrc_tau_out.begin(), data.product_rrc_tau_out.end(), 0.0);
+    std::fill(data.line_luminosity.begin(), data.line_luminosity.end(), 0.0);
+    std::fill(data.rrc_luminosity.begin(), data.rrc_luminosity.end(), 0.0);
+    std::fill(data.grid_tau_in.begin(), data.grid_tau_in.end(), 0.0);
+    std::fill(data.grid_tau_out.begin(), data.grid_tau_out.end(), 0.0);
+    std::fill(data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end(), 0.0);
+    std::fill(data.grid_cont_tau_out.begin(), data.grid_cont_tau_out.end(), 0.0);
+    data.accumulated_zrems.assign(5u * n, 0.0);
+    data.accumulated_zremso.assign(5u * n, 0.0);
+    data.accumulated_zremsz = data.source_incident;
+    for (std::size_t i = 0; i < n; ++i) {
+        data.accumulated_zrems[i] = data.source_incident[i];
+        data.accumulated_zremso[i] = data.source_incident[i];
+    }
+    const int rc = xstar_fixed_state_context_set_runtime_line_tau_v1(
+        fixed, data.line_tau_in.data(), data.line_tau_out.data(),
+        data.line_tau_in.size(), message.data(), message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("0.6.82.27 pass line-tau reset failed: ") + message.data());
+    }
+}
+
+void restore_saved_shell_v068227(
+    StandaloneControllerDataV67& data,
+    xstar_thermal_state_v1& thermal_state,
+    const NativeSavedShellV068227& saved,
+    int radial_direction,
+    xstar_fixed_state_context* fixed,
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE>& message) {
+    const auto& snap = saved.snapshot;
+    thermal_state.temperature_t4 = source_real4_v068227(snap.temperature_t4);
+    thermal_state.electron_fraction_xee = saved.electron_fraction;
+    thermal_state.hydrogen_density_cm3 = saved.hydrogen_density_cm3;
+    data.cumulative_depth_cm = saved.radial_depth_cm;
+    data.cumulative_column_cm2 = saved.column_cm2;
+
+    data.global_xilevg = snap.source_global_xilevg;
+    data.global_rnisg = snap.source_global_rnisg;
+    data.global_workspace_initialized = !data.global_xilevg.empty();
+    if (data.global_workspace_initialized) recompute_global_bilevg(data);
+
+    const std::size_t line_stride = snap.oplin.size();
+    if (snap.tau0.size() >= 2u * line_stride) {
+        if (data.product_line_tau_in.size() != line_stride) {
+            data.product_line_tau_in.assign(line_stride,0.0);
+            data.product_line_tau_out.assign(line_stride,0.0);
+        }
+        const std::size_t plane = radial_direction > 0 ? 0u : 1u;
+        auto& product = radial_direction > 0 ? data.product_line_tau_in : data.product_line_tau_out;
+        auto& runtime = radial_direction > 0 ? data.line_tau_in : data.line_tau_out;
+        for (std::size_t source_slot = 1u; source_slot < line_stride; ++source_slot) {
+            const double value = snap.tau0[plane * line_stride + source_slot];
+            product[source_slot] = value;
+            const std::size_t runtime_slot = source_slot - 1u;
+            if (runtime_slot < runtime.size()) runtime[runtime_slot] = value;
+        }
+    }
+
+    const std::size_t rrc_stride = snap.opakab.size();
+    if (snap.tauc.size() >= 2u * rrc_stride) {
+        if (data.product_rrc_tau_in.size() != rrc_stride) {
+            data.product_rrc_tau_in.assign(rrc_stride,0.0);
+            data.product_rrc_tau_out.assign(rrc_stride,0.0);
+        }
+        const std::size_t plane = radial_direction > 0 ? 0u : 1u;
+        auto& product = radial_direction > 0 ? data.product_rrc_tau_in : data.product_rrc_tau_out;
+        auto& runtime = radial_direction > 0 ? data.source_tau_in : data.source_tau_out;
+        for (std::size_t source_slot = 1u; source_slot < rrc_stride; ++source_slot) {
+            const double value = snap.tauc[plane * rrc_stride + source_slot];
+            product[source_slot] = value;
+            const std::size_t runtime_slot = source_slot - 1u;
+            if (runtime_slot < runtime.size()) runtime[runtime_slot] = value;
+        }
+    }
+
+    const std::size_t grid_stride = data.energy.size();
+    if (snap.dpthc.size() >= 2u * grid_stride) {
+        const std::size_t plane = radial_direction > 0 ? 0u : 1u;
+        auto& target = radial_direction > 0 ? data.grid_tau_in : data.grid_tau_out;
+        for (std::size_t i = 0; i < grid_stride; ++i) target[i] = snap.dpthc[plane * grid_stride + i];
+    }
+    // dpthcont is not written by savd.f90/rstepr4.f90.  Leave the active
+    // pass plane at INIT zero rather than inventing persistence.
+
+    const int rc = xstar_fixed_state_context_set_runtime_line_tau_v1(
+        fixed, data.line_tau_in.data(), data.line_tau_out.data(),
+        data.line_tau_in.size(), message.data(), message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("0.6.82.27 unsavd line-tau restore failed: ") + message.data());
+    }
+}
+
+void project_source_trnfrc_direction_v068227(
+    StandaloneControllerDataV67& data,
+    double radius_cm,
+    int radial_direction) {
+    const std::size_t n = data.energy.size();
+    if (n == 0u) return;
+    const double r19 = radius_cm / xstar_constants::kLegacyTrnfrcRadiusScaleCm;
+    const double fpr2 = xstar_constants::kLegacyTrnfrcGeometryFactor * r19 * r19;
+    if (!(fpr2 > 0.0) || !std::isfinite(fpr2)) {
+        throw std::runtime_error("0.6.82.27 trnfrc radius normalization is invalid");
+    }
+    data.dsec_bremsa.assign(n,0.0);
+    if (n >= 2u) {
+        for (std::size_t reverse = 1u; reverse <= n - 1u; ++reverse) {
+            const std::size_t i = (n - 1u) - reverse;
+            if (radial_direction > 0) {
+                const double tau = i < data.grid_tau_in.size() ? data.grid_tau_in[i] : 0.0;
+                data.dsec_bremsa[i] = data.accumulated_zremsz[i] * std::exp(-tau) / fpr2;
+            } else {
+                data.dsec_bremsa[i] = data.accumulated_zrems[i] / fpr2;
+            }
+        }
+    }
+}
+
+std::size_t source_pprint_nry_zero_based_v068227(
+    double x,
+    const std::vector<double>& energy) {
+    // Literal nbinc.f90/huntf.f90 staging used by pprint(9).  This mirrors
+    // xstar_step_log.cpp but is kept local so the controller can retain a
+    // compact pass trajectory without preserving every old full workspace.
+    const std::size_t n = energy.size();
+    if (n == 0u) return 0u;
+    const std::size_t numcon2 = std::max<std::size_t>(2u,n / 50u);
+    const std::size_t nn = n > numcon2 ? n - numcon2 : 1u;
+    if (nn < 2u) return 0u;
+    constexpr double floor = 1.0e-36;
+    const double xx1 = energy[0];
+    const double xx2 = energy[1];
+    const double xxn = energy[nn - 1u];
+    std::size_t jlo_one_based = 1u;
+    if (x >= floor && xx1 > floor && xxn > floor) {
+        const double xtmp = std::max(x,xx2);
+        const double denom = std::log(xxn / xx1);
+        if (std::isfinite(denom) && denom != 0.0) {
+            const double raw = static_cast<double>(nn - 1u) *
+                std::log(xtmp / xx1) / denom;
+            if (std::isfinite(raw)) {
+                const long long base = static_cast<long long>(raw);
+                jlo_one_based = static_cast<std::size_t>(
+                    std::max<long long>(1ll,base + 1ll));
+            }
+        }
+        if (jlo_one_based < nn) {
+            const std::size_t a = jlo_one_based - 1u;
+            const std::size_t b = jlo_one_based;
+            const double tst = std::abs(std::log(x / (floor + energy[a])));
+            const double tst2 = std::abs(std::log(x / (floor + energy[b])));
+            if (tst2 < tst) ++jlo_one_based;
+        }
+    }
+    jlo_one_based = std::max<std::size_t>(1u,std::min(nn,jlo_one_based));
+    return jlo_one_based;
+}
+
+xstar_run_state::LegacyPprintRadialRowState make_pprint9_row_v068227(
+    const FixedDsecSnapshot& boundary,
+    const StandaloneControllerDataV67& data,
+    const xstar_atdb_runtime::ProductionParameters& params,
+    std::size_t pass_index,
+    int direction,
+    std::size_t zone_index,
+    double radius_cm,
+    double radial_depth_cm,
+    double column_cm2,
+    std::size_t source_ntotit,
+    bool terminal_row) {
+    xstar_run_state::LegacyPprintRadialRowState row;
+    row.pass_index = pass_index;
+    row.direction = direction;
+    row.zone_index = zone_index;
+    row.radius_cm = radius_cm;
+    row.radial_depth_cm = radial_depth_cm;
+    row.column_density_cm2 = column_cm2;
+    row.electron_fraction = boundary.electron_fraction_input;
+    row.density_cm3 = boundary.hydrogen_density_cm3;
+    row.temperature_t4 = boundary.temperature_t4;
+    row.hmctot = boundary.hmctot;
+    row.dsec_ntotit = source_ntotit;
+    row.terminal_row = terminal_row;
+
+    const double r19 = radius_cm * static_cast<double>(static_cast<float>(1.0e-19));
+    const double xi = (r19 > 0.0 && row.density_cm3 > 0.0)
+        ? params.luminosity_1e38 / (row.density_cm3 * r19 * r19) : 0.0;
+    row.log_ionization_parameter = std::log10(std::max(1.0e-24,xi));
+
+    const std::size_t n = boundary.radiation_energy_ev.size();
+    const auto& ws = boundary.zremsz.size() >= n ? boundary.zremsz : data.accumulated_zremsz;
+    const auto& zrems = boundary.zrems.size() >= n ? boundary.zrems : data.accumulated_zrems;
+    if (n >= 2u && ws.size() >= n && zrems.size() >= n) {
+        constexpr double ergsev = static_cast<double>(static_cast<float>(1.602197e-12));
+        double sum_incident = 0.0;
+        double sum_current = 0.0;
+        double previous_incident = 0.0;
+        double previous_current = 0.0;
+        for (std::size_t i = 1u; i < n; ++i) {
+            const double incident = std::isfinite(ws[i]) ? ws[i] : 0.0;
+            const double current = std::isfinite(zrems[i]) ? zrems[i] : 0.0;
+            const double de = boundary.radiation_energy_ev[i] -
+                boundary.radiation_energy_ev[i - 1u];
+            if (std::isfinite(de)) {
+                sum_incident += (incident + previous_incident) * de * ergsev / 2.0;
+                sum_current += (current + previous_current) * de * ergsev / 2.0;
+            }
+            previous_incident = incident;
+            previous_current = current;
+        }
+        row.radiation_balance_percent = 100.0 *
+            (sum_incident - sum_current) / (sum_incident + 1.0e-24);
+    }
+    if (n > 0u && boundary.dpthc.size() >= 2u * n) {
+        const std::size_t reference = std::min(
+            source_pprint_nry_zero_based_v068227(13.6,boundary.radiation_energy_ev),
+            n - 1u);
+        row.forward_reference_tau = boundary.dpthc[reference];
+        row.reverse_reference_tau = boundary.dpthc[n + reference];
+    }
+    return row;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Reproject the retained source continuum to the post-density.dat radius after the source overwrites delr/r.
 // Reference context: xstar.f90 post-savd density.dat ordering followed by the next trnfrc radius normalization.
@@ -17192,20 +17553,8 @@ SourceDensityTableV068226 read_source_density_table_v068226(
 void project_source_trnfrc_radius_v068226(
     StandaloneControllerDataV67& data,
     double radius_cm) {
-    const std::size_t n = data.energy.size();
-    if (n == 0u) return;
-    const double r19 = radius_cm / xstar_constants::kLegacyTrnfrcRadiusScaleCm;
-    const double fpr2 = xstar_constants::kLegacyTrnfrcGeometryFactor * r19 * r19;
-    if (!(fpr2 > 0.0) || !std::isfinite(fpr2)) {
-        throw std::runtime_error("density.dat trnfrc radius normalization is invalid");
-    }
-    data.dsec_bremsa.assign(n,0.0);
-    if (n >= 2u) {
-        for (std::size_t reverse = 1u; reverse <= n - 1u; ++reverse) {
-            const std::size_t i = (n - 1u) - reverse;
-            data.dsec_bremsa[i] = data.accumulated_zrems[i] / fpr2;
-        }
-    }
+    project_source_trnfrc_direction_v068227(
+        data, radius_cm, data.radial_direction_v068227);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -17539,13 +17888,37 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         // reference_trajectory_mode is active.
         std::vector<double> source_boundary_depth_cm;
         std::vector<double> source_boundary_column_cm2;
+        std::vector<double> source_boundary_radius_cm_v068227;
         std::vector<double> source_transport_segment_cm;
         double pending_transport_segment_cm = 0.0;
         int density_iostat_v068226 = 0;
+        const std::size_t requested_npass_v068227 =
+            static_cast<std::size_t>(std::max(params.npass, 1));
+        // Fresh xstar.f90 runs initialize numrec=2 before pprint(2), then use
+        // `if (numrec.le.0) npass=1`.  Native whole-shell execution has the
+        // same positive fresh-run record state, so the public requested pass
+        // count is literal here; source_numrec is replaced by jkp+1 only after
+        // pass 1, exactly as in the source.
+        const std::size_t effective_npass_v068227 = requested_npass_v068227;
+        if (effective_npass_v068227 > 1u && (effective_npass_v068227 % 2u) == 0u) {
+            std::cerr << "V068227_EVEN_NPASS_SPECTRUM_POLICY="
+                      << "FINAL_INWARD_PASS_NOT_ACCURATE npass="
+                      << effective_npass_v068227 << "\n";
+        }
+        std::vector<NativeSavedPassV068227> saved_passes_v068227(
+            effective_npass_v068227 + 1u);
+        std::size_t source_numrec_v068227 = 2u;
+        double current_radius_cm_v068227 = source_initial_radius_cm_v068226;
+        double last_geometry_segment_cm_v068227 = 0.0;
 
         static constexpr std::array<std::size_t,4> expected_dsec_counts{{20u,1u,17u,16u}};
         std::vector<std::size_t> actual_dsec_counts;
         std::vector<std::size_t> actual_dsec_ntotit;
+        // ntotit is a caller-owned scalar in xstar.f90.  When an even
+        // repeated pass sets nlimdt=0, xstarcalc skips DSEC and therefore
+        // leaves the previous value untouched.  Keep that source lifetime
+        // instead of publishing the zero-initialized native stats object.
+        std::size_t source_ntotit_v068227 = 0u;
         std::vector<FixedDsecSnapshot> finals;
         finals.reserve(static_cast<std::size_t>(std::max(params.nsteps, 4)));
         std::optional<FixedDsecSnapshot> terminal_transport_boundary_v82_patch520144;
@@ -17560,8 +17933,54 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         g_shared_zone_seconds_v0648110.clear();
         g_shared_zone_dsec_v0648110.clear();
 
+        for (std::size_t kk_v068227 = 1u; kk_v068227 <= effective_npass_v068227; ++kk_v068227) {
+            data.radial_pass_index_v068227 = kk_v068227;
+            data.radial_direction_v068227 = (kk_v068227 % 2u == 1u) ? -1 : 1;
+            initialize_native_radial_pass_v068227(data, fixed, message);
+            data.cumulative_depth_cm = 0.0;
+            data.physical_transport_intervals_completed = 0u;
+            pending_transport_segment_cm = 0.0;
+            density_iostat_v068226 = 0;
+            current_radius_cm_v068227 = source_initial_radius_cm_v068226;
+            last_geometry_segment_cm_v068227 = 0.0;
+            if (kk_v068227 > 1u) {
+                finals.clear();
+                actual_dsec_counts.clear();
+                actual_dsec_ntotit.clear();
+                source_boundary_depth_cm.clear();
+                source_boundary_column_cm2.clear();
+                source_boundary_radius_cm_v068227.clear();
+                source_transport_segment_cm.clear();
+                terminal_transport_boundary_v82_patch520144.reset();
+                terminal_shell_entry_bremsa_v064883.clear();
+            }
+            std::cout << "V068227_NATIVE_PASS_START=" << kk_v068227
+                      << " DIRECTION=" << data.radial_direction_v068227
+                      << " REQUESTED_PASSES=" << requested_npass_v068227 << "\n";
+
         for (std::size_t call = 1; ; ++call) {
             if (call > 3999u) throw std::runtime_error("too many native radial zones: buffer filled");
+            if (kk_v068227 > 1u) {
+                if (call > source_numrec_v068227) {
+                    throw std::runtime_error("0.6.82.27 repeated pass exceeded source numrec");
+                }
+                const std::size_t jk_v068227 = source_numrec_v068227 + 1u - call;
+                const std::size_t restore_hdu_v068227 = jk_v068227 + 2u;
+                const auto& saved_v068227 = saved_passes_v068227[kk_v068227 - 1u].at_hdu(
+                    restore_hdu_v068227);
+                restore_saved_shell_v068227(
+                    data, state, saved_v068227, data.radial_direction_v068227, fixed, message);
+                current_radius_cm_v068227 = saved_v068227.radius_cm;
+                pending_transport_segment_cm = saved_v068227.step_size_cm;
+                project_source_trnfrc_direction_v068227(
+                    data, current_radius_cm_v068227, data.radial_direction_v068227);
+                std::cout << "V068227_NATIVE_UNSAVD_PASS=" << kk_v068227
+                          << " CALL=" << call
+                          << " JK=" << jk_v068227
+                          << " HDU=" << restore_hdu_v068227
+                          << " RADIUS_CM=" << std::setprecision(17) << current_radius_cm_v068227
+                          << " DELR_CM=" << pending_transport_segment_cm << "\n";
+            }
             production_zone_wait_before_call(call);
             const auto shared_zone_started_v0648110 = std::chrono::steady_clock::now();
             data.call_index = call;
@@ -17591,7 +18010,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             data.writing_final_snapshot = false;
             xstar_dsec_config_v1 config{};
             xstar_dsec_config_init_v1(&config);
-            config.nlim = params.niter;
+            const int source_nlimdt_v068227 =
+                (kk_v068227 > 1u && data.radial_direction_v068227 > 0) ? 0 : params.niter;
+            config.nlim = source_nlimdt_v068227;
             // The native four-call product trajectory has explicit source-call
             // boundaries at 20/1/17/16 DSEC evaluations.  These are not a
             // generic callback limit and are applied only to the canonical
@@ -17640,7 +18061,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 }
             }
             const auto controller_call_started_v064890 = std::chrono::steady_clock::now();
-            if (params.niter == 0) {
+            if (source_nlimdt_v068227 == 0) {
                 // Canonical xstarcalc.f90: nlimdt==0 skips dsec entirely.
                 // Do not emulate this by calling the controller with nlim=0:
                 // dsec(0) would still execute calc_hmc_all once, after which
@@ -17712,7 +18133,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             const std::size_t dsec_count = data.evaluations - before;
             actual_dsec_counts.push_back(dsec_count);
-            actual_dsec_ntotit.push_back(static_cast<std::size_t>(std::max(stats.ntotit, 0)));
+            if (source_nlimdt_v068227 != 0) {
+                source_ntotit_v068227 = static_cast<std::size_t>(std::max(stats.ntotit,0));
+            }
+            actual_dsec_ntotit.push_back(source_ntotit_v068227);
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->controller_call_evaluations[call - 1u] += static_cast<std::uint64_t>(dsec_count);
             }
@@ -17741,7 +18165,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             data.writing_final_snapshot = true;
             source_boundary_depth_cm.push_back(data.cumulative_depth_cm);
             source_boundary_column_cm2.push_back(data.cumulative_column_cm2);
-            const double boundary_radius_cm = source_initial_radius_cm_v068226 + data.cumulative_depth_cm;
+            source_boundary_radius_cm_v068227.push_back(current_radius_cm_v068227);
+            const double boundary_radius_cm = current_radius_cm_v068227;
             // Retain the local source workspace first.  Radial transport is
             // committed only across the shell selected by the previous
             // source STEP evaluation (call 1 itself has zero thickness).
@@ -17823,6 +18248,44 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 data, boundary, segment, boundary_radius_cm, "post_atomic_pre_stpcut");
             FixedDsecSnapshot pretransport_boundary_v82_patch520145 = boundary;
 
+            // pprint(9) is emitted on every shell of every pass before SAVD
+            // and before geometry/STPCUT/TRNFRN.  Retain its compact scalar
+            // and reference-bin surfaces now so xout_step.log can reproduce
+            // the full multipass trajectory without keeping all prior full
+            // FixedDsecSnapshot workspaces resident.
+            whole.legacy_pprint.radial_rows.push_back(
+                make_pprint9_row_v068227(
+                    pretransport_boundary_v82_patch520145, data, params,
+                    kk_v068227, data.radial_direction_v068227, call,
+                    boundary_radius_cm, data.cumulative_depth_cm,
+                    data.cumulative_column_cm2, source_ntotit_v068227, false));
+
+            // xstar.f90 SAVD occurs after HEATT/pprint and before the geometry,
+            // STPCUT, and TRNFRN updates.  Multipass execution depends on the
+            // exact REAL(4) state stored at this source boundary.
+            if (effective_npass_v068227 > 1u) {
+                const double boundary_r19_v068227 = boundary_radius_cm *
+                    static_cast<double>(static_cast<float>(1.0e-19));
+                const double boundary_xi_v068227 =
+                    (boundary_r19_v068227 > 0.0 && boundary.hydrogen_density_cm3 > 0.0)
+                        ? params.luminosity_1e38 /
+                            (boundary_r19_v068227 * boundary_r19_v068227 *
+                             boundary.hydrogen_density_cm3)
+                        : 0.0;
+                const double boundary_zeta_v068227 = boundary_xi_v068227 > 0.0
+                    ? std::log10(boundary_xi_v068227)
+                    : -std::numeric_limits<double>::infinity();
+                saved_passes_v068227[kk_v068227].insert_after_hdu(
+                    call + 1u,
+                    make_saved_shell_v068227(
+                        pretransport_boundary_v82_patch520145,
+                        params.pressure_dyn_cm2, boundary_radius_cm,
+                        data.cumulative_depth_cm, segment,
+                        data.cumulative_column_cm2,
+                        boundary.electron_fraction_input,
+                        boundary.hydrogen_density_cm3, boundary_zeta_v068227, false));
+            }
+
             double source_geometry_segment_v068226 = segment;
             double post_geometry_radius_cm_v068226 = boundary_radius_cm + source_geometry_segment_v068226;
             double post_geometry_density_cm3_v068226 = boundary.hydrogen_density_cm3;
@@ -17858,10 +18321,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // The source uses the post-geometry xpx in xcol=xcol+xpx*delr,
             // and that same live xpx enters the next calc_hmc_all call.
             state.hydrogen_density_cm3 = post_geometry_density_cm3_v068226;
+            current_radius_cm_v068227 = post_geometry_radius_cm_v068226;
+            last_geometry_segment_cm_v068227 = source_geometry_segment_v068226;
             if (source_geometry_segment_v068226 > 0.0) {
                 const auto stpcut_started_v064890 = std::chrono::steady_clock::now();
                 advance_stpcut_depths(
-                    data, boundary, source_geometry_segment_v068226, post_geometry_density_cm3_v068226);
+                    data, boundary, source_geometry_segment_v068226, post_geometry_density_cm3_v068226,
+                    data.radial_direction_v068227);
                 if (g_performance_v064890) {
                     g_performance_v064890->stpcut_seconds += performance_elapsed_seconds(stpcut_started_v064890);
                 }
@@ -17901,9 +18367,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 std::cerr << "V064812311_XCOL_SOURCE_PREDICATE="
                           << (source_predicate_v0648110 ? "CONTINUE" : "STOP") << "\n";
             }
-            const bool continue_after_zone_v0648110 = data.reference_trajectory_mode
-                ? (call < expected_dsec_counts.size())
-                : source_predicate_v0648110;
+            const bool continue_after_zone_v0648110 = kk_v068227 > 1u
+                ? (call < source_numrec_v068227 && density_iostat_v068226 == 0)
+                : (data.reference_trajectory_mode
+                    ? (call < expected_dsec_counts.size())
+                    : source_predicate_v0648110);
             const bool done_after_zone_v0648110 = !continue_after_zone_v0648110;
             if (done_after_zone_v0648110) {
                 terminal_shell_entry_bremsa_v064883 = current_shell_entry_bremsa_v0648110;
@@ -17925,9 +18393,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // already-smoothed opakc directly.  Reapplying the historical
             // call-1 helper here would double-smooth the first boundary and
             // change the accepted trajectory.
-            if (continue_after_zone_v0648110) {
+            if (continue_after_zone_v0648110 && kk_v068227 == 1u) {
                 const std::vector<double>& step_opakc = boundary.opakc;
-                const double step_radius_cm = source_initial_radius_cm_v068226 + data.cumulative_depth_cm;
+                const double step_radius_cm = current_radius_cm_v068227;
                 const double current_column_cm2 = data.cumulative_column_cm2;
                 const auto step_started_v064890 = std::chrono::steady_clock::now();
                 const auto step_result = source_step(
@@ -18094,7 +18562,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 print_xstar_style_live_zone(
                     finals.back(), params, source_initial_radius_cm_v068226,
                     source_boundary_depth_cm.back(), source_boundary_column_cm2.back(),
-                    static_cast<std::size_t>(std::max(stats.ntotit, 0)));
+                    source_ntotit_v068227);
             }
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
@@ -18106,6 +18574,50 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                       << " ELCTER=" << stats.final_elcter << "\n";
             if (done_after_zone_v0648110) break;
         }
+
+            if (kk_v068227 == 1u) {
+                // xstar.f90: after the first traversal, numrec=jkp+1.
+                source_numrec_v068227 = finals.size() + 1u;
+            }
+            if (!terminal_transport_boundary_v82_patch520144) {
+                throw std::runtime_error("0.6.82.27 pass ended without a terminal transport boundary");
+            }
+            whole.legacy_pprint.radial_rows.push_back(
+                make_pprint9_row_v068227(
+                    *terminal_transport_boundary_v82_patch520144, data, params,
+                    kk_v068227, data.radial_direction_v068227, finals.size(),
+                    current_radius_cm_v068227, data.cumulative_depth_cm,
+                    data.cumulative_column_cm2, source_ntotit_v068227, true));
+            if (effective_npass_v068227 > 1u) {
+                const double terminal_r19_v068227 = current_radius_cm_v068227 *
+                    static_cast<double>(static_cast<float>(1.0e-19));
+                const double terminal_xi_v068227 =
+                    (terminal_r19_v068227 > 0.0 && state.hydrogen_density_cm3 > 0.0)
+                        ? params.luminosity_1e38 /
+                            (terminal_r19_v068227 * terminal_r19_v068227 *
+                             state.hydrogen_density_cm3)
+                        : 0.0;
+                const double terminal_zeta_v068227 = terminal_xi_v068227 > 0.0
+                    ? std::log10(terminal_xi_v068227)
+                    : -std::numeric_limits<double>::infinity();
+                saved_passes_v068227[kk_v068227].insert_after_hdu(
+                    finals.size() + 1u,
+                    make_saved_shell_v068227(
+                        *terminal_transport_boundary_v82_patch520144,
+                        params.pressure_dyn_cm2, current_radius_cm_v068227,
+                        data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
+                        data.cumulative_column_cm2, state.electron_fraction_xee,
+                        state.hydrogen_density_cm3, terminal_zeta_v068227, true));
+            }
+            std::cout << "V068227_NATIVE_PASS_DONE=" << kk_v068227
+                      << " DIRECTION=" << data.radial_direction_v068227
+                      << " SHELLS=" << finals.size()
+                      << " SOURCE_NUMREC=" << source_numrec_v068227
+                      << " SAVED_HDUS=" << saved_passes_v068227[kk_v068227].hdus.size() - 1u
+                      << "\n";
+        }
+        whole.legacy_pprint.radial_pass_trajectory_exact =
+            !whole.legacy_pprint.radial_rows.empty();
 
         if (g_performance_v064890) {
             g_performance_v064890->all_fixed_calls = data.cumulative_stats.calls;
@@ -18366,7 +18878,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         const std::size_t radial_event_count = finals.size() + 1u;
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
-                               double source_depth, double source_column,
+                               double source_radius, double source_depth, double source_column,
                                std::size_t dsec_ntotit,
                                std::optional<double> source_logxi_override = std::nullopt) {
             xstar_run_state::AcceptedControllerState accepted;
@@ -18380,8 +18892,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             xstar_run_state::RadialZoneState zone;
             const std::size_t ordinal = whole.radial_zones.size() + 1u;
             zone.zone_index = ordinal;
-            zone.pass_index = 1;
-            zone.radius_cm = source_initial_radius_cm_v068226 + source_depth;
+            zone.pass_index = data.radial_pass_index_v068227;
+            zone.radius_cm = source_radius;
             zone.delta_radius_cm = source_depth;
             zone.outer_radius_cm = zone.radius_cm;
             zone.density_cm3 = snapshot.hydrogen_density_cm3;
@@ -18435,7 +18947,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         for (std::size_t i = 0; i < finals.size(); ++i) {
             const std::size_t ntotit = i < actual_dsec_ntotit.size() ? actual_dsec_ntotit[i] : 0u;
             append_zone(finals[i], "qualification_free_native_call_final_pretransport",
-                        source_boundary_depth_cm[i], source_boundary_column_cm2[i], ntotit);
+                        source_boundary_radius_cm_v068227[i], source_boundary_depth_cm[i],
+                        source_boundary_column_cm2[i], ntotit);
             // Release the source snapshot immediately after its publication
             // state has been transferred.  This keeps peak memory roughly
             // constant with radial depth instead of retaining two full copies
@@ -18456,7 +18969,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         // override is supplied.
         append_zone(*terminal_transport_boundary_v82_patch520144,
                     "qualification_free_native_terminal_posttransport",
-                    data.cumulative_depth_cm, data.cumulative_column_cm2,
+                    current_radius_cm_v068227, data.cumulative_depth_cm,
+                    data.cumulative_column_cm2,
                     actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back(),
                     std::nullopt);
         // Canonical xstar.f90 executes `pprint(9,...)` once more after the
@@ -18613,7 +19127,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             auto final_pprint = evaluate_full_boundary(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
-                source_initial_radius_cm_v068226 + data.cumulative_depth_cm, 0u);
+                current_radius_cm_v068227, 0u);
             if (final_thermal_diagnostic_requested) {
                 const auto parent = final_thermal_diagnostic_path.parent_path();
                 if (!parent.empty()) std::filesystem::create_directories(parent);
@@ -18668,7 +19182,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             advance_source_continuum_radiation(
                 final_pprint_data, final_pprint, final_writer_delr,
-                source_initial_radius_cm_v068226 + data.cumulative_depth_cm);
+                current_radius_cm_v068227);
             final_pprint.tau0 = terminal_writer_state.tau0;
             final_pprint.elum = terminal_writer_state.elum;
             final_pprint.tauc = terminal_writer_state.tauc;

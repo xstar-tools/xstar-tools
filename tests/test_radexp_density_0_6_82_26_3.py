@@ -52,6 +52,21 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
     manifest = json.loads((ROOT / "qualification/radexp_density_0_6_82_26_3/radexp_density_robustness_policy_0_6_82_26_3.json").read_text())
     hashes = manifest["numerical_source_sha256_from_0_6_82_26_2"]
     assert len(hashes) >= 130
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    successor = 'version = "0.6.82.27"' in pyproject
+    declared = set()
+    chain = {}
+    if successor:
+        npass = json.loads((ROOT / "qualification/npass_0_6_82_27/npass_source_scope_0_6_82_27.json").read_text())
+        declared = set(npass["intentional_numerical_source_changes"])
+        chain = npass["predecessor_sha256"]
     for rel, expected in hashes.items():
         path = ROOT / rel
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected, rel
+        current = hashlib.sha256(path.read_bytes()).hexdigest()
+        if successor and rel in declared:
+            # The .26.3 freeze is not rewritten; .27 must prove its predecessor
+            # hash is exactly the frozen .26.3/.26.2 byte before changing it.
+            assert chain[rel] == expected, rel
+            assert current != expected, rel
+        else:
+            assert current == expected, rel
