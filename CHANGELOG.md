@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.82.27.11 - 2026-08-14
+
+- Preserve the accepted `.27.8` directional UNSAVD thermal lifetime and the `.27.9/.27.10` Option-27 correction.
+- Re-project repeated-pass caller-owned `oplin`/`opakab` from already-computed record diagnostics into literal one-based `nplini`/`npconi2` slots after convergence and before SAVD/STPCUT.
+- Add opt-in ownership tracing for line 411 and the RRC sentinel neighborhoods at pre/post-STPCUT, terminal-boundary, and SAVD-quantization boundaries.
+- Keep the `.27.10` final RRC source-slot `N` FITS writer unchanged.
+- Extend historical npass tests through the `.27.11` successor chain.
+
+- Revert the rejected 0.6.82.27.9 unconditional two-plane UNSAVD `tau0/tauc` restore and restore the accepted 0.6.82.27.8 direction-owned repeated-pass thermal lifetime.
+- Persist terminal line/RRC SAVD directly from the already post-STPCUT terminal boundary instead of refreshing it from potentially stale product arrays.
+- Correct detailed RRC publication to the literal source rate-type-7 inventory and one-based `npconi2` slot; add explicit 208/209, 805/806, 860/861, 863/864 host sentinels.
+- Keep the successful 0.6.82.27.9 indexed `zrtmp(:,jkstep)` Option-27 overwrite correction.
+- Keep Option-23 final-pass reader, Option-5, Option-22, DSEC/rates/matrices, Python science, science revision, and ABIs frozen.
+
 ## 0.6.82.27.10 - 2026-08-14
 
 - Revert the rejected 0.6.82.27.9 unconditional two-plane UNSAVD `tau0/tauc` restore and restore the accepted 0.6.82.27.8 direction-owned repeated-pass thermal lifetime.

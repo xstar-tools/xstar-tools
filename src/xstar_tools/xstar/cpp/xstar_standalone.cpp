@@ -12916,6 +12916,178 @@ std::optional<std::size_t> program_population_index(
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Locate the lowered element metadata needed to re-project source-owned multipass opacity workspaces after the fixed-state solve.
+// Reference context: xstar.f90/calc_emisab_all caller-owned SAVD/STPCUT lifetime; orchestration-only projection of already-computed quantities.
+// XSTAR-FUNCTION-COMMENT-END
+const xstar_fixed_program_element_v1* program_element_v06822711(
+    const xstar_atdb_runtime::ProgramStorage& program,
+    int element_index) {
+    for (const auto& element : program.elements) {
+        if (element.element_index == element_index) return &element;
+    }
+    return nullptr;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply the source calc_emisab active-ion window when reconstructing caller-owned line/RRC opacity slots for repeated-pass SAVD/STPCUT.
+// Reference context: calc_emisab_all.f90/calc_emisab_ion.f90 active mml..mmu ion-stage traversal.
+// XSTAR-FUNCTION-COMMENT-END
+bool source_detail_record_active_v06822711(
+    const FixedDsecSnapshot& boundary,
+    const xstar_run_state::RecordProductDiagnosticState& record) {
+    const auto it = boundary.source_detail_active_windows.find(record.element_z);
+    if (it == boundary.source_detail_active_windows.end()) return true;
+    return record.ion_stage >= it->second[0] && record.ion_stage <= it->second[1];
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reconstruct the source cm^-1 line opacity for a Type-50 rate-4 record at its literal one-based nplini slot without changing the solved state.
+// Reference context: calc_emisab_ion.f90/ucalc.f90 Type-50 scalar line opacity and stpcut.f90 tau0 update.
+// XSTAR-FUNCTION-COMMENT-END
+double canonical_line_opacity_v06822711(
+    const xstar_atdb_runtime::ProgramStorage& program,
+    const FixedDsecSnapshot& boundary,
+    const xstar_run_state::RecordProductDiagnosticState& record) {
+    if (!(record.spectral && record.type50_valid && record.data_type == 50 &&
+          record.rate_type == 4 && record.type50_line_index_one_based > 0)) return 0.0;
+    if (!source_detail_record_active_v06822711(boundary, record)) return 0.0;
+    const auto* element = program_element_v06822711(program, record.element_index);
+    const auto lower = program_population_index(program, record.element_index, record.lower_row);
+    if (!element || !lower || *lower >= boundary.populations.size()) return 0.0;
+    const double density = record.density_scale > 0.0 ? record.density_scale : 1.0;
+    const double opacity = record.opakab * boundary.populations[*lower] * element->abundance * density;
+    return std::isfinite(opacity) && opacity > 0.0 ? opacity : 0.0;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reconstruct the source cm^-1 RRC threshold opacity for a rate-7 record at its literal one-based npconi2 slot without changing rates or populations.
+// Reference context: calc_emisab_ion.f90 rate-7 opakab ownership, ucalc Type-49/53/59/99 semantics, and stpcut.f90 tauc update.
+// XSTAR-FUNCTION-COMMENT-END
+double canonical_rrc_opacity_v06822711(
+    const xstar_atdb_runtime::ProgramStorage& program,
+    const FixedDsecSnapshot& boundary,
+    const xstar_run_state::RecordProductDiagnosticState& record) {
+    if (!(record.spectral && record.rate_type == 7 && record.continuum_index_one_based > 0)) return 0.0;
+    if (!source_detail_record_active_v06822711(boundary, record)) return 0.0;
+    const auto* element = program_element_v06822711(program, record.element_index);
+    const auto lower = program_population_index(program, record.element_index, record.lower_row);
+    const auto upper = program_population_index(program, record.element_index, record.upper_row);
+    if (!element || !lower || *lower >= boundary.populations.size()) return 0.0;
+    const double density = record.density_scale > 0.0 ? record.density_scale : 1.0;
+    const double abundance_scale = element->abundance * density;
+    const double lower_population = boundary.populations[*lower];
+    if (record.data_type == 59) {
+        const double opacity = lower_population * abundance_scale * std::max(0.0, record.opakab);
+        return std::isfinite(opacity) && opacity > 0.0 ? opacity : 0.0;
+    }
+    if (record.type99_valid || record.data_type == 99) return 0.0;
+    const double upper_population = upper && *upper < boundary.populations.size()
+        ? boundary.populations[*upper] : 0.0;
+    const double opacity = std::max(0.0,
+        lower_population * abundance_scale * std::max(0.0, record.threshold_abs_sigma_cm2) -
+        upper_population * abundance_scale * std::max(0.0, record.threshold_stimulated_sigma_cm2));
+    return std::isfinite(opacity) && opacity > 0.0 ? opacity : 0.0;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Restore FORTRAN calc_emisab_all caller-owned opacity-slot semantics for repeated passes by rebuilding only oplin/opakab after convergence and before SAVD/STPCUT.
+// Reference context: calc_emisab_all.f90 zeroes oplin/opakab each call; calc_emisab_ion.f90 writes literal nplini/npconi2 slots; stpcut.f90 consumes those arrays.
+// XSTAR-FUNCTION-COMMENT-END
+void repair_repeated_pass_source_opacity_ownership_v06822711(
+    StandaloneControllerDataV67& data,
+    FixedDsecSnapshot& boundary) {
+    if (data.radial_pass_index_v068227 <= 1u || !data.program) return;
+
+    // The thermal/fixed-state solve is complete at this point.  FORTRAN's
+    // calc_emisab_all starts each source publication traversal by zeroing the
+    // complete caller-owned oplin/opakab arrays, then calc_emisab_ion fills
+    // literal nplini/npconi2 slots.  Reproduce only that caller-owned surface
+    // here.  Do not touch opakc/rccemis, rates, populations, matrices, tau0,
+    // tauc, or either UNSAVD depth plane.
+    std::fill(boundary.oplin.begin(), boundary.oplin.end(), 0.0);
+    std::fill(boundary.opakab.begin(), boundary.opakab.end(), 0.0);
+    for (const auto& record : boundary.record_product_diagnostics) {
+        if (record.type50_valid && record.data_type == 50 && record.rate_type == 4 &&
+            record.type50_line_index_one_based > 0) {
+            const std::size_t source_slot = static_cast<std::size_t>(record.type50_line_index_one_based);
+            if (source_slot < boundary.oplin.size()) {
+                boundary.oplin[source_slot] = canonical_line_opacity_v06822711(*data.program, boundary, record);
+            }
+        }
+        if (record.rate_type == 7 && record.continuum_index_one_based > 0) {
+            const std::size_t source_slot = static_cast<std::size_t>(record.continuum_index_one_based);
+            if (source_slot < boundary.opakab.size()) {
+                boundary.opakab[source_slot] = canonical_rrc_opacity_v06822711(*data.program, boundary, record);
+            }
+        }
+    }
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Emit opt-in repeated-pass ownership diagnostics for the line-411 and RRC npconi2 sentinel slots at SAVD/STPCUT lifetime boundaries.
+// Reference context: diagnostic-only tracing of xstar.f90 SAVD -> geometry -> STPCUT ownership; no scientific state mutation.
+// XSTAR-FUNCTION-COMMENT-END
+void trace_npass_ownership_v06822711(
+    const StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& boundary,
+    const char* phase) {
+    const char* path_text = std::getenv("XSTAR_V06822711_NPASS_OWNERSHIP_TRACE");
+    if (!path_text || !*path_text || !phase || !*phase || !data.program) return;
+    const std::filesystem::path path(path_text);
+    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot create 0.6.82.27.11 npass ownership trace");
+    if (fresh) {
+        out << "phase,pass,call,direction,kind,index,source_slot,runtime_slot,npconi2,direct_opacity,canonical_opacity,product_tau_in,product_tau_out,boundary_tau_in,boundary_tau_out\n";
+    }
+    const std::array<int,1> line_targets{{411}};
+    const std::array<int,13> rrc_targets{{208,209,661,662,663,664,665,805,806,860,861,863,864}};
+    const std::size_t line_stride = boundary.oplin.size();
+    const std::size_t rrc_stride = boundary.opakab.size();
+    auto emit = [&](const char* kind, int index, std::size_t source_slot, std::size_t runtime_slot, int npconi2,
+                    double direct_opacity, double canonical_opacity,
+                    const std::vector<double>& product_in, const std::vector<double>& product_out,
+                    const std::vector<double>& tau, std::size_t stride) {
+        const double pin = source_slot < product_in.size() ? product_in[source_slot] : 0.0;
+        const double pout = source_slot < product_out.size() ? product_out[source_slot] : 0.0;
+        const double bin = source_slot < stride && source_slot < tau.size() ? tau[source_slot] : 0.0;
+        const double bout = source_slot < stride && stride + source_slot < tau.size() ? tau[stride + source_slot] : 0.0;
+        out << std::setprecision(17) << phase << ',' << data.radial_pass_index_v068227 << ',' << data.call_index << ','
+            << data.radial_direction_v068227 << ',' << kind << ',' << index << ',' << source_slot << ',' << runtime_slot << ','
+            << npconi2 << ',' << direct_opacity << ',' << canonical_opacity << ',' << pin << ',' << pout << ',' << bin << ',' << bout << '\n';
+    };
+    for (const int target : line_targets) {
+        const std::size_t slot = static_cast<std::size_t>(target);
+        double canonical = 0.0;
+        for (const auto& record : boundary.record_product_diagnostics) {
+            if (record.type50_line_index_one_based == target) {
+                canonical = canonical_line_opacity_v06822711(*data.program, boundary, record);
+                break;
+            }
+        }
+        emit("line", target, slot, slot > 0 ? slot - 1u : 0u, 0,
+             slot < boundary.oplin.size() ? boundary.oplin[slot] : 0.0, canonical,
+             data.product_line_tau_in, data.product_line_tau_out, boundary.tau0, line_stride);
+    }
+    for (const int target : rrc_targets) {
+        const std::size_t slot = static_cast<std::size_t>(target);
+        double canonical = 0.0;
+        int npconi2 = target;
+        for (const auto& record : boundary.record_product_diagnostics) {
+            if (record.continuum_index_one_based == target && record.rate_type == 7) {
+                canonical = canonical_rrc_opacity_v06822711(*data.program, boundary, record);
+                npconi2 = record.continuum_index_one_based;
+                break;
+            }
+        }
+        emit("rrc", target, slot, slot > 0 ? slot - 1u : 0u, npconi2,
+             slot < boundary.opakab.size() ? boundary.opakab[slot] : 0.0, canonical,
+             data.product_rrc_tau_in, data.product_rrc_tau_out, boundary.tauc, rrc_stride);
+    }
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement audit call2 final opakab in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
@@ -18648,6 +18820,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             write_ca13_lifetime_probe(
                 data, boundary, segment, boundary_radius_cm, "post_heatt");
+            trace_npass_ownership_v06822711(data, boundary, "post_solve_pre_reproject");
+            repair_repeated_pass_source_opacity_ownership_v06822711(data, boundary);
+            trace_npass_ownership_v06822711(data, boundary, "post_reproject_pre_savd");
             retain_pre_stpcut_cumulative_state(data, boundary);
             write_transport_commit_probe(
                 data, boundary, segment, boundary_radius_cm, "post_atomic_pre_stpcut");
@@ -18684,15 +18859,17 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 const double boundary_zeta_v068227 = boundary_xi_v068227 > 0.0
                     ? std::log10(boundary_xi_v068227)
                     : -std::numeric_limits<double>::infinity();
+                auto saved_shell_v06822711 = make_saved_shell_v068227(
+                    pretransport_boundary_v82_patch520145, program,
+                    params.pressure_dyn_cm2, boundary_radius_cm,
+                    data.cumulative_depth_cm, segment,
+                    data.cumulative_column_cm2,
+                    boundary.electron_fraction_input,
+                    boundary.hydrogen_density_cm3, boundary_zeta_v068227, false);
+                trace_npass_ownership_v06822711(
+                    data, saved_shell_v06822711.snapshot, "make_saved_shell_pre_stpcut");
                 saved_passes_v068227[kk_v068227].insert_after_hdu(
-                    call + 1u,
-                    make_saved_shell_v068227(
-                        pretransport_boundary_v82_patch520145, program,
-                        params.pressure_dyn_cm2, boundary_radius_cm,
-                        data.cumulative_depth_cm, segment,
-                        data.cumulative_column_cm2,
-                        boundary.electron_fraction_input,
-                        boundary.hydrogen_density_cm3, boundary_zeta_v068227, false));
+                    call + 1u, std::move(saved_shell_v06822711));
             }
 
             double source_geometry_segment_v068226 = segment;
@@ -18733,6 +18910,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             current_radius_cm_v068227 = post_geometry_radius_cm_v068226;
             last_geometry_segment_cm_v068227 = source_geometry_segment_v068226;
             if (source_geometry_segment_v068226 > 0.0) {
+                trace_npass_ownership_v06822711(data, boundary, "immediately_pre_stpcut");
                 const auto stpcut_started_v064890 = std::chrono::steady_clock::now();
                 advance_stpcut_depths(
                     data, boundary, source_geometry_segment_v068226, post_geometry_density_cm3_v068226,
@@ -18740,6 +18918,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 if (g_performance_v064890) {
                     g_performance_v064890->stpcut_seconds += performance_elapsed_seconds(stpcut_started_v064890);
                 }
+                trace_npass_ownership_v06822711(data, boundary, "immediately_post_stpcut");
             }
             write_transport_commit_probe(
                 data, boundary, source_geometry_segment_v068226, boundary_radius_cm, "post_stpcut");
@@ -18785,6 +18964,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (done_after_zone_v0648110) {
                 terminal_shell_entry_bremsa_v064883 = current_shell_entry_bremsa_v0648110;
                 terminal_transport_boundary_v82_patch520144 = boundary;
+                trace_npass_ownership_v06822711(
+                    data, *terminal_transport_boundary_v82_patch520144, "terminal_transport_boundary_capture");
                 if (tabulated_density_v068226 || analytic_variable_density_v068226) {
                     terminal_transport_boundary_v82_patch520144->hydrogen_density_cm3 =
                         post_geometry_density_cm3_v068226;
@@ -19022,14 +19203,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 // made xo03/xo05_detal2 repeat the pre-terminal depth.
                 FixedDsecSnapshot terminal_saved_boundary_v0682274 =
                     *terminal_transport_boundary_v82_patch520144;
+                auto terminal_saved_shell_v06822711 = make_saved_shell_v068227(
+                    terminal_saved_boundary_v0682274, program,
+                    params.pressure_dyn_cm2, current_radius_cm_v068227,
+                    data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
+                    data.cumulative_column_cm2, state.electron_fraction_xee,
+                    state.hydrogen_density_cm3, terminal_zeta_v068227, true);
+                trace_npass_ownership_v06822711(
+                    data, terminal_saved_shell_v06822711.snapshot, "make_saved_shell_terminal");
                 saved_passes_v068227[kk_v068227].insert_after_hdu(
-                    finals.size() + 1u,
-                    make_saved_shell_v068227(
-                        terminal_saved_boundary_v0682274, program,
-                        params.pressure_dyn_cm2, current_radius_cm_v068227,
-                        data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
-                        data.cumulative_column_cm2, state.electron_fraction_xee,
-                        state.hydrogen_density_cm3, terminal_zeta_v068227, true));
+                    finals.size() + 1u, std::move(terminal_saved_shell_v06822711));
             }
             if (effective_npass_v068227 > 1u) {
                 const auto& terminal_saved_v0682274 = saved_passes_v068227[kk_v068227].at_hdu(

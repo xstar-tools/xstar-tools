@@ -551,3 +551,11 @@ include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_10.py
 include tests/test_npass_multipass_hotfix_0_6_82_27_10.py
 include npass_multipass_ownership_hotfix_0_6_82_27_10.md
 include xstar_tools-0.6.82.27.10_host_validation.md
+
+# 0.6.82.27.11 repeated-pass terminal SAVD / source opacity ownership hotfix.
+recursive-include qualification/npass_0_6_82_27_11 *.json *.md
+include tools/qualification/check_npass_multipass_hotfix_0_6_82_27_11.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_11.py
+include tests/test_npass_multipass_hotfix_0_6_82_27_11.py
+include npass_multipass_ownership_hotfix_0_6_82_27_11.md
+include xstar_tools-0.6.82.27.11_host_validation.md

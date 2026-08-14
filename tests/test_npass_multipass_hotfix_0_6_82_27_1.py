@@ -16,10 +16,9 @@ def _runner():
 
 def test_0682271_version_and_scope_chain():
     pyproject=(ROOT/'pyproject.toml').read_text(); make=(ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
-    current_0271='version = "0.6.82.27.1"' in pyproject
-    current_0272='version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject))
-    assert current_0271 or current_0272
-    assert ('PACKAGE_VERSION ?= 0.6.82.27.1' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.3' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.4' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.5' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.6' in make) or (('PACKAGE_VERSION ?= 0.6.82.27.7' in make or 'PACKAGE_VERSION ?= 0.6.82.27.8' in make or 'PACKAGE_VERSION ?= 0.6.82.27.9' in make or 'PACKAGE_VERSION ?= 0.6.82.27.10' in make))
+    supported=('0.6.82.27.1','0.6.82.27.2','0.6.82.27.3','0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7','0.6.82.27.8','0.6.82.27.9','0.6.82.27.10','0.6.82.27.11')
+    assert any(f'version = "{v}"' in pyproject for v in supported)
+    assert any(f'PACKAGE_VERSION ?= {v}' in make for v in supported)
     obj=json.loads(MAN.read_text())
     assert obj['predecessor']=='0.6.82.27'
     assert obj['predecessor_status']=='REJECT_NPASS_GT1_HOST_SCIENCE'
@@ -27,55 +26,26 @@ def test_0682271_version_and_scope_chain():
     assert obj['science_revision']=='0.6.48.12.3.45.3.3.8'
     assert (obj['c_api_abi'],obj['production_zone_abi'],obj['fixed_state_abi'])==(60487,6048110,60488)
     assert obj['numerical_source_count_predecessor']==137
-    changed=set(obj['intentional_numerical_source_changes'])
-    assert changed=={
+    assert set(obj['intentional_numerical_source_changes'])=={
         'src/xstar_tools/xstar/cpp/xstar_standalone.cpp',
         'src/xstar_tools/xstar/radial_transfer.py',
         'src/xstar_tools/xstar/saved_radial_state.py',
     }
-    successor2=json.loads((ROOT/'qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json').read_text()) if current_0272 else None
-    successor3=json.loads((ROOT/'qualification/npass_0_6_82_27_3/npass_hotfix_source_scope_0_6_82_27_3.json').read_text()) if ('version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject))) else None
-    successor4=json.loads((ROOT/'qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json').read_text()) if successor3 is not None else None
-    successor5=json.loads((ROOT/'qualification/npass_0_6_82_27_5/npass_hotfix_source_scope_0_6_82_27_5.json').read_text()) if ('version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject))) else None
-    successor6=json.loads((ROOT/'qualification/npass_0_6_82_27_6/npass_hotfix_source_scope_0_6_82_27_6.json').read_text()) if ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject)) else None
-    successor7=json.loads((ROOT/'qualification/npass_0_6_82_27_7/npass_hotfix_source_scope_0_6_82_27_7.json').read_text()) if ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject)) else None
-    successor8=json.loads((ROOT/'qualification/npass_0_6_82_27_8/npass_hotfix_source_scope_0_6_82_27_8.json').read_text()) if ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject or 'version = "0.6.82.27.10"' in pyproject) else None
-    successor9=json.loads((ROOT/'qualification/npass_0_6_82_27_9/npass_hotfix_source_scope_0_6_82_27_9.json').read_text()) if 'version = "0.6.82.27.9"' in pyproject else None
+    current=next(v for v in supported if f'version = "{v}"' in pyproject)
+    current_suffix=current.rsplit('.',1)[-1]
+    max_hotfix=int(current_suffix) if current != '0.6.82.27' else 0
+    successors=[]
+    for n in range(2,max_hotfix+1):
+        q=ROOT/f'qualification/npass_0_6_82_27_{n}/npass_hotfix_source_scope_0_6_82_27_{n}.json'
+        if q.is_file(): successors.append(json.loads(q.read_text()))
     for rel,old in obj['predecessor_sha256'].items():
-        expected_0271=obj['candidate_changed_sha256'].get(rel,old)
-        if successor2 is None:
-            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0271, rel; continue
-        assert successor2['predecessor_sha256'][rel]==expected_0271, rel
-        expected_0272=successor2['candidate_changed_sha256'].get(rel, expected_0271)
-        if successor3 is None: continue
-        assert successor3['predecessor_sha256'][rel]==expected_0272, rel
-        expected_0273=successor3['candidate_changed_sha256'].get(rel, expected_0272)
-        assert successor4['predecessor_sha256'][rel]==expected_0273, rel
-        expected_0274=successor4['candidate_changed_sha256'].get(rel, expected_0273)
-        if successor5 is None:
-            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0274, rel; continue
-        assert successor5['predecessor_sha256'][rel]==expected_0274, rel
-        expected_0275=successor5['candidate_changed_sha256'].get(rel, expected_0274)
-        if successor6 is None:
-            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0275, rel; continue
-        assert successor6['predecessor_sha256'][rel]==expected_0275, rel
-        expected_0276=successor6['candidate_changed_sha256'].get(rel, expected_0275)
-        if successor7 is None:
-            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0276, rel
-            continue
-        assert successor7['predecessor_sha256'][rel]==expected_0276, rel
-        expected_0277=successor7['candidate_changed_sha256'].get(rel, expected_0276)
-        if successor8 is None:
-            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0277, rel
-            continue
-        assert successor8['predecessor_sha256'][rel]==expected_0277, rel
-        expected_0278=successor8['candidate_changed_sha256'].get(rel, expected_0277)
-        if successor9 is None:
-            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0278, rel
-            continue
-        assert successor9['predecessor_sha256'][rel]==expected_0278, rel
-        expected_0279=successor9['candidate_changed_sha256'].get(rel, expected_0278)
-        now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0279, rel
+        expected=obj['candidate_changed_sha256'].get(rel,old)
+        for successor in successors:
+            assert successor['predecessor_sha256'][rel]==expected, f"{successor['milestone']}:{rel}"
+            expected=successor['candidate_changed_sha256'].get(rel,expected)
+        now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest()
+        assert now==expected, rel
+
 
 def test_0682271_cpp_savd_appends_tail_and_live_rows_share_step_state():
     text=CPP.read_text()
