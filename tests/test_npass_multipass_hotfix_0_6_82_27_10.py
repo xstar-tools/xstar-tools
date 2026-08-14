@@ -12,7 +12,7 @@ def runner():
     m=importlib.util.module_from_spec(s); sys.modules[s.name]=m; s.loader.exec_module(m); return m
 
 def test_version_scope_and_frozen_ids():
-    assert ('version = "0.6.82.27.10"' in (ROOT/'pyproject.toml').read_text() or 'version = "0.6.82.27.12"' in (ROOT/'pyproject.toml').read_text() or 'version = "0.6.82.27.13"' in (ROOT/'pyproject.toml').read_text() or 'version = "0.6.82.27.14"' in (ROOT/'pyproject.toml').read_text())
+    assert ('version = "0.6.82.27.10"' in (ROOT/'pyproject.toml').read_text() or 'version = "0.6.82.27.12"' in (ROOT/'pyproject.toml').read_text() or 'version = "0.6.82.27.13"' in (ROOT/'pyproject.toml').read_text() or ('version = "0.6.82.27.14"' in (ROOT/'pyproject.toml').read_text() or 'version = "0.6.82.27.15"' in (ROOT/'pyproject.toml').read_text()))
     o=json.loads(MAN.read_text()); assert o['predecessor']=='0.6.82.27.9'
     assert set(o['intentional_numerical_source_changes'])=={
         'src/xstar_tools/xstar/cpp/xstar_standalone.cpp','src/xstar_tools/xstar/cpp/xstar_science_fits.cpp'}

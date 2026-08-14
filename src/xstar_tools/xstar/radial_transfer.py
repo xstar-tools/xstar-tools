@@ -1134,6 +1134,43 @@ def _saved_store_from_state(
 # Purpose: Implement the level arrays from state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
 # XSTAR-FUNCTION-COMMENT-END
+def _source_global_level_capacity_v06822715(state: XSTARPythonState) -> int:
+    """Return the FORTRAN ``nnml``-style global level capacity.
+
+    The public/radial state keeps source arrays in a one-based guarded layout
+    (slot zero is a sentinel), while :class:`DsecMutableRuntimeState` owns
+    dense zero-based arrays.  Keep that distinction explicit at SAVD/UNSAVD
+    boundaries instead of inferring one layout from the other.
+    """
+    derived = getattr(getattr(state, "atomic", None), "derived", None)
+    capacity = int(getattr(derived, "n_level_records", 0) or 0)
+    npilev = np.asarray(getattr(derived, "npilev", ()), dtype=np.int64).reshape(-1)
+    if npilev.size:
+        capacity = max(capacity, int(np.max(npilev)))
+    return max(0, capacity)
+
+
+def _dense_level_array_v06822715(state: XSTARPythonState, values: np.ndarray) -> np.ndarray:
+    """Convert a guarded source global-level array to dense runtime layout."""
+    array = np.asarray(values, dtype=float).reshape(-1)
+    capacity = _source_global_level_capacity_v06822715(state)
+    if capacity > 0 and array.size == capacity + 1:
+        # `_guard_full_global_level_array()` stores physical source level N at
+        # Python index N and reserves index zero.  fstepr/rstepr and the DSEC
+        # runtime instead address dense global index N at Python index N-1.
+        return array[1:].copy()
+    return array.copy()
+
+
+def _guard_level_array_v06822715(state: XSTARPythonState, values: np.ndarray) -> np.ndarray:
+    """Return the one-based caller-owned global-level representation."""
+    dense = np.asarray(values, dtype=float).reshape(-1)
+    capacity = max(_source_global_level_capacity_v06822715(state), int(dense.size))
+    guarded = np.zeros(capacity + 1, dtype=float)
+    guarded[1 : dense.size + 1] = dense
+    return guarded
+
+
 def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.ndarray]:
     xilev = state.local_zone.source_arrays.get("xilevg")
     if xilev is None:
@@ -1143,8 +1180,12 @@ def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.nd
         raise RadialTransferPortError(
             "saved radial state requires current xilevg and rnisg arrays"
         )
-    x = np.asarray(xilev, dtype=float).reshape(-1)
-    rn = np.asarray(rnist, dtype=float).reshape(-1)
+    x = _dense_level_array_v06822715(
+        state, np.asarray(xilev, dtype=float).reshape(-1)
+    )
+    rn = _dense_level_array_v06822715(
+        state, np.asarray(rnist, dtype=float).reshape(-1)
+    )
     if x.shape != rn.shape:
         raise RadialTransferPortError("xilevg and rnisg lengths differ")
     return x, rn
@@ -1425,9 +1466,14 @@ def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
             "nry_unsavd": result.nry,
         }
     )
-    state.plasma.populations = result.xilev_after
-    state.local_zone.source_arrays["xilevg"] = result.xilev_after
-    state.local_zone.source_arrays["rnisg"] = result.rnist_after
+    # 0.6.82.27.15: UNSAVD works on dense source global indices, but the
+    # Python radial/output state deliberately exposes one-based guarded arrays.
+    # Re-guard only the public caller-owned state; keep the DSEC runtime dense.
+    guarded_xilev = _guard_level_array_v06822715(state, result.xilev_after)
+    guarded_rnist = _guard_level_array_v06822715(state, result.rnist_after)
+    state.plasma.populations = guarded_xilev
+    state.local_zone.source_arrays["xilevg"] = guarded_xilev
+    state.local_zone.source_arrays["rnisg"] = guarded_rnist
 
     # 0.6.82.27.3: UNSAVD restores xilevg/rnisg into the caller-owned global
     # workspaces, but it does not restore bilevg.  The physical runner builds
@@ -1456,8 +1502,8 @@ def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
     for key in ("calc_emisab_context", "calc_emis_context"):
         context = state.control.get(key)
         if context is not None:
-            context.xilevg = result.xilev_after
-            context.rnisg = result.rnist_after
+            context.xilevg = guarded_xilev
+            context.rnisg = guarded_rnist
             context.temperature_1e4K = result.temperature / 1.0e4
             context.electron_fraction_xee = result.electron_fraction
             context.hydrogen_density_cm3 = result.hydrogen_density
@@ -1611,7 +1657,17 @@ def initialize_bounded_radial_pass_state(state: XSTARPythonState) -> None:
         state.plasma.populations = zero
         physical_runtime = state.control.get("physical_dsec_runtime")
         if physical_runtime is not None and hasattr(physical_runtime, "global_xilevg_by_index"):
-            physical_runtime.global_xilevg_by_index = zero.copy()
+            # DSEC owns a dense zero-based native-index array.  Do not copy the
+            # one-based guarded radial vector into it during repeated-pass INIT.
+            prior_dense = getattr(physical_runtime, "global_xilevg_by_index", None)
+            if prior_dense is not None:
+                physical_runtime.global_xilevg_by_index = np.zeros_like(
+                    np.asarray(prior_dense, dtype=float).reshape(-1)
+                )
+            else:
+                physical_runtime.global_xilevg_by_index = _dense_level_array_v06822715(
+                    state, zero
+                )
         # INIT does not own rnist/bilevg; deliberately leave both unchanged.
     state.transfer.provenance.setdefault("pass_initialization", []).append(
         {

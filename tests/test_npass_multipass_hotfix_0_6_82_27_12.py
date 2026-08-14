@@ -12,7 +12,7 @@ def runner():
     m=importlib.util.module_from_spec(s); sys.modules[s.name]=m; s.loader.exec_module(m); return m
 
 def test_version_scope_and_frozen_ids():
-    assert any(f'version = "{v}"' in (ROOT/'pyproject.toml').read_text() for v in ('0.6.82.27.12','0.6.82.27.13','0.6.82.27.14'))
+    assert any(f'version = "{v}"' in (ROOT/'pyproject.toml').read_text() for v in ('0.6.82.27.12','0.6.82.27.13','0.6.82.27.14','0.6.82.27.15'))
     o=json.loads(MAN.read_text())
     assert o['predecessor']=='0.6.82.27.10'
     assert o['predecessor_sdist_sha256']=='c15345b381e0ec774b88ca8274bd787ca0eb41a4a2064b66c8b2596da60128f9'

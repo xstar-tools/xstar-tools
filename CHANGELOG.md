@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.27.15 - 2026-08-14
+
+- Keep `0.6.82.27.13` as the protected accepted C++ native multipass baseline and inherit the `0.6.82.27.14` SAVD scalar E3/REAL4 persistence fix.
+- Repair Python repeated-pass global-level ownership in `radial_transfer.py`: radial/public `xilevg/rnisg` remain one-based guarded arrays, while SAVD/UNSAVD and `DsecMutableRuntimeState` use dense zero-based arrays.
+- Strip the source guard before sparse SAVD/UNSAVD indexing, re-guard only caller/public state after UNSAVD, and preserve a dense DSEC zero vector across repeated-pass INIT.
+- Target the host-observed first pass-2 thermal divergence (`h-c(%)`) and downstream pass-3 `ntotit=15,15` vs canonical `16,16`; defer published SAVD-header parity and one-pass line/RRC residuals until the thermal trajectory closes.
+- Do not change any C++ numerical source, `detal3 cemab`, or `detal2 rcem/oplin`; science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.27.14 - 2026-08-14
 
 - Freeze `0.6.82.27.13` as the accepted C++ native multipass baseline for C5 `npass=3,5` (`stages=AAAA`).

@@ -575,3 +575,10 @@ include tests/test_npass_python_parity_0_6_82_27_14.py
 include npass_python_parity_hotfix_0_6_82_27_14.md
 include xstar_tools-0.6.82.27.14_host_validation.md
 
+# 0.6.82.27.15 Python npass guarded/dense global-level ownership hotfix.
+recursive-include qualification/npass_0_6_82_27_15 *.json *.md
+include tools/qualification/check_npass_python_parity_0_6_82_27_15.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_15.py
+include tests/test_npass_python_parity_0_6_82_27_15.py
+include npass_python_global_level_ownership_hotfix_0_6_82_27_15.md
+include xstar_tools-0.6.82.27.15_host_validation.md
