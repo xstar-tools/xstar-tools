@@ -1049,7 +1049,12 @@ void append_native_public_line_sections(std::ofstream& out,
     // public subset and cannot reproduce the depth interval near rank 500.
     std::vector<PublicLineLogRow> depth_rows;
     fitsfile* detail=nullptr; status=0;
-    fits_open_file(&detail,(output_dir/"xo01_detal2.fits").c_str(),READONLY,&status);
+    const int final_pass_v0682279 = std::max(1, static_cast<int>(std::llround(parameter_number(state, "npass", 1.0))));
+    std::ostringstream final_line_detail_name_v0682279;
+    final_line_detail_name_v0682279 << "xo" << std::setw(2) << std::setfill('0')
+                                    << final_pass_v0682279 << "_detal2.fits";
+    const auto final_line_detail_path_v0682279 = output_dir / final_line_detail_name_v0682279.str();
+    fits_open_file(&detail,final_line_detail_path_v0682279.c_str(),READONLY,&status);
     if(status==0 && move_to_last_named_hdu(detail,"XSTAR_RADIAL")){
         const int di=column_number(detail,"index"),dion=column_number(detail,"ion"),dw=column_number(detail,"wavelength"),
             dti=column_number(detail,"tau_in"),dto=column_number(detail,"tau_out");

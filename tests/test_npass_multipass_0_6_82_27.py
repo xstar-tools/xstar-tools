@@ -23,9 +23,9 @@ def test_068227_version_and_frozen_identifiers():
     makefile = (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
     current_027 = 'version = "0.6.82.27"' in pyproject
     current_0271 = 'version = "0.6.82.27.1"' in pyproject
-    current_0272 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject)
+    current_0272 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject))
     assert current_027 or current_0271 or current_0272
-    assert any(f"PACKAGE_VERSION ?= {v}" in makefile for v in ("0.6.82.27","0.6.82.27.1","0.6.82.27.3","0.6.82.27.4","0.6.82.27.5","0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8"))
+    assert any(f"PACKAGE_VERSION ?= {v}" in makefile for v in ("0.6.82.27","0.6.82.27.1","0.6.82.27.3","0.6.82.27.4","0.6.82.27.5","0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9"))
     # Frozen science/ABI values remain source-visible through the accepted contract.
     all_text = "\n".join(
         p.read_text(errors="ignore")
@@ -49,13 +49,13 @@ def test_068227_numerical_change_scope_is_three_native_files_only():
     assert manifest["numerical_source_count_predecessor"] == 137
     assert manifest["intentional_numerical_source_changes"] == expected
     pyproject = (ROOT / "pyproject.toml").read_text()
-    hotfix = ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.3"' in pyproject) or ('version = "0.6.82.27.4"' in pyproject) or ('version = "0.6.82.27.5"' in pyproject) or (('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject))
+    hotfix = ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.3"' in pyproject) or ('version = "0.6.82.27.4"' in pyproject) or ('version = "0.6.82.27.5"' in pyproject) or (('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)))
     if hotfix:
         successor = json.loads((ROOT / "qualification/npass_0_6_82_27_1/npass_hotfix_source_scope_0_6_82_27_1.json").read_text())
         # Preserve the historical .27 chain without pretending its rejected
         # SAVD ordering is still the candidate: the .27 candidate byte hashes
         # must exactly be the .27.1 predecessor hashes.
-        current_0272 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject)
+        current_0272 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject))
         successor2 = json.loads((ROOT / "qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json").read_text()) if current_0272 else None
         for rel, old_hash in manifest["predecessor_sha256"].items():
             expected_027 = manifest["candidate_changed_sha256"].get(rel, old_hash)
@@ -93,8 +93,15 @@ def test_068227_native_unsavd_reverse_hdu_and_direction_owned_tau_restore():
     assert "const std::size_t restore_hdu_v068227 = jk_v068227 + 2u;" in text
     restore = _function(text, "void restore_saved_shell_v068227(", "void project_source_trnfrc_direction_v068227(")
     assert "const std::size_t plane = radial_direction > 0 ? 0u : 1u;" in restore
-    assert "radial_direction > 0 ? data.product_line_tau_in : data.product_line_tau_out" in restore
-    assert "radial_direction > 0 ? data.product_rrc_tau_in : data.product_rrc_tau_out" in restore
+    if 'version = "0.6.82.27.9"' in (ROOT / "pyproject.toml").read_text():
+        # .27.9 corrects the earlier interpretation: literal rstepr2/rstepr3
+        # restore both saved line/RRC tau columns; dpthc remains direction-owned.
+        assert restore.count("for (std::size_t plane = 0u; plane < 2u; ++plane)") >= 2
+        assert "literal rstepr2.f90 restores BOTH tau0 columns" in restore
+        assert "rstepr3.f90 likewise restores both tauc columns" in restore
+    else:
+        assert "radial_direction > 0 ? data.product_line_tau_in : data.product_line_tau_out" in restore
+        assert "radial_direction > 0 ? data.product_rrc_tau_in : data.product_rrc_tau_out" in restore
     assert "radial_direction > 0 ? data.grid_tau_in : data.grid_tau_out" in restore
     # Source UNSAVD reads zrems into a local temporary and intentionally does not restore it.
     assert "data.accumulated_zrems = snap.zrems" not in restore
@@ -105,7 +112,7 @@ def test_068227_native_savd_models_real4_and_cfitsio_hdu_insertion():
     text = CPP.read_text()
     saved = _function(text, "struct NativeSavedPassV068227", "void initialize_native_radial_pass_v068227(")
     pyproject = (ROOT / "pyproject.toml").read_text()
-    if ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.3"' in pyproject) or ('version = "0.6.82.27.4"' in pyproject) or ('version = "0.6.82.27.5"' in pyproject) or (('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject)):
+    if ('version = "0.6.82.27.1"' in pyproject) or ('version = "0.6.82.27.3"' in pyproject) or ('version = "0.6.82.27.4"' in pyproject) or ('version = "0.6.82.27.5"' in pyproject) or (('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject))):
         assert "hdus.push_back(std::move(shell));" in saved
         assert "hdus.insert(hdus.begin()" not in saved
     else:

@@ -12,7 +12,7 @@ RUNSTATE = ROOT / "src/xstar_tools/xstar/cpp/xstar_run_state.hpp"
 PY_TRANSFER = ROOT / "src/xstar_tools/xstar/radial_transfer.py"
 PY_PPRINT = ROOT / "src/xstar_tools/xstar/pprint_legacy.py"
 RUNNER = ROOT / "tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_3.py"
-CURRENT_0274 = any(f'version = "{v}"' in (ROOT / "pyproject.toml").read_text() for v in ("0.6.82.27.4", "0.6.82.27.5", "0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8"))
+CURRENT_0274 = any(f'version = "{v}"' in (ROOT / "pyproject.toml").read_text() for v in ("0.6.82.27.4", "0.6.82.27.5", "0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9"))
 
 
 def _runner():

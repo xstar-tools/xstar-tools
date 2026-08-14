@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.27.9 - 2026-08-13
+
+- Restore both saved `tau0` and `tauc` planes on repeated-pass UNSAVD, matching literal FORTRAN `rstepr2/rstepr3` ownership, and retain terminal post-STPCUT cumulative line/RRC depth.
+- Correct RRC `cabab/opakab` addressing to canonical one-based `npconi2` or compact RRC identity ownership with physical-zero preservation.
+- Make STEP Option 23 consume final-pass `xoNN_detal2.fits`.
+- Reproduce repeated-pass indexed `zrtmp(:,jkstep)` overwrite semantics for Option 27 and remove the extra synthetic terminal-zero product row.
+- Make the Option-22 comparator accept concatenated FORTRAN fixed-format fields.
+- Preserve 0.6.82.27.8 Option-17 thermal, Option-5, Option-22, DSEC/rates/matrices, Python science, and frozen ABI/science identifiers.
+
 ## 0.6.82.27.8 - 2026-08-13
 
 - Preserve all 0.6.82.27.7 `ncn2` and Option-5 fixes.

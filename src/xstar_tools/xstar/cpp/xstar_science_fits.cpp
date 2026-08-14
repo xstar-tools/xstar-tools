@@ -8715,14 +8715,25 @@ double two_plane_value(const std::vector<double>& values, std::size_t plane_coun
 // Purpose: Compute rrc workspace value for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-double rrc_workspace_value(const std::vector<double>& values,
-                           std::size_t direct_index,
-                           std::size_t compact_index,
-                           std::size_t identity_index) {
-    if (direct_index < values.size() && values[direct_index] != 0.0) return values[direct_index];
-    if (identity_index < values.size() && values[identity_index] != 0.0) return values[identity_index];
-    if (compact_index < values.size()) return values[compact_index];
-    return 0.0;
+double rrc_workspace_value_v0682279(
+    const std::vector<double>& values,
+    std::size_t source_index_one_based,
+    std::size_t canonical_compact_index,
+    std::size_t canonical_identity_count) {
+    if (values.empty()) return 0.0;
+    // 0.6.82.27.9: npconi2 is a one-based source pointer.  A compact RRC
+    // workspace is indexed only through the canonical RRC identity map; a
+    // source-sized workspace is indexed only by npconi2 itself.  A physical
+    // zero is authoritative and must never fall through to an adjacent index.
+    if (canonical_identity_count > 0u && values.size() == canonical_identity_count) {
+        return canonical_compact_index < values.size()
+            ? values[canonical_compact_index] : 0.0;
+    }
+    if (source_index_one_based < values.size()) {
+        return values[source_index_one_based];
+    }
+    return canonical_compact_index < values.size()
+        ? values[canonical_compact_index] : 0.0;
 }
 
 struct RrcBridgeArrays {
@@ -8778,7 +8789,17 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     const auto rrc_bridge = load_rrc_bridge_arrays(state, hdu_number);
     const std::size_t n = kOracleContinuumCount;
     out.reserve(state.rrc_identities.size());
-    std::size_t compact_rrc_index = 0;
+    // Canonical compact RRC address: derive it from the retained npconi2
+    // identity inventory itself, not from a filtered row counter.  This keeps
+    // compatibility/detail exclusions (e.g. 709/762) from shifting every
+    // subsequent opakab/cabab owner by one slot.
+    std::map<std::int32_t,std::size_t> canonical_rrc_compact_v0682279;
+    for (std::size_t i_v0682279 = 0; i_v0682279 < state.rrc_identities.size(); ++i_v0682279) {
+        const auto ci_v0682279 = state.rrc_identities[i_v0682279].continuum_index;
+        if (ci_v0682279 > 0 && !canonical_rrc_compact_v0682279.count(ci_v0682279)) {
+            canonical_rrc_compact_v0682279[ci_v0682279] = i_v0682279;
+        }
+    }
     for (std::size_t identity_ordinal = 0; identity_ordinal < state.rrc_identities.size(); ++identity_ordinal) {
         const auto& id = state.rrc_identities[identity_ordinal];
         if (id.continuum_index <= 0) continue;
@@ -8799,7 +8820,9 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
             if (!detail_inventory &&
                 !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
         }
-        const std::size_t compact = compact_rrc_index++;
+        const auto canonical_it_v0682279 = canonical_rrc_compact_v0682279.find(id.continuum_index);
+        const std::size_t canonical_compact_v0682279 = canonical_it_v0682279 == canonical_rrc_compact_v0682279.end()
+            ? identity_ordinal : canonical_it_v0682279->second;
         const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);
         if (ci >= n) continue;
         RrcRow row;
@@ -8815,8 +8838,13 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         // The retained source cabab/opakab RRC arrays are compact product-state
         // arrays.  Their address is the compact oracle RRC inventory ordinal,
         // while elumab/tauc bridge arrays retain the large continuum-index plane.
-        row.absorption = rrc_workspace_value(ws.cabab, ci, compact, identity_ordinal);
-        row.opacity = rrc_workspace_value(ws.opakab, ci, compact, identity_ordinal);
+        const std::size_t source_slot_v0682279 = static_cast<std::size_t>(id.continuum_index);
+        row.absorption = rrc_workspace_value_v0682279(
+            ws.cabab, source_slot_v0682279, canonical_compact_v0682279,
+            state.rrc_identities.size());
+        row.opacity = rrc_workspace_value_v0682279(
+            ws.opakab, source_slot_v0682279, canonical_compact_v0682279,
+            state.rrc_identities.size());
         // v17.25.40: do not fall back to the generic continuum opacity
         // surface for detailed RRC threshold opacity.  That surface is ordered
         // by continuum-bin/energy, not by the public RRC detail row, and it
@@ -9985,17 +10013,25 @@ void write_abundances(const std::filesystem::path& path,
     const auto units = abundance_units(names);
     const auto legacy_values = pprint_value() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     fitsfile* fptr = create_fits(path, state);
-    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
+    const int npass_v0682279 = static_cast<int>(std::llround(parameter_value(state, "npass", 1.0)));
+    // pprint(12) is indexed by jkstep=jkp.  On the first/single pass the
+    // source later writes numrec=jkp+1, leaving the historical trailing zero
+    // row.  On repeated final passes jkp reaches numrec and the post-loop
+    // pprint(12) OVERWRITES zrtmp(:,jkp); it does not append another row.
+    // radial_zones contains the extra post-loop pprint(9) endpoint, so exclude
+    // that endpoint from zrtmp-derived ABUNDANCES/HEATING/COOLING only for
+    // npass>1.
+    const bool repeated_final_pass_v0682279 = npass_v0682279 > 1 && state.terminal_synthetic_row_present;
+    const std::size_t zrtmp_rows_v0682279 = repeated_final_pass_v0682279 && !state.radial_zones.empty()
+        ? state.radial_zones.size() - 1u : state.radial_zones.size();
+    create_table(fptr, ASCII_TBL, static_cast<long>(zrtmp_rows_v0682279), "ABUNDANCES", names, formats, units);
     std::vector<std::map<std::pair<int,int>,double>> fractions;
     std::vector<xstar_run_state::AbundanceRadialRowState> abundance_rows;
-    for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+    for (std::size_t z = 0; z < zrtmp_rows_v0682279; ++z) {
         const auto* zone = abundance_output_zone(state, z);
         const bool terminal_reset =
-            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
-        // pprint(12) appends a distinct terminal reset row to the abundance
-        // ledger.  Its ion fractions and geometry are zero even though the
-        // detailed level-population product may retain the preceding accepted
-        // population state in its final HDU.
+            !repeated_final_pass_v0682279 && state.terminal_synthetic_row_present &&
+            z + 1u == zrtmp_rows_v0682279;
         fractions.push_back(!terminal_reset && zone
             ? ion_fractions(zone->accepted_controller.evaluation, elements, rows)
             : std::map<std::pair<int,int>,double>{});
@@ -10020,10 +10056,10 @@ void write_abundances(const std::filesystem::path& path,
         const double abundance = eit == elements.end() ? 0.0 : eit->abundance;
         for (int stage = 1; stage <= element_z; ++stage) {
             // Native pprint option-12/27 zrtmp trapezoidal accumulator.
-            // Preserve the complete signed source boundary sequence, including
-            // the final zeroed row whose rdel resets from the terminal depth to
-            // zero.  Fortran loops jkl=2..numrec without discarding that final
-            // negative interval; it supplies the terminal half-cell subtraction.
+            // For npass=1 preserve the historical numrec=jkp+1 trailing zero
+            // row.  On a repeated final pass, canonical pprint(12,jkp) overwrites
+            // zrtmp(:,jkp) after the loop, so there is no extra terminal row and
+            // no synthetic negative interval to append.
             double column = 0.0;
             std::size_t intervals = 0;
             for (std::size_t j = 1; j < fractions.size() && j < abundance_rows.size(); ++j) {
@@ -10043,14 +10079,17 @@ void write_abundances(const std::filesystem::path& path,
             // public cumulative rdel ledger is unavailable.  This remains a
             // genuine shell-by-shell trapezoid and never reverts to the old
             // initial/terminal whole-column average.
-            if (intervals == 0 && state.radial_zones.size() >= 2) {
+            if (intervals == 0 && zrtmp_rows_v0682279 >= 2u) {
                 std::vector<std::map<std::pair<int,int>,double>> zone_fractions;
-                zone_fractions.reserve(state.radial_zones.size());
-                for (const auto& zone : state.radial_zones) {
-                    zone_fractions.push_back(ion_fractions(zone.accepted_controller.evaluation, elements, rows));
+                zone_fractions.reserve(zrtmp_rows_v0682279);
+                for (std::size_t z_v0682279 = 0; z_v0682279 < zrtmp_rows_v0682279; ++z_v0682279) {
+                    const auto* zone_v0682279 = abundance_output_zone(state, z_v0682279);
+                    zone_fractions.push_back(zone_v0682279
+                        ? ion_fractions(zone_v0682279->accepted_controller.evaluation, elements, rows)
+                        : std::map<std::pair<int,int>,double>{});
                 }
                 const auto key = std::make_pair(element_z, stage);
-                for (std::size_t j = 1; j < state.radial_zones.size(); ++j) {
+                for (std::size_t j = 1; j < zrtmp_rows_v0682279; ++j) {
                     double dr = state.radial_zones[j].delta_radius_cm;
                     if (!(dr > 0.0) && state.radial_zones[j].outer_radius_cm > state.radial_zones[j-1].outer_radius_cm) {
                         dr = state.radial_zones[j].outer_radius_cm - state.radial_zones[j-1].outer_radius_cm;
@@ -10084,8 +10123,12 @@ void write_abundances(const std::filesystem::path& path,
                   << "  \"positive_cumulative_depth_intervals\": " << positive_intervals << ",\n"
                   << "  \"negative_terminal_reset_intervals\": " << negative_intervals << ",\n"
                   << "  \"density_weighted_trapezoid\": true,\n"
-                  << "  \"signed_consecutive_boundary_deltas\": true,\n"
-                  << "  \"terminal_zero_row_included\": true,\n"
+                  << "  \"signed_consecutive_boundary_deltas\": "
+                  << (repeated_final_pass_v0682279 ? "false" : "true") << ",\n"
+                  << "  \"terminal_zero_row_included\": "
+                  << (repeated_final_pass_v0682279 ? "false" : "true") << ",\n"
+                  << "  \"repeated_final_pass_pprint12_overwrite\": "
+                  << (repeated_final_pass_v0682279 ? "true" : "false") << ",\n"
                   << "  \"exact_accepted_radial_boundaries_retained\": "
                   << (state.exact_accepted_radial_boundaries_retained ? "true" : "false") << ",\n"
                   << "  \"initial_terminal_average_removed\": true,\n"
@@ -10099,11 +10142,12 @@ void write_abundances(const std::filesystem::path& path,
     auto heating = thermal; heating.push_back("compton"); heating.push_back("total");
     auto cooling = thermal; cooling.push_back("compton"); cooling.push_back("brems"); cooling.push_back("total");
     auto thermal_units = abundance_units(thermal);
-    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
-    for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+    create_table(fptr, ASCII_TBL, static_cast<long>(zrtmp_rows_v0682279), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
+    for (std::size_t z = 0; z < zrtmp_rows_v0682279; ++z) {
         const long row = static_cast<long>(z + 1);
         const bool source_unfilled_terminal_thermal_row =
-            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
+            !repeated_final_pass_v0682279 && state.terminal_synthetic_row_present &&
+            z + 1u == zrtmp_rows_v0682279;
         if (source_unfilled_terminal_thermal_row) {
             write_abundance_base(fptr, row, xstar_run_state::AbundanceRadialRowState{});
             for (int col = 9; col <= 40; ++col) write_real4(fptr, col, row, 0.0);
@@ -10137,11 +10181,12 @@ void write_abundances(const std::filesystem::path& path,
         if (!std::isfinite(compton)) compton = 0.0;
         write_real4(fptr, 39, row, compton); write_real4(fptr, 40, row, st.total_heating);
     }
-    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
-    for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+    create_table(fptr, ASCII_TBL, static_cast<long>(zrtmp_rows_v0682279), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
+    for (std::size_t z = 0; z < zrtmp_rows_v0682279; ++z) {
         const long row = static_cast<long>(z + 1);
         const bool source_unfilled_terminal_thermal_row =
-            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
+            !repeated_final_pass_v0682279 && state.terminal_synthetic_row_present &&
+            z + 1u == zrtmp_rows_v0682279;
         if (source_unfilled_terminal_thermal_row) {
             write_abundance_base(fptr, row, xstar_run_state::AbundanceRadialRowState{});
             for (int col = 9; col <= 41; ++col) write_real4(fptr, col, row, 0.0);

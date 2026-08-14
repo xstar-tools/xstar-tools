@@ -17,9 +17,9 @@ def _runner():
 def test_0682271_version_and_scope_chain():
     pyproject=(ROOT/'pyproject.toml').read_text(); make=(ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
     current_0271='version = "0.6.82.27.1"' in pyproject
-    current_0272='version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject)
+    current_0272='version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject))
     assert current_0271 or current_0272
-    assert ('PACKAGE_VERSION ?= 0.6.82.27.1' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.3' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.4' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.5' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.6' in make) or (('PACKAGE_VERSION ?= 0.6.82.27.7' in make or 'PACKAGE_VERSION ?= 0.6.82.27.8' in make))
+    assert ('PACKAGE_VERSION ?= 0.6.82.27.1' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.3' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.4' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.5' in make) or ('PACKAGE_VERSION ?= 0.6.82.27.6' in make) or (('PACKAGE_VERSION ?= 0.6.82.27.7' in make or 'PACKAGE_VERSION ?= 0.6.82.27.8' in make or 'PACKAGE_VERSION ?= 0.6.82.27.9' in make))
     obj=json.loads(MAN.read_text())
     assert obj['predecessor']=='0.6.82.27'
     assert obj['predecessor_status']=='REJECT_NPASS_GT1_HOST_SCIENCE'
@@ -34,12 +34,13 @@ def test_0682271_version_and_scope_chain():
         'src/xstar_tools/xstar/saved_radial_state.py',
     }
     successor2=json.loads((ROOT/'qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json').read_text()) if current_0272 else None
-    successor3=json.loads((ROOT/'qualification/npass_0_6_82_27_3/npass_hotfix_source_scope_0_6_82_27_3.json').read_text()) if ('version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject)) else None
+    successor3=json.loads((ROOT/'qualification/npass_0_6_82_27_3/npass_hotfix_source_scope_0_6_82_27_3.json').read_text()) if ('version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject))) else None
     successor4=json.loads((ROOT/'qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json').read_text()) if successor3 is not None else None
-    successor5=json.loads((ROOT/'qualification/npass_0_6_82_27_5/npass_hotfix_source_scope_0_6_82_27_5.json').read_text()) if ('version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject)) else None
-    successor6=json.loads((ROOT/'qualification/npass_0_6_82_27_6/npass_hotfix_source_scope_0_6_82_27_6.json').read_text()) if ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) or 'version = "0.6.82.27.8"' in pyproject) else None
-    successor7=json.loads((ROOT/'qualification/npass_0_6_82_27_7/npass_hotfix_source_scope_0_6_82_27_7.json').read_text()) if ('version = "0.6.82.27.7"' in pyproject or 'version = "0.6.82.27.8"' in pyproject) else None
-    successor8=json.loads((ROOT/'qualification/npass_0_6_82_27_8/npass_hotfix_source_scope_0_6_82_27_8.json').read_text()) if 'version = "0.6.82.27.8"' in pyproject else None
+    successor5=json.loads((ROOT/'qualification/npass_0_6_82_27_5/npass_hotfix_source_scope_0_6_82_27_5.json').read_text()) if ('version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject))) else None
+    successor6=json.loads((ROOT/'qualification/npass_0_6_82_27_6/npass_hotfix_source_scope_0_6_82_27_6.json').read_text()) if ('version = "0.6.82.27.6"' in pyproject or ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) else None
+    successor7=json.loads((ROOT/'qualification/npass_0_6_82_27_7/npass_hotfix_source_scope_0_6_82_27_7.json').read_text()) if ('version = "0.6.82.27.7"' in pyproject or ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject)) else None
+    successor8=json.loads((ROOT/'qualification/npass_0_6_82_27_8/npass_hotfix_source_scope_0_6_82_27_8.json').read_text()) if ('version = "0.6.82.27.8"' in pyproject or 'version = "0.6.82.27.9"' in pyproject) else None
+    successor9=json.loads((ROOT/'qualification/npass_0_6_82_27_9/npass_hotfix_source_scope_0_6_82_27_9.json').read_text()) if 'version = "0.6.82.27.9"' in pyproject else None
     for rel,old in obj['predecessor_sha256'].items():
         expected_0271=obj['candidate_changed_sha256'].get(rel,old)
         if successor2 is None:
@@ -69,7 +70,12 @@ def test_0682271_version_and_scope_chain():
             continue
         assert successor8['predecessor_sha256'][rel]==expected_0277, rel
         expected_0278=successor8['candidate_changed_sha256'].get(rel, expected_0277)
-        now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0278, rel
+        if successor9 is None:
+            now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0278, rel
+            continue
+        assert successor9['predecessor_sha256'][rel]==expected_0278, rel
+        expected_0279=successor9['candidate_changed_sha256'].get(rel, expected_0278)
+        now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest(); assert now==expected_0279, rel
 
 def test_0682271_cpp_savd_appends_tail_and_live_rows_share_step_state():
     text=CPP.read_text()
