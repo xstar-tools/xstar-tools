@@ -15,8 +15,8 @@ def runner():
     m=importlib.util.module_from_spec(spec); sys.modules[spec.name]=m; spec.loader.exec_module(m); return m
 
 def test_0682274_version_abis_and_scope():
-    assert any(f'version = "{v}"' in (ROOT/'pyproject.toml').read_text() for v in ('0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7'))
-    assert any(f'PACKAGE_VERSION ?= {v}' in (ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text() for v in ('0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7'))
+    assert any(f'version = "{v}"' in (ROOT/'pyproject.toml').read_text() for v in ('0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7','0.6.82.27.8'))
+    assert any(f'PACKAGE_VERSION ?= {v}' in (ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text() for v in ('0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7','0.6.82.27.8'))
     obj=json.loads(MAN.read_text()); assert obj['science_revision']=='0.6.48.12.3.45.3.3.8'
     assert obj['c_api_abi']==60487 and obj['production_zone_abi']==6048110 and obj['fixed_state_abi']==60488
     assert obj['numerical_source_count_predecessor']==137 and len(obj['intentional_numerical_source_changes'])==5

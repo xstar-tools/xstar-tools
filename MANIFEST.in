@@ -526,3 +526,12 @@ include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_7.py
 include tests/test_npass_multipass_hotfix_0_6_82_27_7.py
 include npass_step_publication_hotfix_0_6_82_27_7.md
 include xstar_tools-0.6.82.27.7_host_validation.md
+
+# 0.6.82.27.8 final Option-22 unsmoothed STPCUT ownership hotfix.
+recursive-include qualification/npass_0_6_82_27_8 *.json *.md
+include tools/qualification/check_npass_multipass_hotfix_0_6_82_27_8.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_8.py
+include tests/test_npass_multipass_hotfix_0_6_82_27_8.py
+include npass_option22_unsmoothed_stpcut_hotfix_0_6_82_27_8.md
+include xstar_tools-0.6.82.27.8_host_validation.md
+

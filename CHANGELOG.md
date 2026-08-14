@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.27.8 - 2026-08-13
+
+- Preserve all 0.6.82.27.7 `ncn2` and Option-5 fixes.
+- Correct final pprint Option 22 `taulc/taulcb`: canonical post-loop XSTAR does not GSSMOOTH between final `xstarcalc` and `STPCUT(1.e-15)`.
+- Preserve the unsmoothed final `opakc` before the generic radial HEATT helper and consume it only for the final STPCUT depth increment.
+- Leave DSEC, rates, matrices, thermal kernels, RRC ownership, Python science, and all ABI identifiers unchanged.
+
 ## 0.6.82.27.7 - 2026-08-13
 
 - Fixed native `xout_step.log` `ncn2` publication to use the parsed parameter.

@@ -19654,6 +19654,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 final_pprint_data.accumulated_zrems = terminal_writer_state.zrems;
                 final_pprint_data.accumulated_zremso = terminal_writer_state.zrems;
             }
+            // 0.6.82.27.8: canonical xstar.f90 does NOT call GSSMOOTH in the
+            // post-loop final-print sequence.  The generic radial HEATT helper
+            // below does perform GSSMOOTH, so preserve the exact unsmoothed
+            // opakc produced by the final zero-thickness xstarcalc before that
+            // helper mutates the local publication copy.  The subsequent
+            // source STPCUT(delr=1.e-15) must consume this preserved opacity.
+            const auto final_writer_unsmoothed_opakc_v0682278 = final_pprint.opakc;
             advance_source_continuum_radiation(
                 final_pprint_data, final_pprint, final_writer_delr,
                 current_radius_cm_v068227);
@@ -19674,13 +19681,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             {
                 const std::size_t n_v0682277 = final_pprint.radiation_energy_ev.size();
                 if (final_pprint.dpthc.size() >= 2u*n_v0682277 &&
-                    final_pprint.opakc.size() >= n_v0682277) {
+                    final_writer_unsmoothed_opakc_v0682278.size() >= n_v0682277) {
                     const std::size_t plane_v0682277 =
                         final_pprint_data.radial_direction_v068227 > 0 ? 1u : 0u;
                     for (std::size_t i_v0682277 = 0; i_v0682277 < n_v0682277; ++i_v0682277) {
                         const double opacity_v0682277 =
-                            std::isfinite(final_pprint.opakc[i_v0682277])
-                                ? final_pprint.opakc[i_v0682277] : 0.0;
+                            std::isfinite(final_writer_unsmoothed_opakc_v0682278[i_v0682277])
+                                ? final_writer_unsmoothed_opakc_v0682278[i_v0682277] : 0.0;
                         final_pprint.dpthc[plane_v0682277*n_v0682277 + i_v0682277] +=
                             opacity_v0682277 * final_writer_delr;
                     }
