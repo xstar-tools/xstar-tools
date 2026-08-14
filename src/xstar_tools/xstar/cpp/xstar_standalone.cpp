@@ -17470,6 +17470,31 @@ double source_real4_v068227(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
+// 0.6.82.27.6: SAVD scalar headers are not merely TFLOAT values.
+// fstepr/fstepr2/fstepr3/fstepr4 first assign rtmp=sngl(value), then
+// persist RINNER/ROUTER/RDEL/TEMPERAT/PRESSURE/COLUMN/XEE/DENSITY/LOGXI
+// through ftpkye(...,3).  UNSAVD reads those formatted keywords back with
+// ftgkye, so the repeated-pass state sees the 3-decimal scientific-notation
+// value (e.g. 1.201734 -> 1.202 and 4.6960087 -> 4.696), not the full REAL(4)
+// payload.  Reproduce that ASCII FITS-keyword round trip in memory.
+double source_savd_keyword_e3_v0682276(double value) {
+    const float source_r4 = static_cast<float>(value);
+    if (!std::isfinite(source_r4)) return static_cast<double>(source_r4);
+    char buffer[64]{};
+    const int count = std::snprintf(buffer, sizeof(buffer), "%.3E", static_cast<double>(source_r4));
+    if (count <= 0 || static_cast<std::size_t>(count) >= sizeof(buffer)) {
+        throw std::runtime_error("0.6.82.27.6 SAVD scalar keyword formatting failed");
+    }
+    char* end = nullptr;
+    const double parsed = std::strtod(buffer, &end);
+    if (!end || *end != '\0' || !std::isfinite(parsed)) {
+        throw std::runtime_error("0.6.82.27.6 SAVD scalar keyword parse failed");
+    }
+    // rstepr* uses REAL(4) rtmp as the ftgkye destination and only then
+    // promotes it into the caller's REAL(8) scalar.
+    return static_cast<double>(static_cast<float>(parsed));
+}
+
 void source_real4_vector_v068227(std::vector<double>& values) {
     for (double& value : values) value = source_real4_v068227(value);
 }
@@ -17557,14 +17582,19 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     source_real4_vector_v068227(out.snapshot.dpthc);
     source_real4_vector_v068227(out.snapshot.opakc);
     source_real4_vector_v068227(out.snapshot.rccemis);
-    out.pressure_dyn_cm2 = source_real4_v068227(pressure_dyn_cm2);
-    out.radius_cm = source_real4_v068227(radius_cm);
-    out.radial_depth_cm = source_real4_v068227(radial_depth_cm);
-    out.step_size_cm = source_real4_v068227(step_size_cm);
-    out.column_cm2 = source_real4_v068227(column_cm2);
-    out.electron_fraction = source_real4_v068227(electron_fraction);
-    out.hydrogen_density_cm3 = source_real4_v068227(hydrogen_density_cm3);
-    out.zeta = source_real4_v068227(zeta);
+    // Scalar SAVD state is carried in FITS header keywords, not table cells.
+    // Each of the four source detail writers uses the same ftpkye(...,3)
+    // convention, and each rstepr* reader overwrites these values from those
+    // keywords.  Quantize every scalar exactly at the in-memory save boundary.
+    out.snapshot.temperature_t4 = source_savd_keyword_e3_v0682276(source.temperature_t4);
+    out.pressure_dyn_cm2 = source_savd_keyword_e3_v0682276(pressure_dyn_cm2);
+    out.radius_cm = source_savd_keyword_e3_v0682276(radius_cm);
+    out.radial_depth_cm = source_savd_keyword_e3_v0682276(radial_depth_cm);
+    out.step_size_cm = source_savd_keyword_e3_v0682276(step_size_cm);
+    out.column_cm2 = source_savd_keyword_e3_v0682276(column_cm2);
+    out.electron_fraction = source_savd_keyword_e3_v0682276(electron_fraction);
+    out.hydrogen_density_cm3 = source_savd_keyword_e3_v0682276(hydrogen_density_cm3);
+    out.zeta = source_savd_keyword_e3_v0682276(zeta);
     out.terminal_record = terminal_record;
     return out;
 }
@@ -19037,14 +19067,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     xstar_run_state::AcceptedControllerState accepted_v0682273;
                     accepted_v0682273.call_index = saved_v0682273.snapshot.call_index;
                     accepted_v0682273.accepted_sequence = saved_v0682273.snapshot.sequence;
-                    accepted_v0682273.acceptance_reason = "source SAVD REAL4 pass-detail state";
+                    accepted_v0682273.acceptance_reason = "source SAVD FITS-E3/REAL4 pass-detail state";
                     accepted_v0682273.evaluation = copy_real_native_snapshot(saved_v0682273.snapshot, 0.0);
 
                     xstar_run_state::RadialZoneState zone_v0682273;
                     zone_v0682273.zone_index = detail_zones_v0682273.size() + 1u;
                     zone_v0682273.pass_index = pass_v0682273;
                     zone_v0682273.radius_cm = saved_v0682273.radius_cm;
-                    zone_v0682273.outer_radius_cm = saved_v0682273.radius_cm;
+                    zone_v0682273.outer_radius_cm = saved_v0682273.step_size_cm;
                     zone_v0682273.delta_radius_cm = saved_v0682273.radial_depth_cm;
                     zone_v0682273.density_cm3 = saved_v0682273.hydrogen_density_cm3;
                     zone_v0682273.pressure_dyn_cm2 = saved_v0682273.pressure_dyn_cm2;
@@ -19056,7 +19086,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     zone_v0682273.electron_fraction = saved_v0682273.electron_fraction;
                     zone_v0682273.provisional_from_controller = false;
                     zone_v0682273.accepted_boundary_exact = true;
-                    zone_v0682273.boundary_provenance = "source SAVD REAL4 per-pass detail surface";
+                    zone_v0682273.boundary_provenance = "source SAVD FITS-E3/REAL4 per-pass detail surface";
                     zone_v0682273.accepted_controller = std::move(accepted_v0682273);
                     detail_zones_v0682273.push_back(std::move(zone_v0682273));
                 }

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.82.27.6 - SAVD scalar FITS-keyword roundtrip hotfix - 2026-08-13
+
+- Reject `0.6.82.27.5` for multipass host science: the Type-88 ownership change is inactive in the focused C5 run (`TYPE88_COUNT=0`), and pass-3/pass-5 `h-c(%)`/`ntotit` remain on the `.27.4` trajectory.
+- Use the healthy paired FORTRAN/C++ pass-3 diagnostic to localize the first material divergence to the restored scalar shell state: FORTRAN enters pass 3 with `XEE=1.2020000219345093`, while `.27.5` restores `1.2017343044281006`; common H/He/C heating/cooling and Carbon rate values are already within about `2e-4` relative at that evaluation.
+- Reproduce canonical `SAVD -> fstepr* -> RSTEPR* -> UNSAVD` scalar serialization: `REAL(8) -> sngl/REAL(4) -> ftpkye(...,3) -> ftgkye/REAL(4) -> REAL(8)` for `RINNER`, `ROUTER`, `RDEL`, `TEMPERAT`, `PRESSURE`, `COLUMN`, `XEE`, `DENSITY`, and `LOGXI`.
+- Apply that source quantization at the in-memory saved-shell boundary so odd passes restore the same XEE/T/radius/depth/pressure/column/density/log-xi values that FORTRAN reads from its detail FITS headers.
+- Correct per-pass detail `ROUTER` ownership to the source SAVD `delr` argument (`saved.step_size_cm`) rather than duplicating `RINNER`.
+- Preserve `.27.5` RRC ownership code and all `.27.4` multipass transport fixes. Do not change DSEC, rate equations, matrices, thermal kernels, or Python science.
+- Audit all 137 numerical files against exact sealed `.27.5`; change exactly one numerical file: `src/xstar_tools/xstar/cpp/xstar_standalone.cpp`.
+- Add a host gate that compares the exact REAL(4) readback of every SAVD scalar keyword in every non-empty per-pass detail HDU before judging odd-pass thermal convergence.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, and `60488` frozen.
+
 ## 0.6.82.27.5 - RRC npconi2/opakab/tauc ownership hotfix - 2026-08-13
 
 - Reject `0.6.82.27.4` for multipass host science: pass-3/pass-5 thermal trajectories remain wrong even though the pass-2 line SAVD plane improved.

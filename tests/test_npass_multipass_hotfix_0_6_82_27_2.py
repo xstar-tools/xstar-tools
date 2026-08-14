@@ -49,7 +49,10 @@ def test_0682272_step_log_repeats_u_lbol_per_pass():
 def test_0682272_detail_writer_uses_per_pass_real4_saved_surfaces():
     cpp=CPP.read_text(); fits=FITS.read_text()
     assert 'whole.multipass_detail_radial_zones.resize(effective_npass_v068227)' in cpp
-    assert 'source SAVD REAL4 per-pass detail surface' in cpp
+    assert (
+        'source SAVD REAL4 per-pass detail surface' in cpp
+        or 'source SAVD FITS-E3/REAL4 per-pass detail surface' in cpp
+    )
     assert 'state.multipass_detail_radial_zones' in fits
     for kind in ('detail.fits','detal2.fits','detal3.fits','detal4.fits'):
         assert kind in fits

@@ -55,16 +55,18 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
     pyproject = (ROOT / "pyproject.toml").read_text()
     current_027 = 'version = "0.6.82.27"' in pyproject
     current_0271 = 'version = "0.6.82.27.1"' in pyproject
-    current_0272 = 'version = "0.6.82.27.2"' in pyproject or 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject
-    current_0273 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject
-    current_0274 = 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject
-    current_0275 = 'version = "0.6.82.27.5"' in pyproject
+    current_0272 = 'version = "0.6.82.27.2"' in pyproject or 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
+    current_0273 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
+    current_0274 = 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
+    current_0275 = 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
+    current_0276 = 'version = "0.6.82.27.6"' in pyproject
     npass = None
     hotfix = None
     hotfix2 = None
     hotfix3 = None
     hotfix4 = None
     hotfix5 = None
+    hotfix6 = None
     if current_027 or current_0271 or current_0272:
         npass = json.loads((ROOT / "qualification/npass_0_6_82_27/npass_source_scope_0_6_82_27.json").read_text())
     if current_0271 or current_0272:
@@ -77,6 +79,8 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
         hotfix4 = json.loads((ROOT / "qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json").read_text())
     if current_0275:
         hotfix5 = json.loads((ROOT / "qualification/npass_0_6_82_27_5/npass_hotfix_source_scope_0_6_82_27_5.json").read_text())
+    if current_0276:
+        hotfix6 = json.loads((ROOT / "qualification/npass_0_6_82_27_6/npass_hotfix_source_scope_0_6_82_27_6.json").read_text())
     for rel, expected_0263 in hashes.items():
         current = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
         if npass is None:
@@ -114,5 +118,10 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
             continue
         assert hotfix5["predecessor_sha256"][rel] == expected_0274, rel
         expected_0275 = hotfix5["candidate_changed_sha256"].get(rel, expected_0274)
-        assert current == expected_0275, rel
+        if hotfix6 is None:
+            assert current == expected_0275, rel
+            continue
+        assert hotfix6["predecessor_sha256"][rel] == expected_0275, rel
+        expected_0276 = hotfix6["candidate_changed_sha256"].get(rel, expected_0275)
+        assert current == expected_0276, rel
 
