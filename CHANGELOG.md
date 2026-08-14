@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.82.27.16.1 - 2026-08-14
+
+- Diagnostic-only hotfix: the fixed-state population/heating qualification runner now validates the package/distribution version via `xstar_tools.execution.package_version()` instead of comparing the frozen science revision in `xstar_tools.__version__`.
+- No production numerical source changed relative to 0.6.82.27.16; the science revision and ABI identifiers remain frozen.
+- Added versioned `.27.16.1` diagnostic and npass host-runner entry points while retaining the `.27.16` runner filename for compatibility.
+
 ## 0.6.82.27.16 - 2026-08-14
 
 - Keep `0.6.82.27.13` as the protected accepted C++ native multipass baseline and inherit the accepted `.27.14` SAVD E3 scalar persistence plus `.27.15` Python guarded/dense repeated-pass state repair.

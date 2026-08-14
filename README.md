@@ -2,6 +2,8 @@
 
 # xstar-tools
 
+> Package 0.6.82.27.16.1 is a diagnostic-wrapper hotfix only; scientific outputs are unchanged from 0.6.82.27.16.
+
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
 **Distribution:** `0.6.82.26.3`

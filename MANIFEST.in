@@ -591,3 +591,12 @@ include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_16.py
 include tests/test_npass_python_publication_diagnostic_0_6_82_27_16.py
 include npass_python_publication_diagnostic_0_6_82_27_16.md
 include xstar_tools-0.6.82.27.16_host_validation.md
+
+# 0.6.82.27.16.1 diagnostic-wrapper package-version hotfix.
+include tools/qualification/run_c5_python_fixed_state_population_heating_0_6_82_27_16_1.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_16_1.py
+include xstar_tools-0.6.82.27.16.1_host_validation.md
+include npass_python_diagnostic_wrapper_hotfix_0_6_82_27_16_1.md
+recursive-include qualification/npass_0_6_82_27_16_1 *.json *.md
+include tests/test_npass_python_diagnostic_wrapper_0_6_82_27_16_1.py
+include tools/qualification/check_npass_python_diagnostic_wrapper_0_6_82_27_16_1.py
