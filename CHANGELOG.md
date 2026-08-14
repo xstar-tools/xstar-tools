@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.27.16.2 - 2026-08-14
+
+- Diagnostic-only fixed-state follow-up; zero production numerical-source changes relative to 0.6.82.27.16.1.
+- Adds side-by-side fresh and DSEC-carried one-shell Python replays at the canonical FORTRAN first-zone scalar state.
+- The carried replay preserves DSEC mutable xilevg/bilevg/rnisg/leveltemp/work-array ownership, then resets only scalar plasma state before the unconditional final calc_hmc_all.
+- Corrects diagnostic interpretation of xout_abund1 `ion_parameter` as LOGXI and reports both log10(xi) and linear xi explicitly.
+- Corrects diagnostic level output so rnisg is labeled LTE population and bilevg is labeled departure coefficient.
+- Adds target-level, matrix-term delta, data/rate-type summary, and H/total heating/cooling comparisons plus visible progress/heartbeat output.
+- Protected C++ npass baseline remains 0.6.82.27.13; science revision and ABIs remain frozen.
+
 ## 0.6.82.27.16.1 - 2026-08-14
 
 - Diagnostic-only hotfix: the fixed-state population/heating qualification runner now validates the package/distribution version via `xstar_tools.execution.package_version()` instead of comparing the frozen science revision in `xstar_tools.__version__`.

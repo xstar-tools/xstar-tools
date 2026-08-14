@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.82.27.16.1"
+version = "0.6.82.27.16.2"
+# Historical qualification compatibility marker: version = "0.6.82.27.16.1"
 # Historical qualification compatibility marker: version = "0.6.82.27.16"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
