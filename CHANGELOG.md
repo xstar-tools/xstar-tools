@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.82.27.12 - 2026-08-14
+
+- Fix repeated-pass detailed line FITS ownership so source/SAVD `tau0` remains authoritative while Type-50 diagnostics refine only local fields.
+- Fix repeated-pass detailed RRC FITS ownership so source-indexed SAVD `tauc` is never replaced by Type-53 diagnostic tau.
+- Preserve the `.27.10` thermal, `npconi2=N`, Option-5/22/23-selection/27 behavior; discard the rejected `.27.11` reprojection.
+
 ## 0.6.82.27.11 - 2026-08-14
 
 - Preserve the accepted `.27.8` directional UNSAVD thermal lifetime and the `.27.9/.27.10` Option-27 correction.

@@ -29,8 +29,8 @@ def source_roundtrip(value: float) -> float:
 def test_0682276_version_abis_and_narrow_scope():
     py = (ROOT / "pyproject.toml").read_text()
     mk = (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
-    assert any(f'version = "{v}"' in py for v in ("0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.11"))
-    assert any(f'PACKAGE_VERSION ?= {v}' in mk for v in ("0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.11"))
+    assert any(f'version = "{v}"' in py for v in ("0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.12"))
+    assert any(f'PACKAGE_VERSION ?= {v}' in mk for v in ("0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.12"))
     obj = json.loads(MAN.read_text())
     if 'version = "0.6.82.27.7"' in py:
         succ = json.loads((ROOT / "qualification/npass_0_6_82_27_7/npass_hotfix_source_scope_0_6_82_27_7.json").read_text())

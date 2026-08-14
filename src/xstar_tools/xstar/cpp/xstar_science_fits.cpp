@@ -8444,8 +8444,9 @@ RrcRow merged_rrc_row(const RrcRow& base, const RrcRow* diagnostic) {
     if (diagnostic->emis_out != 0.0) out.emis_out = diagnostic->emis_out;
     if (diagnostic->absorption != 0.0) out.absorption = diagnostic->absorption;
     if (diagnostic->opacity != 0.0) out.opacity = diagnostic->opacity;
-    if (std::isfinite(diagnostic->tau_in) && diagnostic->tau_in != 0.0) out.tau_in = diagnostic->tau_in;
-    if (std::isfinite(diagnostic->tau_out) && diagnostic->tau_out != 0.0) out.tau_out = diagnostic->tau_out;
+    // 0.6.82.27.12: cumulative RRC optical depths are owned by the
+    // source-indexed SAVD tauc workspace in base.  Type-53 diagnostic rows
+    // refine local row quantities only and must never replace tau_in/tau_out.
     return out;
 }
 
@@ -8551,7 +8552,7 @@ void write_line_detail(const std::filesystem::path& path,
             for (std::size_t i = 0; i < lines.size(); ++i) {
                 LineRow r = lines[i];
                 const auto found_diag = diagnostic_lines.find(r.record);
-                if (found_diag != diagnostic_lines.end()) r = merged_line_row(found_diag->second, &r);
+                if (found_diag != diagnostic_lines.end()) r = merged_line_row(r, &found_diag->second);
                 const auto* id = line_identity_by_index(state, r.record);
                 const auto found_pw = pw_line_by_index.find(r.record);
                 if (state.backend.find("native") == std::string::npos && found_pw != pw_line_by_index.end()) {
