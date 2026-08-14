@@ -22,8 +22,8 @@ def runner():
 
 
 def test_0682275_version_abis_and_narrow_scope():
-    assert any(f'version = "{v}"' in (ROOT / "pyproject.toml").read_text() for v in ("0.6.82.27.5", "0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.12"))
-    assert any(f'PACKAGE_VERSION ?= {v}' in (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text() for v in ("0.6.82.27.5", "0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.12"))
+    assert any(f'version = "{v}"' in (ROOT / "pyproject.toml").read_text() for v in ("0.6.82.27.5", "0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.12", "0.6.82.27.13"))
+    assert any(f'PACKAGE_VERSION ?= {v}' in (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text() for v in ("0.6.82.27.5", "0.6.82.27.6", "0.6.82.27.7", "0.6.82.27.8", "0.6.82.27.9", "0.6.82.27.10", "0.6.82.27.12", "0.6.82.27.13"))
     obj = json.loads(MAN.read_text())
     assert obj["predecessor"] == "0.6.82.27.4"
     assert obj["science_revision"] == "0.6.48.12.3.45.3.3.8"

@@ -16,7 +16,7 @@ def _runner():
 
 def test_0682271_version_and_scope_chain():
     pyproject=(ROOT/'pyproject.toml').read_text(); make=(ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
-    supported=('0.6.82.27.1','0.6.82.27.2','0.6.82.27.3','0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7','0.6.82.27.8','0.6.82.27.9','0.6.82.27.10','0.6.82.27.12')
+    supported=('0.6.82.27.1','0.6.82.27.2','0.6.82.27.3','0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7','0.6.82.27.8','0.6.82.27.9','0.6.82.27.10','0.6.82.27.12','0.6.82.27.13')
     assert any(f'version = "{v}"' in pyproject for v in supported)
     assert any(f'PACKAGE_VERSION ?= {v}' in make for v in supported)
     obj=json.loads(MAN.read_text())

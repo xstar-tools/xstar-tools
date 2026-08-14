@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.27.13 - 2026-08-14
+
+- Preserve the accepted `.27.12` thermal trajectory, Option 5/22/23/27 behavior, final line/RRC tau ownership, directional UNSAVD, and one-based `npconi2=N` publication.
+- Repair only the native fallback serialization of the two-plane `tauc` workspace: native source-indexed arrays retain slot zero and therefore use `native_continuum_count + 1` as plane stride.
+- Repack the two native `tauc` planes independently into the historical serialized 301301-value plane instead of truncating the concatenated native array, eliminating the one-source-slot `tau_out` lag in repeated-pass `detal3`.
+- Deliberately defer the separate `detal3` `cemab` emissivity and `detal2` `rcem/oplin` unit/publication issues.
+- Science revision and all ABI identifiers remain frozen.
+
 ## 0.6.82.27.12 - 2026-08-14
 
 - Fix repeated-pass detailed line FITS ownership so source/SAVD `tau0` remains authoritative while Type-50 diagnostics refine only local fields.

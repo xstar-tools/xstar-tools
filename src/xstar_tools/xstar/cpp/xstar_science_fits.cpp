@@ -7046,6 +7046,35 @@ std::vector<double> resize_native_array(std::vector<double> values, std::size_t 
     return values;
 }
 
+// 0.6.82.27.13: source-indexed tauc retains the FORTRAN one-based slot zero,
+// so a native two-plane workspace has stride native_continuum_count + 1.
+// The serialized product bridge intentionally exposes the historical
+// 301301-value plane.  Repack the two native planes independently before
+// resizing; truncating the concatenated native vector moves the start of
+// plane 2 one slot early and publishes tau_out(N-1) as tau_out(N).
+std::vector<double> resize_native_tauc_for_serialized_bridge_v06822713(
+    const std::vector<double>& values,
+    std::size_t expected_count,
+    std::size_t native_continuum_count) {
+    if (expected_count == 0u || values.empty()) return values;
+    if (values.size() == expected_count) return values;
+    if ((expected_count % 2u) != 0u) return resize_native_array(values, expected_count);
+
+    const std::size_t serialized_stride = expected_count / 2u;
+    const std::size_t native_stride = native_continuum_count + 1u;
+    if (native_continuum_count == 0u || values.size() != 2u * native_stride) {
+        return resize_native_array(values, expected_count);
+    }
+
+    std::vector<double> out(expected_count, 0.0);
+    const std::size_t copy_count = std::min(serialized_stride, native_stride);
+    std::copy_n(values.begin(), copy_count, out.begin());
+    std::copy_n(values.begin() + static_cast<std::ptrdiff_t>(native_stride),
+                copy_count,
+                out.begin() + static_cast<std::ptrdiff_t>(serialized_stride));
+    return out;
+}
+
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide has finite nonzero signal for final science-product publication from already-committed run state.
@@ -7109,7 +7138,10 @@ std::vector<double> native_workspace_array_for_hdu(
     if (zone_index >= state.radial_zones.size()) zone_index = state.radial_zones.size() - 1;
     const auto& evaluation = state.radial_zones[zone_index].accepted_controller.evaluation;
     const auto& ws = evaluation.source_workspace;
-    if (name == "tauc") return resize_native_array(ws.tauc, expected_count);
+    if (name == "tauc") {
+        return resize_native_tauc_for_serialized_bridge_v06822713(
+            ws.tauc, expected_count, ws.native_continuum_count);
+    }
     if (name == "elumab") return resize_native_array(ws.elumab, expected_count);
     if (name == "zrems") return resize_native_array(ws.zrems, expected_count);
     if (name == "zremsz") return resize_native_array(ws.zremsz, expected_count);
