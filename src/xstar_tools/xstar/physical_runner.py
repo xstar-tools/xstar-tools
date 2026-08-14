@@ -989,11 +989,11 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 z["rrc_rate_type"], z["rrc_atomic_number"],
             )
         )
-        # v0.6.48.12.3.45.3.3.4: frozen-44 generic xo01_detal3 ownership
-        # uses the complete canonical npcon/npconi2 continuum identity surface,
-        # including rate types 7 and 1.  Keep the dedicated STEP/public-RRC
-        # Type-7 ownership separate; detailed FITS publication is broader.
-        detail_rrcs = rrcs
+        # 0.6.82.27.16: fstepr3.f90 publishes only the literal source
+        # npfi(7,ion) chain.  Derive that identity surface from the cached
+        # broad RRC inventory so old metadata caches cannot reintroduce the
+        # rate-1 continuum-660 row.
+        detail_rrcs = tuple(row for row in rrcs if int(row.rate_type) == 7)
     return SourceOutputMetadata(
         levels=levels,
         lines=lines,
@@ -1366,12 +1366,10 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 atomic_number=z,
             )
         )
-    # v0.6.48.12.3.45.3.3.4: frozen-44 generic xo01_detal3 uses the broad
-    # canonical setptrs npcon/npconi2 identity universe, not source_rrc's
-    # rate-type-7-only view.  This intentionally includes canonical rate-type-1
-    # continua when their local detailed workspace activity passes fstepr3's
-    # 1.e-36 publication test.  STEP Options 19/24 remain Type-7-owned.
-    detail_rrcs = list(rrcs)
+    # 0.6.82.27.16: literal fstepr3.f90 walks npfi(7,ion), so detailed
+    # RRC FITS identities are the source rate-type-7 chain.  metadata.rrcs
+    # remains the broader continuum/public identity surface used elsewhere.
+    detail_rrcs = [row for row in rrcs if int(row.rate_type) == 7]
 
     return SourceOutputMetadata(
         levels=tuple(levels),
@@ -1381,8 +1379,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v13_frozen44_broad_npcon_detail_inventory",
-            "detail_rrc_owner": "canonical npcon/npconi2 broad continuum identity surface",
+            "metadata_builder": "vectorized_numpy_v14_source_type7_detail_inventory",
+            "detail_rrc_owner": "literal fstepr3 npfi(7,ion) source chain",
             "metadata_cache_status": "built",
         },
     )
@@ -1519,6 +1517,15 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
     capture_hydrogen_history = bool(
         state.control.get("zone1_dsec_capture_hydrogen_history", False)
     )
+    _trace_spec = state.control.get("zone1_dsec_capture_lucy_trace_element_z", ())
+    if _trace_spec in (None, ""):
+        trace_element_z: set[int] = set()
+    elif isinstance(_trace_spec, (list, tuple, set)):
+        trace_element_z = {int(value) for value in _trace_spec}
+    else:
+        trace_element_z = {int(_trace_spec)}
+    if capture_hydrogen_history:
+        trace_element_z.add(1)
     requests: list[FixedStateElementRequest] = []
     for z, abundance in enumerate(parameters.physical_abundances, start=1):
         if float(abundance) <= 1.0e-24:
@@ -1542,7 +1549,7 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
                 strict_context=True,
                 allow_lstsq_fallback=False,
                 allow_dense_matrix_rescue=False,
-                capture_lucy_trace=bool(capture_hydrogen_history and int(z) == 1),
+                capture_lucy_trace=bool(int(z) in trace_element_z),
             )
         )
     if not requests:

@@ -76,6 +76,7 @@ from astropy.io import fits
 
 from .state import XSTARPythonState
 from .fits_provenance import apply_python_primary_fits_header
+from .saved_radial_state import _savd_keyword_e3_real4_scalar
 
 
 class OutputWriterPortError(RuntimeError):
@@ -181,9 +182,8 @@ class SourceOutputMetadata:
     levels: tuple[LevelOutputMetadata, ...] = ()
     lines: tuple[LineOutputMetadata, ...] = ()
     rrcs: tuple[RRCOutputMetadata, ...] = ()
-    # FITS detail-RRC view of the canonical ``rrcs``/npcon inventory.
-    # Since 45.3.3.4 this mirrors frozen-44's broad canonical npcon/npconi2
-    # identity owner; STEP/public RRC source ownership remains separately Type 7.
+    # FITS detail-RRC view owned by the literal FORTRAN fstepr3 Type-7 chain.
+    # Keep this narrower than the broad executable/public continuum inventory.
     detail_rrcs: tuple[RRCOutputMetadata, ...] = ()
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
@@ -206,16 +206,21 @@ class ShellOutputHeader:
     # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
     # XSTAR-FUNCTION-COMMENT-END
     def real4_keywords(self) -> dict[str, float]:
+        # 0.6.82.27.16: these nine keywords are written by SAVD with
+        # CFITSIO ftpkye(...,3) after REAL(4) assignment.  The intermediate
+        # E3 text round-trip is part of the persisted radial-state contract;
+        # detail products must expose the same scalar snapshot that UNSAVD
+        # subsequently reads.
         return {
-            "RINNER": _r4(self.inner_radius_cm),
-            "ROUTER": _r4(self.outer_radius_cm),
-            "RDEL": _r4(self.radial_depth_cm),
-            "TEMPERAT": _r4(self.temperature_1e4K),
-            "PRESSURE": _r4(self.pressure_dyn_cm2),
-            "COLUMN": _r4(self.column_cm2),
-            "XEE": _r4(self.electron_fraction),
-            "DENSITY": _r4(self.density_cm3),
-            "LOGXI": _r4(self.logxi),
+            "RINNER": _savd_keyword_e3_real4_scalar(self.inner_radius_cm),
+            "ROUTER": _savd_keyword_e3_real4_scalar(self.outer_radius_cm),
+            "RDEL": _savd_keyword_e3_real4_scalar(self.radial_depth_cm),
+            "TEMPERAT": _savd_keyword_e3_real4_scalar(self.temperature_1e4K),
+            "PRESSURE": _savd_keyword_e3_real4_scalar(self.pressure_dyn_cm2),
+            "COLUMN": _savd_keyword_e3_real4_scalar(self.column_cm2),
+            "XEE": _savd_keyword_e3_real4_scalar(self.electron_fraction),
+            "DENSITY": _savd_keyword_e3_real4_scalar(self.density_cm3),
+            "LOGXI": _savd_keyword_e3_real4_scalar(self.logxi),
         }
 
     # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -544,13 +549,14 @@ def build_detail_rrc_table(
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
     depth = np.asarray(tauc, dtype=float)
     abund = None if element_abundances is None else np.asarray(element_abundances, dtype=float).reshape(-1)
-    if metadata.rrcs:
-        # Frozen-44 generic detailed-FITS identity owner: complete canonical
-        # setptrs npcon/npconi2 order.  Do not narrow this to rate type 7.
-        source_rows = metadata.rrcs
-    elif metadata.detail_rrcs:
-        # Backward-compatible synthetic/fixture metadata.
+    if metadata.detail_rrcs:
+        # 0.6.82.27.16: literal fstepr3.f90 walks npfi(7,ion) only.  Keep
+        # this detail-specific Type-7 identity surface separate from the
+        # broader public/executable continuum inventory in metadata.rrcs.
         source_rows = metadata.detail_rrcs
+    elif metadata.rrcs:
+        # Backward-compatible synthetic fixtures that predate detail_rrcs.
+        source_rows = tuple(row for row in metadata.rrcs if int(getattr(row, "rate_type", 0) or 0) == 7)
     else:
         source_rows = ()
     rows: list[RRCOutputMetadata] = []

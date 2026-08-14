@@ -40,8 +40,8 @@ def load_saved_module():
 def test_06822714_version_scope_and_protected_cpp_baseline():
     py = (ROOT / 'pyproject.toml').read_text()
     mk = (ROOT / 'src/xstar_tools/xstar/cpp/Makefile').read_text()
-    assert any(f'version = "{v}"' in py for v in ('0.6.82.27.14','0.6.82.27.15'))
-    assert any(f'PACKAGE_VERSION ?= {v}' in mk for v in ('0.6.82.27.14','0.6.82.27.15'))
+    assert any(f'version = "{v}"' in py for v in ('0.6.82.27.14','0.6.82.27.15','0.6.82.27.16'))
+    assert any(f'PACKAGE_VERSION ?= {v}' in mk for v in ('0.6.82.27.14','0.6.82.27.15','0.6.82.27.16'))
     o = json.loads(MAN.read_text())
     assert o['predecessor'] == '0.6.82.27.13'
     assert o['protected_cpp_baseline'] == '0.6.82.27.13'

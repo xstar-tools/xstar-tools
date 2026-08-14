@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.27.16 - 2026-08-14
+
+- Keep `0.6.82.27.13` as the protected accepted C++ native multipass baseline and inherit the accepted `.27.14` SAVD E3 scalar persistence plus `.27.15` Python guarded/dense repeated-pass state repair.
+- Close the cheap Python detail-publication defects: write all nine SAVD scalar detail-header keywords with the same REAL(4) -> CFITSIO-E3 -> REAL(4) persistence as canonical SAVD/UNSAVD, and propagate `pprint(9)`'s radius-local `zeta` back to caller state before terminal SAVD so terminal `LOGXI` has canonical ownership.
+- Restore literal FORTRAN `fstepr3` detail-RRC inventory ownership to the rate-type-7 (`npfi(7,ion)`) chain, preventing the broad continuum inventory from publishing the extra C I continuum-660 row; public/executable RRC ownership remains unchanged.
+- Add a qualification-only one-shell fixed-state diagnostic for H I levels 2/3/17/18/27, He II levels 89/90/106, their compact matrix terms, and hydrogen/total heating/cooling. Diagnostic trace hooks are dormant in normal production.
+- Do not apply empirical population/heating corrections. Require the fast fixed-state diagnostic to identify whether the remaining 1-3% population/opacity and ~1.06% H-heating residuals are local-solver discrepancies before rerunning expensive pure-Python `npass=3`; keep `npass=5` deferred until `npass=3` fully ACCEPTs.
+- No C++ numerical source changes; science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.27.15 - 2026-08-14
 
 - Keep `0.6.82.27.13` as the protected accepted C++ native multipass baseline and inherit the `0.6.82.27.14` SAVD scalar E3/REAL4 persistence fix.

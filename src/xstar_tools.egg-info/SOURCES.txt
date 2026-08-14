@@ -16,6 +16,7 @@ npass_multipass_writer_ownership_hotfix_0_6_82_27_12.md
 npass_option22_unsmoothed_stpcut_hotfix_0_6_82_27_8.md
 npass_python_global_level_ownership_hotfix_0_6_82_27_15.md
 npass_python_parity_hotfix_0_6_82_27_14.md
+npass_python_publication_diagnostic_0_6_82_27_16.md
 npass_rrc_ownership_hotfix_0_6_82_27_5.md
 npass_savd_scalar_keyword_hotfix_0_6_82_27_6.md
 npass_step_publication_hotfix_0_6_82_27_7.md
@@ -44,6 +45,7 @@ xstar_tools-0.6.82.27.12_host_validation.md
 xstar_tools-0.6.82.27.13_host_validation.md
 xstar_tools-0.6.82.27.14_host_validation.md
 xstar_tools-0.6.82.27.15_host_validation.md
+xstar_tools-0.6.82.27.16_host_validation.md
 xstar_tools-0.6.82.27.1_host_validation.md
 xstar_tools-0.6.82.27.2_host_validation.md
 xstar_tools-0.6.82.27.3_host_validation.md
@@ -345,6 +347,8 @@ qualification/npass_0_6_82_27_14/README.md
 qualification/npass_0_6_82_27_14/npass_hotfix_source_scope_0_6_82_27_14.json
 qualification/npass_0_6_82_27_15/README.md
 qualification/npass_0_6_82_27_15/npass_hotfix_source_scope_0_6_82_27_15.json
+qualification/npass_0_6_82_27_16/README.md
+qualification/npass_0_6_82_27_16/npass_hotfix_source_scope_0_6_82_27_16.json
 qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json
 qualification/npass_0_6_82_27_3/npass_hotfix_source_scope_0_6_82_27_3.json
 qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json
@@ -654,6 +658,7 @@ tests/test_npass_multipass_hotfix_0_6_82_27_8.py
 tests/test_npass_multipass_hotfix_0_6_82_27_9.py
 tests/test_npass_python_parity_0_6_82_27_14.py
 tests/test_npass_python_parity_0_6_82_27_15.py
+tests/test_npass_python_publication_diagnostic_0_6_82_27_16.py
 tests/test_o7_density_grid_type69_mode_compare_reference.py
 tests/test_option15_material_surface.py
 tests/test_option24_fortran_stale_local_policy.py
@@ -794,6 +799,7 @@ tools/qualification/check_npass_multipass_hotfix_0_6_82_27_8.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_9.py
 tools/qualification/check_npass_python_parity_0_6_82_27_14.py
 tools/qualification/check_npass_python_parity_0_6_82_27_15.py
+tools/qualification/check_npass_python_publication_diagnostic_0_6_82_27_16.py
 tools/qualification/check_packaging_milestone.py
 tools/qualification/check_parity_freeze.py
 tools/qualification/check_pescl_source_pi_0_6_82_14.py
@@ -859,6 +865,7 @@ tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_12.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_13.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_14.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_15.py
+tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_16.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_2.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_3.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_4.py
@@ -867,6 +874,7 @@ tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_6.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_7.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_8.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_9.py
+tools/qualification/run_c5_python_fixed_state_population_heating_0_6_82_27_16.py
 tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26.py
 tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26_1.py
 tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26_2.py

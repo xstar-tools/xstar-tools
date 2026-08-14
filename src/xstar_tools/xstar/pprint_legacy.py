@@ -481,6 +481,11 @@ def _option9_zone_line(state: XSTARPythonState, buf: LegacyPprintBuffers) -> str
     xlum = float(state.control.get("xlum", 0.0))
     skse = xlum / xpx / r19 / r19
     zeta = np.log10(max(1.0e-24, skse))
+    # 0.6.82.27.16: pprint.f90 receives zeta by reference and option 9
+    # assigns the radius-local log(xi) before the caller's terminal SAVD.
+    # Preserve that side effect so the terminal detail header owns the same
+    # LOGXI scalar as canonical FORTRAN.
+    state.control["zeta"] = float(zeta)
     nry = int(nbinc(13.6, epi, n)) + 1
     nry0 = max(1, min(n, nry)) - 1
     # The first h-c(%) column is the local thermal-balance residual.
