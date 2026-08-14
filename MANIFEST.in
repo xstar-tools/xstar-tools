@@ -567,3 +567,11 @@ include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_13.py
 include tests/test_npass_multipass_hotfix_0_6_82_27_13.py
 include npass_multipass_tauc_stride_hotfix_0_6_82_27_13.md
 include xstar_tools-0.6.82.27.13_host_validation.md
+# 0.6.82.27.14 Python npass SAVD scalar parity hotfix.
+recursive-include qualification/npass_0_6_82_27_14 *.json *.md
+include tools/qualification/check_npass_python_parity_0_6_82_27_14.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_14.py
+include tests/test_npass_python_parity_0_6_82_27_14.py
+include npass_python_parity_hotfix_0_6_82_27_14.md
+include xstar_tools-0.6.82.27.14_host_validation.md
+

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.27.14 - 2026-08-14
+
+- Freeze `0.6.82.27.13` as the accepted C++ native multipass baseline for C5 `npass=3,5` (`stages=AAAA`).
+- Begin Python npass parity with one numerical change in `saved_radial_state.py`: reproduce SAVD scalar `REAL(4) -> ftpkye(...,3) -> ftgkye/REAL(4)` persistence instead of a plain float32 round-trip.
+- Apply FITS-E3 persistence only to the nine SAVD scalar keywords; keep all saved arrays as ordinary REAL(4).
+- Keep all C++ numerical sources byte-identical to `.27.13`; defer `detal3 cemab` and `detal2 rcem/oplin` publication repairs.
+- Science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.27.13 - 2026-08-14
 
 - Preserve the accepted `.27.12` thermal trajectory, Option 5/22/23/27 behavior, final line/RRC tau ownership, directional UNSAVD, and one-based `npconi2=N` publication.
