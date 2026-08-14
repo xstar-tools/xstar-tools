@@ -9,6 +9,7 @@ npass_multipass_hotfix_0_6_82_27_1.md
 npass_multipass_hotfix_0_6_82_27_2.md
 npass_multipass_hotfix_0_6_82_27_3.md
 npass_multipass_hotfix_0_6_82_27_4.md
+npass_multipass_ownership_hotfix_0_6_82_27_10.md
 npass_multipass_ownership_hotfix_0_6_82_27_9.md
 npass_option22_unsmoothed_stpcut_hotfix_0_6_82_27_8.md
 npass_rrc_ownership_hotfix_0_6_82_27_5.md
@@ -34,6 +35,7 @@ xstar_tools-0.6.82.26.1_host_validation.md
 xstar_tools-0.6.82.26.2_host_validation.md
 xstar_tools-0.6.82.26.3_host_validation.md
 xstar_tools-0.6.82.26_host_validation.md
+xstar_tools-0.6.82.27.10_host_validation.md
 xstar_tools-0.6.82.27.1_host_validation.md
 xstar_tools-0.6.82.27.2_host_validation.md
 xstar_tools-0.6.82.27.3_host_validation.md
@@ -326,6 +328,8 @@ qualification/lcpres_pressure_0_6_82_25_2/lcpres_pressure_python_compare_0_6_82_
 qualification/lcpres_pressure_0_6_82_25_3/lcpres_pressure_leveltemp_0_6_82_25_3.json
 qualification/npass_0_6_82_27/npass_source_scope_0_6_82_27.json
 qualification/npass_0_6_82_27_1/npass_hotfix_source_scope_0_6_82_27_1.json
+qualification/npass_0_6_82_27_10/README.md
+qualification/npass_0_6_82_27_10/npass_hotfix_source_scope_0_6_82_27_10.json
 qualification/npass_0_6_82_27_2/npass_hotfix_source_scope_0_6_82_27_2.json
 qualification/npass_0_6_82_27_3/npass_hotfix_source_scope_0_6_82_27_3.json
 qualification/npass_0_6_82_27_4/npass_hotfix_source_scope_0_6_82_27_4.json
@@ -622,6 +626,7 @@ tests/test_niter_semantics_0_6_82_24.py
 tests/test_niter_xee_ownership_0_6_82_24_1.py
 tests/test_npass_multipass_0_6_82_27.py
 tests/test_npass_multipass_hotfix_0_6_82_27_1.py
+tests/test_npass_multipass_hotfix_0_6_82_27_10.py
 tests/test_npass_multipass_hotfix_0_6_82_27_2.py
 tests/test_npass_multipass_hotfix_0_6_82_27_3.py
 tests/test_npass_multipass_hotfix_0_6_82_27_4.py
@@ -757,6 +762,7 @@ tools/qualification/check_niter_semantics_0_6_82_24.py
 tools/qualification/check_niter_semantics_0_6_82_24_1.py
 tools/qualification/check_npass_multipass_0_6_82_27.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_1.py
+tools/qualification/check_npass_multipass_hotfix_0_6_82_27_10.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_2.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_3.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_4.py
@@ -825,6 +831,7 @@ tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_1.py
 tools/qualification/run_c5_niter_modes_host_smoke_0_6_82_24_2.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_1.py
+tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_10.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_2.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_3.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_4.py

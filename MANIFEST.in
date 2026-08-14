@@ -543,3 +543,11 @@ include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_9.py
 include tests/test_npass_multipass_hotfix_0_6_82_27_9.py
 include npass_multipass_ownership_hotfix_0_6_82_27_9.md
 include xstar_tools-0.6.82.27.9_host_validation.md
+
+# 0.6.82.27.10 repeated-pass terminal SAVD / RRC npconi2 ownership hotfix.
+recursive-include qualification/npass_0_6_82_27_10 *.json *.md
+include tools/qualification/check_npass_multipass_hotfix_0_6_82_27_10.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_10.py
+include tests/test_npass_multipass_hotfix_0_6_82_27_10.py
+include npass_multipass_ownership_hotfix_0_6_82_27_10.md
+include xstar_tools-0.6.82.27.10_host_validation.md

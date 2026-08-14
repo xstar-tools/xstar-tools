@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.27.10 - 2026-08-14
+
+- Revert the rejected 0.6.82.27.9 unconditional two-plane UNSAVD `tau0/tauc` restore and restore the accepted 0.6.82.27.8 direction-owned repeated-pass thermal lifetime.
+- Persist terminal line/RRC SAVD directly from the already post-STPCUT terminal boundary instead of refreshing it from potentially stale product arrays.
+- Correct detailed RRC publication to the literal source rate-type-7 inventory and one-based `npconi2` slot; add explicit 208/209, 805/806, 860/861, 863/864 host sentinels.
+- Keep the successful 0.6.82.27.9 indexed `zrtmp(:,jkstep)` Option-27 overwrite correction.
+- Keep Option-23 final-pass reader, Option-5, Option-22, DSEC/rates/matrices, Python science, science revision, and ABIs frozen.
+
 ## 0.6.82.27.9 - 2026-08-13
 
 - Restore both saved `tau0` and `tauc` planes on repeated-pass UNSAVD, matching literal FORTRAN `rstepr2/rstepr3` ownership, and retain terminal post-STPCUT cumulative line/RRC depth.

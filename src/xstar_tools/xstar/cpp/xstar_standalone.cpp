@@ -17736,23 +17736,21 @@ void restore_saved_shell_v068227(
             data.product_line_tau_in.assign(line_stride,0.0);
             data.product_line_tau_out.assign(line_stride,0.0);
         }
-        // 0.6.82.27.9: literal rstepr2.f90 restores BOTH tau0 columns on
-        // every UNSAVD call.  Earlier native multipass code restored only the
-        // plane presumed to be far-side for the new direction.  That loses the
-        // prior odd/even-pass cumulative plane when the next shell is restored,
-        // so the terminal SAVD repeats a pre-STPCUT depth instead of carrying
-        // the complete cumulative tau0 state.  Preserve sparse-row semantics,
-        // but overwrite both saved planes exactly as rstepr2 does.
-        for (std::size_t plane = 0u; plane < 2u; ++plane) {
-            auto& product = plane == 0u ? data.product_line_tau_in : data.product_line_tau_out;
-            auto& runtime = plane == 0u ? data.line_tau_in : data.line_tau_out;
-            for (const std::size_t source_slot : saved.saved_line_slots_v0682273) {
-                if (source_slot == 0u || source_slot >= line_stride) continue;
-                const double value = snap.tau0[plane * line_stride + source_slot];
-                product[source_slot] = value;
-                const std::size_t runtime_slot = source_slot - 1u;
-                if (runtime_slot < runtime.size()) runtime[runtime_slot] = value;
-            }
+        // 0.6.82.27.10: retain the scientifically accepted .27.8 repeated-pass
+        // lifetime.  Only the far-side/source-owned tau0 plane is restored for
+        // the new direction.  Restoring both checkpoint planes unconditionally
+        // (the .27.9 experiment) overwrote the live pass-local plane and changed
+        // Option-17 h-c/ntotit.  The terminal SAVD producer below is repaired
+        // independently so this directional UNSAVD state is not disturbed.
+        const std::size_t plane = radial_direction > 0 ? 0u : 1u;
+        auto& product = radial_direction > 0 ? data.product_line_tau_in : data.product_line_tau_out;
+        auto& runtime = radial_direction > 0 ? data.line_tau_in : data.line_tau_out;
+        for (const std::size_t source_slot : saved.saved_line_slots_v0682273) {
+            if (source_slot == 0u || source_slot >= line_stride) continue;
+            const double value = snap.tau0[plane * line_stride + source_slot];
+            product[source_slot] = value;
+            const std::size_t runtime_slot = source_slot - 1u;
+            if (runtime_slot < runtime.size()) runtime[runtime_slot] = value;
         }
     }
 
@@ -17761,19 +17759,19 @@ void restore_saved_shell_v068227(
             data.product_rrc_tau_in.assign(rrc_stride,0.0);
             data.product_rrc_tau_out.assign(rrc_stride,0.0);
         }
-        // rstepr3.f90 likewise restores both tauc columns.  Do not preserve a
-        // pass-local plane across UNSAVD: the source checkpoint is the owner,
-        // and STPCUT subsequently advances only ldir for the current shell.
-        for (std::size_t plane = 0u; plane < 2u; ++plane) {
-            auto& product = plane == 0u ? data.product_rrc_tau_in : data.product_rrc_tau_out;
-            auto& runtime = plane == 0u ? data.source_tau_in : data.source_tau_out;
-            for (const std::size_t source_slot : saved.saved_rrc_slots_v0682273) {
-                if (source_slot == 0u || source_slot >= rrc_stride) continue;
-                const double value = snap.tauc[plane * rrc_stride + source_slot];
-                product[source_slot] = value;
-                const std::size_t runtime_slot = source_slot - 1u;
-                if (runtime_slot < runtime.size()) runtime[runtime_slot] = value;
-            }
+        // 0.6.82.27.10: same .27.8 directional ownership for tauc.  The
+        // opposite/live pass plane remains caller-owned until STPCUT advances
+        // it.  This preserves the accepted thermal trajectory while the detail
+        // publication's npconi2 address is corrected independently.
+        const std::size_t plane = radial_direction > 0 ? 0u : 1u;
+        auto& product = radial_direction > 0 ? data.product_rrc_tau_in : data.product_rrc_tau_out;
+        auto& runtime = radial_direction > 0 ? data.source_tau_in : data.source_tau_out;
+        for (const std::size_t source_slot : saved.saved_rrc_slots_v0682273) {
+            if (source_slot == 0u || source_slot >= rrc_stride) continue;
+            const double value = snap.tauc[plane * rrc_stride + source_slot];
+            product[source_slot] = value;
+            const std::size_t runtime_slot = source_slot - 1u;
+            if (runtime_slot < runtime.size()) runtime[runtime_slot] = value;
         }
     }
 
@@ -19015,14 +19013,15 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 const double terminal_zeta_v068227 = terminal_xi_v068227 > 0.0
                     ? std::log10(terminal_xi_v068227)
                     : -std::numeric_limits<double>::infinity();
-                // 0.6.82.27.9: source terminal SAVD is after the final
-                // physical STPCUT/TRNFRN.  At this point the product tau0/tauc
-                // arrays already include the final shell increment; refresh the
-                // retained boundary from those cumulative planes before TFLOAT
-                // persistence.  The ordinary in-loop SAVD remains pre-STPCUT.
+                // 0.6.82.27.10: terminal_transport_boundary is captured only
+                // after the final physical STPCUT, and advance_stpcut_depths()
+                // has already committed the cumulative tau0/tauc planes into
+                // that boundary.  Persist this post-STPCUT owner directly.
+                // Re-running retain_pre_stpcut_cumulative_state here can graft
+                // stale product arrays over the correct terminal boundary and
+                // made xo03/xo05_detal2 repeat the pre-terminal depth.
                 FixedDsecSnapshot terminal_saved_boundary_v0682274 =
                     *terminal_transport_boundary_v82_patch520144;
-                retain_pre_stpcut_cumulative_state(data, terminal_saved_boundary_v0682274);
                 saved_passes_v068227[kk_v068227].insert_after_hdu(
                     finals.size() + 1u,
                     make_saved_shell_v068227(

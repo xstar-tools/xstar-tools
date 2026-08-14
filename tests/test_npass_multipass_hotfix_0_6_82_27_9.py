@@ -12,7 +12,7 @@ def runner():
     m=importlib.util.module_from_spec(s); sys.modules[s.name]=m; s.loader.exec_module(m); return m
 
 def test_version_scope_and_frozen_ids():
-    assert 'version = "0.6.82.27.9"' in (ROOT/'pyproject.toml').read_text()
+    assert any(f'version = "{v}"' in (ROOT/'pyproject.toml').read_text() for v in ('0.6.82.27.9','0.6.82.27.10'))
     o=json.loads(MAN.read_text()); assert o['predecessor']=='0.6.82.27.8'
     assert set(o['intentional_numerical_source_changes'])=={
         'src/xstar_tools/xstar/cpp/xstar_standalone.cpp',
@@ -20,13 +20,19 @@ def test_version_scope_and_frozen_ids():
         'src/xstar_tools/xstar/cpp/xstar_step_log.cpp'}
     assert (o['science_revision'],o['c_api_abi'],o['production_zone_abi'],o['fixed_state_abi'])==('0.6.48.12.3.45.3.3.8',60487,6048110,60488)
 
-def test_unsavd_restores_both_line_and_rrc_planes():
-    c=STAND.read_text()
-    assert 'literal rstepr2.f90 restores BOTH tau0 columns' in c
-    assert 'rstepr3.f90 likewise restores both tauc columns' in c
-    # One two-plane loop for tau0 and one for tauc in the restore region.
-    region=c[c.index('literal rstepr2.f90 restores BOTH tau0 columns'):c.index('const std::size_t grid_stride', c.index('literal rstepr2.f90 restores BOTH tau0 columns'))]
-    assert region.count('for (std::size_t plane = 0u; plane < 2u; ++plane)')==2
+def test_unsavd_restore_history_is_preserved_or_source_faithfully_superseded():
+    c=STAND.read_text(); py=(ROOT/'pyproject.toml').read_text()
+    if 'version = "0.6.82.27.9"' in py:
+        assert 'literal rstepr2.f90 restores BOTH tau0 columns' in c
+        assert 'rstepr3.f90 likewise restores both tauc columns' in c
+        region=c[c.index('literal rstepr2.f90 restores BOTH tau0 columns'):c.index('const std::size_t grid_stride', c.index('literal rstepr2.f90 restores BOTH tau0 columns'))]
+        assert region.count('for (std::size_t plane = 0u; plane < 2u; ++plane)')==2
+    else:
+        # .27.10 deliberately rejects the .27.9 two-plane experiment because it
+        # regressed the accepted .27.8 Option-17 thermal trajectory.
+        region=c[c.index('retain the scientifically accepted .27.8 repeated-pass'):c.index('const std::size_t grid_stride', c.index('retain the scientifically accepted .27.8 repeated-pass'))]
+        assert 'const std::size_t plane = radial_direction > 0 ? 0u : 1u;' in region
+        assert 'for (std::size_t plane = 0u; plane < 2u; ++plane)' not in region
 
 def test_rrc_mapping_is_source_one_based_or_canonical_compact_only():
     c=SCI.read_text()
@@ -36,7 +42,7 @@ def test_rrc_mapping_is_source_one_based_or_canonical_compact_only():
     assert 'source_index_one_based' in fn and 'canonical_compact_index' in fn
     assert 'values[identity_index]' not in fn
     assert 'A physical' in fn and 'zero is authoritative' in fn
-    assert 'const std::size_t source_slot_v0682279 = static_cast<std::size_t>(id.continuum_index);' in c
+    assert ('const std::size_t source_slot_v0682279 = static_cast<std::size_t>(id.continuum_index);' in c or 'const std::size_t source_slot_v06822710 = static_cast<std::size_t>(id.continuum_index);' in c)
 
 def test_option23_uses_final_pass_detal2():
     t=STEP.read_text()

@@ -8788,20 +8788,27 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     const auto tauc = bridge_array_for_hdu(state, "tauc", hdu_number, 2 * kOracleContinuumCount);
     const auto rrc_bridge = load_rrc_bridge_arrays(state, hdu_number);
     const std::size_t n = kOracleContinuumCount;
-    out.reserve(state.rrc_identities.size());
-    // Canonical compact RRC address: derive it from the retained npconi2
-    // identity inventory itself, not from a filtered row counter.  This keeps
-    // compatibility/detail exclusions (e.g. 709/762) from shifting every
-    // subsequent opakab/cabab owner by one slot.
-    std::map<std::int32_t,std::size_t> canonical_rrc_compact_v0682279;
-    for (std::size_t i_v0682279 = 0; i_v0682279 < state.rrc_identities.size(); ++i_v0682279) {
-        const auto ci_v0682279 = state.rrc_identities[i_v0682279].continuum_index;
-        if (ci_v0682279 > 0 && !canonical_rrc_compact_v0682279.count(ci_v0682279)) {
-            canonical_rrc_compact_v0682279[ci_v0682279] = i_v0682279;
+    // 0.6.82.27.10: fstepr3 inventory is the literal rate-type-7/npconi2
+    // source chain, not the broader executable RRC identity inventory.  Use
+    // source_rrc_identities for detail SAVD publication so metadata rows and
+    // the compact/source npconi2 address domain cannot diverge (the .27.9
+    // extra continuum index 660 was one symptom of mixing the two domains).
+    const auto& detail_rrc_identities_v06822710 =
+        detail_inventory && !state.source_rrc_identities.empty()
+            ? state.source_rrc_identities : state.rrc_identities;
+    out.reserve(detail_rrc_identities_v06822710.size());
+    // Canonical compact RRC address: derive it from the SAME identity domain
+    // that owns this publication.  Compatibility/detail filtering happens
+    // after this map is formed and therefore cannot shift later owners.
+    std::map<std::int32_t,std::size_t> canonical_rrc_compact_v06822710;
+    for (std::size_t i_v06822710 = 0; i_v06822710 < detail_rrc_identities_v06822710.size(); ++i_v06822710) {
+        const auto ci_v06822710 = detail_rrc_identities_v06822710[i_v06822710].continuum_index;
+        if (ci_v06822710 > 0 && !canonical_rrc_compact_v06822710.count(ci_v06822710)) {
+            canonical_rrc_compact_v06822710[ci_v06822710] = i_v06822710;
         }
     }
-    for (std::size_t identity_ordinal = 0; identity_ordinal < state.rrc_identities.size(); ++identity_ordinal) {
-        const auto& id = state.rrc_identities[identity_ordinal];
+    for (std::size_t identity_ordinal = 0; identity_ordinal < detail_rrc_identities_v06822710.size(); ++identity_ordinal) {
+        const auto& id = detail_rrc_identities_v06822710[identity_ordinal];
         if (id.continuum_index <= 0) continue;
         // 0.6.82.27.4: 709 and 762 are frozen-44 compatibility-only Carbon
         // detail identities.  Literal FORTRAN fstepr3 walks the type-7 chain
@@ -8820,31 +8827,35 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
             if (!detail_inventory &&
                 !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
         }
-        const auto canonical_it_v0682279 = canonical_rrc_compact_v0682279.find(id.continuum_index);
-        const std::size_t canonical_compact_v0682279 = canonical_it_v0682279 == canonical_rrc_compact_v0682279.end()
-            ? identity_ordinal : canonical_it_v0682279->second;
+        const auto canonical_it_v06822710 = canonical_rrc_compact_v06822710.find(id.continuum_index);
+        const std::size_t canonical_compact_v06822710 = canonical_it_v06822710 == canonical_rrc_compact_v06822710.end()
+            ? identity_ordinal : canonical_it_v06822710->second;
         const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);
-        if (ci >= n) continue;
+        const std::size_t source_slot_v06822710 = static_cast<std::size_t>(id.continuum_index);
+        if (ci >= n || source_slot_v06822710 >= n) continue;
         RrcRow row;
         row.record = id.continuum_index;
         row.energy_ev = id.threshold_ev;
-        // Source tauc/elumab convention follows the retained bridge arrays:
-        // plane 0 is inward and plane 1 is outward.  Keep this orientation
-        // explicit so public RRC depth/emission columns are not swapped.
-        row.emis_in = two_plane_value(elumab, n, 0, ci, "elumab");
-        row.emis_out = two_plane_value(elumab, n, 1, ci, "elumab");
-        row.tau_in = two_plane_value(tauc, n, 0, ci, "tauc");
-        row.tau_out = two_plane_value(tauc, n, 1, ci, "tauc");
+        // 0.6.82.27.10: tauc/elumab are FORTRAN npconi2-addressed source
+        // workspaces: slot zero is unused and npconi2=N owns vector slot N.
+        // The previous detail writer used N-1 here, shifting every nonzero
+        // RRC depth into the following identity (208->209, 805->806,
+        // 860->861, 863->864).  Preserve the source one-based slot while the
+        // FITS row metadata remains the physical continuum identity N.
+        // Plane 0 is inward and plane 1 is outward in this retained surface.
+        row.emis_in = two_plane_value(elumab, n, 0, source_slot_v06822710, "elumab");
+        row.emis_out = two_plane_value(elumab, n, 1, source_slot_v06822710, "elumab");
+        row.tau_in = two_plane_value(tauc, n, 0, source_slot_v06822710, "tauc");
+        row.tau_out = two_plane_value(tauc, n, 1, source_slot_v06822710, "tauc");
         // The retained source cabab/opakab RRC arrays are compact product-state
         // arrays.  Their address is the compact oracle RRC inventory ordinal,
         // while elumab/tauc bridge arrays retain the large continuum-index plane.
-        const std::size_t source_slot_v0682279 = static_cast<std::size_t>(id.continuum_index);
         row.absorption = rrc_workspace_value_v0682279(
-            ws.cabab, source_slot_v0682279, canonical_compact_v0682279,
-            state.rrc_identities.size());
+            ws.cabab, source_slot_v06822710, canonical_compact_v06822710,
+            detail_rrc_identities_v06822710.size());
         row.opacity = rrc_workspace_value_v0682279(
-            ws.opakab, source_slot_v0682279, canonical_compact_v0682279,
-            state.rrc_identities.size());
+            ws.opakab, source_slot_v06822710, canonical_compact_v06822710,
+            detail_rrc_identities_v06822710.size());
         // v17.25.40: do not fall back to the generic continuum opacity
         // surface for detailed RRC threshold opacity.  That surface is ordered
         // by continuum-bin/energy, not by the public RRC detail row, and it
