@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.27.7 - 2026-08-13
+
+- Fixed native `xout_step.log` `ncn2` publication to use the parsed parameter.
+- Fixed pprint Option 5 to consume final-pass `xoNN_detal4.fits` instead of always pass 1.
+- Restored final post-loop `STPCUT(ldir,1.e-15)` continuum depth ownership for pprint Option 22 `taulc/taulcb`.
+- Preserved 0.6.82.27.6 SAVD scalar/odd-pass thermal science and all ABI identifiers.
+
 ## 0.6.82.27.6 - SAVD scalar FITS-keyword roundtrip hotfix - 2026-08-13
 
 - Reject `0.6.82.27.5` for multipass host science: the Type-88 ownership change is inactive in the focused C5 run (`TYPE88_COUNT=0`), and pass-3/pass-5 `h-c(%)`/`ntotit` remain on the `.27.4` trajectory.

@@ -55,11 +55,11 @@ def test_all_0262_numerical_sources_are_frozen_by_sha256():
     pyproject = (ROOT / "pyproject.toml").read_text()
     current_027 = 'version = "0.6.82.27"' in pyproject
     current_0271 = 'version = "0.6.82.27.1"' in pyproject
-    current_0272 = 'version = "0.6.82.27.2"' in pyproject or 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
-    current_0273 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
-    current_0274 = 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
-    current_0275 = 'version = "0.6.82.27.5"' in pyproject or 'version = "0.6.82.27.6"' in pyproject
-    current_0276 = 'version = "0.6.82.27.6"' in pyproject
+    current_0272 = 'version = "0.6.82.27.2"' in pyproject or 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or 'version = "0.6.82.27.7"' in pyproject)
+    current_0273 = 'version = "0.6.82.27.3"' in pyproject or 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or 'version = "0.6.82.27.7"' in pyproject)
+    current_0274 = 'version = "0.6.82.27.4"' in pyproject or 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or 'version = "0.6.82.27.7"' in pyproject)
+    current_0275 = 'version = "0.6.82.27.5"' in pyproject or ('version = "0.6.82.27.6"' in pyproject or 'version = "0.6.82.27.7"' in pyproject)
+    current_0276 = ('version = "0.6.82.27.6"' in pyproject or 'version = "0.6.82.27.7"' in pyproject)
     npass = None
     hotfix = None
     hotfix2 = None

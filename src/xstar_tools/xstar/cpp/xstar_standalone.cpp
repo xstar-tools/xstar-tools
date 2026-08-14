@@ -19665,6 +19665,33 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             final_pprint.dpthcont = terminal_writer_state.dpthcont;
             final_pprint.continuum_tau_in = terminal_writer_evaluation.continuum_tau_in;
             final_pprint.continuum_tau_out = terminal_writer_evaluation.continuum_tau_out;
+            // 0.6.82.27.7: xstar.f90 does not stop at the retained terminal
+            // boundary.  After the final zero-thickness xstarcalc and HEATT it
+            // executes STPCUT(ldir,delr=1.e-15) before pprint(22).  Preserve
+            // that tiny but source-visible continuum-depth increment on the
+            // final-writer state.  It is intentionally local to publication
+            // and must not perturb the accepted radial/multipass trajectory.
+            {
+                const std::size_t n_v0682277 = final_pprint.radiation_energy_ev.size();
+                if (final_pprint.dpthc.size() >= 2u*n_v0682277 &&
+                    final_pprint.opakc.size() >= n_v0682277) {
+                    const std::size_t plane_v0682277 =
+                        final_pprint_data.radial_direction_v068227 > 0 ? 1u : 0u;
+                    for (std::size_t i_v0682277 = 0; i_v0682277 < n_v0682277; ++i_v0682277) {
+                        const double opacity_v0682277 =
+                            std::isfinite(final_pprint.opakc[i_v0682277])
+                                ? final_pprint.opakc[i_v0682277] : 0.0;
+                        final_pprint.dpthc[plane_v0682277*n_v0682277 + i_v0682277] +=
+                            opacity_v0682277 * final_writer_delr;
+                    }
+                    final_pprint.continuum_tau_in.assign(
+                        final_pprint.dpthc.begin(),
+                        final_pprint.dpthc.begin() + static_cast<std::ptrdiff_t>(n_v0682277));
+                    final_pprint.continuum_tau_out.assign(
+                        final_pprint.dpthc.begin() + static_cast<std::ptrdiff_t>(n_v0682277),
+                        final_pprint.dpthc.begin() + static_cast<std::ptrdiff_t>(2u*n_v0682277));
+                }
+            }
             if (final_pprint_data.accumulated_zremsz.size() == final_pprint.radiation_energy_ev.size()) {
                 final_pprint.zremsz = final_pprint_data.accumulated_zremsz;
             } else if (terminal_writer_state.zremsz.size() == final_pprint.radiation_energy_ev.size()) {

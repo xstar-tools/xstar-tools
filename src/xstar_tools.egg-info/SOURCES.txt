@@ -11,6 +11,7 @@ npass_multipass_hotfix_0_6_82_27_3.md
 npass_multipass_hotfix_0_6_82_27_4.md
 npass_rrc_ownership_hotfix_0_6_82_27_5.md
 npass_savd_scalar_keyword_hotfix_0_6_82_27_6.md
+npass_step_publication_hotfix_0_6_82_27_7.md
 pyproject.toml
 setup.cfg
 setup.py
@@ -37,6 +38,7 @@ xstar_tools-0.6.82.27.3_host_validation.md
 xstar_tools-0.6.82.27.4_host_validation.md
 xstar_tools-0.6.82.27.5_host_validation.md
 xstar_tools-0.6.82.27.6_host_validation.md
+xstar_tools-0.6.82.27.7_host_validation.md
 xstar_tools-0.6.82.27_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
@@ -327,6 +329,8 @@ qualification/npass_0_6_82_27_5/README.md
 qualification/npass_0_6_82_27_5/npass_hotfix_source_scope_0_6_82_27_5.json
 qualification/npass_0_6_82_27_6/README.md
 qualification/npass_0_6_82_27_6/npass_hotfix_source_scope_0_6_82_27_6.json
+qualification/npass_0_6_82_27_7/README.md
+qualification/npass_0_6_82_27_7/npass_hotfix_source_scope_0_6_82_27_7.json
 qualification/radexp_density_0_6_82_26/README.md
 qualification/radexp_density_0_6_82_26/radexp_density_0_6_82_26.json
 qualification/radexp_density_0_6_82_26_1/README.md
@@ -615,6 +619,7 @@ tests/test_npass_multipass_hotfix_0_6_82_27_3.py
 tests/test_npass_multipass_hotfix_0_6_82_27_4.py
 tests/test_npass_multipass_hotfix_0_6_82_27_5.py
 tests/test_npass_multipass_hotfix_0_6_82_27_6.py
+tests/test_npass_multipass_hotfix_0_6_82_27_7.py
 tests/test_o7_density_grid_type69_mode_compare_reference.py
 tests/test_option15_material_surface.py
 tests/test_option24_fortran_stale_local_policy.py
@@ -747,6 +752,7 @@ tools/qualification/check_npass_multipass_hotfix_0_6_82_27_3.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_4.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_5.py
 tools/qualification/check_npass_multipass_hotfix_0_6_82_27_6.py
+tools/qualification/check_npass_multipass_hotfix_0_6_82_27_7.py
 tools/qualification/check_packaging_milestone.py
 tools/qualification/check_parity_freeze.py
 tools/qualification/check_pescl_source_pi_0_6_82_14.py
@@ -812,6 +818,7 @@ tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_3.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_4.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_5.py
 tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_6.py
+tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_7.py
 tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26.py
 tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26_1.py
 tools/qualification/run_c5_radexp_density_host_smoke_0_6_82_26_2.py

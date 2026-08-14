@@ -242,7 +242,7 @@ void append_native_input_parameters(std::ofstream& out,
     out << " xeemin=  " << e3(parameter_number(state, "xeemin", 0.0)) << "\n";
     out << " critf=  " << e3(parameter_number(state, "critf", 0.0)) << "\n";
     out << " vturbi=  " << e3(parameter_number(state, "vturbi", 0.0)) << "\n";
-    out << " ncn2= 9999\n";
+    out << " ncn2= " << static_cast<long long>(std::llround(parameter_number(state, "ncn2", 9999.0))) << "\n";
     out << " radexp=  " << e3(0.0) << "\n\n";
 }
 
@@ -756,8 +756,22 @@ void append_native_radial_summary(std::ofstream& out,
         // limit returns before charge neutrality is solved.
         const double final_xee = std::isfinite(eval.electron_fraction_input) && eval.electron_fraction_input > 0.0
             ? eval.electron_fraction_input : r.xee;
-        const double tf=reference_depths.empty()?0.0:reference_depths.back().first;
-        const double tb=reference_depths.empty()?0.0:reference_depths.back().second;
+        // 0.6.82.27.7: pprint(22) is called after the post-loop
+        // xstarcalc -> HEATT -> STPCUT(delr=1.e-15) sequence.  Consume the
+        // final-writer dpthc retained for that exact lifetime, not the last
+        // radial Option-17 boundary.
+        double tf=0.0, tb=0.0;
+        {
+            const auto& final_energy_v0682277 = eval.radiation_energy_ev;
+            const auto& final_dpthc_v0682277 = eval.source_workspace.dpthc;
+            const std::size_t n_v0682277 = final_energy_v0682277.size();
+            if (n_v0682277 > 0u && final_dpthc_v0682277.size() >= 2u*n_v0682277) {
+                const std::size_t rb_v0682277 = std::min(
+                    source_option17_reference_bin_zero_based(final_energy_v0682277), n_v0682277-1u);
+                tf = std::max(0.0, final_dpthc_v0682277[rb_v0682277]);
+                tb = std::max(0.0, final_dpthc_v0682277[n_v0682277 + rb_v0682277]);
+            }
+        }
         const double source_radius_scale=static_cast<double>(static_cast<float>(1.0e-19));
         const double r19=r.radius*source_radius_scale;
         const double xlum=parameter_number(state,"rlrad38",0.0);
@@ -1472,17 +1486,40 @@ double trapezoid_values(const std::vector<double>& energy,const std::vector<doub
     return sum;
 }
 
+// 0.6.82.27.7: pprint(5) consumes the live/final-pass continuum state.
+// Multipass publication writes that state to xoNN_detal4.fits, where NN is
+// the final requested/source pass.  The old native formatter always reopened
+// xo01_detal4.fits and therefore mixed pass-1 continuum sums with final-pass
+// line luminosities.
+std::filesystem::path final_pass_detal4_path_v0682277(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& state) {
+    long long npass = static_cast<long long>(std::llround(parameter_number(state, "npass", 1.0)));
+    if (npass < 1) npass = 1;
+    std::ostringstream name;
+    name << "xo" << std::setfill('0') << std::setw(2) << npass << "_detal4.fits";
+    auto path = output_dir / name.str();
+    if (!std::filesystem::is_regular_file(path) && npass != 1) {
+        // Source conditions can collapse detail publication to the common
+        // single-pass file.  Keep that legacy fallback without ever selecting
+        // pass 1 when the final-pass file exists.
+        path = output_dir / "xo01_detal4.fits";
+    }
+    return path;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Append native energy sums from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir,const xstar_run_state::ProductWritingState& state){
     std::vector<double> ce,de;std::vector<std::vector<double>> cv,dv;
+    const auto detail_path_v0682277 = final_pass_detal4_path_v0682277(output_dir, state);
     bool have_incident=read_spectrum_column(output_dir/"xout_spect1.fits","XSTAR_SPECTRA","energy",{"incident"},ce,cv) &&
         !cv.empty() && finite_nonzero_vector(cv.front());
     if(!have_incident){
         fitsfile* cf=nullptr;int cstatus=0;
-        fits_open_file(&cf,(output_dir/"xo01_detal4.fits").c_str(),READONLY,&cstatus);
+        fits_open_file(&cf,detail_path_v0682277.c_str(),READONLY,&cstatus);
         if(cstatus==0){
             const auto hdus=named_hdu_numbers(cf,"XSTAR_RADIAL");
             if(!hdus.empty()){
@@ -1494,7 +1531,7 @@ void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& o
             int cs=0;fits_close_file(cf,&cs);
         }
     }
-    const bool have_detail=read_spectrum_column(output_dir/"xo01_detal4.fits","XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
+    const bool have_detail=read_spectrum_column(detail_path_v0682277,"XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
     // pprint(5) sums the full nlsvn cumulative elum surface, not the
     // luminosity-ranked 500/600-row public xout_lines1 subset.
     double line_sum=0.0;

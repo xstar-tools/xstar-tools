@@ -27,9 +27,16 @@ def source_roundtrip(value: float) -> float:
 
 
 def test_0682276_version_abis_and_narrow_scope():
-    assert 'version = "0.6.82.27.6"' in (ROOT / "pyproject.toml").read_text()
-    assert 'PACKAGE_VERSION ?= 0.6.82.27.6' in (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
+    py = (ROOT / "pyproject.toml").read_text()
+    mk = (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
+    assert any(f'version = "{v}"' in py for v in ("0.6.82.27.6", "0.6.82.27.7"))
+    assert any(f'PACKAGE_VERSION ?= {v}' in mk for v in ("0.6.82.27.6", "0.6.82.27.7"))
     obj = json.loads(MAN.read_text())
+    if 'version = "0.6.82.27.7"' in py:
+        succ = json.loads((ROOT / "qualification/npass_0_6_82_27_7/npass_hotfix_source_scope_0_6_82_27_7.json").read_text())
+        for rel, old_hash in obj["predecessor_sha256"].items():
+            expected = obj["candidate_changed_sha256"].get(rel, old_hash)
+            assert succ["predecessor_sha256"][rel] == expected, rel
     assert obj["predecessor"] == "0.6.82.27.5"
     assert obj["predecessor_sdist_sha256"] == "fb95a27edef6f7ad88dd2eaf8d5737fd6b7d78743dccc12483f1d5d2a68f2680"
     assert obj["science_revision"] == "0.6.48.12.3.45.3.3.8"
