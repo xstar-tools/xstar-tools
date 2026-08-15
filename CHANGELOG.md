@@ -1,5 +1,393 @@
 # CHANGELOG
 
+# 0.6.82.27.16.4 - 2026-08-14
+
+- Diagnostic-only upstream fixed-state forensic; zero production numerical-source changes.
+- Adds independent Python/native comparison at DSEC evaluation 1 and the post-DSEC final `calc_hmc_all` checkpoint using production-native ATDB lowering.
+- Compares source-ordered evaluated records, H/He compact seeds, dense matrices, RHS vectors, final compact populations, and H heating to localize the residual upstream of `msolvelucy`.
+- Preserves science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60488`, and protected C++ multipass baseline `0.6.82.27.13`.
+
+## 0.6.82.27.16.3
+
+- Diagnostic-only H/He DSEC-carried `msolvelucy` forensic; zero production numerical-source changes.
+- Replays the protected native C++ element solver on the identical Python compact seed and source-ordered matrix terms.
+- Captures and compares complete Python/native outer, fixed-point, superlevel, and condensed-matrix traces.
+- Keeps science revision and all ABI identifiers frozen.
+
+## 0.6.82.27.16.2
+
+- Diagnostic-only fixed-state follow-up; zero production numerical-source changes relative to 0.6.82.27.16.1.
+- Adds side-by-side fresh and DSEC-carried one-shell Python replays at the canonical FORTRAN first-zone scalar state.
+- The carried replay preserves DSEC mutable xilevg/bilevg/rnisg/leveltemp/work-array ownership, then resets only scalar plasma state before the unconditional final calc_hmc_all.
+- Corrects diagnostic interpretation of xout_abund1 `ion_parameter` as LOGXI and reports both log10(xi) and linear xi explicitly.
+- Corrects diagnostic level output so rnisg is labeled LTE population and bilevg is labeled departure coefficient.
+- Adds target-level, matrix-term delta, data/rate-type summary, and H/total heating/cooling comparisons plus visible progress/heartbeat output.
+- Protected C++ npass baseline remains 0.6.82.27.13; science revision and ABIs remain frozen.
+
+## 0.6.82.27.16.1
+
+- Diagnostic-only hotfix: the fixed-state population/heating qualification runner now validates the package/distribution version via `xstar_tools.execution.package_version()` instead of comparing the frozen science revision in `xstar_tools.__version__`.
+- No production numerical source changed relative to 0.6.82.27.16; the science revision and ABI identifiers remain frozen.
+- Added versioned `.27.16.1` diagnostic and npass host-runner entry points while retaining the `.27.16` runner filename for compatibility.
+
+## 0.6.82.27.16
+
+- Keep `0.6.82.27.13` as the protected accepted C++ native multipass baseline and inherit the accepted `.27.14` SAVD E3 scalar persistence plus `.27.15` Python guarded/dense repeated-pass state repair.
+- Close the cheap Python detail-publication defects: write all nine SAVD scalar detail-header keywords with the same REAL(4) -> CFITSIO-E3 -> REAL(4) persistence as canonical SAVD/UNSAVD, and propagate `pprint(9)`'s radius-local `zeta` back to caller state before terminal SAVD so terminal `LOGXI` has canonical ownership.
+- Restore literal FORTRAN `fstepr3` detail-RRC inventory ownership to the rate-type-7 (`npfi(7,ion)`) chain, preventing the broad continuum inventory from publishing the extra C I continuum-660 row; public/executable RRC ownership remains unchanged.
+- Add a qualification-only one-shell fixed-state diagnostic for H I levels 2/3/17/18/27, He II levels 89/90/106, their compact matrix terms, and hydrogen/total heating/cooling. Diagnostic trace hooks are dormant in normal production.
+- Do not apply empirical population/heating corrections. Require the fast fixed-state diagnostic to identify whether the remaining 1-3% population/opacity and ~1.06% H-heating residuals are local-solver discrepancies before rerunning expensive pure-Python `npass=3`; keep `npass=5` deferred until `npass=3` fully ACCEPTs.
+- No C++ numerical source changes; science revision and ABI identifiers remain frozen.
+
+## 0.6.82.27.15
+
+- Keep `0.6.82.27.13` as the protected accepted C++ native multipass baseline and inherit the `0.6.82.27.14` SAVD scalar E3/REAL4 persistence fix.
+- Repair Python repeated-pass global-level ownership in `radial_transfer.py`: radial/public `xilevg/rnisg` remain one-based guarded arrays, while SAVD/UNSAVD and `DsecMutableRuntimeState` use dense zero-based arrays.
+- Strip the source guard before sparse SAVD/UNSAVD indexing, re-guard only caller/public state after UNSAVD, and preserve a dense DSEC zero vector across repeated-pass INIT.
+- Target the host-observed first pass-2 thermal divergence (`h-c(%)`) and downstream pass-3 `ntotit=15,15` vs canonical `16,16`; defer published SAVD-header parity and one-pass line/RRC residuals until the thermal trajectory closes.
+- Do not change any C++ numerical source, `detal3 cemab`, or `detal2 rcem/oplin`; science revision and ABI identifiers remain frozen.
+
+## 0.6.82.27.14
+
+- Freeze `0.6.82.27.13` as the accepted C++ native multipass baseline for C5 `npass=3,5` (`stages=AAAA`).
+- Begin Python npass parity with one numerical change in `saved_radial_state.py`: reproduce SAVD scalar `REAL(4) -> ftpkye(...,3) -> ftgkye/REAL(4)` persistence instead of a plain float32 round-trip.
+- Apply FITS-E3 persistence only to the nine SAVD scalar keywords; keep all saved arrays as ordinary REAL(4).
+- Keep all C++ numerical sources byte-identical to `.27.13`; defer `detal3 cemab` and `detal2 rcem/oplin` publication repairs.
+- Science revision and ABI identifiers remain frozen.
+
+## 0.6.82.27.13
+
+- Preserve the accepted `.27.12` thermal trajectory, Option 5/22/23/27 behavior, final line/RRC tau ownership, directional UNSAVD, and one-based `npconi2=N` publication.
+- Repair only the native fallback serialization of the two-plane `tauc` workspace: native source-indexed arrays retain slot zero and therefore use `native_continuum_count + 1` as plane stride.
+- Repack the two native `tauc` planes independently into the historical serialized 301301-value plane instead of truncating the concatenated native array, eliminating the one-source-slot `tau_out` lag in repeated-pass `detal3`.
+- Deliberately defer the separate `detal3` `cemab` emissivity and `detal2` `rcem/oplin` unit/publication issues.
+- Science revision and all ABI identifiers remain frozen.
+
+## 0.6.82.27.12
+
+- Fix repeated-pass detailed line FITS ownership so source/SAVD `tau0` remains authoritative while Type-50 diagnostics refine only local fields.
+- Fix repeated-pass detailed RRC FITS ownership so source-indexed SAVD `tauc` is never replaced by Type-53 diagnostic tau.
+- Preserve the `.27.10` thermal, `npconi2=N`, Option-5/22/23-selection/27 behavior; discard the rejected `.27.11` reprojection.
+
+## 0.6.82.27.10
+
+- Revert the rejected 0.6.82.27.9 unconditional two-plane UNSAVD `tau0/tauc` restore and restore the accepted 0.6.82.27.8 direction-owned repeated-pass thermal lifetime.
+- Persist terminal line/RRC SAVD directly from the already post-STPCUT terminal boundary instead of refreshing it from potentially stale product arrays.
+- Correct detailed RRC publication to the literal source rate-type-7 inventory and one-based `npconi2` slot; add explicit 208/209, 805/806, 860/861, 863/864 host sentinels.
+- Keep the successful 0.6.82.27.9 indexed `zrtmp(:,jkstep)` Option-27 overwrite correction.
+- Keep Option-23 final-pass reader, Option-5, Option-22, DSEC/rates/matrices, Python science, science revision, and ABIs frozen.
+
+
+## 0.6.82.27.9
+
+- Restore both saved `tau0` and `tauc` planes on repeated-pass UNSAVD, matching literal FORTRAN `rstepr2/rstepr3` ownership, and retain terminal post-STPCUT cumulative line/RRC depth.
+- Correct RRC `cabab/opakab` addressing to canonical one-based `npconi2` or compact RRC identity ownership with physical-zero preservation.
+- Make STEP Option 23 consume final-pass `xoNN_detal2.fits`.
+- Reproduce repeated-pass indexed `zrtmp(:,jkstep)` overwrite semantics for Option 27 and remove the extra synthetic terminal-zero product row.
+- Make the Option-22 comparator accept concatenated FORTRAN fixed-format fields.
+- Preserve 0.6.82.27.8 Option-17 thermal, Option-5, Option-22, DSEC/rates/matrices, Python science, and frozen ABI/science identifiers.
+
+
+## 0.6.82.27.8
+
+- Preserve all 0.6.82.27.7 `ncn2` and Option-5 fixes.
+- Correct final pprint Option 22 `taulc/taulcb`: canonical post-loop XSTAR does not GSSMOOTH between final `xstarcalc` and `STPCUT(1.e-15)`.
+- Preserve the unsmoothed final `opakc` before the generic radial HEATT helper and consume it only for the final STPCUT depth increment.
+- Leave DSEC, rates, matrices, thermal kernels, RRC ownership, Python science, and all ABI identifiers unchanged.
+
+## 0.6.82.27.7
+
+- Fixed native `xout_step.log` `ncn2` publication to use the parsed parameter.
+- Fixed pprint Option 5 to consume final-pass `xoNN_detal4.fits` instead of always pass 1.
+- Restored final post-loop `STPCUT(ldir,1.e-15)` continuum depth ownership for pprint Option 22 `taulc/taulcb`.
+- Preserved 0.6.82.27.6 SAVD scalar/odd-pass thermal science and all ABI identifiers.
+
+## 0.6.82.27.6 - SAVD scalar FITS-keyword roundtrip hotfix
+
+- Reject `0.6.82.27.5` for multipass host science: the Type-88 ownership change is inactive in the focused C5 run (`TYPE88_COUNT=0`), and pass-3/pass-5 `h-c(%)`/`ntotit` remain on the `.27.4` trajectory.
+- Use the healthy paired FORTRAN/C++ pass-3 diagnostic to localize the first material divergence to the restored scalar shell state: FORTRAN enters pass 3 with `XEE=1.2020000219345093`, while `.27.5` restores `1.2017343044281006`; common H/He/C heating/cooling and Carbon rate values are already within about `2e-4` relative at that evaluation.
+- Reproduce canonical `SAVD -> fstepr* -> RSTEPR* -> UNSAVD` scalar serialization: `REAL(8) -> sngl/REAL(4) -> ftpkye(...,3) -> ftgkye/REAL(4) -> REAL(8)` for `RINNER`, `ROUTER`, `RDEL`, `TEMPERAT`, `PRESSURE`, `COLUMN`, `XEE`, `DENSITY`, and `LOGXI`.
+- Apply that source quantization at the in-memory saved-shell boundary so odd passes restore the same XEE/T/radius/depth/pressure/column/density/log-xi values that FORTRAN reads from its detail FITS headers.
+- Correct per-pass detail `ROUTER` ownership to the source SAVD `delr` argument (`saved.step_size_cm`) rather than duplicating `RINNER`.
+- Preserve `.27.5` RRC ownership code and all `.27.4` multipass transport fixes. Do not change DSEC, rate equations, matrices, thermal kernels, or Python science.
+- Audit all 137 numerical files against exact sealed `.27.5`; change exactly one numerical file: `src/xstar_tools/xstar/cpp/xstar_standalone.cpp`.
+- Add a host gate that compares the exact REAL(4) readback of every SAVD scalar keyword in every non-empty per-pass detail HDU before judging odd-pass thermal convergence.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, and `60488` frozen.
+
+## 0.6.82.27.5 - RRC npconi2/opakab/tauc ownership hotfix
+
+- Reject `0.6.82.27.4` for multipass host science: pass-3/pass-5 thermal trajectories remain wrong even though the pass-2 line SAVD plane improved.
+- Trace the remaining raw RRC SAVD corruption to the native Type-88/rate-42 stale-`kkkl` side effect in `local_zone_engine.cpp`.
+- Reproduce canonical `calc_emis_ion.f90` rate-type-major lifetime: complete the ion's rate-7 chain first, retain that chain's final `npconi2` slot as `kkkl`, and make every later rate-42 record for the ion reuse that single slot.
+- Remove the source-wrong native source-position interleaving in which Type-88 records could consume different partially advanced rate-7 owners. Keep the existing one-based source `npconi2/opakab` to zero-based runtime `tauc` mapping unchanged.
+- Preserve all `0.6.82.27.4` pass-2 line-plane, sparse UNSAVD, terminal SAVD, per-pass detail, U/Lbol, and publication fixes. Do not change DSEC, thermal convergence, rate equations, or matrix ordering.
+- Leave Python numerical science unchanged: its `calc_emis` traversal already follows rate-type-major ordering and retained-`kkkl` semantics.
+- Add a raw RRC SAVD host gate that compares `opacity`, `tau_in`, and `tau_out` for every material RRC row in every saved HDU, including dedicated ownership sentinels around the host-exposed shifts.
+- Relative to exact `0.6.82.27.4`, audit 137 numerical files and change exactly one numerical file: `src/xstar_tools/xstar/cpp/local_zone_engine.cpp`.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, and `60488` frozen.
+
+## 0.6.82.27.4 - repeated-pass opacity/depth and UNSAVD ownership hotfix
+
+- Treat `0.6.82.27.3` as rejected by host `npass=3,5` thermal/line/RRC depth results.
+- Force the source `nlimdt=0` even-pass path through a fresh post-DSEC `xstarcalc`-equivalent fixed-state evaluation so new `oplin/opakab` reach STPCUT plane 2.
+- Model full sparse `RSTEPR2/RSTEPR3/RSTEPR4` restoration (`rcem/oplin`, `cemab/cabab/opakab`, `opakc/rccemis`) and preserve the source direction-owned tau/depth plane.
+- Refresh the terminal SAVD snapshot after the final STPCUT so pass 2 carries both the restored far-side plane and newly accumulated active plane into pass 3.
+- Remove the source-dead INIT level-1 `1/Z` seed; the unconditional `go to 9000` leaves xilev zero before sparse UNSAVD.
+- Execute repeated `ispec4 -> ispecgg -> ispcg2` in scalar/in-place source order and retain scientific-notation per-pass Lbol diagnostics.
+- Resolve the inherited RRC detail-only rows 709/762 separately by excluding those compatibility identities from literal `fstepr3` detail publication without changing physical workspaces or `xout_rrc1`.
+- Ensure `xo0k_*` detail writers consume each pass's actual SAVD snapshot rather than final-pass bridge overlays.
+- Mirror the source semantics in Python, but continue to defer Python host qualification until C++ accepts.
+
+# Changelog
+
+## 0.6.82.27.3 - repeated-pass INIT/sparse-SAVD/source-spectrum hotfix
+
+- Rejects `0.6.82.27.2` for host `npass` science. `.27.1` fixed CFITSIO SAVD append/reverse replay and brought pass 2 into near-FORTRAN agreement; `.27.2` restored pass-specific `xo0N_*` products and per-pass U/Lbol blocks, but pass 3+ thermal/`ntotit` and final line-tau trajectories still diverged. Its `cont_tau=inf` result was also traced to a comparator reading the wrong detail FITS surface.
+- Reproduce the canonical per-pass source ordering from `xstar.f90`: for repeated passes, rerun the additive `ispec4` source contribution and `ispecgg` normalization before pass `INIT`, retain the resulting pass-local `ispcg2` U/Lbol values, and print `Lbol` in scientific notation.
+- Reproduce the source `INIT + sparse UNSAVD` ownership model rather than treating SAVD as a dense checkpoint. Repeated-pass INIT clears pass-local level populations and seeds each source level-1 row to `1/Z`, while caller-owned `rnist`/`bilevg` remain live. SAVD records only the level/line/RRC rows selected by the source `fstepr/fstepr2/fstepr3` predicates; UNSAVD overwrites only those sparse rows and the source-owned far-side depth plane.
+- Mirror the same repeated source regeneration, level-1 INIT seeding, sparse SAVD selection, and preserved `bilevg` lifetime in pure Python. Python remains a second-stage host gate after C++ ACCEPT.
+- Correct the `.27.2` host detail comparator: line tau comes from `detal2`, RRC tau from `detal3` using `rrc index`, and true continuum forward/back depth from `detal4` using `fwd dpth`/`bck dpth`. This removes the false `cont_tau=inf` rejection for `npass=1`.
+- Preserve `.27.2` pass-specific detail publication, complete live/STEP rows, and per-pass output inventory. Relative to exact rejected `.27.2`, the numerical inventory remains 137 files and exactly five numerical files change: `xstar_run_state.hpp`, `xstar_standalone.cpp`, `xstar_step_log.cpp`, `pprint_legacy.py`, and `radial_transfer.py`.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, and `60488` frozen. No DSEC tolerance, atomic-rate formula, matrix order, Type-50/53 equation, or accepted `cfrac` science is changed.
+
+## 0.6.82.27.1 - npass SAVD replay/order hotfix
+
+- Rejects `0.6.82.27` as a multipass host-science candidate after host FORTRAN comparison exposed incorrect pass-2+ shell replay.
+- Corrects native and Python SAVD in-memory persistence to match observed CFITSIO/XSTAR behavior: `ftcrhd` creates each new radial extension at the physical tail rather than shifting an already-written later shell.
+- Consequently pass 1 persists HDU 3=zone 1, HDU 4=zone 2, HDU 5=terminal for the focused C5 case, and later `UNSAVD(jk+2)` traversal restores 5,4,3.
+- Corrects native live multipass terminal output so each pass has its own heading and every retained `pprint(9)` row, including the terminal duplicate, is printed from the same compact state serialized to `xout_step.log`.
+- Keeps the `npass=1` numerical path frozen and preserves the science revision and public ABI identifiers.
+- Adds a C++-first host gate for reuse of the already-computed FORTRAN `npass=1,3,5` reference tree; Python qualification remains deliberately second-stage.
+- Extends historical successor-aware qualification gates through `.27.1` without changing their original science assertions; this is qualification compatibility only.
+
+## 0.6.82.27
+
+- Implement native whole-shell `npass` transport from canonical FORTRAN XSTAR 2.59g instead of treating `npass` as publication-only: execute the requested fresh-run pass count, alternate source `ldir=-1,+1,...`, and retain the complete per-pass `pprint(9)`/Option-17 trajectory.
+- Reproduce the source SAVD/UNSAVD contract in memory: CFITSIO-style HDU insertion order, REAL(4) persistence of saved floating payloads, reverse `jk=numrec+1-jkp` reads, and direction-owned restoration of only the opposite/far-side line/RRC/continuum optical-depth plane. Saved `zrems` remains intentionally non-restored, as in `unsavd.f90`.
+- Re-run INIT-equivalent pass state on every pass, project TRNFRC by source direction, update STPCUT only on the direction-owned depth plane, and reproduce the source `nlimdt=0` behavior on even repeated passes while retaining caller-owned `ntotit`. Pass 1 replaces `numrec` with `jkp+1`; later passes execute that fixed record count.
+- Keep final public FITS science owned by the final pass while publishing all pass trajectories to `xout_step.log`. Preserve the already-qualified `npass=1` serializer/publication path where possible. Even `npass>1` is source-permitted but emits an explicit warning that an inward final pass does not provide an accurate emergent spectrum; qualification uses odd `npass=1,3,5`.
+- Add a dependency-free source/hash gate, focused `npass` regressions, and a host FORTRAN/C++/pure-Python gate for a finite H+He+C, `cfrac=0` slab. The host gate checks per-pass trajectories, forward/reverse continuum reference depths, final line/RRC optical depths, final public science, and emergent spectrum.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, `60488` frozen. No Python numerical science source is changed; the existing Python multipass implementation remains a secondary oracle after FORTRAN.
+
+## 0.6.82.26.3
+
+- Close the `radexp` / `density.dat` failure-policy edge case without changing any `.26.2` numerical XSTAR code. Host `.26.2` qualification accepted all six analytic/tabulated radial cases in both C++ and pure Python.
+- Record canonical FORTRAN XSTAR 2.59g missing-`density.dat` behavior as `LEGACY_UNSAFE_CONTINUE` (zero return with non-finite/overflow-formatted state) instead of requiring a nonexistent `missing density file` error.
+- Retain the safer C++ nonzero `missing density file` rejection and Python `TabulatedRadialDensityError` as `ACCEPT_DOCUMENTED_ROBUSTNESS_DIVERGENCE`, explicitly not a science discrepancy.
+- Keep decreasing-radius `radius error` source-concordant across FORTRAN/C++/Python, allowing FORTRAN `STOP` to return zero while the modern ports return nonzero.
+- Freeze all 137 numerical Python/C++ XSTAR source/data files to their exact `.26.2` SHA-256 values and freeze the six successful case inputs/comparator functions against the packaged `.26.2` runner. Science revision and ABIs remain unchanged.
+
+## 0.6.82.26.2
+
+- Correct the host-exposed terminal radial publication semantics from `0.6.82.26.1`: source `pprint(9)` recomputes terminal xi from the live post-geometry radius/density; remove the stale-xi override from live and persisted STEP.
+- Publish the final variable-density abundance row with the post-geometry density and recompute xi with that density, while retaining the last evaluated populations/thermal state.
+- In hidden `density.dat` mode, publish the controller-retained cumulative HEATT `elum` instead of reconstructing line luminosity from table-radius differences; this preserves the final pre-EOF HEATT shell.
+- Remove the obsolete terminal optional-xi override that triggered GCC `-Wmaybe-uninitialized`; no Python science or radial-controller arithmetic changes.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`, `6048110`, `60488` frozen.
+
+## 0.6.82.26.1
+
+- Repair host-exposed `0.6.82.26` publication ownership without changing the radial controller: for `lcpres=0, radexp!=0`, retain source-owned live density, recomputed radial xi, and cumulative `xcol` instead of restoring the input constant density/rlogxi/`density*depth`.
+- Make live STEP/pprint(9)-style rows use the source initial radius and retained cumulative column for variable-density analytic/table paths.
+- Treat canonical `density.dat` as source input rather than a generated artifact in hidden `radexp<-99` table mode; the host runner also separates input and output directories.
+- Fix the host analytic-law self-check to ignore XSTAR's terminal all-zero ABUNDANCES row, preventing false `radexp=0` rejection and `0**negative` failures.
+- Preserve the source-stale terminal ionization scalar through live and persisted STEP publication after the final variable-density geometry update.
+- Preserve `.25.4` msolvelucy closure, `.26` radial update arithmetic, science revision `0.6.48.12.3.45.3.3.8`, and ABIs `60487`, `6048110`, `60488`.
+
+## 0.6.82.26
+
+- Close the `radexp` radial-density plumbing against canonical `xstar.f90`: public `lcpres=0`/source `lcdd=1` now carries the live analytic density `n=n0*(R/R0)^radexp` through C++ production evolution, with Python explicitly capturing the first-shell `xpx0,r0` source baseline.
+- Expose the hidden source `radexp < -99` branch in both public runners while preserving the stock XPI analytic interval `[-3,3]`; values in the gap `[-99,-3)` remain invalid. Both ports bind the fixed-name `density.dat` through a source/input directory.
+- Reproduce tabulated source ordering: row 1 initializes radius/density before pass 1; HEATT keeps the STEP width; the post-shell density-file read replaces geometry `delr`, radius and density before `xcol`, STPCUT and the next zone; decreasing radius is `radius error`; EOF terminates via nonzero I/O status with retained last values.
+- Preserve the terminal `pprint(9)` source behavior in native production: terminal radius/density are post-geometry while `xi/zeta` remain the last pre-geometry shell scalar. No artificial cap is added for negative `radexp`; canonical source termination predicates remain authoritative.
+- Retain the accepted `0.6.82.25.4` Python `msolvelucy` correction and keep science revision `0.6.48.12.3.45.3.3.8` plus ABIs `60487`, `6048110`, and `60488` frozen.
+
+
+## 0.6.82.25.4
+
+- Restore source-faithful pure-Python `msolvelucy` fixed-point control: cumulative `diff2 >= 1e3` terminates only the ordered per-row difference scan, not the surrounding fixed-point loop.
+- Add direct regressions for the `1e3` row-scan boundary and continuation to the next fixed-point iteration.
+- Preserve the accepted science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`, `6048110`, and `60488`.
+
+## 0.6.82.25.3
+
+- Keep `0.6.82.25.2` C++ and pressure-controller science frozen, but correct a source-ownership defect exposed by pure-Python `cd_xi1`: FORTRAN owns one mutable `leveltemp` workspace across repeated DSEC `calc_hmc_all` trials, the unconditional final `calc_hmc_all`, `calc_emisab_all`, `calc_emis_all`, `heatt`, and the following radial zone.
+- The public Python runner now carries the prior `leveltemp` workspace/ownership state into the next DSEC runtime and no longer resets `leveltemp` between `calc_hmc_all` trials. `calc_emisab_all` hands its updated workspace to `calc_emis_all`; `calc_emis_all` and `heatt` commit the resulting workspace back to the source-wide runtime for the next zone.
+- This is a source-faithful state-lifetime correction, not a tolerance or convergence change. DSEC equations, tolerances, atomic rate formulas, matrix ordering, pressure equations, C++ science, and transport equations are unchanged.
+- Trigger evidence: pure-Python `cd_xi1` under `.25.2` produced `ntotit=26/9/9` versus FORTRAN/C++ `27/1/1`, final `T4=4.67898456` versus FORTRAN `4.66699415`, and Option-1 carbon-line discrepancies up to about 3.81%. The pressure milestone therefore remains open until `.25.3` host validation ACCEPTs.
+- Science revision remains `0.6.48.12.3.45.3.3.8`; C API / production-zone / fixed-state ABIs remain `60487` / `6048110` / `60488`.
+
+## 0.6.82.25.2
+
+- Preserve the `0.6.82.25` constant-pressure equations and the `0.6.82.25.1` native STEP/xcol/tau and Python BREMSMAP-tail repairs, but correct a newly exposed pure-Python continuum-context ownership defect. `_calc_kwargs_factory()` now prebuilds `comp2`/`freef`/`bremem` with the same source-resolved `xpx` that `calc_hmc_all` obtains from `pressure/[REAL4(1.38e-12)*T4]` under `lcdd=0`; constant-density `lcdd=1` is unchanged.
+- Make the pressure host comparator backend-independent. A failed backend directory is no longer treated as a complete candidate: comparison requires the actual `xout_step.log` and `xout_abund1.fits` products, and `--backend cpp|python` permits explicit per-backend qualification.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487` / `6048110` / `60488` frozen. No C++ science, DSEC, atomic-rate, matrix, pressure-controller, cfrac, niter, or transport arithmetic changes are included.
+
+## 0.6.82.25.1
+
+- Keep the `0.6.82.25` constant-pressure equations/controller arithmetic frozen, but repair the two host-exposed native STEP publication mismatches: publish the retained source cumulative column `xcol` (`RadialZoneState::column_density_cm2`) instead of reconstructing `current_density*cumulative_depth`, and apply the literal FORTRAN `log10(max(dpthc,1e-10))` optical-depth floor in live and persisted STEP rows.
+- Repair pure-Python minimum-grid BREMSMAP capacity at public `ncn2=999`: allocate caller-owned `bremsint(ncn2m+1)` tail storage as FORTRAN's global `ncn` array does, while full-grid emissivity consumers slice only the active first `ncn2` rows.
+- Add a permanent `.25.1` source gate, direct `ncn2=999` BREMSMAP regression, and host runner that reuses existing FORTRAN `.25` references. `0.6.82.25` is host-science REJECT; `.25.1` is the corrective host candidate.
+- Preserve frozen science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487` / `6048110` / `60488`; no constant-pressure formula, DSEC, rate, matrix, cfrac, or niter science changes are mixed into this hotfix.
+
+## 0.6.82.25
+
+- Implement the public `lcpres` / `pressure` contract directly from the attached unmodified FORTRAN XSTAR 2.59g source. Public `lcpres=0` maps to source `lcdd=1` (constant density); public `lcpres=1` maps to `lcdd=0` (constant pressure).
+- Reproduce the source mixed-kind initialization for constant pressure: XPI REAL(4)-promoted `pressure`/`temperature`, initial `xpx=p/(1.38d-12*T4)`, and pressure-form input radius from `sqrt(L38/(REAL4(12.56)*c*p*10**rlogxi))`.
+- Recompute constant-pressure hydrogen density on every native fixed-state evaluation from the live temperature using the source default-REAL `1.38e-12` coefficient, then retain that live density through DSEC, HEATT/transport, STEP, STPCUT, cumulative column, terminal state, and FITS publication.
+- Keep the `lcpres=0` density-controlled branch source-faithful and prevent the public `pressure` value from replacing the supplied density in constant-density science.
+- Requalify the existing Python `lcdd` path against the same source ordering and mixed-precision pressure coefficients. No public ABI change; science revision remains frozen pending host FORTRAN/C++/Python pressure qualification.
+- Add a four-case host gate (`lcpres=0` plus pressure-form `log Xi=-2,0,+2`) comparing STEP/material science, Option 1, and `xout_abund1` radius/density/pressure/temperature/electron-fraction trajectories.
+
+## 0.6.82.24.3
+
+- Close the `niter` campaign after host `0.6.82.24.2` C++ `niter=0/1` ACCEPT and pure-Python `niter=0/-99/1/99` scientific concordance.
+- Correct only the pure-Python legacy STEP/progress **first** `h-c(%)` publication stage. Canonical `xstarcalc.f90` executes one unconditional final `calc_hmc_all` after DSEC, and `xstar.f90` calls `pprint(9)` only after that final fixed-state evaluation and `heatt`; Python had frozen `result.final_hmctot` inside the DSEC handler one stage too early.
+- Make the final Python `calc_hmc_all` handler own `legacy_pprint_hc1_percent = result.hmctot*100`, while the DSEC handler clears any stale display snapshot. The second `h-c(%)` transport residual and all science/FITS quantities remain unchanged.
+- Add a permanent source-order regression that forbids DSEC-return ownership of the first `h-c(%)` column and requires final-`calc_hmc_all` ownership. Science revision and ABIs remain frozen.
+
+## 0.6.82.24.2
+
+- Complete the `niter=0`/finite-`niter=1` electron-fraction ownership repair in persisted publication.  `retain_controller_owned_product_workspaces()` no longer replaces accepted/source `electron_fraction_input` with diagnostic `computed_electron_fraction`.
+- Make all generic/native radial publication paths keep source/controller `xee`; `computed_electron_fraction` remains diagnostic only.
+- Make `xstar_step_log.cpp` Option 22 publish accepted/source `xee` for `n_e` and pressure `Xi`, with retained radial `r.xee` as fallback.
+- Add a static regression that rejects any future generic radial-zone publication assignment from `computed_electron_fraction` and rejects Option-22 ownership regression.
+- Preserve the accepted C++ `niter=-99/99` results and pure-Python `niter=0/1/-99` results; rerun only native `niter=0/1` against existing FORTRAN references. No DSEC/rate/matrix/Type-50/53/cfrac/convergence arithmetic change.
+
+## 0.6.82.24.1
+
+- Correct accepted electron-fraction ownership for the `niter=0` and one-iteration `niter=1` source branches.  The fixed-state computed electron fraction is a charge diagnostic (`enelec`-derived); canonical `calc_hmc_all` does not overwrite the live `xee` argument.
+- Pass the accepted controller/source `xee` into native HEATT/transport and publish that same accepted value in live STEP/progress and generic radial/FITS state.
+- Preserve the computed electron fraction as a diagnostic field only; converged negative/positive `niter` branches remain numerically unchanged when accepted and computed `xee` coincide.
+- Repair the niter host runner's obsolete STEP row-key names so completed pure-Python products can be compared without rerunning them.
+
+## 0.6.82.24
+
+- Restore literal FORTRAN `niter` ownership in native production. `xstar_atdb_runtime.cpp` no longer clamps the requested value to `>=1`; `niter=0`, negative values, and positive values reach the controller unchanged.
+- Reproduce the three source branches: `niter=0` skips `dsec` entirely in `xstarcalc` and evaluates only the final fixed local state at the input temperature/source electron-fraction assumption; `niter<0` runs charge-neutrality iterations with temperature fixed; `niter>0` runs charge and thermal equilibrium.
+- Keep Python science code source-faithful and add explicit qualification coverage proving `xstarcalc` skips `dsec` for zero while Python `dsec` uses `nlimt=max(nlim,0)` and `nlimx=abs(nlim)` for negative/positive modes.
+- Add a host H+He+C `niter=0,-99,1,99` FORTRAN/C++/pure-Python qualification runner comparing STEP temperature/electron trajectories, ionic columns, heating/cooling, and Option-1 reflected/transmitted lines.
+- Preserve the accepted 0.6.82.22 `cfrac`/`emult` science and memory baseline, the accepted 0.6.82.23 Table-1 contract/default envelope, science revision `0.6.48.12.3.45.3.3.8`, and ABIs `60487`/`6048110`. No atomic-rate, matrix, transport, or performance optimization is mixed into this release.
+
+## 0.6.82.23
+
+- Establish the authoritative Table-1/public-parameter contract layer without changing atomic, thermal, matrix, transport, DSEC, or publication science. Science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`/`6048110` remain frozen.
+- Add a machine-readable 59-parameter ledger combining XSTAR Manual Table 1, detailed section 4.3 defaults, stock `xstar.par` defaults/ranges/modes, `rread1`/FORTRAN consumers, native C++ consumers, Python consumers, and science/radial/output/metadata classifications. Preserve documented conflicts explicitly rather than silently reconciling them.
+- Make the supplied stock XSTAR 2.59g `xstar.par`/XPI envelope the executable validation/default authority for this milestone. Record manual/source conflicts including `cfrac`, `column`, `nsteps`, `loopcontrol`, `lwrite=-1`, `radexp<-100`, `spectun=2`, and the Table-1 omissions `naabund`/`lstep`. Runtime default conflicts remain `PENDING_HOST_HEASOFT` because HEASoft is unavailable in the build environment; provide an isolated-PFILES host probe.
+- Remove qualification-model values from native production fallbacks. Canonical public defaults now include `density=1e4`, `rlrad38=1e-6`, `column=1e17`, `rlogxi=5`, `nsteps=3`, `niter=0` requested, `critf=1e-7`, `vturbi=1`, `spectrum_file=spct.dat`, and the complete Z=1..30 abundance multiplier defaults from stock `xstar.par`.
+- Centralize Python and C++ validation. Public ranges now reject rather than silently clamp, including `ncn2=999..999999`, `cfrac=0..1`, `nsteps=1..1000`, stock-XPI `lprint/lwrite/loopcontrol/spectun/radexp` ranges, and all abundance multipliers. Partial `xstar-cpp` commands receive the stock public defaults before validation.
+- Expand public provenance from the historical 56 FORTRAN `fparmlist` rows to all 59 stock public parameters by appending `radexp`, `ncn2`, and `mode`; native JSON provenance records the complete normalized parameter envelope.
+- Add source/contract sensitivity tests proving representative active parameters reach their intended consumers while metadata/interface controls remain outside local science kernels. `niter` physics semantics are deliberately deferred to 0.6.82.24: `.23` preserves the requested value separately while retaining the pre-existing native effective floor so this milestone does not mix in a science/controller change.
+- Preserve the accepted 0.6.82.22 C5 `cfrac=0/0.4/1` and `emult=0.1/0.25/0.5/1.0` science results as frozen regression/performance baselines. Low-ionization speed work remains scheduled for 0.6.82.31-0.6.82.33.
+
+## 0.6.82.22
+
+- Prioritize low-ionization native performance and memory after the C5 covering-fraction axis closed at `cfrac=0`, `0.4`, and `1.0`. No science equation, controller arithmetic, rate ordering, matrix ordering, transport equation, science revision, or ABI is changed.
+- Profile the 0.6.82.21 H+He+C, `ne=1e12`, `column=1e20`, `cfrac=0`, `rlogxi=-3` emult sweep. FORTRAN/C++ zone counts are 150/150 at `emult=0.25`, 78/78 at `0.5`, and 42/42 at `1.0`; the corresponding C++/FORTRAN runtime ratios from native total-time logs are about 2.37x, 2.41x, and 2.15x. At `emult=0.1`, FORTRAN completes 367 zones while C++ is killed with return code 137 after 289 live zones.
+- Identify the dominant memory scaling as retained per-zone product/source workspaces. Retained product-array payload alone is 1.720 GB at 150 zones (`emult=0.25`), 894.8 MB at 78 zones, and 482.2 MB at 42 zones, implying multi-GB growth at the 367-zone `emult=0.1` endpoint.
+- Compact only completed, nonterminal sparse RRC source-address planes (`cemab`, `elumab`, `cabab`, `opakab`, `tauc`) into the exact RRC identity order already consumed by generic publication. The newest/terminal accepted boundary remains full source-indexed; reference/diagnostic trajectories are never compacted. The retained-workspace normalization path recognizes compact intermediates and does not re-expand them through the legacy sparse continuum geometry.
+- Remove a science-neutral per-evaluation CPU cost: opacity-producer/absorption diagnostic scratch arrays are now allocated only when those diagnostics are enabled instead of on every fixed-state evaluation.
+- Add all-evaluation native timing counters (`V068222_PERF_ALL_FIXED_*`) and RRC compaction counters, fixing the historical instrumentation blind spot that timed only early controller slots.
+- Fix the emult qualification CSV schema so an early failed `emult=0.1` row cannot prevent reporting later ACCEPT cases. The runner now records `/usr/bin/time -v` maximum RSS and native performance markers in addition to STEP/material/Option-1 science.
+- Host performance gate remains pending: first validate `emult=0.25` science plus memory/timing reduction, then require `emult=0.1` to complete instead of exit 137, then run the full `0.1,0.25,0.5,1.0` sweep.
+
+## 0.6.82.21
+
+- Restore canonical FORTRAN DSEC post-return ownership in generic C++ production. A successful native DSEC return is now accepted exactly as `xstarcalc.f90` accepts `dsec.f90`; the port no longer adds a second rejection solely because the diagnostic `charge_converged`/`thermal_converged` flags are false or `lnerr` is nonzero.
+- Preserve `charge_converged`, `thermal_converged`, `lnerr`, `hmctot`, `elcter`, and `ntotit` as diagnostics. Reference-trajectory qualification assertions remain strict and unchanged.
+- Add Python `DsecResult.source_accepted` to distinguish canonical source-return acceptance from the existing stricter `converged` diagnostic property.
+- Add a focused H+He+C `cfrac=0`, `rlogxi=-2` host gate. Wide `cfrac=0` and `emult` sweeps remain blocked until this case closes against original unmodified FORTRAN XSTAR 2.59g.
+- Keep the 0.6.82.20 Type-50/cfrac ownership fixes, science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, and production-zone ABI `6048110` frozen.
+
+## 0.6.82.20
+- Qualification harness correction: the focused `cfrac=0.4`, `rlogxi=-3` host runner now applies its local `-3` default instead of inheriting the wide-grid `-5..5` default. No science or ABI change.
+
+- Correct Type-50 DSEC continuum pumping to sample the canonical 999-bin `calc_hmc_input` (`epim/bremsam`) workspace.
+- Correct the Type-50 `calc_emis` revisit to sample the live transported full `epi/bremsa` state rather than the incident controller spectrum.
+- Remove `emult` from fixed-state covering-fraction semantics; `cfrac` now owns emission/escape/thermal physics in standalone and Python/native final recompute paths, while `emult` remains a radial STEP multiplier only.
+- Add independent `cfrac`/`emult` contract tests and a one-point H+He+C `cfrac=0.4`, `rlogxi=-3` host qualification gate.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, and production-zone ABI `6048110` frozen pending broad qualification.
+
+# Changelog
+
+## 0.6.82.19
+
+- Reopen the covering-fraction science axis after the exact 0.6.82.18 H+He+C, `ne=1e12`, `column=1e20`, `cfrac=1`, `rlogxi=-5..5` grid closed 11/11 under the established <1% material policy. Fresh stock-FORTRAN `cfrac=0.4` runs exposed large transmitted/reflected Option-1 and heating/cooling discrepancies that the `cfrac=1` endpoint could not exercise.
+- Restore canonical Type-50 caller-grid ownership. FORTRAN evaluates Type-50 pumping on reduced `epim/bremsam` in `calc_hmc_all`/`calc_emisab_all`, then explicitly calls `ucalc` again from `calc_emis_ion` on full `epi/bremsa` before forming `fline/rcem`. Native C++ had reused the reduced-grid Type-50 answer in final line emissivity.
+- Keep the reduced-grid Type-50 answer for DSEC/matrix ownership and retain a distinct full-grid `calc_emis` Type-50 answer for line publication. Use discrete FORTRAN `nbinc` sampling at the live endpoint separation `abs(eeup-eelo)` rather than a linear interpolation fallback.
+- Correct Python Type-50 caller-grid semantics so `calc_emis` can use full `epi/bremsa`; replace wavelength-derived pumping-bin selection in the pure and compact/native fast paths with the live endpoint energy.
+- Add a version-locked `cfrac=0.4/0.0 x rlogxi=-5..5` host runner that uses original, unmodified FORTRAN XSTAR 2.59g as the qualification oracle and continues after individual C++ failures so a campaign summary is still produced.
+- Preserve 0.6.82.14 `pescl` pi, 0.6.82.15 ATDB Type-50 mass, 0.6.82.16 `ispec4` normalization, and 0.6.82.17/.18 publication-memory/writer repairs. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` remain frozen. The `cfrac=0.4`/`0.0` science gate remains `PENDING_HOST` for this release candidate.
+
+## 0.6.82.18
+
+- Fix the 0.6.82.17 publication regression that aborted after the final physical STEP row with `missing terminal boundary for patch5.20.14.5 final writer recompute`.
+- Keep the 0.6.82.17 memory reduction: the temporary terminal `FixedDsecSnapshot` is still released after transfer.
+- Rebind the final writer recompute to the canonical retained terminal boundary in `whole.radial_zones.back().accepted_controller.evaluation` and its exact `source_workspace`, including retained continuum `tau_in/tau_out`.
+- No science-kernel, DSEC, atomic-rate, science-revision, or ABI change. `ntotit` remains diagnostic-only; STEP/FITS material acceptance remains <1% (percentage STEP fields <1 percentage point).
+
+## 0.6.82.17
+
+- Fix the generic standalone end-of-run memory spike that caused long low-ionization `xstar-cpp` runs to be SIGKILLed with return code 137 after the final physical STEP row but before `final print`, `xout_step.log`, and FITS publication. This is a production memory/ownership correction; it does not change the scientific kernels, DSEC arithmetic, accepted radial states, or source constants.
+- Generic production no longer retains every DSEC trial after its controller decision. Full controller history remains unchanged for explicit reference-trajectory and qualification-diagnostic modes.
+- Transfer each accepted boundary into canonical `radial_zones` and release the source snapshot immediately afterward. Generic production no longer duplicates every accepted boundary into `accepted_controller_states`; reference/diagnostic paths retain the historical copies.
+- Add move-based `WholeRunAccumulatedState -> ProductWritingState` construction so large per-zone source workspaces are transferred rather than deep-copied immediately before publication. A single fixed-evaluation compatibility entry remains for incident-grid consumers; per-sequence publication falls back to the canonical accepted radial zones.
+- Update the wide-rlogxi host comparator policy: `ntotit` is a convergence diagnostic and no longer vetoes science acceptance. Material STEP/FITS quantities remain subject to the established `<1%` numerical criterion; percentage-valued STEP columns such as `h-c(%)` are compared by `<1` absolute percentage point.
+- Host evidence from exact 0.6.82.16 at H+He+C, density `1e12`, column `1e20`, `cfrac=1`, `rlogxi=-3`: C++ produced all 77 physical STEP rows before exit 137. All printed STEP fields except the first `h-c(%)` column matched FORTRAN at printed precision; max `|Delta h-c|` was `0.10` percentage point. Only three `ntotit` rows differed (max absolute delta 6), now diagnostic-only. FITS/material acceptance remains pending because 0.6.82.16 was killed before publication.
+- Preserve/freeze the 0.6.82.13 all-element atomic-data generalization, 0.6.82.14 source-faithful high-tau `pescl` pi, 0.6.82.15 ATDB source-parent Type-50 mass, and 0.6.82.16 canonical `ispec4` normalization. Science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487`/`6048110` remain unchanged.
+
+## 0.6.82.16
+
+- Restore canonical `ispec4.f90` power-law erg/eV normalization in Python and native C++. `ispec4` imports `ergsev` from `constants.f90`, where `real(8), parameter :: ergsev = 1.602176634e-12`; the unsuffixed initializer is default-REAL-rounded before promotion, giving approximately `1.602176616204154e-12`.
+- Remove the historical port value `1.602197e-12` from both ispec4-equivalent power-law normalization passes. Preserve the separate historical `ispcg2.f90` diagnostic/publication literal unchanged.
+- Preserve 0.6.82.15 source-parent Type-50 mass ownership, 0.6.82.14 source-faithful high-tau `pescl` pi, and 0.6.82.13 all-element atomic-data generalization. DSEC, escape formulas, optical-depth transport, and thermal-ledger ownership are unchanged.
+- Host evidence motivating this narrow cleanup: 0.6.82.15 makes H+He+C `rlogxi=-3` rows 1-67 exact in printed `h-c` and `ntotit`; only isolated `ntotit` differences remain at rows 68, 71, and 75 before the host process is SIGKILLed after row 76. H I bound-free optical depth is already very large in this regime, so ppm source normalization differences are amplified in the escaping photo-rate.
+- Do not claim low-`xi` closure before host reruns. `rlogxi=-3` and `-2` remain the immediate gates; the host return-code-137 issue near the final row is tracked separately from numerical science. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` remain frozen.
+
+## 0.6.82.15
+
+- Restore canonical Type-50 nuclear-mass ownership. Literal `ucalc.f90` and `binemislin.f90` walk `line -> ion -> element` and read the second REAL from the rate-type-11 element record; the port had substituted a hard-coded modern periodic-table mass by `Z`.
+- C++ ATDB lowering now reads the source parent-element mass for every applicable ion and carries the same value into line-publication metadata. The Z=1--30 table remains only as a guarded fallback for compact synthetic fixtures that omit the source parent topology.
+- Python Type-50 provenance, compact/native lowering, and public line metadata now use the same source-parent mass first, with the historical tables retained only as fixture fallbacks.
+- Preserve the 0.6.82.14 source-faithful high-tau `pescl` pi repair and the complete 0.6.82.13 all-element atomic-data-type generalization.
+- Host motivation: 0.6.82.14 moved the first serious H+He+C `rlogxi=-3` trajectory divergence from row 3 to row 12; row 3 now has canonical `h-c=0.30` with `ntotit=63` versus FORTRAN `62`. The remaining pre-transport H Ly-alpha opacity is still ppm-low even though the H I ground population is slightly high, directly implicating Type-50 profile construction.
+- Do not claim low-`xi` closure before host reruns. `rlogxi=-3` and `-2` remain the immediate gates; `-5` remains a later exact-`ntotit` cleanup. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` remain frozen.
+
+## 0.6.82.14
+
+- Restore the canonical high-optical-depth `pescl.f90` line escape probability constant. FORTRAN declares `real(8) pi` but initializes it from the default-REAL literal `3.1415927`, i.e. the source-rounded binary value `3.1415927410125732` when promoted to double.
+- Remove the erroneous C++ constant `3.145165358979...`, which biased every `tau >= 1` `pescl` result by about `-5.681e-4` (-0.0568%).
+- Use the same source-rounded `pi` in Python `element_equilibrium.pescl`; the previous `math.pi` difference was tiny, but the source contract is now identical across Python/C++.
+- Add a direct threshold/high-tau regression gate at `tau < 1`, `tau = 1`, and the H Type-50 row-3 optical depths near `2.1811229` and `4.3623470`.
+- Evidence motivating the repair: at H+He+C `rlogxi=-3` call3/eval1, FORTRAN/C++ H Type-50 records 186/187 differed by about 0.055%; substituting the actual FORTRAN/C++ `tau` values and the two `pi` constants predicts the observed ans2 ratio to within about 0.03 ppm.
+- Keep the 0.6.82.13 all-element atomic-data generalization, accepted science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, and production-zone ABI `6048110` unchanged. `rlogxi=-3,-2` remain host qualification gates until rerun.
+
+## 0.6.82.13
+
+- Generalize the atomic-data-type science contract across all supported elements wherever canonical FORTRAN XSTAR 2.59g is target-element independent.
+- Keep the complete 1--102 catalog closed: 78 physical data types and 24 source no-op/metadata labels.
+- Generalize Type-50 mutable endpoint and live line-escape ownership; retain legacy H/Mg maps only as non-source compatibility scaffolding outside canonical runtime-state use.
+- Make canonical Type-51 commitment universal across C++ backends and retain the already-general Type-49 source path.
+- Make Type-53 canonical bound-free commitment depend on lowered source context rather than H/He/C/Mg identity; historical row-46 oracle use is non-native qualification only.
+- Promote canonical Type-57, Type-60/62 and Type-68 semantics unconditionally wherever those source-defined ion-sequence records exist.
+- Extend Type-99 persistent `leveltemp` energy/statistical-weight ownership from the old Mg 12-stage payload to a Z=1--30 layout, retaining old-layout read compatibility.
+- Mirror Z=1--30 Type-49/53/99 lowering in Python and retire Mg-only Python matrix/rate/emissivity product accelerators from science ownership; generic source evaluators remain authoritative.
+- Expand the Python compact/native ATDB lowerer from the historical H/He/Mg subset to all 78 physical FORTRAN labels, with Z=1--30 atomic masses and `xdef` defaults; the 44 non-direct/non-alias labels route through the generic source UCalc opcode.
+- Fix Type-70 source identity: the FORTRAN high-density cap is keyed to global `jkion==1` (hydrogen), not the first compact ion of every element.
+- Make Type-99 direct opacity publication source-zero for all elements and generalize the science-FITS `xdef` fallback table through Z=30.
+- Default the optional C++ element-engine scope to Z=1--30 when enabled, while preserving explicit subset overrides.
+- Preserve genuine FORTRAN ion-sequence/data-family restrictions. The thermal-ledger/source-order cleanup is explicitly deferred to a separate milestone.
+- Do not claim low-xi closure: H+He+C `rlogxi=-3,-2,-5` remain external FORTRAN host gates. Science revision and ABIs remain frozen.
+
+## 0.6.82.12
+
+- Promote the canonical/source-faithful Type-51 Burgess-Tully collision evaluator to the normal native-production path for every active element.
+- Remove the hidden dependence on native-promoted Type-51 qualification flags; production now selects the canonical Type-51 result explicitly.
+- Preserve the historical Type-51 environment flags only as non-production compatibility/diagnostic controls.
+- Keep the science revision and C/production-zone ABIs frozen pending broad FORTRAN closure.
+- Preserve the 0.6.82.10 all-element Type-53 live escape-state, 0.6.82.9 Lucy-loop, 0.6.82.8 rnisi, 0.6.82.7 Type-63, and 0.6.82.6 terminal STEP repairs.
+- Host science status remains open for H+He+C rlogxi=-3,-2,-5; this release does not claim those regimes are fixed until canonical host reruns confirm it.
+
 ## 0.6.82.27.16.3 - 2026-08-14
 
 - Diagnostic-only H/He DSEC-carried `msolvelucy` forensic; zero production numerical-source changes.
