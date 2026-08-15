@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.82.27.16.4.1 - 2026-08-14
+
+- Diagnostic-only hotfix for the `.16.4` Python/native upstream fixed-state forensic wrapper.
+- Enable protected `ALL_ELEMENT_SOLVE_SYSTEM` capture in the native diagnostic subprocess so the solver seed/matrix/RHS/final manifests and binaries expected by the wrapper are emitted.
+- Add explicit missing-manifest diagnostics and a versioned `.16.4.1` entrypoint.
+- Zero production numerical-source changes; science revision and ABIs remain frozen.
+
 # 0.6.82.27.16.4 - 2026-08-14
 
 - Diagnostic-only upstream fixed-state forensic; zero production numerical-source changes.

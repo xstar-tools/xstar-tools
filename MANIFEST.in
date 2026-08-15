@@ -614,3 +614,19 @@ include tools/qualification/run_c5_python_fixed_state_msolvelucy_forensic_0_6_82
 include tools/qualification/check_npass_python_msolvelucy_forensic_0_6_82_27_16_3.py
 include npass_python_msolvelucy_forensic_0_6_82_27_16_3.md
 include xstar_tools-0.6.82.27.16.3_host_validation.md
+
+# 0.6.82.27.16.4 diagnostic-only Python/native upstream fixed-state forensic.
+recursive-include qualification/npass_0_6_82_27_16_4 *.json *.md
+include tools/qualification/check_npass_python_native_upstream_forensic_0_6_82_27_16_4.py
+include tools/qualification/run_c5_python_native_fixed_state_upstream_forensic_0_6_82_27_16_4.py
+include tools/qualification/upstream_fixed_state_native_probe_0_6_82_27_16_4.cpp
+include tests/test_npass_python_native_upstream_forensic_0_6_82_27_16_4.py
+include npass_python_native_upstream_forensic_0_6_82_27_16_4.md
+include xstar_tools-0.6.82.27.16.4_host_validation.md
+
+# 0.6.82.27.16.4.1 diagnostic-only native solve-system capture hotfix.
+recursive-include qualification/npass_0_6_82_27_16_4_1 *.json *.md
+include tools/qualification/check_npass_python_native_upstream_capture_hotfix_0_6_82_27_16_4_1.py
+include tools/qualification/run_c5_python_native_fixed_state_upstream_forensic_0_6_82_27_16_4_1.py
+include npass_python_native_upstream_capture_hotfix_0_6_82_27_16_4_1.md
+include xstar_tools-0.6.82.27.16.4.1_host_validation.md

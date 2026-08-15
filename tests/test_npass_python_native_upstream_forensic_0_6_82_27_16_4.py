@@ -14,8 +14,8 @@ def test_068227164_package_science_version_split():
     sys.path.insert(0,str(ROOT/'src'))
     import xstar_tools
     from xstar_tools.execution import package_version
-    assert package_version()=='0.6.82.27.16.4'
-    assert xstar_tools.__package_version__=='0.6.82.27.16.4'
+    assert package_version()=='0.6.82.27.16.4.1'
+    assert xstar_tools.__package_version__=='0.6.82.27.16.4.1'
     assert xstar_tools.__version__=='0.6.48.12.3.45.3.3.8'
 
 def test_068227164_scope_gate_zero_production_numerical_changes():
@@ -44,3 +44,11 @@ def test_068227164_no_native_result_is_applied_back_to_python():
     text=RUNNER.read_text(); assert 'production_numerical_source_changes":0' in text
     assert 'state.local_zone.calc_hmc_all =' not in text
     assert 'global_xilevg_by_index =' not in text[text.find('def _run_native_probe'):]
+
+
+def test_0682271641_native_probe_enables_solve_system_capture_without_science_replacement():
+    text=RUNNER.read_text()
+    assert 'env["XSTAR_QUALIFICATION_REPLACEMENT"] = "1"' in text
+    assert 'env["XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM"] = "1"' in text
+    assert 'XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED' not in text[text.find('def _run_native_probe'):text.find('def main')]
+    assert 'XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE' not in text[text.find('def _run_native_probe'):text.find('def main')]
