@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# 0.6.82.29.2 - 2026-08-15
+
+- Successor to the rejected `0.6.82.29.1` verbose-output host candidate; package version advanced rather than reusing the rejected artifact.
+- Record the second `.29.1` C++ host return: science invariance, products, option order, Options 14/7/4/6/18/29/30 row counts, and Option-10 row identity were already correct; Option 21 remained `299/238`, while Options 10/30 still contained `retained-...-unavailable` payload placeholders.
+- Reproduce literal FORTRAN Option-21 ownership: each printed ion stage reuses the element first-ion Type-7/`npconi2` chain, giving the canonical H I 32 + He I 103 + He II 103 inventory and excluding the spurious carbon rows in this reference case.
+- Retain the canonical full-stage preliminary `calc_ion_rates` `pirt`/`rrrt` arrays before compact active-stage truncation and publish the five Option-10 ion quantities, including source global Type-12 ratio semantics.
+- Retain the complete four-channel per-element thermal ledger plus free-free heating so Option 10 publishes both photon/electron POV columns, Compton, free-free, and totals numerically.
+- Publish Option-6 source trapezoid normalization scalars rather than a retention placeholder.
+- Upgrade Option 29 from row-count-only native diagnostics to source-like record/ion/level/type/local/global identities and the six retained evaluated rate components; keep the source active-stage/rate filters that reproduce the canonical 1954-row inventory.
+- Recompute Option-30 K-shell photoionization, fluorescence, Auger, and yield quantities from retained evaluated records, source level identities, and final populations instead of `retained-k-shell-scalars-unavailable`.
+- Apply the same retained-state/publication semantics to pure Python, using already-computed `preliminary_pirt`/`preliminary_rrrt` and per-record assembly results; Python remains untested on the host until C++ accepts, by design.
+- Strengthen the `.29.2` host comparator: source-required `unavailable` placeholders are hard failures, Options 6/10/29/30 compare numerical payloads, and Option 29 compares source-addressed row identities rather than inventory length alone.
+- Exactly seven production files differ from exact `.29`, all for retaining or serializing state already computed by the solver; science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen.
+
 # 0.6.82.29.1 - 2026-08-15
 
 - Publication-only successor to the closed `0.6.82.29` source/package release; no rate, ionization, thermal, DSEC, transport, matrix, opacity, or solver science change.

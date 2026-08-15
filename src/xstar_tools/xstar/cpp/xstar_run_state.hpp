@@ -261,6 +261,8 @@ struct ElementThermalProductState {
     std::int32_t element_z = 0;
     double heating = 0.0;
     double cooling = 0.0;
+    double heating2 = 0.0;
+    double cooling2 = 0.0;
 };
 
 struct FixedEvaluationState {
@@ -294,6 +296,7 @@ struct FixedEvaluationState {
     double magnesium_cooling2 = 0.0;
     double compton_heating = 0.0;
     double compton_cooling = 0.0;
+    double free_free_heating = 0.0;
     double brems_cooling = 0.0;
     bool thermal_families_native = false;
     bool runtime_state_abi = false;
@@ -306,6 +309,10 @@ struct FixedEvaluationState {
     // full level populations, this surface excludes the compact normalization
     // row when it aliases the next ion ground at a truncated active window.
     std::map<int, std::vector<double>> source_ion_stage_fractions;
+    // 0.6.82.29.2: literal calc_ion_rates/pprint(10) full-stage rates.
+    // These include source stages outside the compact active matrix window.
+    std::map<int, std::vector<double>> source_ionization_rates;
+    std::map<int, std::vector<double>> source_recombination_rates;
     // v0.6.48.12.3.18: source fstepr publication lifetime.  Retain the
     // solved compact/full-row surface so the controller can reconstruct the
     // literal calc_hmc_all per-ion global map-back independently of the C++

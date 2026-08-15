@@ -1742,6 +1742,11 @@ def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeStat
                 result.global_rnisg_by_index, state.atomic.derived
             ),
             "xii": _ion_fraction_array(state.atomic.derived, result),
+            # pprint(10) consumes the full-stage preliminary calc_ion_rates
+            # totals, including stages outside the selected compact matrix
+            # window.  Retain those source arrays alongside xii.
+            "pirt": _ion_rate_array(state.atomic.derived, result, result.preliminary_pirt),
+            "rrrt": _ion_rate_array(state.atomic.derived, result, result.preliminary_rrrt),
             "htt": _element_array(result.htt),
             "cll": _element_array(result.cll),
             "htt2": _element_array(result.htt2),
@@ -1755,6 +1760,8 @@ def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeStat
             "htt2": state.local_zone.source_arrays["htt2"],
             "cll2": state.local_zone.source_arrays["cll2"],
             "xii": state.local_zone.source_arrays["xii"],
+            "pirt": state.local_zone.source_arrays["pirt"],
+            "rrrt": state.local_zone.source_arrays["rrrt"],
             "httot": float(result.httot),
             "cltot": float(result.cltot),
             "httot2": float(result.httot2),
@@ -1780,6 +1787,20 @@ def _ion_fraction_array(derived: Any, result: FixedStateCalcHMCAllResult) -> np.
         if 1 <= int(index) <= values.size:
             values[int(index) - 1] = float(fraction)
     return values
+
+
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Publish full-stage preliminary calc_ion_rates totals in global Type-12 ion order for pprint(10).
+# Reference context: XSTAR pprint.f90 option 10 consumes pirt/rrrt from calc_ion_rates before compact active-stage truncation.
+# XSTAR-FUNCTION-COMMENT-END
+def _ion_rate_array(derived: Any, result: FixedStateCalcHMCAllResult, values: Mapping[tuple[int, int], float]) -> np.ndarray:
+    """Return source Type-12 global-ion-order rate array for pprint(10)."""
+    out = np.zeros(int(derived.n_ions), dtype=float)
+    for key, value in values.items():
+        index = int(result.global_ion_index_by_key.get((int(key[0]), int(key[1])), 0))
+        if 1 <= index <= out.size:
+            out[index - 1] = float(value)
+    return out
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN

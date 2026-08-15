@@ -100,6 +100,15 @@ def test_0682276_runner_detects_and_accepts_scalar_keyword_readback(tmp_path):
 def test_0682276_keeps_27_5_rrc_and_thermal_sources_frozen_by_manifest():
     obj = json.loads(MAN.read_text())
     import hashlib
+    py = (ROOT / "pyproject.toml").read_text()
+    successor = None
+    if 'version = "0.6.82.29.2"' in py:
+        successor = json.loads((ROOT / "qualification/output_control_verbose_0_6_82_29_2/output_control_verbose_scope_0_6_82_29_2.json").read_text())
     for rel in ("src/xstar_tools/xstar/cpp/local_zone_engine.cpp", "src/xstar_tools/xstar/cpp/thermal_kernels.cpp"):
         got = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
-        assert got == obj["predecessor_sha256"][rel]
+        expected = obj["predecessor_sha256"][rel]
+        if successor is not None:
+            row = next((r for r in successor["production_hashes"] if r["path"] == rel), None)
+            if row is not None and row.get("changed"):
+                expected = row["sha256"]
+        assert got == expected

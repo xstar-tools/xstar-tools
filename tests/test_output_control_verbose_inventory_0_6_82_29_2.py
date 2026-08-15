@@ -7,8 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_runner():
-    path = ROOT / ("tools/qualification/run_output_control_host_smoke_0_6_82_29_2.py" if 'version = "0.6.82.29.2"' in (ROOT / "pyproject.toml").read_text() else "tools/qualification/run_output_control_host_smoke_0_6_82_29_1.py")
-    spec = importlib.util.spec_from_file_location("output_control_host_0682291", path)
+    path = ROOT / "tools/qualification/run_output_control_host_smoke_0_6_82_29_2.py"
+    spec = importlib.util.spec_from_file_location("output_control_host_0682292", path)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -18,11 +18,10 @@ def _load_runner():
 def test_successor_versions_and_frozen_science_contract():
     pyproject = (ROOT / "pyproject.toml").read_text()
     makefile = (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
-    assert any(v in pyproject for v in ('version = "0.6.82.29.1"', 'version = "0.6.82.29.2"'))
-    assert any(v in makefile for v in ("PACKAGE_VERSION ?= 0.6.82.29.1", "PACKAGE_VERSION ?= 0.6.82.29.2"))
+    assert 'version = "0.6.82.29.2"' in pyproject
+    assert "PACKAGE_VERSION ?= 0.6.82.29.2" in makefile
     # The publication-only hotfix does not change any science or ABI identifiers.
-    scope = ROOT / ("qualification/output_control_verbose_0_6_82_29_2/output_control_verbose_scope_0_6_82_29_2.json" if 'version = "0.6.82.29.2"' in pyproject else "qualification/output_control_verbose_0_6_82_29_1/output_control_verbose_scope_0_6_82_29_1.json")
-    text = scope.read_text()
+    text = (ROOT / "qualification/output_control_verbose_0_6_82_29_2/output_control_verbose_scope_0_6_82_29_2.json").read_text()
     assert '"science_revision": "0.6.48.12.3.45.3.3.8"' in text
     assert '"c_api_abi": 60487' in text
     assert '"production_zone_abi": 6048110' in text
@@ -30,39 +29,88 @@ def test_successor_versions_and_frozen_science_contract():
 
 
 def test_cpp_verbose_publication_uses_retained_active_state():
-    src = (ROOT / "src/xstar_tools/xstar/cpp/xstar_step_log.cpp").read_text()
+    step = (ROOT / "src/xstar_tools/xstar/cpp/xstar_step_log.cpp").read_text()
+    engine = (ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp").read_text()
+    standalone = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text()
+    internal = (ROOT / "src/xstar_tools/xstar/cpp/xstar_local_zone_internal.hpp").read_text()
     for token in (
-        "source_rrc_identities",
-        "state.rrc_identities",
-        "detail_level_identities",
-        "source_global_xilevg",
-        "source_ion_stage_fractions",
-        "global_type12_ion_index",
-        "source_detail_active_windows",
-        "row.rate_type == 8 || row.rate_type == 15",
+        "first_ion_rrcs_by_z",
+        "source_ionization_rates",
+        "source_recombination_rates",
+        "free_free_heating",
         "record_product_diagnostics",
+        "source_detail_active_windows",
         "std::abs(row.ans[0]) > 1.0e-34",
     ):
-        assert token in src
-    assert "append_native_lprint_extra_sections(out, state, lprint);" in src
+        assert token in step
+    assert "last_source_ionization_rates_v0682292" in engine
+    assert "last_source_recombination_rates_v0682292" in engine
+    assert "capture_publication_state_v0682292" in engine
+    assert "PublicationStateV0682292" in internal
+    assert "capture_publication_state_v0682292" in standalone
+    for banned in ("retained-rate-components-unavailable", "retained-k-shell-scalars-unavailable", "retained-source-norms-unavailable"):
+        assert banned not in step.lower()
 
 
-def test_python_verbose_publication_is_active_inventory_bounded():
-    src = (ROOT / "src/xstar_tools/xstar/pprint_legacy.py").read_text()
+def test_python_verbose_publication_retains_source_payloads_without_placeholders():
+    pprint = (ROOT / "src/xstar_tools/xstar/pprint_legacy.py").read_text()
+    runner = (ROOT / "src/xstar_tools/xstar/physical_runner.py").read_text()
     for token in (
         "_source_verbose_line_rows",
         "_source_verbose_level_rows",
         "oplin_physical",
         "rcem_physical",
         "cemab_physical",
-        "_active_epi(state)",
+        'getattr(assembly, "record_results", ())',
+        'source_arrays["pirt"]',
+        'source_arrays["rrrt"]',
     ):
-        assert token in src
-    # Regression sentinels for the old padded/fixed-capacity explosion.
-    assert "301301" not in src
-    assert "733824" not in src
+        assert token in (pprint + runner)
+    for banned in ("retained-rate-components-unavailable", "retained-k-shell-scalars-unavailable", "retained-source-norms-unavailable", "retained per-record rate workspace unavailable"):
+        assert banned not in pprint.lower()
+    assert "301301" not in pprint
+    assert "733824" not in pprint
 
 
+def test_verbose_shape_parser_rejects_placeholders_even_when_row_count_matches(tmp_path: Path):
+    mod = _load_runner()
+    ref = tmp_path / "ref_placeholder"; cand = tmp_path / "cand_placeholder"
+    ref.mkdir(); cand.mkdir()
+    (ref / "xout_step.log").write_text(
+        " print option:30\n"
+        " he_i 0.0 1.0 0.0 1.0e34\n"
+        " total time\n"
+    )
+    (cand / "xout_step.log").write_text(
+        " print option:30\n"
+        " he_i retained-k-shell-scalars-unavailable\n"
+        " total time\n"
+    )
+    rs = mod.verbose_shape(ref, 30)
+    cs = mod.verbose_shape(cand, 30)
+    assert rs["rows"] == cs["rows"] == 1
+    assert cs["placeholder"]
+    assert not mod.shape_matches(rs, cs, 30)
+
+
+def test_verbose_shape_parser_option29_rejects_equal_count_wrong_source_identity(tmp_path: Path):
+    mod = _load_runner()
+    ref = tmp_path / "ref29"; cand = tmp_path / "cand29"
+    ref.mkdir(); cand.mkdir()
+    (ref / "xout_step.log").write_text(
+        " print option:29\n"
+        " 36 h_i lo up 53 7 29 33 29 33 1 2 3 4 5 6\n"
+        " print option:30\n"
+    )
+    (cand / "xout_step.log").write_text(
+        " print option:29\n"
+        " 36 h_i lo up 53 7 29 33 29 34 1 2 3 4 5 6\n"
+        " print option:30\n"
+    )
+    rs = mod.verbose_shape(ref, 29)
+    cs = mod.verbose_shape(cand, 29)
+    assert rs["rows"] == cs["rows"] == 1
+    assert not mod.shape_matches(rs, cs, 29)
 
 
 def test_option30_roman_stage_parser_covers_multi_element_stages():

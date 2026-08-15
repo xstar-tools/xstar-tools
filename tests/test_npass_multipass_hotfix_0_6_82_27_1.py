@@ -16,7 +16,7 @@ def _runner():
 
 def test_0682271_version_and_scope_chain():
     pyproject=(ROOT/'pyproject.toml').read_text(); make=(ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
-    supported=('0.6.82.27.1','0.6.82.27.2','0.6.82.27.3','0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7','0.6.82.27.8','0.6.82.27.9','0.6.82.27.10','0.6.82.27.12','0.6.82.27.13','0.6.82.27.14','0.6.82.27.15','0.6.82.27.16','0.6.82.29','0.6.82.29.1')
+    supported=('0.6.82.27.1','0.6.82.27.2','0.6.82.27.3','0.6.82.27.4','0.6.82.27.5','0.6.82.27.6','0.6.82.27.7','0.6.82.27.8','0.6.82.27.9','0.6.82.27.10','0.6.82.27.12','0.6.82.27.13','0.6.82.27.14','0.6.82.27.15','0.6.82.27.16','0.6.82.29','0.6.82.29.1','0.6.82.29.2')
     assert any(f'version = "{v}"' in pyproject for v in supported)
     assert any(f'PACKAGE_VERSION ?= {v}' in make for v in supported)
     obj=json.loads(MAN.read_text())
@@ -33,7 +33,7 @@ def test_0682271_version_and_scope_chain():
     }
     current=next(v for v in supported if f'version = "{v}"' in pyproject)
     current_suffix=current.rsplit('.',1)[-1]
-    max_hotfix=16 if current in ('0.6.82.29','0.6.82.29.1') else (int(current_suffix) if current != '0.6.82.27' else 0)
+    max_hotfix=16 if current in ('0.6.82.29','0.6.82.29.1','0.6.82.29.2') else (int(current_suffix) if current != '0.6.82.27' else 0)
     successors=[]
     for n in range(2,max_hotfix+1):
         q=ROOT/f'qualification/npass_0_6_82_27_{n}/npass_hotfix_source_scope_0_6_82_27_{n}.json'
@@ -45,30 +45,35 @@ def test_0682271_version_and_scope_chain():
             expected=successor['candidate_changed_sha256'].get(rel,expected)
         now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest()
         active_version=next((line.split('=',1)[1].strip().strip('\"') for line in pyproject.splitlines() if line.startswith('version = ')), '')
-        if active_version in ('0.6.82.27.16.5', '0.6.82.28','0.6.82.28.1','0.6.82.29','0.6.82.29.1'):
+        if active_version in ('0.6.82.27.16.5', '0.6.82.28','0.6.82.28.1','0.6.82.29','0.6.82.29.1','0.6.82.29.2'):
             later=json.loads((ROOT/'qualification/npass_0_6_82_27_16_5/type50_nbinc_source_correction_scope_0_6_82_27_16_5.json').read_text())
             row=next((r for r in later['production_hashes'] if r['path']==rel), None)
             if row is not None and row['baseline_sha256'] != row['sha256']:
                 expected=row['sha256']
-        if active_version in ('0.6.82.28', '0.6.82.28.1','0.6.82.29','0.6.82.29.1'):
+        if active_version in ('0.6.82.28', '0.6.82.28.1','0.6.82.29','0.6.82.29.1','0.6.82.29.2'):
             spectrum=json.loads((ROOT/'qualification/spectrum_0_6_82_28/spectrum_source_scope_0_6_82_28.json').read_text())
             row=next((r for r in spectrum['production_hashes'] if r['path']==rel), None)
             if row is not None and row['baseline_sha256'] != row['sha256']:
                 expected=row['sha256']
-        if active_version in ('0.6.82.28.1','0.6.82.29','0.6.82.29.1'):
+        if active_version in ('0.6.82.28.1','0.6.82.29','0.6.82.29.1','0.6.82.29.2'):
             hotfix=json.loads((ROOT/'qualification/spectrum_0_6_82_28_1/spectrum_file_input_artifact_hotfix_scope_0_6_82_28_1.json').read_text())
             row=next((r for r in hotfix['production_hashes'] if r['path']==rel), None)
             if row is not None and row['baseline_sha256'] != row['sha256']:
                 expected=row['sha256']
-        if active_version in ('0.6.82.29','0.6.82.29.1'):
+        if active_version in ('0.6.82.29','0.6.82.29.1','0.6.82.29.2'):
             output=json.loads((ROOT/'qualification/output_control_0_6_82_29/output_control_scope_0_6_82_29.json').read_text())
             row=next((r for r in output['production_hashes'] if r['path']==rel), None)
             if row is not None and row['baseline_sha256'] != row['sha256']:
                 expected=row['sha256']
-        if active_version == '0.6.82.29.1':
+        if active_version in ('0.6.82.29.1','0.6.82.29.2'):
             verbose=json.loads((ROOT/'qualification/output_control_verbose_0_6_82_29_1/output_control_verbose_scope_0_6_82_29_1.json').read_text())
             row=next((r for r in verbose['production_hashes'] if r['path']==rel), None)
             if row is not None and row['baseline_sha256'] != row['sha256']:
+                expected=row['sha256']
+        if active_version == '0.6.82.29.2':
+            verbose2=json.loads((ROOT/'qualification/output_control_verbose_0_6_82_29_2/output_control_verbose_scope_0_6_82_29_2.json').read_text())
+            row=next((r for r in verbose2['production_hashes'] if r['path']==rel), None)
+            if row is not None and row.get('changed'):
                 expected=row['sha256']
         assert now==expected, rel
 

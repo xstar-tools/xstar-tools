@@ -12,6 +12,7 @@
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
 #include "xstar_local_zone_engine.h"
+#include "xstar_local_zone_internal.hpp"
 #include "xstar_spectral_engine.h"
 #include "xstar_thermal_engine.h"
 #include "source_real_energy_grid.hpp"
@@ -2695,12 +2696,15 @@ struct FixedDsecSnapshot {
     double magnesium_cooling2 = 0.0;
     double compton_heating = 0.0;
     double compton_cooling = 0.0;
+    double free_free_heating = 0.0;
     double brems_cooling = 0.0;
     bool thermal_families_native = false;
     bool dsec_runtime_state_abi = false;
     std::vector<double> source_global_xilevg;
     std::vector<double> source_global_rnisg;
     std::map<int, std::vector<double>> source_ion_stage_fractions;
+    std::map<int, std::vector<double>> source_ionization_rates;
+    std::map<int, std::vector<double>> source_recombination_rates;
     std::vector<double> source_detail_pre_mapback_populations;
     std::map<int, std::array<int,4>> source_detail_active_windows;
     std::vector<double> source_detail_global_xilevg;
@@ -3081,10 +3085,13 @@ FixedDsecSnapshot lightweight_snapshot(const FixedDsecSnapshot& source) {
     out.magnesium_cooling2 = source.magnesium_cooling2;
     out.compton_heating = source.compton_heating;
     out.compton_cooling = source.compton_cooling;
+    out.free_free_heating = source.free_free_heating;
     out.brems_cooling = source.brems_cooling;
     out.thermal_families_native = source.thermal_families_native;
     out.dsec_runtime_state_abi = source.dsec_runtime_state_abi;
     out.source_ion_stage_fractions = source.source_ion_stage_fractions;
+    out.source_ionization_rates = source.source_ionization_rates;
+    out.source_recombination_rates = source.source_recombination_rates;
     out.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
     out.source_detail_active_windows = source.source_detail_active_windows;
     out.source_detail_global_xilevg = source.source_detail_global_xilevg;
@@ -5087,12 +5094,15 @@ int command_run_fixed_dsec(const Options& options) {
         target.magnesium_cooling2 = source.magnesium_cooling2;
         target.compton_heating = source.compton_heating;
         target.compton_cooling = source.compton_cooling;
+        target.free_free_heating = source.free_free_heating;
         target.brems_cooling = source.brems_cooling;
         target.thermal_families_native = source.thermal_families_native;
         target.runtime_state_abi = source.dsec_runtime_state_abi;
         target.source_global_xilevg = source.source_global_xilevg;
         target.source_global_rnisg = source.source_global_rnisg;
         target.source_ion_stage_fractions = source.source_ion_stage_fractions;
+        target.source_ionization_rates = source.source_ionization_rates;
+        target.source_recombination_rates = source.source_recombination_rates;
         target.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
         target.source_detail_active_windows = source.source_detail_active_windows;
         target.source_detail_global_xilevg = source.source_detail_global_xilevg;
@@ -6163,12 +6173,15 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     target.magnesium_cooling2 = source.magnesium_cooling2;
     target.compton_heating = source.compton_heating;
     target.compton_cooling = source.compton_cooling;
+    target.free_free_heating = source.free_free_heating;
     target.brems_cooling = source.brems_cooling;
     target.thermal_families_native = source.thermal_families_native;
     target.runtime_state_abi = source.dsec_runtime_state_abi;
     target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
     target.source_ion_stage_fractions = source.source_ion_stage_fractions;
+    target.source_ionization_rates = source.source_ionization_rates;
+    target.source_recombination_rates = source.source_recombination_rates;
     target.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
     target.source_detail_active_windows = source.source_detail_active_windows;
     target.source_detail_global_xilevg = source.source_detail_global_xilevg;
@@ -10428,12 +10441,15 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state(const FixedDse
     target.magnesium_cooling2 = source.magnesium_cooling2;
     target.compton_heating = source.compton_heating;
     target.compton_cooling = source.compton_cooling;
+    target.free_free_heating = source.free_free_heating;
     target.brems_cooling = source.brems_cooling;
     target.thermal_families_native = source.thermal_families_native;
     target.runtime_state_abi = source.dsec_runtime_state_abi;
     target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
     target.source_ion_stage_fractions = source.source_ion_stage_fractions;
+    target.source_ionization_rates = source.source_ionization_rates;
+    target.source_recombination_rates = source.source_recombination_rates;
     target.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
     target.source_detail_active_windows = source.source_detail_active_windows;
     target.source_detail_global_xilevg = source.source_detail_global_xilevg;
@@ -15003,6 +15019,7 @@ void attach_native_thermal_components(
     snapshot.magnesium_cooling2 = components.magnesium_cooling2;
     snapshot.compton_heating = components.compton_heating;
     snapshot.compton_cooling = components.compton_cooling;
+    snapshot.free_free_heating = components.free_free_heating;
     snapshot.brems_cooling = components.bremsstrahlung_cooling;
     snapshot.thermal_families_native = true;
 }
@@ -15124,6 +15141,21 @@ void attach_native_product_diagnostics(
         out.cooling = row.cooling;
         snapshot.element_thermal_products.push_back(out);
     }
+
+    xstar_local_zone_internal::PublicationStateV0682292 publication;
+    xstar_local_zone_internal::capture_publication_state_v0682292(context, publication);
+    snapshot.source_ionization_rates = std::move(publication.ionization_rates);
+    snapshot.source_recombination_rates = std::move(publication.recombination_rates);
+    for (auto& item : snapshot.element_thermal_products) {
+        const auto found = publication.element_thermal.find(item.element_z);
+        if (found == publication.element_thermal.end()) continue;
+        item.heating = found->second[0];
+        item.cooling = found->second[1];
+        item.heating2 = found->second[2];
+        item.cooling2 = found->second[3];
+    }
+    snapshot.free_free_heating = publication.free_free_heating;
+    snapshot.brems_cooling = publication.brems_cooling;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN

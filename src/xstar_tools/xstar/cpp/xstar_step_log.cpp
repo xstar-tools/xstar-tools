@@ -1716,50 +1716,58 @@ void append_native_lprint_extra_sections(
         }
         out << "\n print option:21\n level opacities and emissivities\n";
         out << "index,energy,ion,level,index,emiss in,emiss out,threshold opacity,absorbed energy,depth in, depth out\n";
-        // pprint(21) walks each ion's rate-type-7 npfi chain and publishes
-        // kkkl=npconi2(ml).  That identity surface is state.rrc_identities.
-        // source_rrc_identities instead follows the global npcon ordinal used
-        // by writespectra4/FITS publication; substituting it here changes both
-        // the ion label and the reusable npconi2 slot inventory.
+        // Literal pprint(21) source ownership is intentionally peculiar:
+        // the Type-12 terminal pointer used as jkk identifies the element's
+        // first-ion source chain, so each printed stage reuses that chain and
+        // only the ion label changes.  Preserve that observable source
+        // behavior rather than substituting each physical ion's independent
+        // RRC/FITS identity list.
         const auto& source_rrcs = state.rrc_identities.empty()
             ? state.source_rrc_identities : state.rrc_identities;
-        std::vector<const xstar_run_state::RrcIdentityState*> rrcs;
-        rrcs.reserve(source_rrcs.size());
+        std::map<int, std::vector<const xstar_run_state::RrcIdentityState*>> first_ion_rrcs_by_z;
         for (const auto& id : source_rrcs) {
-            const auto owner = ion_label_to_z.find(id.ion_label);
+            const auto owner_z = ion_label_to_z.find(id.ion_label);
+            const auto owner_stage = ion_label_to_stage.find(id.ion_label);
             const bool source_rate7 = id.rate_type == 0 || id.rate_type == 7;
-            if (source_rate7 && id.continuum_index > 0 && owner != ion_label_to_z.end() && active_z(owner->second, 1.0e-10)) {
-                rrcs.push_back(&id);
-            }
+            if (!source_rate7 || id.continuum_index <= 0 || owner_z == ion_label_to_z.end() ||
+                owner_stage == ion_label_to_stage.end() || owner_stage->second != 1) continue;
+            first_ion_rrcs_by_z[owner_z->second].push_back(&id);
         }
-        std::stable_sort(rrcs.begin(), rrcs.end(), [&](const auto* a, const auto* b) {
-            const int za = ion_label_to_z.count(a->ion_label) ? ion_label_to_z.at(a->ion_label) : 0;
-            const int zb = ion_label_to_z.count(b->ion_label) ? ion_label_to_z.at(b->ion_label) : 0;
-            if (za != zb) return za < zb;
-            const int sa = ion_label_to_stage.count(a->ion_label) ? ion_label_to_stage.at(a->ion_label) : 0;
-            const int sb = ion_label_to_stage.count(b->ion_label) ? ion_label_to_stage.at(b->ion_label) : 0;
-            if (sa != sb) return sa < sb;
-            if (a->continuum_index != b->continuum_index) return a->continuum_index < b->continuum_index;
-            return a->source_record < b->source_record;
-        });
-        for (const auto* id : rrcs) {
-            const std::size_t slot = static_cast<std::size_t>(id->continuum_index);
-            const double cin = flat_plane(ws.cemab, 2u, 0u, slot);
-            const double cout = flat_plane(ws.cemab, 2u, 1u, slot);
-            const double opa = vector_value(ws.opakab, slot);
-            const double absorbed = vector_value(ws.cabab, slot);
-            if (!(opa > 1.0e-49 || absorbed > 1.0e-49 || cin > 1.0e-49 || cout > 1.0e-49)) continue;
-            const double tin = flat_plane(ws.tauc, 2u, 0u, slot);
-            const double tout = flat_plane(ws.tauc, 2u, 1u, slot);
-            out << std::setw(7) << id->continuum_index << std::setw(6) << id->level_global_index
-                << " " << std::left << std::setw(9) << id->ion_label.substr(0,9) << std::right
-                << std::setw(6) << id->lower_local_index << std::setw(6) << id->upper_local_index
-                << " " << std::left << std::setw(20) << id->lower_level.substr(0,20)
-                << " " << std::setw(20) << id->upper_level.substr(0,20) << std::right
-                << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
-                << id->threshold_ev << std::setw(13) << cin << std::setw(13) << cout
-                << std::setw(13) << opa << std::setw(13) << absorbed
-                << std::setw(13) << tin << std::setw(13) << tout << "\n";
+        for (auto& [z, rows] : first_ion_rrcs_by_z) {
+            std::stable_sort(rows.begin(), rows.end(), [](const auto* a, const auto* b) {
+                if (a->continuum_index != b->continuum_index) return a->continuum_index < b->continuum_index;
+                return a->source_record < b->source_record;
+            });
+        }
+        for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
+            if (!active_z(z, 1.0e-10)) continue;
+            const auto base = first_ion_rrcs_by_z.find(z);
+            if (base == first_ion_rrcs_by_z.end()) continue;
+            const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
+            for (int stage = 1; stage <= nstage; ++stage) {
+                const auto label_it = ion_labels.find(std::make_pair(z, stage));
+                const std::string printed_label = label_it != ion_labels.end()
+                    ? label_it->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                for (const auto* id : base->second) {
+                    const std::size_t slot = static_cast<std::size_t>(id->continuum_index);
+                    const double cin = flat_plane(ws.cemab, 2u, 0u, slot);
+                    const double cout = flat_plane(ws.cemab, 2u, 1u, slot);
+                    const double opa = vector_value(ws.opakab, slot);
+                    const double absorbed = vector_value(ws.cabab, slot);
+                    if (!(opa > 1.0e-49 || absorbed > 1.0e-49 || cin > 1.0e-49 || cout > 1.0e-49)) continue;
+                    const double tin = flat_plane(ws.tauc, 2u, 0u, slot);
+                    const double tout = flat_plane(ws.tauc, 2u, 1u, slot);
+                    out << std::setw(7) << id->continuum_index << std::setw(6) << id->level_global_index
+                        << " " << std::left << std::setw(9) << printed_label.substr(0,9) << std::right
+                        << std::setw(6) << id->lower_local_index << std::setw(6) << id->upper_local_index
+                        << " " << std::left << std::setw(20) << id->lower_level.substr(0,20)
+                        << " " << std::setw(20) << id->upper_level.substr(0,20) << std::right
+                        << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
+                        << id->threshold_ev << std::setw(13) << cin << std::setw(13) << cout
+                        << std::setw(13) << opa << std::setw(13) << absorbed
+                        << std::setw(13) << tin << std::setw(13) << tout << "\n";
+                }
+            }
         }
 
         out << "\n print option: 7\n  level populations \n";
@@ -1801,32 +1809,78 @@ void append_native_lprint_extra_sections(
 
         out << "\n print option:10\n ion abundances and  rates (/sec)\n";
         out << " index, ion, abundance, recombination, ionization,\n";
+        // pprint(10) uses the complete global Type-12 xii sequence when it
+        // forms xii(lk)/xii(lk+1), so retain a global-index surface even for
+        // zero-abundance elements that are absent from the printed inventory.
+        std::map<int,double> fraction_by_global_ion;
+        for (const auto& [z_all, fractions_all] : eval->source_ion_stage_fractions) {
+            const int nstage_all = std::min<int>(z_all, static_cast<int>(fractions_all.size()));
+            for (int stage_all = 1; stage_all <= nstage_all; ++stage_all) {
+                fraction_by_global_ion[global_type12_ion_index(z_all, stage_all)] =
+                    fractions_all[static_cast<std::size_t>(stage_all - 1)];
+            }
+        }
+        constexpr int kSourceType12IonCountZn = 30 * 31 / 2;
         for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
             if (!active_z(z, 1.0e-15)) continue;
+            const auto pirt_it = eval->source_ionization_rates.find(z);
+            const auto rrrt_it = eval->source_recombination_rates.find(z);
             const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
             for (int stage = 1; stage <= nstage; ++stage) {
                 const auto key = std::make_pair(z, stage);
                 const auto found = ion_labels.find(key);
                 const int global_ion = global_type12_ion_index(z, stage);
+                const std::size_t slot = static_cast<std::size_t>(stage - 1);
                 const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                const double abundance = fractions[slot];
+                const double rrrt = (rrrt_it != eval->source_recombination_rates.end() && slot < rrrt_it->second.size())
+                    ? rrrt_it->second[slot] : 0.0;
+                const double pirt = (pirt_it != eval->source_ionization_rates.end() && slot < pirt_it->second.size())
+                    ? pirt_it->second[slot] : 0.0;
+                double rat1 = 0.0;
+                double rat2 = 0.0;
+                if (global_ion > 1 && global_ion < kSourceType12IonCountZn) {
+                    const auto next = fraction_by_global_ion.find(global_ion + 1);
+                    const double next_fraction = next != fraction_by_global_ion.end() ? next->second : 0.0;
+                    rat1 = abundance / (next_fraction + 1.0e-34);
+                    rat2 = rrrt / (pirt + 1.0e-34);
+                }
                 out << std::setw(5) << global_ion << " " << std::left << std::setw(9) << label.substr(0,9)
                     << std::right << std::setw(16) << std::uppercase << std::scientific << std::setprecision(8)
-                    << fractions[static_cast<std::size_t>(stage-1)]
-                    << std::setw(16) << 0.0 << std::setw(16) << 0.0 << " retained-rate-components-unavailable\n";
+                    << abundance << std::setw(16) << rrrt << std::setw(16) << pirt
+                    << std::setw(16) << rat1 << std::setw(16) << rat2 << "\n";
             }
         }
         out << " heating and cooling rates (erg/sec)\n";
-        out << " index element   heating         cooling        heating-cooling\n";
+        out << "                 photon pov                                      electron pov\n";
+        out << " index element   heating         cooling        heating-cooling  heating         cooling        heating-cooling\n";
+        double element_heating2_total = 0.0;
+        double element_cooling2_total = 0.0;
         for (const auto& item : eval->element_thermal_products) {
             if (!active_z(item.element_z, 1.0e-36)) continue;
+            element_heating2_total += item.heating2;
+            element_cooling2_total += item.cooling2;
             out << std::setw(5) << item.element_z << " " << std::left << std::setw(10) << element_label_for_z(item.element_z) << std::right
                 << std::setw(16) << std::uppercase << std::scientific << std::setprecision(8) << item.heating
-                << std::setw(16) << item.cooling << std::setw(16) << (item.heating-item.cooling) << "\n";
+                << std::setw(16) << item.cooling << std::setw(16) << (item.heating-item.cooling)
+                << std::setw(16) << item.heating2 << std::setw(16) << item.cooling2
+                << std::setw(16) << (item.heating2-item.cooling2) << "\n";
         }
         out << "      compton " << std::uppercase << std::scientific << std::setprecision(8)
-            << eval->compton_heating << " " << eval->compton_cooling << "\n";
-        out << "      free-free retained continuum components\n";
-        out << "      total " << eval->total_heating << " " << eval->total_cooling << "\n";
+            << std::setw(16) << eval->compton_heating << std::setw(16) << eval->compton_cooling
+            << std::setw(16) << (eval->compton_heating-eval->compton_cooling)
+            << std::setw(16) << eval->compton_heating << std::setw(16) << eval->compton_cooling
+            << std::setw(16) << (eval->compton_heating-eval->compton_cooling) << "\n";
+        out << "      free-free " << std::setw(16) << eval->free_free_heating
+            << std::setw(16) << eval->brems_cooling << std::setw(16) << (eval->free_free_heating-eval->brems_cooling)
+            << std::setw(16) << eval->free_free_heating << std::setw(16) << eval->brems_cooling
+            << std::setw(16) << (eval->free_free_heating-eval->brems_cooling) << "\n";
+        const double total_heating2 = element_heating2_total + eval->compton_heating + eval->free_free_heating;
+        const double total_cooling2 = element_cooling2_total + eval->compton_cooling + eval->brems_cooling;
+        out << "      total " << std::setw(16) << eval->total_heating << std::setw(16) << eval->total_cooling
+            << std::setw(16) << (eval->total_heating-eval->total_cooling)
+            << std::setw(16) << total_heating2 << std::setw(16) << total_cooling2
+            << std::setw(16) << (total_heating2-total_cooling2) << "\n";
         // pprint.f90 option 26 branches directly to the common return after
         // printing the option marker, so no body follows in the current source.
         out << "\n print option:26\n";
@@ -1856,7 +1910,20 @@ void append_native_lprint_extra_sections(
             out << std::setw(13) << flat_plane(ws.dpthc, 2u, 0u, i)
                 << std::setw(13) << flat_plane(ws.dpthc, 2u, 1u, i) << "\n";
         }
-        out << " norms: retained source-normalization scalars unavailable\n";
+        // pprint(6) integrates zremsz and zrems(1:3,:) with a literal
+        // trapezoid in eV and converts with the source erg/eV constant.
+        constexpr double kSourceErgPerEv = 1.602197e-12;
+        double sum1 = 0.0, sum2 = 0.0, sum3 = 0.0, sum4 = 0.0;
+        for (std::size_t i = 1u; i < n; ++i) {
+            const double de = eval->radiation_energy_ev[i] - eval->radiation_energy_ev[i-1u];
+            sum1 += (vector_value(ws.zremsz, i) + vector_value(ws.zremsz, i-1u)) * de * kSourceErgPerEv / 2.0;
+            sum2 += (flat_plane(ws.zrems, 5u, 0u, i) + flat_plane(ws.zrems, 5u, 0u, i-1u)) * de * kSourceErgPerEv / 2.0;
+            sum3 += (flat_plane(ws.zrems, 5u, 1u, i) + flat_plane(ws.zrems, 5u, 1u, i-1u)) * de * kSourceErgPerEv / 2.0;
+            sum4 += (flat_plane(ws.zrems, 5u, 2u, i) + flat_plane(ws.zrems, 5u, 2u, i-1u)) * de * kSourceErgPerEv / 2.0;
+        }
+        out << " norms:\n";
+        out << std::setw(20) << "" << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
+            << sum1 << std::setw(13) << sum2 << std::setw(13) << sum3 << std::setw(13) << sum4 << "\n";
     }
 
     if (lprint >= 4) {
@@ -1895,10 +1962,36 @@ void append_native_lprint_extra_sections(
             if (a->record != b->record) return a->record < b->record;
             return a->source_position < b->source_position;
         });
+        // Build the source local-level role map used by pprint(29).  The
+        // detail identity inventory retains continuum/next-ion roles that the
+        // compact solver identity surface deliberately aliases away.
+        std::map<std::tuple<int,int,int>, const xstar_run_state::LevelIdentityState*> level_role_by_local;
+        const auto& source_level_roles = !state.detail_level_identities.empty()
+            ? state.detail_level_identities : state.level_identities;
+        for (const auto& level : source_level_roles) {
+            const int stage = ion_label_to_stage.count(level.ion_label) ? ion_label_to_stage.at(level.ion_label) : 0;
+            if (level.atomic_number <= 0 || stage <= 0 || level.upper_index <= 0) continue;
+            level_role_by_local[std::make_tuple(static_cast<int>(level.atomic_number), stage, static_cast<int>(level.upper_index))] = &level;
+        }
         for (const auto* row : rates) {
-            out << std::setw(10) << row->record << " z" << row->element_z << "_" << row->ion_stage
-                << std::setw(8) << row->data_type << std::setw(8) << row->rate_type
-                << std::setw(8) << row->lower_row << std::setw(8) << row->upper_row;
+            const auto ion_it = ion_labels.find({row->element_z, row->ion_stage});
+            const std::string ion_label = ion_it != ion_labels.end() ? ion_it->second
+                : ("z" + std::to_string(row->element_z) + "_" + std::to_string(row->ion_stage));
+            const auto lower_it = level_role_by_local.find(std::make_tuple(row->element_z, row->ion_stage, row->lower_row));
+            const auto upper_it = level_role_by_local.find(std::make_tuple(row->element_z, row->ion_stage, row->upper_row));
+            const std::string lower_label = lower_it != level_role_by_local.end()
+                ? lower_it->second->level_label : "unknown";
+            const std::string upper_label = upper_it != level_role_by_local.end()
+                ? upper_it->second->level_label : "continuum";
+            const int global_lower = lower_it != level_role_by_local.end()
+                ? lower_it->second->global_index : row->lower_row;
+            const int global_upper = upper_it != level_role_by_local.end()
+                ? upper_it->second->global_index : row->upper_row;
+            out << std::setw(10) << row->record << " " << std::left << std::setw(9) << ion_label.substr(0,9)
+                << std::setw(26) << lower_label.substr(0,25) << std::setw(26) << upper_label.substr(0,25)
+                << std::right << std::setw(8) << row->data_type << std::setw(8) << row->rate_type
+                << std::setw(8) << row->lower_row << std::setw(8) << row->upper_row
+                << std::setw(8) << global_lower << std::setw(8) << global_upper;
             for (double value : row->ans) out << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5) << value;
             out << "\n";
         }
@@ -1906,21 +1999,69 @@ void append_native_lprint_extra_sections(
 
         out << "\n print option:30\n auger and fluorescence yields\n";
         out << "ion     K shell pi rate  k fluorescence rate auger rate fluorescence yield\n";
+        // pprint(30) recomputes K-shell aggregates from the evaluated rate
+        // records and retained level populations.  It intentionally prints
+        // the *previous qualifying ion's* K-shell PI total (pirttoto), then
+        // the current ion fluorescence/Auger totals.
+        std::map<std::pair<int,int>, std::vector<const xstar_run_state::RecordProductDiagnosticState*>> records_by_ion;
+        for (const auto& row : eval->record_product_diagnostics) {
+            records_by_ion[{row.element_z, row.ion_stage}].push_back(&row);
+        }
+        auto starts_1s1 = [](const std::string& label) {
+            return label.size() >= 3u && label[0] == '1' && label[1] == 's' && label[2] == '1';
+        };
+        auto level_role = [&](int z, int stage, int local_index) -> const xstar_run_state::LevelIdentityState* {
+            const auto it = level_role_by_local.find(std::make_tuple(z, stage, local_index));
+            return it != level_role_by_local.end() ? it->second : nullptr;
+        };
+        auto retained_population = [&](const xstar_run_state::LevelIdentityState* level) {
+            if (!level || level->global_index <= 0) return 0.0;
+            return vector_value(eval->source_global_xilevg, static_cast<std::size_t>(level->global_index - 1));
+        };
+        double previous_k_pi = 0.0;
         for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
             if (!active_z(z, 1.0e-34)) continue;
             const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
-            for (int stage = 1; stage < nstage; ++stage) {
+            for (int stage = 1; stage <= nstage; ++stage) {
                 const double fraction = fractions[static_cast<std::size_t>(stage-1)];
                 if (!(fraction > 1.0e-12)) continue;
-                const auto found = ion_labels.find({z,stage});
-                const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
-                // The native retained state does not expose the temporary
-                // K-shell aggregation performed only inside pprint(30).  Emit
-                // the source-selected ion inventory while explicitly marking
-                // those non-retained scalar fields unavailable; do not invent
-                // numerical yields.
-                out << " " << std::left << std::setw(8) << label.substr(0,8) << std::right
-                    << " retained-k-shell-scalars-unavailable\n";
+                const double pirttoto = previous_k_pi;
+                double current_k_pi = 0.0;
+                double fluorescence = 0.0;
+                double auger = 0.0;
+                if (stage < z) {
+                    const auto rows_it = records_by_ion.find({z, stage});
+                    if (rows_it != records_by_ion.end()) {
+                        for (const auto* row : rows_it->second) {
+                            if (row->lower_row <= 0 || row->upper_row <= 0) continue;
+                            const auto* lower = level_role(z, stage, row->lower_row);
+                            const auto* upper = level_role(z, stage, row->upper_row);
+                            const double lower_population = retained_population(lower);
+                            if (row->rate_type == 7 && upper && starts_1s1(upper->level_label) &&
+                                row->upper_row > row->lower_row) {
+                                // Literal pprint(30): only continuum/next-ion
+                                // endpoints (idest2>nlev) whose next-ion label
+                                // begins 1s1 contribute to the K-shell PI sum.
+                                if (upper->upper_index == row->upper_row &&
+                                    (upper->level_label == "continuum" || upper->global_index > (lower ? lower->global_index : 0))) {
+                                    current_k_pi += row->ans[0] * lower_population;
+                                }
+                            }
+                            if ((row->rate_type == 4 || row->rate_type == 41) &&
+                                ((lower && starts_1s1(lower->level_label)) || (upper && starts_1s1(upper->level_label)))) {
+                                if (row->rate_type == 4) fluorescence += row->ans[1] * lower_population;
+                                else auger += row->ans[0] * lower_population;
+                            }
+                        }
+                    }
+                    const auto found = ion_labels.find({z,stage});
+                    const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                    out << " " << std::left << std::setw(8) << label.substr(0,8) << std::right
+                        << std::setw(11) << std::uppercase << std::scientific << std::setprecision(3) << pirttoto
+                        << std::setw(11) << fluorescence << std::setw(11) << auger
+                        << std::setw(11) << (fluorescence / (1.0e-34 + pirttoto)) << "\n";
+                }
+                previous_k_pi = current_k_pi;
             }
         }
     }

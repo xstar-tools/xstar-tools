@@ -11,6 +11,7 @@
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
 #include "xstar_local_zone_engine.h"
+#include "xstar_local_zone_internal.hpp"
 #include "source_real_energy_grid.hpp"
 #include "source_order_thermal_reducer.hpp"
 #include "canonical_thermal_term.hpp"
@@ -3590,6 +3591,11 @@ struct xstar_fixed_state_context_impl {
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
+    // 0.6.82.29.2 publication-only retention of literal calc_ion_rates
+    // full-stage totals.  These are intentionally separate from the active
+    // compact matrix window used by the solver.
+    std::map<int, std::vector<double>> last_source_ionization_rates_v0682292;
+    std::map<int, std::vector<double>> last_source_recombination_rates_v0682292;
     // v0.6.48.12.3.1: source leveltemp(2,1:5000) is one mutable workspace
     // shared across element solves and fixed-state evaluations.  Type49/53
     // destination-energy ownership therefore cannot be reconstructed from a
@@ -11314,6 +11320,8 @@ int run_impl(
     ctx.last_element_diagnostics.clear();
     ctx.last_detail_pre_mapback_populations_v064812318.clear();
     ctx.last_active_stage_windows_v064812318.clear();
+    ctx.last_source_ionization_rates_v0682292.clear();
+    ctx.last_source_recombination_rates_v0682292.clear();
     ctx.last_element_thermal_budget.clear();
     ctx.last_computed_element_thermal_budget.clear();
     ctx.last_element_electron_contribution.clear();
@@ -11899,6 +11907,22 @@ int run_impl(
         residual_audit_v064812339.preliminary_balance_seconds = elapsed(preliminary_balance_started_v064812339);
         write_preliminary_ion_balance_audit(
             element, preliminary, ctx.critical_ion_fraction);
+        // pprint(10) consumes calc_ion_rates totals for every source stage,
+        // not only the compact active matrix window.  Retain the literal
+        // source eligibility sums before active-stage truncation.
+        std::vector<double> source_pirt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
+        std::vector<double> source_rrrt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
+        for (const auto& row_v0682292 : preliminary.audit_rows_v0648117) {
+            const int stage_v0682292 = row_v0682292.ion_stage;
+            if (stage_v0682292 < 1 || stage_v0682292 > element.element_z) continue;
+            const std::size_t slot_v0682292 = static_cast<std::size_t>(stage_v0682292 - 1);
+            if (row_v0682292.source_ionization_eligible)
+                source_pirt_v0682292[slot_v0682292] += row_v0682292.ans1;
+            if (row_v0682292.source_recombination_eligible)
+                source_rrrt_v0682292[slot_v0682292] += row_v0682292.ans1;
+        }
+        ctx.last_source_ionization_rates_v0682292[element.element_z] = std::move(source_pirt_v0682292);
+        ctx.last_source_recombination_rates_v0682292[element.element_z] = std::move(source_rrrt_v0682292);
         PreliminaryIonBalance active_balance = preliminary;
         const bool retain_active_stage_window =
             (input.runtime_state_flags &
@@ -15801,6 +15825,22 @@ int run_impl(
 } // namespace
 
 struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
+
+namespace xstar_local_zone_internal {
+
+void capture_publication_state_v0682292(
+    const xstar_fixed_state_context* context,
+    PublicationStateV0682292& out) {
+    out = PublicationStateV0682292{};
+    if (!context) return;
+    out.ionization_rates = context->last_source_ionization_rates_v0682292;
+    out.recombination_rates = context->last_source_recombination_rates_v0682292;
+    out.element_thermal = context->last_element_thermal_budget;
+    out.free_free_heating = context->last_htfreef;
+    out.brems_cooling = context->last_clbrems;
+}
+
+} // namespace xstar_local_zone_internal
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement create context from program as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
