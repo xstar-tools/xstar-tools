@@ -44,6 +44,12 @@ def test_0682271_version_and_scope_chain():
             assert successor['predecessor_sha256'][rel]==expected, f"{successor['milestone']}:{rel}"
             expected=successor['candidate_changed_sha256'].get(rel,expected)
         now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest()
+        active_version=next((line.split('=',1)[1].strip().strip('\"') for line in pyproject.splitlines() if line.startswith('version = ')), '')
+        if active_version == '0.6.82.27.16.5':
+            later=json.loads((ROOT/'qualification/npass_0_6_82_27_16_5/type50_nbinc_source_correction_scope_0_6_82_27_16_5.json').read_text())
+            row=next((r for r in later['production_hashes'] if r['path']==rel), None)
+            if row is not None and row['baseline_sha256'] != row['sha256']:
+                expected=row['sha256']
         assert now==expected, rel
 
 

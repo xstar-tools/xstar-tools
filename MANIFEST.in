@@ -630,3 +630,12 @@ include tools/qualification/check_npass_python_native_upstream_capture_hotfix_0_
 include tools/qualification/run_c5_python_native_fixed_state_upstream_forensic_0_6_82_27_16_4_1.py
 include npass_python_native_upstream_capture_hotfix_0_6_82_27_16_4_1.md
 include xstar_tools-0.6.82.27.16.4.1_host_validation.md
+
+# 0.6.82.27.16.5 narrow Python Type-50 nbinc source correction.
+recursive-include qualification/npass_0_6_82_27_16_5 *.json *.md
+include tools/qualification/check_type50_nbinc_source_correction_0_6_82_27_16_5.py
+include tools/qualification/run_c5_python_fixed_state_population_heating_0_6_82_27_16_5.py
+include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_16_5.py
+include tests/test_type50_nbinc_source_correction_0_6_82_27_16_5.py
+include npass_python_type50_nbinc_hotfix_0_6_82_27_16_5.md
+include xstar_tools-0.6.82.27.16.5_host_validation.md

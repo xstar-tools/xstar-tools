@@ -26,8 +26,8 @@ def test_068227163_package_science_version_split():
     import xstar_tools
     from xstar_tools.execution import package_version
 
-    assert package_version() in ("0.6.82.27.16.3", "0.6.82.27.16.4", "0.6.82.27.16.4.1")
-    assert xstar_tools.__package_version__ in ("0.6.82.27.16.3", "0.6.82.27.16.4", "0.6.82.27.16.4.1")
+    assert package_version() in ("0.6.82.27.16.3", "0.6.82.27.16.4", "0.6.82.27.16.4.1", "0.6.82.27.16.5")
+    assert xstar_tools.__package_version__ in ("0.6.82.27.16.3", "0.6.82.27.16.4", "0.6.82.27.16.4.1", "0.6.82.27.16.5")
     assert xstar_tools.__version__ == "0.6.48.12.3.45.3.3.8"
 
 

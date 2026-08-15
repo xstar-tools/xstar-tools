@@ -2634,7 +2634,13 @@ class SourceFaithfulUCalc:
                 else:
                     epi, brem, _ = _radiation_arrays(c.radiation)
                 if endpoint_energy_ev is not None and endpoint_energy_ev > 0.0:
-                    bremsa = float(brem[_nbinc(endpoint_energy_ev, epi)])
+                    # Canonical ucalc.f90 Type-50 pumping samples bremsa(nb1)
+                    # with nb1=nbinc(ener,epi,ncn2).  nbinc/huntf chooses the
+                    # nearest logarithmic-grid point and returns a one-based
+                    # index; the generic Python _nbinc() is a lower bracket
+                    # and is not source-equivalent for this channel.
+                    nb1_one_based = _xstar_nbinc_fortran_value(endpoint_energy_ev, epi)
+                    bremsa = float(brem[nb1_one_based - 1])
             except Exception:
                 bremsa = None
         ev = evaluate_type50_ucalc_record(

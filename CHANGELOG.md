@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.82.27.16.5 - 2026-08-15
+
+- Narrow Python production-science correction for Type-50 radiative pumping; protected C++ baseline `0.6.82.27.13` is unchanged.
+- Replace the Python lower-bracket Type-50 continuum lookup with the canonical one-based `nbinc.f90`/`huntf.f90` nearest-log-grid mapping already implemented by `_xstar_nbinc_fortran_value()`.
+- Apply the same source-faithful mapping to direct UCalc Type-50 evaluation and the promoted reduced-grid Type-50 packet paths so `calc_hmc_all`/`calc_emisab_all` and full-grid `calc_emis_all` share canonical bin ownership.
+- No empirical scaling, tolerance, solver, DSEC-controller, transport, C++, publication, or ABI change; science revision remains frozen pending host qualification.
+
 # 0.6.82.27.16.4.1 - 2026-08-14
 
 - Diagnostic-only hotfix for the `.16.4` Python/native upstream fixed-state forensic wrapper.

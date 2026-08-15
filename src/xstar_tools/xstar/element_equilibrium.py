@@ -63,7 +63,7 @@ from .ucalc import (
     UCalcStatus,
     default_source_faithful_ucalc,
     _radiation_arrays,
-    _nbinc,
+    _xstar_nbinc_fortran_value,
     _source_faithful_level_threshold,
 )
 
@@ -3700,7 +3700,8 @@ def _run_rate_payload_four_family_product_candidate(
                     raise RuntimeError(f"type50 record {rec} escape context blocked: {escape_reason}")
                 bremsa_nb1 = 0.0
                 if float(context.covering_fraction) < 1.0 and wavelength <= 0.99e9:
-                    bremsa_nb1 = float(reduced_bremsa[_nbinc(abs(e1 - e2), reduced_epi)])
+                    nb1_one_based = _xstar_nbinc_fortran_value(abs(e1 - e2), reduced_epi)
+                    bremsa_nb1 = float(reduced_bremsa[nb1_one_based - 1])
                 row.update({
                     "type50_wavelength_A": wavelength,
                     "type50_aij_s_inv": aij,
@@ -6641,7 +6642,8 @@ def _assemble_element_matrix_impl(
                             if float(context.covering_fraction) < 1.0 and _wavelength <= 0.99e9:
                                 if _reduced_epi.size < 3 or _reduced_bremsa.size < _reduced_epi.size:
                                     raise RuntimeError("Type-50 reduced radiation grid unavailable")
-                                _bremsa_nb1 = float(_reduced_bremsa[_nbinc(abs(_e1 - _e2), _reduced_epi)])
+                                _nb1_one_based = _xstar_nbinc_fortran_value(abs(_e1 - _e2), _reduced_epi)
+                                _bremsa_nb1 = float(_reduced_bremsa[_nb1_one_based - 1])
                             _native_packet.append({
                                 "record": int(_record), "rate_type": 4, "data_type": 50,
                                 "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
