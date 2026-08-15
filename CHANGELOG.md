@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.82.28 - 2026-08-15
+
+- Closed the `0.6.82.27` native/Python `npass` milestone after final pure-Python `npass=3` and `npass=5` host acceptance on `.27.16.5`; protected C++ `.27.13` remains frozen.
+- Added the complete public incident-spectrum contract in Python and native `xstar-cpp`: `pow`, `bbody`, public `bremss` plus source `brems`, and canonical text `file` spectra.
+- Added executable `spectun=0/1/2` semantics: energy flux, photon flux converted by energy before interpolation, and base-10 log energy flux.
+- Added canonical `spct.dat` default, logarithmic file interpolation with source endpoint/zero behavior, mode-dependent `trad`, repeated-pass source regeneration, and source-faithful 1--1000 Ry `rlrad38` normalization.
+- Reproduce `ispecg.f90` interpolation literally, including `exp10.f90 = exp(2.30259*x)` rather than replacing it with exact `10**x`; keep file-unit equivalence separate from the small canonical file-vs-built-in-power-law shape difference.
+- Added an ATDB-independent compiled-FORTRAN source-routine oracle; local Python/FORTRAN continuum arrays agree from exactly to `2.1e-15` maximum relative across `pow`, `bbody`, source `brems`, and file `spectun=0/1/2`.
+- Added local/source tests and a FORTRAN/C++/pure-Python host qualification matrix. Full downstream host FORTRAN science acceptance remains the release-closing gate for `.28`.
+- Science revision and all public ABIs remain frozen.
+
 # 0.6.82.27.16.5 - 2026-08-15
 
 - Narrow Python production-science correction for Type-50 radiative pumping; protected C++ baseline `0.6.82.27.13` is unchanged.

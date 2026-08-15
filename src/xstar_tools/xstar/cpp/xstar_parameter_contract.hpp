@@ -16,7 +16,7 @@ inline constexpr std::array<Rule, 59> kRules = {{
     {"density", ParameterKind::Real, "10000.0", true, 0.0, true, 1e+21},
     {"spectrum", ParameterKind::String, "pow", false, 0.0, false, 0.0},
     {"spectrum_file", ParameterKind::String, "spct.dat", false, 0.0, false, 0.0},
-    {"spectun", ParameterKind::Integer, "0", true, 0.0, true, 1.0},
+    {"spectun", ParameterKind::Integer, "0", true, 0.0, true, 2.0},
     {"trad", ParameterKind::Real, "-1.0", false, 0.0, false, 0.0},
     {"rlrad38", ParameterKind::Real, "1e-06", true, 0.0, true, 10000000000.0},
     {"column", ParameterKind::Real, "1e+17", true, 0.0, true, 1e+25},

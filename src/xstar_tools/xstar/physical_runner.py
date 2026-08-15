@@ -14,9 +14,10 @@ names and execute the translated Python call graph.  They never invoke the
 Fortran ``xstar`` executable and never read XSTAR-produced spectra, populations,
 or rates as calculation inputs.
 
-The first production scope is the constant-density, analytic-radius, built-in
-power-law benchmark represented by ``helike_type69/c5_ne1``.  Unsupported
-source branches fail explicitly instead of being approximated.
+The production controller preserves the public XSTAR parameter contract,
+including the source-faithful incident-spectrum modes implemented by the
+current campaign.  Unsupported source branches fail explicitly instead of
+being approximated.
 """
 
 from __future__ import annotations
@@ -44,6 +45,12 @@ from .parameter_contract import (
     coerce_and_validate_parameter,
 )
 from .source_real_energy_grid import source_ener_grid
+from .spectrum_contract import (
+    SpectrumContractError,
+    canonical_spectrum_mode,
+    initial_source_spectrum,
+    apply_source_spectrum_pass,
+)
 
 from .. import __version__ as XSTAR_ATOMIC_VERSION
 from ..data import resolve_atdb_path
@@ -338,7 +345,7 @@ _XSTAR_OUTPUT_PARAMETER_ROWS: tuple[tuple[str, str, str], ...] = (
     ("density", "real", "cm**(-3)"),
     ("spectrum", "string", " "),
     ("spectrum_file", "string", " "),
-    ("spectun", "integer", "0=energy, 1=photons"),
+    ("spectun", "integer", "0=energy, 1=photons, 2=log10 energy"),
     ("trad", "real", "or alpha"),
     ("rlrad38", "real", "/10**38 erg/sec"),
     ("column", "real", "cm**(-2)"),
@@ -628,13 +635,10 @@ def normalize_xstar_parameters(
                 except (TypeError, ValueError) as exc:
                     raise XSTARPythonRunnerError(str(exc)) from exc
 
-    spectrum = str(values["spectrum"]).strip().lower()
-    if spectrum not in {"pow", "powerlaw", "power-law"}:
-        raise UnsupportedXSTARParameterError(
-            "the first public physical runner supports spectrum='pow' only; "
-            f"observed {values['spectrum']!r}"
-        )
-    values["spectrum"] = "pow"
+    try:
+        values["spectrum"] = canonical_spectrum_mode(str(values["spectrum"]))
+    except SpectrumContractError as exc:
+        raise UnsupportedXSTARParameterError(str(exc)) from exc
     abundance_table, baseline_abundances = resolve_abundance_table(values["abundtbl"])
     values["abundtbl"] = abundance_table
 
@@ -746,28 +750,13 @@ def ener_grid(ncn2: int) -> np.ndarray:
 def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[float]) -> np.ndarray:
     """Translate ``ispec4 -> ispecgg`` for a built-in power law."""
     epi = np.asarray(epi_eV, dtype=float).reshape(-1)
-    n = epi.size
-    z = np.zeros(n, dtype=float)
-    raw = np.where(epi > 0.01, np.power(epi, float(index)), 1.0e-24)
-    nb1 = int(nbinc(13.6, epi, n))
-    nb2 = int(nbinc(1.36e4, epi, n))
-    total = 0.0
-    for one in range(max(2, nb1), min(n, nb2) + 1):
-        i = one - 1
-        total += (raw[i] + raw[i - 1]) * (epi[i] - epi[i - 1]) / 2.0
-    if total <= 0.0:
-        raise XSTARPythonRunnerError("power-law 1-1000 Ry normalization is nonpositive")
-    z += raw * (float(luminosity_1e38) / total / ISPEC4_ERGSEV)
-
-    # XSTAR immediately applies ispecgg, using a slightly different bin gate.
-    total2 = 0.0
-    for i in range(1, n):
-        if 13.6 <= epi[i] <= 1.36e4:
-            total2 += (z[i] + z[i - 1]) * (epi[i] - epi[i - 1]) / 2.0
-    if total2 <= 0.0:
-        raise XSTARPythonRunnerError("renormalized power-law luminosity is nonpositive")
-    z *= float(luminosity_1e38) / total2 / ISPEC4_ERGSEV
-    return z
+    return apply_source_spectrum_pass(
+        np.zeros(epi.size, dtype=float),
+        mode="pow",
+        trad=float(index),
+        luminosity_1e38=float(luminosity_1e38),
+        epi_eV=epi,
+    )
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -2419,11 +2408,19 @@ def _build_initial_state(
     ncn2m = 999
     epi = ener_grid(ncn2)
     epim = ener_grid(ncn2m)
-    zremsz = powerlaw_spectrum(
-        index=float(parameters.get("trad")),
-        luminosity_1e38=float(parameters.luminosity_1e38),
-        epi_eV=epi,
-    )
+    try:
+        zremsz, source_file_data = initial_source_spectrum(
+            mode=str(parameters.get("spectrum")),
+            trad=float(parameters.get("trad")),
+            luminosity_1e38=float(parameters.luminosity_1e38),
+            epi_eV=epi,
+            spectrum_file=str(parameters.get("spectrum_file")),
+            spectun=int(parameters.get("spectun")),
+        )
+    except SpectrumContractError as exc:
+        raise XSTARPythonRunnerError(str(exc)) from exc
+    state.control["source_spectrum_mode_068228"] = str(parameters.get("spectrum"))
+    state.control["source_spectrum_file_068228"] = source_file_data
     shared = CalcEmisWorkspace.allocate(
         n_lines=int(derived.nlsvn),
         n_continua=int(derived.ncsvn),
@@ -2515,7 +2512,7 @@ def _build_initial_state(
             "zeta": float(parameters.get("rlogxi")),
             "xi": float(parameters.ionization_parameter),
             "rmax": float(parameters.rmax_cm),
-            "spectype": "pow",
+            "spectype": str(parameters.get("spectrum")),
             "specfile": str(parameters.get("spectrum_file")),
             "specunit": int(parameters.get("spectun")),
             "kmodelname": str(parameters.get("modelname")),

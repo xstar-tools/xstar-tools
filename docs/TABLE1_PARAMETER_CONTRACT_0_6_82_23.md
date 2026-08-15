@@ -14,7 +14,7 @@ Known conflicts are not hidden:
 - `loopcontrol`: Table 1/`xstar.par` `0`; detailed section 4.3.27 says `1`.
 - `lwrite`: detailed manual documents `-1`, while stock XPI range is `0..1`.
 - `radexp`: source/manual describe a `radexp<-100` `density.dat` branch, while stock XPI range is `-3..3`.
-- `spectun`: `rread1.f90` contains a `specunit==2` file-spectrum branch, while stock XPI range is `0..1`.
+- `spectun`: `rread1.f90` contains a `specunit==2` file-spectrum branch while stock XPI range is `0..1`; `0.6.82.28` intentionally exposes `0..2` in the modern public contract and host-tests the unchanged executable through a temporary XPI metadata shadow.
 - `naabund` and `lstep` exist in stock `xstar.par`/`rread1` but are omitted from manual Table 1.
 
 The supplied environment for building this candidate has no HEASoft executable, so `probe_stock_xstar_defaults_0_6_82_23.py` must be run after `heainit` on a host. It creates an empty local PFILES directory and queries `$HEADAS/syspfiles` to avoid learned user values.

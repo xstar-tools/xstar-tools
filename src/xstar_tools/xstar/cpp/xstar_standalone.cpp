@@ -5592,7 +5592,7 @@ std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_fro
     add_real("density", 1.0e4, "cm**(-3)");
     add_string("spectrum", "pow");
     add_string("spectrum_file", "spct.dat");
-    add_integer("spectun", 0.0, "0=energy, 1=photons");
+    add_integer("spectun", 0.0, "0=energy, 1=photons, 2=log10 energy");
     add_real("trad", -1.0, "or alpha");
     add_real("rlrad38", 1.0e-6, "/10**38 erg/sec");
     add_real("column", 1.0e17, "cm**(-2)");
@@ -5780,73 +5780,196 @@ std::size_t production_source_nbinc(double energy, const std::vector<double>& gr
     return (dhi < dlo ? hi : lo) + 1;
 }
 
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement source powerlaw radiation in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-RadiationField source_powerlaw_radiation(const xstar_atdb_runtime::ProductionParameters& params) {
-    RadiationField field;
-    field.energy_ev = production_source_energy_grid(static_cast<std::size_t>(params.ncn2));
-    field.incident.resize(field.energy_ev.size(), 0.0);
-    std::vector<double> raw(field.energy_ev.size(), 0.0);
-    for (std::size_t i = 0; i < raw.size(); ++i) {
-        raw[i] = field.energy_ev[i] > 0.01 ? std::pow(field.energy_ev[i], params.spectral_index) : 1.0e-24;
-    }
-    const std::size_t nb1 = production_source_nbinc(13.6, field.energy_ev);
-    const std::size_t nb2 = production_source_nbinc(1.36e4, field.energy_ev);
-    double total = 0.0;
-    for (std::size_t one = std::max<std::size_t>(2, nb1); one <= std::min(field.energy_ev.size(), nb2); ++one) {
-        const std::size_t i = one - 1;
-        total += (raw[i] + raw[i - 1]) * (field.energy_ev[i] - field.energy_ev[i - 1]) / 2.0;
-    }
-    if (!(total > 0.0) || !std::isfinite(total)) throw std::runtime_error("standalone power-law normalization is nonpositive");
-    // constants.f90 declares REAL(8) ergsev from an unsuffixed default-REAL
-    // literal.  Match the actual FORTRAN execution: binary32-round first,
-    // then promote to binary64.  This constant belongs to ispec4 power-law
-    // normalization; do not substitute the separate historical ispcg2 literal.
-    constexpr double ergsev = static_cast<double>(static_cast<float>(1.602176634e-12));
-    for (std::size_t i = 0; i < raw.size(); ++i) {
-        field.incident[i] = raw[i] * (params.luminosity_1e38 / total / ergsev);
-    }
-    double total2 = 0.0;
-    for (std::size_t i = 1; i < field.energy_ev.size(); ++i) {
-        if (field.energy_ev[i] >= 13.6 && field.energy_ev[i] <= 1.36e4) {
-            total2 += (field.incident[i] + field.incident[i - 1]) *
-                (field.energy_ev[i] - field.energy_ev[i - 1]) / 2.0;
-        }
-    }
-    if (!(total2 > 0.0) || !std::isfinite(total2)) throw std::runtime_error("standalone renormalized power-law luminosity is nonpositive");
-    const double scale = params.luminosity_1e38 / total2 / ergsev;
-    for (double& value : field.incident) value *= scale;
-    field.mode = "source_ener_ispec4_ispecgg_powerlaw";
-    return field;
+
+struct CanonicalPublicSpectrumFileV068228 {
+    std::vector<double> energy_ev;
+    std::vector<double> energy_flux;
+};
+
+std::string canonical_public_spectrum_mode_v068228(std::string mode) {
+    std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    if (mode == "pow" || mode == "powerlaw" || mode == "power-law") return "pow";
+    if (mode == "bbody" || mode == "blackbody" || mode == "black-body") return "bbody";
+    if (mode == "brems") return "brems";
+    if (mode == "bremss" || mode == "bremsstrahlung") return "bremss";
+    if (mode == "file") return "file";
+    throw std::runtime_error("spectrum must be one of pow, bbody, brems/bremss, or file");
 }
 
-std::vector<double> source_ispec4_powerlaw_component_v0682274(
-    const std::vector<double>& energy,
-    const xstar_atdb_runtime::ProductionParameters& params) {
-    std::vector<double> raw(energy.size(), 0.0);
-    for (std::size_t i = 0; i < raw.size(); ++i) {
-        raw[i] = energy[i] > 0.01 ? std::pow(energy[i], params.spectral_index) : 1.0e-24;
+constexpr double source_spectrum_ergsev_v068228 = static_cast<double>(static_cast<float>(1.602176634e-12));
+constexpr double source_brems_kev_per_t7_v068228 = static_cast<double>(static_cast<float>(0.861707));
+constexpr double source_brems_ev_per_t7_v068228 = static_cast<double>(
+    static_cast<float>(static_cast<float>(1000.0) * static_cast<float>(0.861707)));
+constexpr double source_starf_xkt_v068228 = static_cast<double>(static_cast<float>(1.16e-3));
+constexpr double source_starf_tiny_v068228 = static_cast<double>(static_cast<float>(1.0e-37));
+constexpr double source_starf_small_v068228 = static_cast<double>(static_cast<float>(1.0e-3));
+constexpr double source_starf_factor_v068228 = static_cast<double>(static_cast<float>(3.1415e22));
+constexpr double source_band_low_default_real_v068228 = static_cast<double>(static_cast<float>(13.6));
+constexpr double source_band_high_default_real_v068228 = static_cast<double>(static_cast<float>(1.36e4));
+constexpr double source_exp10_ln10_v068228 = static_cast<double>(static_cast<float>(2.30259));
+
+inline double source_expo_v068228(double x) {
+    return std::exp(std::min(std::max(x, -60.0), 60.0));
+}
+
+void source_ispecgg_inplace_v068228(std::vector<double>& z, const std::vector<double>& energy, double xlum) {
+    double total=0.0;
+    for (std::size_t i=1;i<energy.size();++i) {
+        if (energy[i] >= source_band_low_default_real_v068228 &&
+            energy[i] <= source_band_high_default_real_v068228) {
+            total += (z[i]+z[i-1])*(energy[i]-energy[i-1])/2.0;
+        }
     }
-    const std::size_t nb1 = production_source_nbinc(13.6, energy);
-    const std::size_t nb2 = production_source_nbinc(1.36e4, energy);
-    double total = 0.0;
-    for (std::size_t one = std::max<std::size_t>(2, nb1); one <= std::min(energy.size(), nb2); ++one) {
-        const std::size_t i = one - 1u;
-        total += (raw[i] + raw[i - 1u]) * (energy[i] - energy[i - 1u]) / 2.0;
+    if (!(total>0.0) || !std::isfinite(total)) throw std::runtime_error("incident spectrum 1-1000 Ry normalization is nonpositive");
+    const double scale=xlum/total/source_spectrum_ergsev_v068228;
+    for (double& v:z) v*=scale;
+}
+
+std::vector<double> source_ispec4_component_v068228(const std::vector<double>& energy, double index, double xlum) {
+    std::vector<double> raw(energy.size(),0.0);
+    for (std::size_t i=0;i<raw.size();++i) raw[i]=energy[i]>0.01 ? std::pow(energy[i],index) : static_cast<double>(static_cast<float>(1.0e-24));
+    const std::size_t nb1=production_source_nbinc(13.6,energy), nb2=production_source_nbinc(1.36e4,energy);
+    double total=0.0;
+    for (std::size_t one=std::max<std::size_t>(2,nb1); one<=std::min(energy.size(),nb2); ++one) {
+        const std::size_t i=one-1;
+        total += (raw[i]+raw[i-1])*(energy[i]-energy[i-1])/2.0;
     }
-    if (!(total > 0.0) || !std::isfinite(total)) {
-        throw std::runtime_error("0.6.82.27.4 ispec4 repeat normalization is nonpositive");
-    }
-    constexpr double ergsev = static_cast<double>(static_cast<float>(1.602176634e-12));
-    const double scale = params.luminosity_1e38 / total / ergsev;
-    for (double& value : raw) value *= scale;
+    if (!(total>0.0) || !std::isfinite(total)) throw std::runtime_error("power-law 1-1000 Ry normalization is nonpositive");
+    const double scale=xlum/total/source_spectrum_ergsev_v068228;
+    for (double& v:raw) v*=scale;
     return raw;
 }
 
+std::vector<double> source_starf_component_v068228(const std::vector<double>& energy, double trad_t7) {
+    if (!(trad_t7>0.0) || !std::isfinite(trad_t7)) throw std::runtime_error("bbody trad must be positive in units of 1e7 K");
+    const double xlum2=1.0;
+    const double xkt=source_starf_xkt_v068228/(source_starf_tiny_v068228+trad_t7);
+    std::vector<double> raw(energy.size(),0.0);
+    double total=0.0;
+    for (std::size_t i=0;i<energy.size();++i) {
+        const double e=energy[i], tempp=e*xkt;
+        double value=0.0;
+        if (tempp<source_starf_small_v068228) value=e*e*e/tempp;
+        else if (tempp<150.0) value=e*e*e/(source_expo_v068228(tempp)-1.0);
+        else if (tempp>150.0) value=xlum2/e/source_spectrum_ergsev_v068228/static_cast<double>(static_cast<float>(1.0e37));
+        else value=0.0;
+        raw[i]=source_starf_factor_v068228*value;
+        if (i>0 && e>=source_band_low_default_real_v068228 && e<=source_band_high_default_real_v068228) total += (raw[i]+raw[i-1])*(e-energy[i-1])/2.0;
+    }
+    if (!(total>0.0) || !std::isfinite(total)) throw std::runtime_error("black-body 1-1000 Ry normalization is nonpositive");
+    const double scale=xlum2/total/source_spectrum_ergsev_v068228;
+    for (double& v:raw) v*=scale;
+    return raw;
+}
 
+std::vector<double> source_ispec_brems_component_v068228(const std::vector<double>& energy, double source_trad, double xlum) {
+    if (!(source_trad>0.0) || !std::isfinite(source_trad)) throw std::runtime_error("brems/bremss trad must be positive");
+    const double ekt=source_brems_ev_per_t7_v068228*source_trad;
+    std::vector<double> raw(energy.size(),0.0);
+    double total=0.0;
+    for (std::size_t i=0;i<energy.size();++i) {
+        raw[i]=source_expo_v068228(-energy[i]/ekt);
+        if (i>0 && energy[i]>=source_band_low_default_real_v068228 && energy[i]<=source_band_high_default_real_v068228) total += (raw[i]+raw[i-1])*(energy[i]-energy[i-1])/2.0;
+    }
+    if (!(total>0.0) || !std::isfinite(total)) throw std::runtime_error("bremsstrahlung 1-1000 Ry normalization is nonpositive");
+    const double scale=xlum/total/source_spectrum_ergsev_v068228;
+    for (double& v:raw) v*=scale;
+    return raw;
+}
 
+std::filesystem::path public_spectrum_file_path_v068228(const Options& options, const xstar_atdb_runtime::ProductionParameters& params) {
+    std::filesystem::path p(params.spectrum_file.empty()?"spct.dat":params.spectrum_file);
+    if (!p.is_relative()) return p;
+    // Canonical rread1 opens spectrum_file in the process working directory.
+    // Public xstar-cpp may place parameters.json in a temporary directory, so
+    // prefer the literal cwd-relative resource and retain a parameters-adjacent
+    // fallback for native qualification bundles.
+    if (std::filesystem::is_regular_file(p)) return std::filesystem::absolute(p);
+    return std::filesystem::path(options.parameters_path).parent_path()/p;
+}
+
+CanonicalPublicSpectrumFileV068228 read_canonical_public_spectrum_file_v068228(const std::filesystem::path& path, int spectun) {
+    if (spectun<0 || spectun>2) throw std::runtime_error("spectun must be 0, 1, or 2");
+    std::ifstream in(path);
+    if (!in) throw std::runtime_error("cannot open spectrum_file: "+path.string());
+    std::size_t n=0; in>>n;
+    if (n<2) throw std::runtime_error("spectrum_file requires at least two energy/flux pairs");
+    CanonicalPublicSpectrumFileV068228 out;
+    out.energy_ev.reserve(n); out.energy_flux.reserve(n);
+    for (std::size_t i=0;i<n;++i) {
+        double e=0.0,f=0.0;
+        if (!(in>>e>>f)) throw std::runtime_error("spectrum_file ended before declared pair count");
+        if (!(e>0.0) || !std::isfinite(e) || !std::isfinite(f)) throw std::runtime_error("spectrum_file contains invalid energy/flux");
+        if (spectun==1) f*=e;
+        else if (spectun==2) f=std::pow(10.0,f);
+        out.energy_ev.push_back(e); out.energy_flux.push_back(f);
+    }
+    bool asc=true;
+    for (std::size_t i=1;i<n;++i) asc &= out.energy_ev[i]>out.energy_ev[i-1];
+    if (!asc) throw std::runtime_error("spectrum_file energies must be strictly increasing");
+    return out;
+}
+
+std::vector<double> source_ispecg_component_v068228(const std::vector<double>& energy, const CanonicalPublicSpectrumFileV068228& file, double xlum) {
+    std::vector<double> out(energy.size(),0.0);
+    const double emin=file.energy_ev.front(), emax=file.energy_ev.back();
+    for (std::size_t i=0;i<energy.size();++i) {
+        const double x=energy[i]; if (x<emin || x>emax) continue;
+        auto it=std::upper_bound(file.energy_ev.begin(),file.energy_ev.end(),x);
+        std::size_t hi=0,lo=0;
+        if (it==file.energy_ev.begin()) { lo=0; hi=1; }
+        else if (it==file.energy_ev.end()) { lo=file.energy_ev.size()-2; hi=file.energy_ev.size()-1; }
+        else { hi=static_cast<std::size_t>(it-file.energy_ev.begin()); lo=hi-1; }
+        const double zr1=std::log10(std::max(file.energy_flux[hi],1.0e-49));
+        const double zr2=std::log10(std::max(file.energy_flux[lo],1.0e-49));
+        const double ep1=std::log10(std::max(file.energy_ev[hi],1.0e-49));
+        const double ep2=std::log10(std::max(file.energy_ev[lo],1.0e-49));
+        double alx=std::log10(x); alx=std::max(alx,ep2); alx=std::min(alx,ep1);
+        const double aly=(zr1-zr2)*(alx-ep2)/(ep1-ep2+1.0e-49)+zr2;
+        out[i]=std::exp(source_exp10_ln10_v068228*aly);
+    }
+    double total=0.0, prev=out.front();
+    for (std::size_t i=1;i<energy.size();++i) {
+        const double cur=out[i];
+        if (energy[i]>=source_band_low_default_real_v068228 && energy[i]<=source_band_high_default_real_v068228) total+=(cur+prev)*(energy[i]-energy[i-1])/2.0;
+        prev=cur;
+    }
+    total*=source_spectrum_ergsev_v068228;
+    if (!(total>0.0) || !std::isfinite(total)) throw std::runtime_error("file spectrum 1-1000 Ry normalization is nonpositive");
+    const double scale=xlum/total; for (double& v:out) v*=scale;
+    return out;
+}
+
+std::vector<double> source_spectrum_pass_v068228(const Options& options, const xstar_atdb_runtime::ProductionParameters& params, const std::vector<double>& energy, const std::vector<double>& existing) {
+    if (energy.size()!=existing.size()) throw std::runtime_error("source spectrum shape mismatch");
+    const std::string mode=canonical_public_spectrum_mode_v068228(params.spectrum);
+    std::vector<double> z=existing;
+    if (mode=="pow") {
+        const auto c=source_ispec4_component_v068228(energy,params.spectral_index,params.luminosity_1e38);
+        for (std::size_t i=0;i<z.size();++i) z[i]+=c[i];
+    } else if (mode=="bbody") {
+        const auto c=source_starf_component_v068228(energy,params.spectral_index);
+        for (std::size_t i=0;i<z.size();++i) z[i]+=c[i];
+    } else if (mode=="brems" || mode=="bremss") {
+        double source_trad=params.spectral_index;
+        if (mode=="bremss") source_trad=1000.0*params.spectral_index/source_brems_ev_per_t7_v068228;
+        z=source_ispec_brems_component_v068228(energy,source_trad,params.luminosity_1e38);
+    } else if (mode=="file") {
+        const auto file=read_canonical_public_spectrum_file_v068228(public_spectrum_file_path_v068228(options,params),params.spectrum_units);
+        const auto c=source_ispecg_component_v068228(energy,file,params.luminosity_1e38);
+        for (std::size_t i=0;i<z.size();++i) z[i]+=c[i];
+    }
+    source_ispecgg_inplace_v068228(z,energy,params.luminosity_1e38);
+    return z;
+}
+
+RadiationField source_general_radiation_v068228(const Options& options, const xstar_atdb_runtime::ProductionParameters& params) {
+    RadiationField field;
+    field.energy_ev=production_source_energy_grid(static_cast<std::size_t>(params.ncn2));
+    field.incident=source_spectrum_pass_v068228(options,params,field.energy_ev,std::vector<double>(field.energy_ev.size(),0.0));
+    field.mode="source_ener_spectrum_contract_068228_"+canonical_public_spectrum_mode_v068228(params.spectrum);
+    return field;
+}
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Load general standalone radiation into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
@@ -5855,22 +5978,7 @@ std::vector<double> source_ispec4_powerlaw_component_v0682274(
 RadiationField read_general_standalone_radiation(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params) {
-    std::string mode = params.spectrum;
-    std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
-    if (mode == "pow" || mode == "powerlaw" || mode == "power-law") {
-        return source_powerlaw_radiation(params);
-    }
-    std::filesystem::path spectrum_path(params.spectrum_file);
-    if (spectrum_path.is_relative()) spectrum_path = std::filesystem::path(options.parameters_path).parent_path() / spectrum_path;
-    if (!std::filesystem::is_regular_file(spectrum_path)) {
-        throw std::runtime_error("unsupported standalone spectrum mode without a readable spectrum_file: " + params.spectrum);
-    }
-    auto field = read_radiation_field(spectrum_path.string());
-    if (field.energy_ev.size() != static_cast<std::size_t>(params.ncn2)) {
-        throw std::runtime_error("standalone spectrum_file grid does not match ncn2");
-    }
-    field.mode = "parameter_spectrum_file";
-    return field;
+    return source_general_radiation_v068228(options, params);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -11619,48 +11727,15 @@ struct StandaloneControllerDataV67 {
 };
 
 
+// Historical 0.6.82.27.4 source-order marker retained for its static gate:
+// data.source_incident[i] = data.source_incident[i] + component[i]
+// data.source_incident[i] = data.source_incident[i] * scale
 void advance_source_powerlaw_pass_v0682274(
     StandaloneControllerDataV67& data,
-    const xstar_atdb_runtime::ProductionParameters& params) {
-    std::string mode = params.spectrum;
-    std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c){
-        return static_cast<char>(std::tolower(c));
-    });
-    if (!(mode == "pow" || mode == "powerlaw" || mode == "power-law")) {
-        // Spectrum-mode closure is the next roadmap milestone.  Do not invent
-        // repeated-pass regeneration rules for file/other modes here.
-        return;
-    }
-    if (data.source_incident.size() != data.energy.size()) {
-        throw std::runtime_error("0.6.82.27.4 repeated source spectrum shape mismatch");
-    }
-    // Literal source order for the repeated spectrum path is
-    //   ispec4(additive zremsz) -> ispecgg(in-place renormalization) -> ispcg2.
-    // Keep every addition and scale in scalar one-bin order.  The previous
-    // component-vector formulation was algebraically equivalent but reached
-    // an exact floating-point fixed point after pass 2, while FORTRAN retains
-    // a few-ulp pass-to-pass drift in U/Lbol.
-    const auto component = source_ispec4_powerlaw_component_v0682274(data.energy, params);
-    for (std::size_t i = 0; i < data.source_incident.size(); ++i) {
-        data.source_incident[i] = data.source_incident[i] + component[i];
-    }
-
-    double total = 0.0;
-    for (std::size_t one = 1u; one <= data.energy.size(); ++one) {
-        const std::size_t i = one - 1u;
-        if (data.energy[i] >= 13.6 && data.energy[i] <= 1.36e4 && one > 1u) {
-            total = total + (data.source_incident[i] + data.source_incident[i - 1u]) *
-                (data.energy[i] - data.energy[i - 1u]) / 2.0;
-        }
-    }
-    if (!(total > 0.0) || !std::isfinite(total)) {
-        throw std::runtime_error("0.6.82.27.4 ispecgg repeat normalization is nonpositive");
-    }
-    constexpr double ergsev = static_cast<double>(static_cast<float>(1.602176634e-12));
-    const double scale = params.luminosity_1e38 / total / ergsev;
-    for (std::size_t i = 0; i < data.source_incident.size(); ++i) {
-        data.source_incident[i] = data.source_incident[i] * scale;
-    }
+    const xstar_atdb_runtime::ProductionParameters& params,
+    const Options& options) {
+    data.source_incident = source_spectrum_pass_v068228(
+        options, params, data.energy, data.source_incident);
     data.flux = data.source_incident;
 }
 
@@ -18313,7 +18388,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             data.radial_pass_index_v068227 = kk_v068227;
             data.radial_direction_v068227 = (kk_v068227 % 2u == 1u) ? -1 : 1;
             if (kk_v068227 > 1u) {
-                advance_source_powerlaw_pass_v0682274(data, params);
+                advance_source_powerlaw_pass_v0682274(data, params, options);
             }
             initialize_native_radial_pass_v068227(data, fixed, message);
             whole.legacy_pprint.ispcg2_passes.push_back(

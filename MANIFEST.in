@@ -639,3 +639,17 @@ include tools/qualification/run_c5_npass_multipass_host_smoke_0_6_82_27_16_5.py
 include tests/test_type50_nbinc_source_correction_0_6_82_27_16_5.py
 include npass_python_type50_nbinc_hotfix_0_6_82_27_16_5.md
 include xstar_tools-0.6.82.27.16.5_host_validation.md
+
+# 0.6.82.27 final npass closure evidence.
+recursive-include qualification/npass_0_6_82_27_closure *.json *.log
+include npass_multipass_closure_0_6_82_27.md
+
+# 0.6.82.28 complete incident-spectrum / spectun contract.
+recursive-include qualification/spectrum_0_6_82_28 *.json *.md
+include tools/qualification/check_spectrum_contract_0_6_82_28.py
+include tools/qualification/run_spectrum_contract_host_smoke_0_6_82_28.py
+include tests/test_spectrum_contract_0_6_82_28.py
+include spectrum_contract_0_6_82_28.md
+include xstar_tools-0.6.82.28_host_validation.md
+
+include tools/qualification/check_spectrum_fortran_routines_0_6_82_28.py

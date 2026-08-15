@@ -1,12 +1,14 @@
-> **Current 0.6.82.26.3 qualification note:** host `0.6.82.26.2` accepted all six analytic/tabulated `radexp`/`density.dat` science cases in both C++ and pure Python. `.26.3` changes only the failure-policy oracle: missing `density.dat` is documented as a safe-port robustness divergence from legacy FORTRAN unsafe continuation; no `.26.2` numerical XSTAR code changes.
-
 # xstar-tools
 
-> Package 0.6.82.27.16.1 is a diagnostic-wrapper hotfix only; scientific outputs are unchanged from 0.6.82.27.16.
+> **Current candidate: `0.6.82.28` — complete incident-spectrum / `spectun` contract.** `0.6.82.27` is **CLOSED** after final pure-Python `npass=3/5` host acceptance on `.27.16.5`; protected native C++ `.27.13` remains the frozen `npass` baseline. `.28` adds `pow`, `bbody`, `bremss`/source `brems`, canonical text-file spectra, `spectun=0/1/2`, mode-dependent `trad`, logarithmic interpolation, repeated-pass source ownership, and source-faithful `rlrad38` normalization. The ATDB-independent compiled-FORTRAN spectrum-routine oracle is locally ACCEPT; full downstream host FORTRAN spectrum qualification remains the `.28` release-closing gate.
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.26.3`
+**Distribution:** `0.6.82.28`
+
+**0.6.82.27 `npass` closure:** protected native C++ `.27.13` and closing pure-Python `.27.16.5` both ACCEPT the canonical repeated-pass gates; see `npass_multipass_closure_0_6_82_27.md`.
+
+**0.6.82.28 spectrum contract:** source-faithful public spectrum modes and `spectun=0/1/2` are implemented in Python and native `xstar-cpp`; the compiled canonical FORTRAN spectrum-routine oracle is locally ACCEPT and the full downstream host matrix is pending. See `spectrum_contract_0_6_82_28.md`.
 
 
 **0.6.82.26.3 radexp/density.dat closure policy:** all six valid radial-density cases are host-accepted in C++ and pure Python against FORTRAN 2.59g. Missing `density.dat` is intentionally safer in the modern ports: FORTRAN is recorded as `LEGACY_UNSAFE_CONTINUE`, while C++ and Python remain `SAFE_REJECT`; this is an accepted documented robustness divergence, not a numerical-science discrepancy. The `.26.2` numerical source tree is hash-frozen.

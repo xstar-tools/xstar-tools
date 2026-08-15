@@ -27,7 +27,7 @@ def test_ledger_and_python_rules_are_complete():
 
 def test_exact_xpi_range_boundaries():
     m=contract_module()
-    for name,lo,hi in [('cfrac',0,1),('ncn2',999,999999),('nsteps',1,1000),('lprint',-1,6),('lwrite',0,1),('loopcontrol',0,30000),('spectun',0,1),('radexp',-3,3),('vturbi',0,30000),('xeemin',1e-6,0.5)]:
+    for name,lo,hi in [('cfrac',0,1),('ncn2',999,999999),('nsteps',1,1000),('lprint',-1,6),('lwrite',0,1),('loopcontrol',0,30000),('spectun',0,2),('radexp',-3,3),('vturbi',0,30000),('xeemin',1e-6,0.5)]:
         assert m.coerce_and_validate_parameter(name,lo)==lo
         assert m.coerce_and_validate_parameter(name,hi)==hi
         with pytest.raises(ValueError): m.coerce_and_validate_parameter(name,lo-1 if isinstance(lo,int) else lo-abs(lo or 1)-1e-6)

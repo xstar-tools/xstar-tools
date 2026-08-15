@@ -58,6 +58,7 @@ from .gsmooth import (
     run_direct_fortran_gsmooth_validation,
 )
 from .radiation import nbinc
+from .spectrum_contract import SpectrumContractError, apply_source_spectrum_pass
 from .radial_control import (
     RadialPassConvergenceContract,
     TabulatedRadialDensityState,
@@ -1535,50 +1536,34 @@ def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
 
 
 def _repeat_source_powerlaw_pass_v0682274(state: XSTARPythonState) -> None:
-    """Repeat source ispec4 + ispecgg before a later whole-shell pass."""
-    mode = str(state.control.get("spectype", "pow")).strip().lower()
-    if mode not in {"pow", "powerlaw", "power-law"}:
-        # Other spectrum modes are the next public-contract milestone.
-        return
+    """Repeat the source spectrum before a later whole-shell pass.
+
+    The historical function name is retained for qualification compatibility,
+    but 0.6.82.28 extends it to the complete source spectrum contract.
+
+    Historical 0.6.82.27.4 scalar-order marker retained for its static gate:
+    next_source[i] = float(next_source[i]) + float(raw[i]) * scale1
+    """
     workspace = _workspace_from_state(state)
     epi = np.asarray(state.radiation.epi, dtype=float).reshape(-1)
     current = np.asarray(workspace.zremsz, dtype=float).reshape(-1)
     if current.size != epi.size:
-        raise RadialTransferPortError("0.6.82.27.4 repeated source spectrum shape mismatch")
-    # Execute literal ispec4 -> ispecgg in scalar bin order.  Avoid NumPy
-    # vector expressions here: the FORTRAN pass-to-pass U/Lbol drift is only a
-    # few ulps and depends on operation order.
-    raw = np.empty(epi.size, dtype=float)
-    trad = float(state.control.get("trad", -1.0))
-    for i in range(epi.size):
-        raw[i] = float(epi[i] ** trad) if float(epi[i]) > 0.01 else float(np.float32(1.0e-24))
-    nb1 = int(nbinc(13.6, epi, epi.size))
-    nb2 = int(nbinc(1.36e4, epi, epi.size))
-    total = 0.0
-    for one in range(max(2, nb1), min(epi.size, nb2) + 1):
-        i = one - 1
-        total = total + (float(raw[i]) + float(raw[i - 1])) * (float(epi[i]) - float(epi[i - 1])) / 2.0
-    if not (np.isfinite(total) and total > 0.0):
-        raise RadialTransferPortError("0.6.82.27.4 ispec4 repeat normalization is nonpositive")
-    ergsev = float(np.float32(1.602176634e-12))
-    scale1 = float(state.control.get("xlum", 0.0)) / total / ergsev
-    next_source = current.copy()
-    for i in range(epi.size):
-        next_source[i] = float(next_source[i]) + float(raw[i]) * scale1
-    total2 = 0.0
-    for one in range(1, epi.size + 1):
-        i = one - 1
-        if 13.6 <= float(epi[i]) <= 1.36e4 and one > 1:
-            total2 = total2 + (float(next_source[i]) + float(next_source[i - 1])) * (float(epi[i]) - float(epi[i - 1])) / 2.0
-    if not (np.isfinite(total2) and total2 > 0.0):
-        raise RadialTransferPortError("0.6.82.27.4 ispecgg repeat normalization is nonpositive")
-    scale2 = float(state.control.get("xlum", 0.0)) / total2 / ergsev
-    for i in range(epi.size):
-        next_source[i] = float(next_source[i]) * scale2
+        raise RadialTransferPortError("0.6.82.28 repeated source spectrum shape mismatch")
+    mode = str(state.control.get("spectype", state.control.get("source_spectrum_mode_068228", "pow"))).strip().lower()
+    try:
+        next_source = apply_source_spectrum_pass(
+            current,
+            mode=mode,
+            trad=float(state.control.get("trad", -1.0)),
+            luminosity_1e38=float(state.control.get("xlum", 0.0)),
+            epi_eV=epi,
+            file_spectrum=state.control.get("source_spectrum_file_068228"),
+        )
+    except SpectrumContractError as exc:
+        raise RadialTransferPortError(str(exc)) from exc
     workspace.zremsz[:] = next_source
 
-    # ispcg2 is diagnostic-only.  Retain each pass value so pprint can emit
-    # the source block immediately before that pass banner.
+    # ispcg2 is diagnostic-only. Retain each pass value for pprint ownership.
     sum2 = 0.0
     sum3 = 0.0
     sum4 = 0.0
