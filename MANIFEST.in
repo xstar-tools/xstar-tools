@@ -653,3 +653,11 @@ include spectrum_contract_0_6_82_28.md
 include xstar_tools-0.6.82.28_host_validation.md
 
 include tools/qualification/check_spectrum_fortran_routines_0_6_82_28.py
+
+# 0.6.82.28.1 declared spectrum-file source-input artifact hotfix.
+recursive-include qualification/spectrum_0_6_82_28_1 *.json *.md
+include tools/qualification/check_spectrum_file_input_artifact_hotfix_0_6_82_28_1.py
+include tools/qualification/run_spectrum_contract_host_smoke_0_6_82_28_1.py
+include tests/test_spectrum_file_input_artifact_hotfix_0_6_82_28_1.py
+include spectrum_file_input_artifact_hotfix_0_6_82_28_1.md
+include xstar_tools-0.6.82.28.1_host_validation.md

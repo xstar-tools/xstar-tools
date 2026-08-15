@@ -31,6 +31,7 @@ pyproject.toml
 setup.cfg
 setup.py
 spectrum_contract_0_6_82_28.md
+spectrum_file_input_artifact_hotfix_0_6_82_28_1.md
 xstar_tools-0.6.82.20_host_validation.md
 xstar_tools-0.6.82.21_host_validation.md
 xstar_tools-0.6.82.22_host_validation.md
@@ -70,6 +71,7 @@ xstar_tools-0.6.82.27.7_host_validation.md
 xstar_tools-0.6.82.27.8_host_validation.md
 xstar_tools-0.6.82.27.9_host_validation.md
 xstar_tools-0.6.82.27_host_validation.md
+xstar_tools-0.6.82.28.1_host_validation.md
 xstar_tools-0.6.82.28_host_validation.md
 xstar_tools_conversation_handoff_through_0.6.82.22_lowxi_memory_performance.md
 xstar_tools_conversation_handoff_through_0.6.82.23_table1_contract.md
@@ -401,6 +403,7 @@ qualification/radexp_density_0_6_82_26_3/host_0_6_82_26_2_acceptance.json
 qualification/radexp_density_0_6_82_26_3/radexp_density_robustness_policy_0_6_82_26_3.json
 qualification/spectrum_0_6_82_28/spectrum_contract_manifest.json
 qualification/spectrum_0_6_82_28/spectrum_source_scope_0_6_82_28.json
+qualification/spectrum_0_6_82_28_1/spectrum_file_input_artifact_hotfix_scope_0_6_82_28_1.json
 qualification/type63_source_cutoff_0_6_82_7/fortran_zero_cpp_nonzero_records_xi1p2.json
 qualification/type63_source_cutoff_0_6_82_7/reference_step_ne1e12_rlogxi_1p0_1p5.json
 references/current/README.md
@@ -720,6 +723,7 @@ tests/test_source_function_comments_0_6_73.py
 tests/test_source_name_hygiene_0_6_76.py
 tests/test_source_root_history_cleanup.py
 tests/test_spectrum_contract_0_6_82_28.py
+tests/test_spectrum_file_input_artifact_hotfix_0_6_82_28_1.py
 tests/test_standalone_publication_memory_0_6_82_17.py
 tests/test_standalone_terminal_writer_0_6_82_18.py
 tests/test_table1_parameter_contract_0_6_82_23.py
@@ -862,6 +866,7 @@ tools/qualification/check_source_function_comments.py
 tools/qualification/check_source_name_hygiene_0_6_76.py
 tools/qualification/check_source_root_history_cleanup.py
 tools/qualification/check_spectrum_contract_0_6_82_28.py
+tools/qualification/check_spectrum_file_input_artifact_hotfix_0_6_82_28_1.py
 tools/qualification/check_spectrum_fortran_routines_0_6_82_28.py
 tools/qualification/check_standalone_publication_memory_0_6_82_17.py
 tools/qualification/check_standalone_terminal_writer_0_6_82_18.py
@@ -974,6 +979,7 @@ tools/qualification/run_multi_element_host_smoke_0_6_82_3.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_4.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_5.py
 tools/qualification/run_spectrum_contract_host_smoke_0_6_82_28.py
+tools/qualification/run_spectrum_contract_host_smoke_0_6_82_28_1.py
 tools/qualification/source_name_hygiene_compat.py
 tools/qualification/upstream_fixed_state_native_probe_0_6_82_27_16_4.cpp
 tools/qualification/reference/xstar2table_edge_probe_0_6_81.cpp

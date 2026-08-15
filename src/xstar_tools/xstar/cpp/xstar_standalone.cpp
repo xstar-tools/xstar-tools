@@ -5521,6 +5521,38 @@ std::string json_string_value(const std::string& text, const std::string& key, c
     } catch (...) { return fallback; }
 }
 
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Preserve declared public source-input files when file-silent production verifies that it created no non-product artifacts.
+// Reference context: XSTAR rread1.f90 opens density.dat and spectrum_file from the working directory; those are inputs, not generated products.
+// XSTAR-FUNCTION-COMMENT-END
+void add_public_source_input_allowances_v0682281(
+    std::set<std::string>& allowed,
+    const std::filesystem::path& output,
+    const std::filesystem::path& parameters_path) {
+    const std::string publication_json = read_text_file(parameters_path);
+    if (json_number_value(publication_json, "radexp", 0.0) < -99.0) {
+        const auto density = output / "density.dat";
+        if (std::filesystem::is_regular_file(density)) allowed.insert("density.dat");
+    }
+    std::string spectrum_mode = json_string_value(publication_json, "spectrum", "pow");
+    std::transform(spectrum_mode.begin(), spectrum_mode.end(), spectrum_mode.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (spectrum_mode != "file") return;
+
+    std::filesystem::path declared(json_string_value(publication_json, "spectrum_file", "spct.dat"));
+    if (declared.empty()) declared = "spct.dat";
+    std::filesystem::path candidate = declared.is_absolute() ? declared : output / declared;
+    std::error_code output_ec, candidate_ec;
+    const auto output_abs = std::filesystem::weakly_canonical(output, output_ec);
+    const auto candidate_abs = std::filesystem::weakly_canonical(candidate, candidate_ec);
+    if (output_ec || candidate_ec || !std::filesystem::is_regular_file(candidate_abs)) return;
+    // The top-level file-silent artifact scan sees only direct children of the
+    // output directory. Allow the declared spectrum input only when it is
+    // exactly such a child; an external absolute input needs no exemption.
+    if (candidate_abs.parent_path() == output_abs) allowed.insert(candidate_abs.filename().string());
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement float bits local in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
@@ -11558,10 +11590,7 @@ ProductPublicationResultV172524 publish_true_production_products(
                 allowed.insert(prefix_v0682273 + "detal4.fits");
             }
         }
-        const std::string publication_json_v0682261 = read_text_file(options.parameters_path);
-        if (json_number_value(publication_json_v0682261, "radexp", 0.0) < -99.0) {
-            allowed.insert("density.dat");
-        }
+        add_public_source_input_allowances_v0682281(allowed, output, options.parameters_path);
         for (const auto& entry : std::filesystem::directory_iterator(output)) {
             if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
                 throw std::runtime_error("true production created a non-product artifact: " + entry.path().filename().string());
@@ -20884,13 +20913,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
                     allowed.insert(prefix_v0682273 + "detal4.fits");
                 }
             }
-            // 0.6.82.26.1: density.dat is canonical source input for the
-            // hidden radexp<-99 table branch.  When input and output are the
-            // same directory it must not be misclassified as generated output.
-            const std::string publication_json_v0682261 = read_text_file(options.parameters_path);
-            if (json_number_value(publication_json_v0682261, "radexp", 0.0) < -99.0) {
-                allowed.insert("density.dat");
-            }
+            // 0.6.82.28.1: density.dat and a declared working-directory
+            // spectrum_file are canonical source inputs, not generated products.
+            add_public_source_input_allowances_v0682281(allowed, output, options.parameters_path);
             for (const auto& entry : std::filesystem::directory_iterator(output)) {
                 if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
                     throw std::runtime_error("file-silent production created a non-product artifact: " + entry.path().filename().string());

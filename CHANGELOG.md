@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.82.28.1 - 2026-08-15
+
+- Narrow native publication/artifact-ownership hotfix for the `0.6.82.28` spectrum-contract candidate.
+- Fix `xstar-cpp` file-spectrum runs that completed the physical calculation and FITS publication but then rejected because the declared working-directory `spct.dat` input was misclassified as a generated non-product artifact.
+- Treat only the declared `spectrum_file` for `spectrum=file`, when it is an existing direct child of the output/working directory, as a source input during both true-production and file-silent artifact checks.
+- Centralize the existing `density.dat` source-input exception through the same narrow helper while preserving strict rejection of undeclared non-product artifacts.
+- No incident-spectrum arithmetic, interpolation, `spectun`, `trad`, `rlrad38` normalization, solver, DSEC, multipass, FITS science, science revision, or ABI change.
+- Full FORTRAN/C++/pure-Python host spectrum matrix remains the release-closing gate.
+
 # 0.6.82.28 - 2026-08-15
 
 - Closed the `0.6.82.27` native/Python `npass` milestone after final pure-Python `npass=3` and `npass=5` host acceptance on `.27.16.5`; protected C++ `.27.13` remains frozen.

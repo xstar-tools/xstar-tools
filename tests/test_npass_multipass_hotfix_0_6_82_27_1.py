@@ -45,14 +45,19 @@ def test_0682271_version_and_scope_chain():
             expected=successor['candidate_changed_sha256'].get(rel,expected)
         now=hashlib.sha256((ROOT/rel).read_bytes()).hexdigest()
         active_version=next((line.split('=',1)[1].strip().strip('\"') for line in pyproject.splitlines() if line.startswith('version = ')), '')
-        if active_version in ('0.6.82.27.16.5', '0.6.82.28'):
+        if active_version in ('0.6.82.27.16.5', '0.6.82.28','0.6.82.28.1'):
             later=json.loads((ROOT/'qualification/npass_0_6_82_27_16_5/type50_nbinc_source_correction_scope_0_6_82_27_16_5.json').read_text())
             row=next((r for r in later['production_hashes'] if r['path']==rel), None)
             if row is not None and row['baseline_sha256'] != row['sha256']:
                 expected=row['sha256']
-        if active_version == '0.6.82.28':
+        if active_version in ('0.6.82.28', '0.6.82.28.1'):
             spectrum=json.loads((ROOT/'qualification/spectrum_0_6_82_28/spectrum_source_scope_0_6_82_28.json').read_text())
             row=next((r for r in spectrum['production_hashes'] if r['path']==rel), None)
+            if row is not None and row['baseline_sha256'] != row['sha256']:
+                expected=row['sha256']
+        if active_version == '0.6.82.28.1':
+            hotfix=json.loads((ROOT/'qualification/spectrum_0_6_82_28_1/spectrum_file_input_artifact_hotfix_scope_0_6_82_28_1.json').read_text())
+            row=next((r for r in hotfix['production_hashes'] if r['path']==rel), None)
             if row is not None and row['baseline_sha256'] != row['sha256']:
                 expected=row['sha256']
         assert now==expected, rel
