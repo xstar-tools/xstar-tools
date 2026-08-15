@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.27.16.3 - 2026-08-14
+
+- Diagnostic-only H/He DSEC-carried `msolvelucy` forensic; zero production numerical-source changes.
+- Replays the protected native C++ element solver on the identical Python compact seed and source-ordered matrix terms.
+- Captures and compares complete Python/native outer, fixed-point, superlevel, and condensed-matrix traces.
+- Keeps science revision and all ABI identifiers frozen.
+
 ## 0.6.82.27.16.2 - 2026-08-14
 
 - Diagnostic-only fixed-state follow-up; zero production numerical-source changes relative to 0.6.82.27.16.1.

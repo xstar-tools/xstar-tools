@@ -608,3 +608,9 @@ include tools/qualification/run_c5_python_fixed_state_population_heating_0_6_82_
 include tests/test_npass_python_dsec_carried_diagnostic_0_6_82_27_16_2.py
 include npass_python_dsec_carried_diagnostic_0_6_82_27_16_2.md
 include xstar_tools-0.6.82.27.16.2_host_validation.md
+
+# 0.6.82.27.16.3 diagnostic-only DSEC-carried H/He msolvelucy forensic.
+include tools/qualification/run_c5_python_fixed_state_msolvelucy_forensic_0_6_82_27_16_3.py
+include tools/qualification/check_npass_python_msolvelucy_forensic_0_6_82_27_16_3.py
+include npass_python_msolvelucy_forensic_0_6_82_27_16_3.md
+include xstar_tools-0.6.82.27.16.3_host_validation.md
