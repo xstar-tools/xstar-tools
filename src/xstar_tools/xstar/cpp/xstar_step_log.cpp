@@ -1019,7 +1019,7 @@ void append_native_public_line_sections(std::ofstream& out,
     std::vector<PublicLineLogRow> rows; const long long nr=table_rows(fptr); rows.reserve(nr);
     for(long long r=1;r<=nr;++r) rows.push_back({read_integer_cell(fptr,ci,r),read_string_cell(fptr,cion,r),read_double_cell(fptr,cw,r),read_double_cell(fptr,cei,r),read_double_cell(fptr,ceo,r),read_double_cell(fptr,cdi,r),read_double_cell(fptr,cdo,r)});
     int cs=0;fits_close_file(fptr,&cs);
-    out<<"\n print option:11\n\n print option: 1\n";
+    out<<"\n print option: 1\n";
     if (state.diagnostic_preview_partial) {
         out<<" diagnostic partial values: accumulated only through retained physical transport intervals\n";
     }
@@ -1590,6 +1590,344 @@ void append_native_product_sections(std::ofstream& out,const std::filesystem::pa
 // Purpose: Append source like timing footer from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append the additional source-owned verbose pprint surfaces selected by lprint>=2.
+// Reference context: xstar.f90 nlprnt/nlnprnt final dispatch and pprint.f90 options 14,21,7,10,26,0,4,6,18,29,30.
+// XSTAR-FUNCTION-COMMENT-END
+void append_native_lprint_extra_sections(
+    std::ofstream& out,
+    const xstar_run_state::ProductWritingState& state,
+    int lprint) {
+    if (lprint < 2) return;
+
+    const xstar_run_state::FixedEvaluationState* eval = nullptr;
+    // The final nlprnt loop runs after xstar.f90's post-radial zero-thickness
+    // xstarcalc.  Use the retained final-writer evaluation when available;
+    // only fall back to the last physical radial boundary for older states.
+    if (state.final_writer_evaluation) {
+        eval = &*state.final_writer_evaluation;
+    } else if (!state.radial_zones.empty()) {
+        std::size_t zi = state.radial_zones.size() - 1u;
+        if (state.terminal_synthetic_row_present && state.radial_zones.size() >= 2u) zi -= 1u;
+        eval = &state.radial_zones[zi].accepted_controller.evaluation;
+    } else if (!state.fixed_evaluations.empty()) {
+        eval = &state.fixed_evaluations.back();
+    }
+    if (!eval) {
+        throw std::runtime_error("verbose pprint publication requires a retained final fixed evaluation");
+    }
+    const auto& ws = eval->source_workspace;
+
+    std::map<int,double> abundance_by_z;
+    std::map<int,int> element_index_to_z;
+    for (const auto& element : state.element_metadata) {
+        abundance_by_z[element.atomic_number] = element.abundance;
+        element_index_to_z[element.element_index] = element.atomic_number;
+    }
+    auto active_z = [&](int z, double floor) {
+        const auto it = abundance_by_z.find(z);
+        return it != abundance_by_z.end() && it->second > floor;
+    };
+
+    std::map<std::pair<int,int>, std::string> ion_labels;
+    std::map<std::string,int> ion_label_to_z;
+    std::map<std::string,int> ion_label_to_stage;
+    for (const auto& row : state.row_metadata) {
+        const auto ez = element_index_to_z.find(row.element_index);
+        if (ez == element_index_to_z.end() || row.ion <= 0 || row.ion_label.empty()) continue;
+        const auto key = std::make_pair(ez->second, row.ion);
+        if (!ion_labels.count(key)) ion_labels[key] = row.ion_label;
+        ion_label_to_z[row.ion_label] = ez->second;
+        ion_label_to_stage[row.ion_label] = row.ion;
+    }
+
+    // pprint(10) numbers ions in the complete global Type-12 source encounter
+    // order, including zero-abundance elements that are skipped by the final
+    // printing predicate.  For atomic number Z the source owns Z Type-12 ion
+    // records before the fully stripped state, so the one-based global index
+    // is triangular(Z-1)+stage.  Do not derive this offset from the retained
+    // active element inventory: doing so incorrectly numbered C I..C VI as
+    // 4..9 instead of the canonical 16..21 when Li/Be/B were absent.
+    auto global_type12_ion_index = [](int z, int stage) {
+        return z > 0 && stage > 0 ? (z * (z - 1)) / 2 + stage : stage;
+    };
+
+    auto element_label_for_z = [](int z) -> std::string {
+        static const std::array<const char*,30> names = {{
+            "hydrogen","helium","lithium","beryllium","boron","carbon",
+            "nitrogen","oxygen","fluorine","neon","sodium","magnesium",
+            "aluminum","silicon","phosphorus","sulfur","chlorine","argon",
+            "potassium","calcium","scandium","titanium","vanadium","chromium",
+            "manganese","iron","cobalt","nickel","copper","zinc"
+        }};
+        return z >= 1 && z <= static_cast<int>(names.size()) ? names[static_cast<std::size_t>(z-1)] : ("z" + std::to_string(z));
+    };
+
+    // pprint(14) and pprint(18) walk nplin in source order.  The apparent
+    // lrtyp exclusion in pprint.f90 occurs after drd() has visited the parent
+    // ion and element and therefore does not act as a line-rate-type filter.
+    // The observable source inventory is the same active-element/wavelength
+    // inventory already qualified for pprint(15).
+    std::vector<const xstar_run_state::LineIdentityState*> source_lines;
+    source_lines.reserve(state.line_identities.size());
+    for (const auto& id : state.line_identities) {
+        const double wave = std::abs(id.wavelength_angstrom);
+        const auto owner = ion_label_to_z.find(id.ion_label);
+        if (id.line_index > 0 && wave > 0.1 && wave < 9.0e9 &&
+            owner != ion_label_to_z.end() && active_z(owner->second, 1.0e-36)) {
+            source_lines.push_back(&id);
+        }
+    }
+    std::stable_sort(source_lines.begin(), source_lines.end(), [](const auto* a, const auto* b) {
+        return a->line_index < b->line_index;
+    });
+
+    auto flat_plane = [](const std::vector<double>& values, std::size_t planes,
+                         std::size_t plane, std::size_t slot) {
+        if (planes == 0u || values.empty() || values.size() % planes != 0u) return 0.0;
+        const std::size_t stride = values.size() / planes;
+        const std::size_t at = plane * stride + slot;
+        return at < values.size() && std::isfinite(values[at]) ? values[at] : 0.0;
+    };
+    auto vector_value = [](const std::vector<double>& values, std::size_t slot) {
+        return slot < values.size() && std::isfinite(values[slot]) ? values[slot] : 0.0;
+    };
+
+    if (lprint >= 2) {
+        out << "\n print option:14\nline opacities and emissivities (erg/cm**3/sec/10**38)\n";
+        out << " index,wavelength,energy,ion,opacity,rec. em.,coll. em.,fl. em.,di. em.,cx. em.\n";
+        // nlsvn is the complete source database line capacity; the native
+        // lowered state intentionally retains only active line identities.
+        // Preserve the source row surface without inventing the unavailable
+        // inactive capacity scalar.
+        out << " retained active source line inventory " << source_lines.size() << "\n";
+        const std::size_t rcem_stride = ws.rcem.size() >= 2u ? ws.rcem.size() / 2u : 0u;
+        for (const auto* id : source_lines) {
+            const std::size_t slot = static_cast<std::size_t>(id->line_index);
+            const double op = vector_value(ws.oplin, slot);
+            const double r0 = rcem_stride ? flat_plane(ws.rcem, 2u, 0u, slot) : 0.0;
+            const double r1 = rcem_stride ? flat_plane(ws.rcem, 2u, 1u, slot) : 0.0;
+            const double energy = 12398.4016 / std::max(std::abs(id->wavelength_angstrom), 1.0e-24);
+            out << std::setw(10) << id->line_index << std::setw(13) << std::uppercase
+                << std::scientific << std::setprecision(5) << id->wavelength_angstrom
+                << std::setw(13) << energy << " " << std::left << std::setw(9)
+                << id->ion_label.substr(0,9) << std::right << std::setw(13) << op
+                << std::setw(13) << r0 << std::setw(13) << r1 << "\n";
+        }
+        out << "\n print option:21\n level opacities and emissivities\n";
+        out << "index,energy,ion,level,index,emiss in,emiss out,threshold opacity,absorbed energy,depth in, depth out\n";
+        // pprint(21) walks each ion's rate-type-7 npfi chain and publishes
+        // kkkl=npconi2(ml).  That identity surface is state.rrc_identities.
+        // source_rrc_identities instead follows the global npcon ordinal used
+        // by writespectra4/FITS publication; substituting it here changes both
+        // the ion label and the reusable npconi2 slot inventory.
+        const auto& source_rrcs = state.rrc_identities.empty()
+            ? state.source_rrc_identities : state.rrc_identities;
+        std::vector<const xstar_run_state::RrcIdentityState*> rrcs;
+        rrcs.reserve(source_rrcs.size());
+        for (const auto& id : source_rrcs) {
+            const auto owner = ion_label_to_z.find(id.ion_label);
+            const bool source_rate7 = id.rate_type == 0 || id.rate_type == 7;
+            if (source_rate7 && id.continuum_index > 0 && owner != ion_label_to_z.end() && active_z(owner->second, 1.0e-10)) {
+                rrcs.push_back(&id);
+            }
+        }
+        std::stable_sort(rrcs.begin(), rrcs.end(), [&](const auto* a, const auto* b) {
+            const int za = ion_label_to_z.count(a->ion_label) ? ion_label_to_z.at(a->ion_label) : 0;
+            const int zb = ion_label_to_z.count(b->ion_label) ? ion_label_to_z.at(b->ion_label) : 0;
+            if (za != zb) return za < zb;
+            const int sa = ion_label_to_stage.count(a->ion_label) ? ion_label_to_stage.at(a->ion_label) : 0;
+            const int sb = ion_label_to_stage.count(b->ion_label) ? ion_label_to_stage.at(b->ion_label) : 0;
+            if (sa != sb) return sa < sb;
+            if (a->continuum_index != b->continuum_index) return a->continuum_index < b->continuum_index;
+            return a->source_record < b->source_record;
+        });
+        for (const auto* id : rrcs) {
+            const std::size_t slot = static_cast<std::size_t>(id->continuum_index);
+            const double cin = flat_plane(ws.cemab, 2u, 0u, slot);
+            const double cout = flat_plane(ws.cemab, 2u, 1u, slot);
+            const double opa = vector_value(ws.opakab, slot);
+            const double absorbed = vector_value(ws.cabab, slot);
+            if (!(opa > 1.0e-49 || absorbed > 1.0e-49 || cin > 1.0e-49 || cout > 1.0e-49)) continue;
+            const double tin = flat_plane(ws.tauc, 2u, 0u, slot);
+            const double tout = flat_plane(ws.tauc, 2u, 1u, slot);
+            out << std::setw(7) << id->continuum_index << std::setw(6) << id->level_global_index
+                << " " << std::left << std::setw(9) << id->ion_label.substr(0,9) << std::right
+                << std::setw(6) << id->lower_local_index << std::setw(6) << id->upper_local_index
+                << " " << std::left << std::setw(20) << id->lower_level.substr(0,20)
+                << " " << std::setw(20) << id->upper_level.substr(0,20) << std::right
+                << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
+                << id->threshold_ev << std::setw(13) << cin << std::setw(13) << cout
+                << std::setw(13) << opa << std::setw(13) << absorbed
+                << std::setw(13) << tin << std::setw(13) << tout << "\n";
+        }
+
+        out << "\n print option: 7\n  level populations \n";
+        out << " ion                      level               e_exc population\n";
+        // pprint(7), like fstepr, walks every source ion/local-level npilev
+        // role.  Adjacent ions can share a compact continuum/next-ground row,
+        // so the compact level_identities surface loses legitimate continuum
+        // publication roles.  detail_level_identities retains exactly those
+        // source roles and was introduced for this same npilev ownership.
+        const auto& source_levels = !state.detail_level_identities.empty()
+            ? state.detail_level_identities : state.level_identities;
+        std::vector<const xstar_run_state::LevelIdentityState*> levels;
+        for (const auto& level : source_levels) {
+            if (level.global_index <= 0 || !active_z(level.atomic_number, 1.0e-10)) continue;
+            const std::size_t slot = static_cast<std::size_t>(level.global_index - 1);
+            const double pop = vector_value(eval->source_global_xilevg, slot);
+            if (!(pop > 1.0e-64)) continue;
+            levels.push_back(&level);
+        }
+        std::stable_sort(levels.begin(), levels.end(), [&](const auto* a, const auto* b) {
+            if (a->atomic_number != b->atomic_number) return a->atomic_number < b->atomic_number;
+            const int sa = ion_label_to_stage.count(a->ion_label) ? ion_label_to_stage.at(a->ion_label) : 0;
+            const int sb = ion_label_to_stage.count(b->ion_label) ? ion_label_to_stage.at(b->ion_label) : 0;
+            if (sa != sb) return sa < sb;
+            if (a->upper_index != b->upper_index) return a->upper_index < b->upper_index;
+            return a->global_index < b->global_index;
+        });
+        for (const auto* level : levels) {
+            const std::size_t slot = static_cast<std::size_t>(level->global_index - 1);
+            const double pop = vector_value(eval->source_global_xilevg, slot);
+            const double rn = vector_value(eval->source_global_rnisg, slot);
+            out << std::setw(7) << level->global_index << " " << std::left << std::setw(9)
+                << level->ion_label.substr(0,9) << " " << std::setw(20)
+                << level->level_label.substr(0,20) << std::right << std::setw(13)
+                << std::uppercase << std::scientific << std::setprecision(5)
+                << level->excitation_ev << std::setw(13) << pop << std::setw(13) << rn << "\n";
+        }
+        out << " done with 7\n";
+
+        out << "\n print option:10\n ion abundances and  rates (/sec)\n";
+        out << " index, ion, abundance, recombination, ionization,\n";
+        for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
+            if (!active_z(z, 1.0e-15)) continue;
+            const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
+            for (int stage = 1; stage <= nstage; ++stage) {
+                const auto key = std::make_pair(z, stage);
+                const auto found = ion_labels.find(key);
+                const int global_ion = global_type12_ion_index(z, stage);
+                const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                out << std::setw(5) << global_ion << " " << std::left << std::setw(9) << label.substr(0,9)
+                    << std::right << std::setw(16) << std::uppercase << std::scientific << std::setprecision(8)
+                    << fractions[static_cast<std::size_t>(stage-1)]
+                    << std::setw(16) << 0.0 << std::setw(16) << 0.0 << " retained-rate-components-unavailable\n";
+            }
+        }
+        out << " heating and cooling rates (erg/sec)\n";
+        out << " index element   heating         cooling        heating-cooling\n";
+        for (const auto& item : eval->element_thermal_products) {
+            if (!active_z(item.element_z, 1.0e-36)) continue;
+            out << std::setw(5) << item.element_z << " " << std::left << std::setw(10) << element_label_for_z(item.element_z) << std::right
+                << std::setw(16) << std::uppercase << std::scientific << std::setprecision(8) << item.heating
+                << std::setw(16) << item.cooling << std::setw(16) << (item.heating-item.cooling) << "\n";
+        }
+        out << "      compton " << std::uppercase << std::scientific << std::setprecision(8)
+            << eval->compton_heating << " " << eval->compton_cooling << "\n";
+        out << "      free-free retained continuum components\n";
+        out << "      total " << eval->total_heating << " " << eval->total_cooling << "\n";
+        // pprint.f90 option 26 branches directly to the common return after
+        // printing the option marker, so no body follows in the current source.
+        out << "\n print option:26\n";
+    }
+
+    if (lprint >= 3) {
+        out << "\n print option: 0\n";
+        const std::size_t n = std::min<std::size_t>(
+            static_cast<std::size_t>(std::max<long long>(0LL, std::llround(parameter_number(state, "ncn2", static_cast<double>(eval->radiation_energy_ev.size()))))),
+            eval->radiation_energy_ev.size());
+        out << "\n print option: 4\n continuum opacity and emissivities (/cm**3/sec/10**38)\n";
+        out << "channel, energy, opacity, scattered, rec. in, rec. out, source\n";
+        for (std::size_t i = 1u; i < n; ++i) {
+            const double op = vector_value(ws.opakc, i);
+            const double rin = flat_plane(ws.rccemis, 2u, 0u, i);
+            const double rout = flat_plane(ws.rccemis, 2u, 1u, i);
+            out << std::setw(7) << (i+1u) << std::setw(13) << std::uppercase << std::scientific
+                << std::setprecision(5) << eval->radiation_energy_ev[i] << std::setw(13) << op
+                << std::setw(13) << 0.0 << std::setw(13) << rin << std::setw(13) << rout << "\n";
+        }
+        out << "\n print option: 6\n continuum luminosities (/sec/10**38) and depths\n";
+        out << " real quantities are as follows:\n";
+        for (std::size_t i = 0u; i < n; ++i) {
+            out << std::setw(7) << (i+1u) << std::setw(13) << std::uppercase << std::scientific
+                << std::setprecision(5) << eval->radiation_energy_ev[i];
+            for (std::size_t plane = 0u; plane < 5u; ++plane) out << std::setw(13) << flat_plane(ws.zrems, 5u, plane, i);
+            out << std::setw(13) << flat_plane(ws.dpthc, 2u, 0u, i)
+                << std::setw(13) << flat_plane(ws.dpthc, 2u, 1u, i) << "\n";
+        }
+        out << " norms: retained source-normalization scalars unavailable\n";
+    }
+
+    if (lprint >= 4) {
+        out << "\n print option:18\n line wavelengths and levels\n";
+        out << "       index wavelength  ion            lo                  up\n";
+        for (const auto* id : source_lines) {
+            out << std::setw(10) << id->line_index << std::setw(13) << std::uppercase
+                << std::scientific << std::setprecision(5) << id->wavelength_angstrom << " "
+                << std::left << std::setw(9) << id->ion_label.substr(0,9)
+                << std::setw(25) << id->lower_level.substr(0,25)
+                << std::setw(25) << id->upper_level.substr(0,25) << std::right
+                << std::setw(7) << id->lower_local_index << std::setw(7) << id->upper_local_index << "\n";
+        }
+
+        out << "\n print option:29\n rates\n doing pprint(29)\n";
+        std::vector<const xstar_run_state::RecordProductDiagnosticState*> rates;
+        for (const auto& row : eval->record_product_diagnostics) {
+            // pprint(29) prints the final source rates(1,ml) workspace.  The
+            // detailed calc_hmc_ion pass never calls UCalc for rate 8, rate
+            // 15, or the rate-1/Type-53 ownership case, so those source rates
+            // remain zero.  The retained native diagnostic inventory is wider
+            // than that source pass and also contains records outside the
+            // source active ion-stage window; exclude both classes before
+            // applying the literal abs(rates(1,ml)) > 1.e-34 predicate.
+            if (row.rate_type == 8 || row.rate_type == 15 ||
+                (row.rate_type == 1 && row.data_type == 53)) continue;
+            if (const auto active = eval->source_detail_active_windows.find(row.element_z);
+                active != eval->source_detail_active_windows.end()) {
+                const int min_stage = active->second[0];
+                const int max_stage = active->second[1];
+                if (row.ion_stage < min_stage || row.ion_stage > max_stage) continue;
+            }
+            if (std::abs(row.ans[0]) > 1.0e-34) rates.push_back(&row);
+        }
+        std::stable_sort(rates.begin(), rates.end(), [](const auto* a, const auto* b) {
+            if (a->record != b->record) return a->record < b->record;
+            return a->source_position < b->source_position;
+        });
+        for (const auto* row : rates) {
+            out << std::setw(10) << row->record << " z" << row->element_z << "_" << row->ion_stage
+                << std::setw(8) << row->data_type << std::setw(8) << row->rate_type
+                << std::setw(8) << row->lower_row << std::setw(8) << row->upper_row;
+            for (double value : row->ans) out << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5) << value;
+            out << "\n";
+        }
+        out << " done with pprint(29)\n";
+
+        out << "\n print option:30\n auger and fluorescence yields\n";
+        out << "ion     K shell pi rate  k fluorescence rate auger rate fluorescence yield\n";
+        for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
+            if (!active_z(z, 1.0e-34)) continue;
+            const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
+            for (int stage = 1; stage < nstage; ++stage) {
+                const double fraction = fractions[static_cast<std::size_t>(stage-1)];
+                if (!(fraction > 1.0e-12)) continue;
+                const auto found = ion_labels.find({z,stage});
+                const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                // The native retained state does not expose the temporary
+                // K-shell aggregation performed only inside pprint(30).  Emit
+                // the source-selected ion inventory while explicitly marking
+                // those non-retained scalar fields unavailable; do not invent
+                // numerical yields.
+                out << " " << std::left << std::setw(8) << label.substr(0,8) << std::right
+                    << " retained-k-shell-scalars-unavailable\n";
+            }
+        }
+    }
+    out.unsetf(std::ios::floatfield);
+    out << std::setprecision(17);
+}
+
 void append_source_like_timing_footer(std::ofstream& out,
                                       double measured_run_seconds,
                                       double formatter_seconds) {
@@ -1636,7 +1974,10 @@ Result write_native_step_log(
     out << " done with setptrs\n";
     append_native_input_parameters(out, state);
     append_native_radial_summary(out, output_dir, state);
-    append_native_product_sections(out, output_dir, state);
+    const int lprint = static_cast<int>(std::llround(parameter_number(state, "lprint", 0.0)));
+    if (lprint >= 0) out << "\n print option:11\n";
+    if (lprint >= 1) append_native_product_sections(out, output_dir, state);
+    append_native_lprint_extra_sections(out, state, lprint);
     const char* debug_product_summary = std::getenv("XSTAR_DEBUG_PRODUCT_STATE_SUMMARY");
     const bool emit_product_state_summary =
         debug_product_summary && std::string(debug_product_summary) == "1";

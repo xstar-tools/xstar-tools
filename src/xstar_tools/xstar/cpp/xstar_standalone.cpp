@@ -4497,6 +4497,7 @@ const TrajectoryRow* find_reference_row(
 // Forward declaration: publication-count contract helper is defined with the
 // other retained-product helpers below and is used by the fixed-DSEC
 // qualification path as well as the public standalone publisher.
+bool abundance_required_by_lprint(const xstar_run_state::ProductWritingState& product);
 std::size_t required_native_fits_products(const xstar_run_state::ProductWritingState& product);
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -5203,7 +5204,7 @@ int command_run_fixed_dsec(const Options& options) {
     // generated from the actual native abundance/column product rather than a
     // placeholder ProductWritingState summary.  Include abundance publication
     // in the measured controller-and-FITS time.
-    if (!options.skip_fits && xstar_science_fits::abundance_product_enabled()) {
+    if (!options.skip_fits && abundance_required_by_lprint(product_writing_state)) {
         try {
             xstar_science_fits::write_native_abundance_product(
                 options.case_dir, options.output_dir, product_writing_state);
@@ -5631,7 +5632,7 @@ std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_fro
     add_real("rlogxi", 5.0);
     add_integer("nsteps", 3.0);
     add_integer("niter", 0.0);
-    add_integer("lwrite", 0.0, "1=yes, 0=no");
+    add_integer("lwrite", 0.0, "-1=spectrum-only, 0=standard, 1=detail");
     add_integer("lprint", 0.0, "1=yes, 0=no");
     add_integer("lstep", 0.0);
     add_string("abundtbl", "xdef");
@@ -10872,13 +10873,18 @@ double retained_public_parameter_number(
 // Purpose: Return the number of FITS products required by the literal XSTAR lwrite/npass publication contract for a retained native run.
 // Reference context: XSTAR Manual Ch. 5 output descriptions and xstar.f90, where detail FITS are emitted for lwrite>0 or npass>1.
 // XSTAR-FUNCTION-COMMENT-END
+bool abundance_required_by_lprint(const xstar_run_state::ProductWritingState& product) {
+    const int lprint = static_cast<int>(std::llround(retained_public_parameter_number(product, "lprint", 0.0)));
+    return lprint >= 0 && xstar_science_fits::abundance_product_enabled();
+}
+
 std::size_t required_native_fits_products(const xstar_run_state::ProductWritingState& product) {
     const int lwrite = static_cast<int>(std::llround(retained_public_parameter_number(product, "lwrite", 0.0)));
     const int npass = static_cast<int>(std::llround(retained_public_parameter_number(product, "npass", 1.0)));
     const bool detail = (lwrite > 0) || (npass > 1);
     const std::size_t detail_count = detail ? 4u * static_cast<std::size_t>(std::max(npass,1)) : 0u;
-    const std::size_t public_non_abundance = 4u + detail_count;
-    return public_non_abundance + (xstar_science_fits::abundance_product_enabled() ? 1u : 0u);
+    const std::size_t spectral_count = lwrite >= 0 ? 4u : (lwrite >= -1 ? 1u : 0u);
+    return spectral_count + detail_count + (abundance_required_by_lprint(product) ? 1u : 0u);
 }
 
 
@@ -11236,7 +11242,7 @@ ProductPublicationResultV172524 publish_full61_products(
             ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev;
         auto science = xstar_science_fits::write_historical_science_products(
             options.case_dir, output, product, energy);
-        if (xstar_science_fits::abundance_product_enabled()) {
+        if (abundance_required_by_lprint(product)) {
             xstar_science_fits::write_native_abundance_product(options.case_dir, output, product);
             ++science.files_written;
             science.filenames.push_back("xout_abund1.fits");
@@ -11555,7 +11561,7 @@ ProductPublicationResultV172524 publish_true_production_products(
             auto science = xstar_science_fits::write_historical_science_products(
                 options.case_dir, output, product, energy);
             (void)science;
-            if (xstar_science_fits::abundance_product_enabled()) {
+            if (abundance_required_by_lprint(product)) {
                 xstar_science_fits::write_native_abundance_product(options.case_dir, output, product);
             }
             product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds) +
@@ -11571,7 +11577,7 @@ ProductPublicationResultV172524 publish_true_production_products(
         result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
             regular_file_size_or_zero(output / "xout_step.log") > 0;
         result.ok = result.fits_count == required_native_fits_products(product) && result.step_log_written;
-        if (!result.ok) throw std::runtime_error("true production did not write all ten public products");
+        if (!result.ok) throw std::runtime_error("true production did not write the control-required public products");
         std::set<std::string> allowed = {
             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits",
             "xout_spect1.fits", "xout_step.log"};
@@ -18627,7 +18633,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             const std::size_t dsec_count = data.evaluations - before;
             actual_dsec_counts.push_back(dsec_count);
             if (source_nlimdt_v068227 != 0) {
-                source_ntotit_v068227 = static_cast<std::size_t>(std::max(stats.ntotit,0));
+                source_ntotit_v068227 = static_cast<std::size_t>(std::max(stats.ntotit, 0));
             }
             actual_dsec_ntotit.push_back(source_ntotit_v068227);
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
@@ -20879,7 +20885,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
         performance_v064890.science_fits_seconds += performance_elapsed_seconds(science_fits_started_v064890);
         (void)science;
         const auto abundance_fits_started_v064890 = std::chrono::steady_clock::now();
-        xstar_science_fits::write_native_abundance_product({}, output, product);
+        if (abundance_required_by_lprint(product)) {
+            xstar_science_fits::write_native_abundance_product({}, output, product);
+        }
         performance_v064890.abundance_fits_seconds += performance_elapsed_seconds(abundance_fits_started_v064890);
         const auto step_log_started_v064890 = std::chrono::steady_clock::now();
         auto step = xstar_step_log::write_native_step_log(output, product);
@@ -21355,7 +21363,7 @@ int command_run_physical_standalone(Options options) {
         auto science_result = xstar_science_fits::write_historical_science_products(
             options.case_dir, options.output_dir, product, product.fixed_evaluations.empty() ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev);
         auto step_result = xstar_step_log::write_native_step_log(output, product);
-        if (xstar_science_fits::abundance_product_enabled()) {
+        if (abundance_required_by_lprint(product)) {
             xstar_science_fits::write_native_abundance_product(options.case_dir, options.output_dir, product);
             ++science_result.files_written;
             science_result.filenames.push_back("xout_abund1.fits");

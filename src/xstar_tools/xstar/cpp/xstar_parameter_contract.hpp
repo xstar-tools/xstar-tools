@@ -55,7 +55,7 @@ inline constexpr std::array<Rule, 59> kRules = {{
     {"modelname", ParameterKind::String, "XSTAR Default", false, 0.0, false, 0.0},
     {"nsteps", ParameterKind::Integer, "3", true, 1.0, true, 1000.0},
     {"niter", ParameterKind::Integer, "0", false, 0.0, false, 0.0},
-    {"lwrite", ParameterKind::Integer, "0", true, 0.0, true, 1.0},
+    {"lwrite", ParameterKind::Integer, "0", true, -1.0, true, 1.0},
     {"lprint", ParameterKind::Integer, "0", true, -1.0, true, 6.0},
     {"lstep", ParameterKind::Integer, "0", false, 0.0, false, 0.0},
     {"emult", ParameterKind::Real, "0.5", true, 1e-06, true, 1000000.0},

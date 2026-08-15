@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.82.29.1 - 2026-08-15
+
+- Publication-only successor to the closed `0.6.82.29` source/package release; no rate, ionization, thermal, DSEC, transport, matrix, opacity, or solver science change.
+- Repair verbose `lprint>=2` publication in C++ and bound the corresponding Python inventories to active source-owned rows instead of placeholders or fixed-capacity workspaces.
+- Reproduce canonical FORTRAN active inventories for Options 14/21/7/10/4/6/18/29/30; the host reference contains 1140/238/250/15/998/999/1140/1954/4 data rows at `lprint=4`.
+- Preserve source identity semantics, including global RRC level indices, global Type-12 ion indices, active-element abundance gates, final-writer publication ownership, and source-order record filtering.
+- Add a stricter `.29.1` host comparator that checks verbose row shapes and source-addressed identities rather than marker presence alone.
+- Keep the pure-Python Option-29 per-record-rate workspace explicitly unresolved under `diagnostics=none`; `.29.1` is therefore handed off as a **C++-first host candidate**, not as full Python host closure.
+- Local qualification: 168 relevant successor tests PASS; dedicated `.29.1` scope/reference gate ACCEPT with exactly two changed production numerical/publication files; Type-50, spectrum, broad-multi-element/`ntotit`, source-function-comment, Python compileall, C++17 syntax, and compiled canonical-FORTRAN spectrum gates ACCEPT.
+- Science revision and C/production-zone/fixed-state ABIs remain frozen.
+
 # 0.6.82.28.1 - 2026-08-15
 
 - Narrow native publication/artifact-ownership hotfix for the `0.6.82.28` spectrum-contract candidate.

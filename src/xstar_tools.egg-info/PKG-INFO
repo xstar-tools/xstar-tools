@@ -1,3 +1,35 @@
+Metadata-Version: 2.4
+Name: xstar-tools
+Version: 0.6.82.29.1
+Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
+Author: Ashkbiz Danehkar
+License-Expression: MIT
+Keywords: astronomy,atomic-data,xstar,fits,emissivity,x-ray
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: Astronomy
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy<2.4,>=1.23; python_version < "3.11"
+Requires-Dist: astropy>=5.0; python_version < "3.11"
+Requires-Dist: numpy>=1.24; python_version >= "3.11"
+Requires-Dist: astropy>=7.2; python_version >= "3.11"
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: build>=1.0; extra == "dev"
+Requires-Dist: twine>=5; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=7; extra == "docs"
+Requires-Dist: sphinx-rtd-theme>=2; extra == "docs"
+Requires-Dist: myst-parser>=2; extra == "docs"
+Provides-Extra: hdf5
+Requires-Dist: h5py>=3; extra == "hdf5"
+Provides-Extra: sparse
+Requires-Dist: scipy>=1.8; extra == "sparse"
+Dynamic: license-file
+
 # xstar-tools
 
 > **Current release: `0.6.82.29` — output/control source/package closure.** `0.6.82.28` is **CLOSED** after the full FORTRAN/C++/pure-Python spectrum matrix accepted on `.28.1`; `0.6.82.27` is also closed and protected native C++ `.27.13` remains the frozen `npass` baseline. `.29` completes source-supported `lwrite=-1,0,1`, stock `lprint=-1..6`, legacy `lstep`, and the metadata/interface-only `modelname`, `mode`, and `loopcontrol` contract while keeping output controls outside physical science.

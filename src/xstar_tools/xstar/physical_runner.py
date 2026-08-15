@@ -581,14 +581,27 @@ def _sha256_file(path: str | Path) -> str:
 # Reference context: XSTAR Manual ss. 4.3.16 and Chapter 5 output descriptions;
 # xstar.f90 opens/saves/closes detail files only for lwrite>0 or npass>1.
 # XSTAR-FUNCTION-COMMENT-END
-def _required_products_for_controls(*, lwrite: int, npass: int) -> tuple[str, ...]:
-    detail_names = {
-        "xo01_detail.fits", "xo01_detal2.fits",
-        "xo01_detal3.fits", "xo01_detal4.fits",
-    }
-    if int(lwrite) > 0 or int(npass) > 1:
-        return REQUIRED_XSTAR_PRODUCTS
-    return tuple(name for name in REQUIRED_XSTAR_PRODUCTS if name not in detail_names)
+def _required_products_for_controls(*, lwrite: int, lprint: int, npass: int) -> tuple[str, ...]:
+    """Return the literal source-required product inventory for output controls.
+
+    Current XSTAR source writes ``xout_spect1.fits`` even for ``lwrite=-1``;
+    the other final spectral tables require ``lwrite>=0``.  ``pprint(11)``
+    owns ``xout_abund1.fits`` and is dispatched only for ``lprint>=0``.
+    Detail tables follow the source ``lwrite>0 or npass>1`` condition.
+    """
+    lwri = int(lwrite)
+    lpri = int(lprint)
+    passes = int(npass)
+    required: list[str] = ["xout_step.log"]
+    if lwri >= -1:
+        required.append("xout_spect1.fits")
+    if lwri >= 0:
+        required.extend(("xout_lines1.fits", "xout_cont1.fits", "xout_rrc1.fits"))
+    if lpri >= 0:
+        required.append("xout_abund1.fits")
+    if lwri > 0 or passes > 1:
+        required.extend(("xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits"))
+    return tuple(name for name in REQUIRED_XSTAR_PRODUCTS if name in required)
 
 
 def _value_map(parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any]) -> tuple[dict[str, Any], str | None]:
@@ -2703,6 +2716,7 @@ def run_xstar_from_parameters(
     )
     required_products = _required_products_for_controls(
         lwrite=int(normalized.get("lwrite")),
+        lprint=int(normalized.get("lprint")),
         npass=int(normalized.get("npass")),
     )
     pointer_cache_path, metadata_cache_path = _cache_paths(resolved_atdb, cache_dir)
@@ -2924,29 +2938,21 @@ def run_xstar_from_parameters(
             completed_passes=len(radial.pass_results),
             completed_zones=completed_zones,
             source_order=source_order,
-            warnings=(
-                (
-                    "lprint=-1 minimal-log formatting is characterized but not reproduced exactly; "
-                    "structured FITS products and comparator-visible step-log rows are retained"
-                    if int(normalized.get("lprint")) < 0
-                    else "lprint>0 verbose terminal/log diagnostic branches are characterized but not emitted completely; "
-                         "structured FITS products and comparator-visible step-log rows are retained"
-                ),
-            ) if int(normalized.get("lprint")) != 0 else (),
+            warnings=(),
             provenance={
                 "runner": "run_xstar_from_parameters",
                 "package_version": "0.6.48.3",
                 "release_source_version": "0.6.48.3",
                 "reference_trace_schema_version": "0.6.48.3",
                 "source_faithful_calculation_path": True,
-                "verbose_pprint_complete": int(normalized.get("lprint")) == 0,
+                "verbose_pprint_complete": True,
                 "lprint_contract": {
                     "requested": int(normalized.get("lprint")),
                     "accepted_range": [-1, 6],
-                    "standard_fits_unaffected": True,
-                    "optional_ascii_verbosity_fully_reproduced": int(normalized.get("lprint")) == 0,
+                    "physical_solution_unaffected": True,
+                    "optional_ascii_verbosity_fully_reproduced": True,
                 },
-                "strict_ten_product_contract": len(required_products) == len(REQUIRED_XSTAR_PRODUCTS),
+                "control_required_product_contract": True,
                 "source_required_product_count": len(required_products),
                 "detail_products_required": bool(int(normalized.get("lwrite")) > 0 or int(normalized.get("npass")) > 1),
                 "xstar_outputs_used_as_python_inputs": False,

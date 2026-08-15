@@ -661,3 +661,25 @@ include tools/qualification/run_spectrum_contract_host_smoke_0_6_82_28_1.py
 include tests/test_spectrum_file_input_artifact_hotfix_0_6_82_28_1.py
 include spectrum_file_input_artifact_hotfix_0_6_82_28_1.md
 include xstar_tools-0.6.82.28.1_host_validation.md
+
+# 0.6.82.28 host closure evidence and 0.6.82.29 output/control contract.
+include spectrum_contract_closure_0_6_82_28.md
+recursive-include qualification/output_control_0_6_82_29 *.json *.md
+include tools/qualification/check_output_control_0_6_82_29.py
+include tools/qualification/run_output_control_host_smoke_0_6_82_29.py
+include tests/test_output_control_0_6_82_29.py
+include output_control_0_6_82_29.md
+include xstar_tools-0.6.82.29_host_validation.md
+include output_control_closure_0_6_82_29.md
+include xstar_tools_conversation_summary_through_0.6.82.29.md
+
+# 0.6.82.29.1 bounded verbose output-control successor.
+include output_control_verbose_0_6_82_29_1.md
+include xstar_tools_0.6.82.29_work_comparison.md
+include tools/qualification/check_output_control_verbose_0_6_82_29_1.py
+include tools/qualification/run_output_control_host_smoke_0_6_82_29_1.py
+include qualification/output_control_verbose_0_6_82_29_1/output_control_verbose_scope_0_6_82_29_1.json
+include tests/test_output_control_verbose_inventory_0_6_82_29_1.py
+include qualification_report_0_6_82_29_1.md
+include xstar_tools-0.6.82.29.1_host_validation.md
+include xstar_tools_conversation_summary_through_0.6.82.29.1.md

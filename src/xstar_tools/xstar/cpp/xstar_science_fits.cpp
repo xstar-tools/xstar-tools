@@ -10880,19 +10880,32 @@ Result write_historical_science_products(
             detail_filenames_v0682272 = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"};
         }
     }
-    write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
-    state.xout_lines1_computed_from_native_state = true;
-    write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows);
-    state.xout_rrc1_computed_from_native_state = true;
-    write_public_spectrum(output_dir / "xout_cont1.fits", state, false);
-    state.xout_cont1_computed_from_native_state = true;
-    write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
-    state.xout_spect1_computed_from_native_state = true;
+    // Literal xstar.f90 writes the full spectrum for lwrite>=-1, while
+    // lines/continuum/RRC publication is gated by lwrite>=0.
+    if (lwrite >= 0) {
+        write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
+        state.xout_lines1_computed_from_native_state = true;
+        write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows);
+        state.xout_rrc1_computed_from_native_state = true;
+        write_public_spectrum(output_dir / "xout_cont1.fits", state, false);
+        state.xout_cont1_computed_from_native_state = true;
+    } else {
+        state.xout_lines1_computed_from_native_state = false;
+        state.xout_rrc1_computed_from_native_state = false;
+        state.xout_cont1_computed_from_native_state = false;
+    }
+    if (lwrite >= -1) {
+        write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
+        state.xout_spect1_computed_from_native_state = true;
+    } else {
+        state.xout_spect1_computed_from_native_state = false;
+    }
     // xout_abund1 is written after xout_step.log by write_native_abundance_product().
     state.xout_abund1_computed_from_native_state = false;
 
     Result result;
-    result.files_written = 4u + detail_filenames_v0682272.size();
+    const std::size_t public_spectral_count = (lwrite >= 0 ? 4u : (lwrite >= -1 ? 1u : 0u));
+    result.files_written = public_spectral_count + detail_filenames_v0682272.size();
     result.schema_complete = true;
     result.computed_from_native_state = true;
     result.continuum_and_spectrum_paths_separate = true;
@@ -10903,8 +10916,11 @@ Result write_historical_science_products(
     result.benchmark_archive_materialized = false;
     result.generalized_product_reduction_qualified = false;
     result.filenames = detail_filenames_v0682272;
-    result.filenames.insert(result.filenames.end(),
-        {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"});
+    if (lwrite >= 0) {
+        result.filenames.insert(result.filenames.end(),
+            {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits"});
+    }
+    if (lwrite >= -1) result.filenames.push_back("xout_spect1.fits");
     return result;
 }
 

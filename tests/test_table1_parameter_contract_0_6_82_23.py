@@ -27,11 +27,18 @@ def test_ledger_and_python_rules_are_complete():
 
 def test_exact_xpi_range_boundaries():
     m=contract_module()
-    for name,lo,hi in [('cfrac',0,1),('ncn2',999,999999),('nsteps',1,1000),('lprint',-1,6),('lwrite',0,1),('loopcontrol',0,30000),('spectun',0,2),('radexp',-3,3),('vturbi',0,30000),('xeemin',1e-6,0.5)]:
+    for name,lo,hi in [('cfrac',0,1),('ncn2',999,999999),('nsteps',1,1000),('lprint',-1,6),('loopcontrol',0,30000),('spectun',0,2),('radexp',-3,3),('vturbi',0,30000),('xeemin',1e-6,0.5)]:
         assert m.coerce_and_validate_parameter(name,lo)==lo
         assert m.coerce_and_validate_parameter(name,hi)==hi
         with pytest.raises(ValueError): m.coerce_and_validate_parameter(name,lo-1 if isinstance(lo,int) else lo-abs(lo or 1)-1e-6)
         with pytest.raises(ValueError): m.coerce_and_validate_parameter(name,hi+1)
+    # Historical stock XPI metadata listed lwrite=0..1, but 0.6.82.29
+    # intentionally exposes the literal source-supported lwrite=-1 branch.
+    assert m.coerce_and_validate_parameter('lwrite',-1)==-1
+    assert m.coerce_and_validate_parameter('lwrite',0)==0
+    assert m.coerce_and_validate_parameter('lwrite',1)==1
+    with pytest.raises(ValueError): m.coerce_and_validate_parameter('lwrite',-2)
+    with pytest.raises(ValueError): m.coerce_and_validate_parameter('lwrite',2)
     with pytest.raises(ValueError): m.coerce_and_validate_parameter('ncn2',999.5)
 
 def test_active_parameter_changes_are_not_default_overwritten():
@@ -58,7 +65,8 @@ def test_cpp_header_accepts_and_rejects_contract(tmp_path):
         xstar_parameter_contract::validate_text("cfrac","0.4");
         xstar_parameter_contract::validate_text("ncn2","999");
         try { xstar_parameter_contract::validate_text("ncn2","998"); return 2; } catch(...) {}
-        try { xstar_parameter_contract::validate_text("lwrite","-1"); return 3; } catch(...) {}
+        xstar_parameter_contract::validate_text("lwrite","-1");
+        try { xstar_parameter_contract::validate_text("lwrite","-2"); return 3; } catch(...) {}
         std::cout << xstar_parameter_contract::string_default("spectrum_file") << " " << xstar_parameter_contract::numeric_default("density") << "\\n";
         return 0;
       }

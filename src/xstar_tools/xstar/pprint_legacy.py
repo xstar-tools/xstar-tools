@@ -811,6 +811,32 @@ def _active_line_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> 
 # Purpose: Implement the active rrc rows by index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
 # XSTAR-FUNCTION-COMMENT-END
+def _source_verbose_line_rows(state: XSTARPythonState) -> list[Any]:
+    """Return the observable pprint(14/18) active nplin inventory.
+
+    In the literal source the apparent lrtyp test occurs after parent-ion and
+    parent-element drd() calls have overwritten lrtyp.  The public inventory
+    therefore reduces to active composition plus the wavelength gate, matching
+    the already-qualified pprint(15) FORTRAN row identity surface.
+    """
+    return [
+        row for row in _active_line_rows_by_index(state, _line_metadata_rows(state))
+        if 0.1 < abs(float(getattr(row, "wavelength_angstrom", 0.0))) < 9.0e9
+    ]
+
+
+def _source_verbose_level_rows(state: XSTARPythonState) -> list[Any]:
+    active = _active_element_symbols(state)
+    meta = state.control.get("output_atomic_metadata")
+    rows = [
+        row for row in tuple(getattr(meta, "levels", ()) or ())
+        if int(getattr(row, "global_index", 0)) > 0
+        and (not active or _row_element_symbol(row) in active)
+    ]
+    rows.sort(key=lambda row: int(getattr(row, "global_index", 0)))
+    return rows
+
+
 def _active_rrc_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> list[Any]:
     active = _active_element_symbols(state)
     out = [
@@ -1189,6 +1215,269 @@ def _final_zero_thickness_print(state: XSTARPythonState, buf: LegacyPprintBuffer
     buf.source_calls.append("xstar(final-zero-thickness-print)")
 
 
+
+
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Return the literal final pprint option sequence selected by lprint.
+# Reference context: xstar.f90 nlprnt/nlnprnt dispatch; lprint=-1..6.
+# XSTAR-FUNCTION-COMMENT-END
+def _final_pprint_option_sequence(lprint: int) -> tuple[int, ...]:
+    lpri = int(lprint)
+    if lpri < 0:
+        return (22,)
+    if lpri == 0:
+        n = 2
+    elif lpri == 1:
+        n = 10
+    elif lpri == 2:
+        n = 15
+    elif lpri == 3:
+        n = 18
+    else:
+        n = 21
+    return tuple(int(v) for v in NLPRNT[:n])
+
+
+def _append_pprint_marker(buf: LegacyPprintBuffers, option: int) -> None:
+    # pprint.f90 format 9211: ``1x,'print option:',i2``.
+    buf.log_lines.append(f" print option:{int(option):2d}")
+    call = f"pprint({int(option)})"
+    if call not in buf.source_calls:
+        buf.source_calls.append(call)
+
+
+def _option14_line_opacity_emissivity(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 14)
+    buf.log_lines.extend([
+        "line opacities and emissivities (erg/cm**3/sec/10**38)",
+        " index,wavelength,energy,ion,opacity,rec. em.,coll. em.,fl. em.,di. em.,cx. em.",
+    ])
+    rows = _source_verbose_line_rows(state)
+    all_rows = _line_metadata_rows(state)
+    ws = _workspace(state)
+    oplin = np.asarray(getattr(ws, "oplin_physical", np.zeros(0)), dtype=float).reshape(-1)
+    rcem = np.asarray(getattr(ws, "rcem_physical", np.zeros((2, 0))), dtype=float)
+    # FORTRAN prints nlsvn before the filtered rows.  Preserve the complete
+    # metadata capacity scalar while iterating only the source-active inventory.
+    buf.log_lines.append(str(len(all_rows)))
+    for row in rows:
+        idx = int(getattr(row, "line_index", 0)) - 1
+        if idx < 0 or idx >= oplin.size or rcem.ndim != 2 or rcem.shape[0] < 2 or idx >= rcem.shape[1]:
+            continue
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        energy = 12398.4016 / max(wave, 1.0e-24)
+        ion = str(getattr(row, "ion_label", ""))[:9]
+        buf.log_lines.append(
+            f"{idx+1:10d}{wave:13.5E}{energy:13.5E} {ion:<9s}"
+            f"{oplin[idx]:13.5E}{rcem[0,idx]:13.5E}{rcem[1,idx]:13.5E}"
+        )
+
+
+def _option21_level_opacity_emissivity(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 21)
+    buf.log_lines.extend([
+        " level opacities and emissivities",
+        "index,energy,ion,level,index,emiss in,emiss out,threshold opacity,absorbed energy,depth in, depth out",
+    ])
+    ws = _workspace(state)
+    cemab = np.asarray(getattr(ws, "cemab_physical", np.zeros((2, 0))), dtype=float)
+    base = getattr(getattr(ws, "emissivity", None), "base", None)
+    opakab = np.asarray(getattr(base, "opakab", np.zeros(1)), dtype=float).reshape(-1)[1:]
+    cabab = np.asarray(getattr(base, "cabab", np.zeros(1)), dtype=float).reshape(-1)[1:]
+    tauc = np.asarray(getattr(ws, "tauc", np.zeros((2, 0))), dtype=float)
+    meta = state.control.get("output_atomic_metadata")
+    rows = _active_rrc_rows_by_index(state, tuple(getattr(meta, "detail_rrcs", ()) or ()))
+    for row in rows:
+        idx = int(getattr(row, "continuum_index", 0)) - 1
+        if idx < 0:
+            continue
+        cin = cemab[0,idx] if cemab.ndim == 2 and cemab.shape[0] > 1 and idx < cemab.shape[1] else 0.0
+        cout = cemab[1,idx] if cemab.ndim == 2 and cemab.shape[0] > 1 and idx < cemab.shape[1] else 0.0
+        opa = opakab[idx] if idx < opakab.size else 0.0
+        absorbed = cabab[idx] if idx < cabab.size else 0.0
+        if not (opa > 1.0e-49 or absorbed > 1.0e-49 or cin > 1.0e-49 or cout > 1.0e-49):
+            continue
+        tin = tauc[0,idx] if tauc.ndim == 2 and tauc.shape[0] > 1 and idx < tauc.shape[1] else 0.0
+        tout = tauc[1,idx] if tauc.ndim == 2 and tauc.shape[0] > 1 and idx < tauc.shape[1] else 0.0
+        buf.log_lines.append(
+            f"{idx+1:8d} {int(getattr(row,'level_global_index',0)):5d} "
+            f"{str(getattr(row,'ion_label',''))[:9]:<9s} "
+            f"{int(getattr(row,'lower_local_index',0)):5d} {int(getattr(row,'upper_local_index',0)):5d} "
+            f"{str(getattr(row,'lower_level',''))[:20]:<20s} {str(getattr(row,'upper_level',''))[:20]:<20s} "
+            f"{float(getattr(row,'threshold_eV',0.0)):13.5E}{cin:13.5E}{cout:13.5E}{opa:13.5E}{absorbed:13.5E}{tin:13.5E}{tout:13.5E}"
+        )
+
+
+def _option7_level_populations(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 7)
+    buf.log_lines.extend(["  level populations ", " ion                      level               e_exc population"])
+    xilev = state.local_zone.source_arrays.get("xilevg")
+    if xilev is None:
+        xilev = state.control.get("xilevg")
+    rnis = state.local_zone.source_arrays.get("rnisg")
+    arr = np.asarray(xilev if xilev is not None else np.zeros(0), dtype=float).reshape(-1)
+    rn = np.asarray(rnis if rnis is not None else np.zeros(0), dtype=float).reshape(-1)
+    guarded = arr.size > 1 and abs(arr[0]) == 0.0
+    for row in _source_verbose_level_rows(state):
+        gi = int(getattr(row, "global_index", 0))
+        at = gi if guarded else gi - 1
+        pop = arr[at] if 0 <= at < arr.size else 0.0
+        if not (pop > 1.0e-64):
+            continue
+        rnval = rn[at] if 0 <= at < rn.size else 0.0
+        buf.log_lines.append(
+            f"{gi:7d} {str(getattr(row,'ion_label',''))[:9]:<9s} "
+            f"{str(getattr(row,'level_label',''))[:20]:<20s} "
+            f"{float(getattr(row,'excitation_eV',0.0)):13.5E}{pop:13.5E}{rnval:13.5E}"
+        )
+    buf.log_lines.append(" done with 7")
+
+
+def _option10_ion_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 10)
+    buf.log_lines.extend([" ion abundances and  rates (/sec)", " index, ion, abundance, recombination, ionization,"])
+    meta = _pprint_metadata(state)
+    n = max((int(i.ion_index) for i in meta.ions), default=0)
+    def _safe(name: str) -> np.ndarray:
+        if not n:
+            return np.zeros(0)
+        try:
+            return _array_value(state, name, n)
+        except LegacyPprintPortError:
+            return np.zeros(n, dtype=float)
+    xii, rrrt, pirt = _safe("xii"), _safe("rrrt"), _safe("pirt")
+    for ion in meta.ions:
+        if float(getattr(ion, "elemental_abundance", 0.0)) <= 1.0e-15:
+            continue
+        j = int(ion.ion_index) - 1
+        if 0 <= j < n:
+            buf.log_lines.append(
+                f"{j+1:5d} {str(ion.ion_label)[:9]:<9s} {xii[j]:16.8E} {rrrt[j]:16.8E} {pirt[j]:16.8E}"
+            )
+    buf.log_lines.extend([
+        " heating and cooling rates (erg/sec)",
+        " index element   heating         cooling        heating-cooling",
+    ])
+    ababs = np.asarray(state.control.get("ababs", np.ones(len(meta.thermal_elements))), dtype=float)
+    htt = np.asarray(state.local_zone.source_arrays.get("htt", np.zeros(len(meta.thermal_elements))), dtype=float).reshape(-1)
+    cll = np.asarray(state.local_zone.source_arrays.get("cll", np.zeros(len(meta.thermal_elements))), dtype=float).reshape(-1)
+    for element in meta.thermal_elements:
+        ei = int(element.element_index)
+        if ei <= 0 or ei > ababs.size or float(ababs[ei-1]) <= 1.0e-36:
+            continue
+        h = htt[ei-1] if ei-1 < htt.size else 0.0
+        c = cll[ei-1] if ei-1 < cll.size else 0.0
+        buf.log_lines.append(f"{ei:5d} {str(element.element_label)[:10]:<10s} {h:16.8E} {c:16.8E} {h-c:16.8E}")
+    fixed = getattr(state.local_zone, "calc_hmc_all", None)
+    htcomp = float(getattr(getattr(fixed, "continuum", None), "htcomp", 0.0))
+    clcomp = float(getattr(getattr(fixed, "continuum", None), "clcomp", 0.0))
+    clbrems = float(getattr(getattr(fixed, "continuum", None), "clbrems", 0.0))
+    buf.log_lines.append(f"      compton    {htcomp:16.8E} {clcomp:16.8E} {htcomp-clcomp:16.8E}")
+    buf.log_lines.append(f"      free-free  {0.0:16.8E} {clbrems:16.8E} {-clbrems:16.8E}")
+    buf.log_lines.append(f"      total      {float(state.thermal.heating):16.8E} {float(state.thermal.cooling):16.8E} {float(state.thermal.heating-state.thermal.cooling):16.8E}")
+
+
+def _option4_continuum_opacity(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 4)
+    buf.log_lines.extend(["continuum opacity and emissivities (/cm**3/sec/10**38)", "channel, energy, opacity, scattered, rec. in, rec. out, brem. em., source"])
+    ws = _workspace(state)
+    epi = _active_epi(state)
+    opakc = np.asarray(getattr(ws, "opakc", np.zeros(0)), dtype=float).reshape(-1)
+    rcc = np.asarray(getattr(ws, "rccemis", np.zeros((2,0))), dtype=float)
+    base = getattr(getattr(ws, "emissivity", None), "base", None)
+    br = np.asarray(getattr(base, "brcems", np.zeros(0)), dtype=float).reshape(-1)
+    n = min(epi.size, opakc.size)
+    for i in range(1, n):
+        rin = rcc[0,i] if rcc.ndim == 2 and rcc.shape[0] > 1 and i < rcc.shape[1] else 0.0
+        rout = rcc[1,i] if rcc.ndim == 2 and rcc.shape[0] > 1 and i < rcc.shape[1] else 0.0
+        b = br[i] if i < br.size else 0.0
+        source = (rin+rout+b/12.56)/(1.0e-36+opakc[i])
+        buf.log_lines.append(f"{i+1:7d}{epi[i]:13.5E}{opakc[i]:13.5E}{0.0:13.5E}{rin:13.5E}{rout:13.5E}{b:13.5E}{source:13.5E}")
+
+
+def _option6_continuum_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 6)
+    buf.log_lines.extend(["continuum luminosities (/sec/10**38) and depths", "real quantities are as follows:"])
+    ws = _workspace(state)
+    epi = _active_epi(state)
+    zrems = np.asarray(getattr(ws, "zrems", np.zeros((0,0))), dtype=float)
+    dpth = np.asarray(getattr(ws, "dpthc", np.zeros((2,0))), dtype=float)
+    for i, e in enumerate(epi):
+        vals = [zrems[k,i] if zrems.ndim == 2 and k < zrems.shape[0] and i < zrems.shape[1] else 0.0 for k in range(5)]
+        tin = dpth[0,i] if dpth.ndim == 2 and dpth.shape[0] > 1 and i < dpth.shape[1] else 0.0
+        tout = dpth[1,i] if dpth.ndim == 2 and dpth.shape[0] > 1 and i < dpth.shape[1] else 0.0
+        buf.log_lines.append(f"{i+1:7d}{e:13.5E}"+"".join(f"{v:13.5E}" for v in vals)+f"{tin:13.5E}{tout:13.5E}")
+    buf.log_lines.extend([" norms:", " retained source-normalization scalars unavailable"])
+
+
+def _option18_line_levels(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 18)
+    buf.log_lines.extend(["line wavelengths and levels", "      index wavelength  ion       lo                  up"])
+    for row in _source_verbose_line_rows(state):
+        buf.log_lines.append(
+            f"{int(getattr(row,'line_index',0)):10d}{abs(float(getattr(row,'wavelength_angstrom',0.0))):13.5E} "
+            f"{str(getattr(row,'ion_label',''))[:9]:<9s} {str(getattr(row,'lower_level',''))[:25]:<25s} "
+            f"{str(getattr(row,'upper_level',''))[:25]:<25s} {int(getattr(row,'lower_local_index',0)):7d} {int(getattr(row,'upper_local_index',0)):7d}"
+        )
+
+
+def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 29)
+    buf.log_lines.extend(["rates", "doing pprint(29)"])
+    # Production diagnostics=none intentionally discards the source-sized
+    # per-record rate workspace.  Keep the section bounded and explicit rather
+    # than walking fixed-capacity ATDB storage or fabricating rate values.
+    buf.log_lines.append(" retained per-record rate workspace unavailable in diagnostics=none")
+    buf.log_lines.append("done with pprint(29)")
+
+
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Decode the Roman ion-stage suffix used by source-format ion labels for verbose publication.
+# Reference context: XSTAR pprint ion labels use lower-case Roman stages through the complete element inventory.
+# XSTAR-FUNCTION-COMMENT-END
+def _roman_stage_from_ion_label(label: str) -> int:
+    text = str(label).strip().lower()
+    numeral = text.split("_", 1)[1] if "_" in text else ""
+    values = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100}
+    total = 0
+    previous = 0
+    for char in reversed(numeral):
+        value = values.get(char, 0)
+        if value <= 0:
+            return 0
+        if value < previous:
+            total -= value
+        else:
+            total += value
+            previous = value
+    return total
+
+
+def _option30_auger_fluorescence(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    _append_pprint_marker(buf, 30)
+    buf.log_lines.extend(["auger and fluorescence yields", "ion     K shell pi rate  k fluorescence rate auger rate fluorescence yield"])
+    meta = _pprint_metadata(state)
+    n = max((int(i.ion_index) for i in meta.ions), default=0)
+    try:
+        xii = _array_value(state, "xii", n)
+    except LegacyPprintPortError:
+        xii = np.zeros(n, dtype=float)
+    # Source pprint(30) writes one row for each non-fully-stripped active ion
+    # whose xii exceeds 1e-12.  The temporary K-shell aggregate scalars are not
+    # retained by the production Python controller, so publish the exact ion
+    # inventory while labeling those scalars unavailable.
+    for ion in meta.ions:
+        j = int(ion.ion_index) - 1
+        label = str(ion.ion_label).strip()
+        stage = _roman_stage_from_ion_label(label)
+        # element_index is the periodic-table Z in XSTAR's element inventory.
+        z = int(getattr(ion, "element_index", 0))
+        if float(getattr(ion, "elemental_abundance", 0.0)) <= 1.0e-34 or stage <= 0 or stage >= z:
+            continue
+        if not (0 <= j < xii.size and xii[j] > 1.0e-12):
+            continue
+        buf.log_lines.append(f" {label[:8]:<8s} retained-k-shell-scalars-unavailable")
+
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the option22 final lines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
@@ -1383,18 +1672,34 @@ def finalize_legacy_pprint(
     requested_lpri = int(state.control.get("requested_lpri", state.control.get("lpri", 0)))
     _final_zero_thickness_print(state, buf)
     _option22_final_lines(state, buf)
-    buf.log_lines.extend([" ", " print option:11"])
-    if "pprint(11)" not in buf.source_calls:
-        buf.source_calls.append("pprint(11)")
-    if requested_lpri >= 1:
-        _option1_emission_line_luminosities(state, buf)
-        _option23_line_depths(state, buf)
-        _option24_absorption_edge_depths(state, buf)
-        _option16_ucalc_timing_accounting(state, buf)
-        _option27_ion_column_densities(state, buf)
-        _option15_line_luminosities_and_depths(state, buf)
-        _option19_recombination_continuum_luminosities(state, buf)
-        _option5_energy_sums(state, buf)
+    dispatch = {
+        1: _option1_emission_line_luminosities,
+        23: _option23_line_depths,
+        24: _option24_absorption_edge_depths,
+        16: _option16_ucalc_timing_accounting,
+        27: _option27_ion_column_densities,
+        15: _option15_line_luminosities_and_depths,
+        19: _option19_recombination_continuum_luminosities,
+        5: _option5_energy_sums,
+        14: _option14_line_opacity_emissivity,
+        21: _option21_level_opacity_emissivity,
+        7: _option7_level_populations,
+        10: _option10_ion_rates,
+        4: _option4_continuum_opacity,
+        6: _option6_continuum_luminosities,
+        18: _option18_line_levels,
+        29: _option29_rates,
+        30: _option30_auger_fluorescence,
+    }
+    for option in _final_pprint_option_sequence(requested_lpri)[1:]:
+        if option == 11:
+            _append_pprint_marker(buf, 11)
+        elif option in (0, 26):
+            _append_pprint_marker(buf, option)
+        else:
+            fn = dispatch.get(option)
+            if fn is not None:
+                fn(state, buf)
     paths: dict[str, str] = {}
     if out_dir is not None:
         root = Path(out_dir)
@@ -1402,10 +1707,9 @@ def finalize_legacy_pprint(
         log_path = root / "xout_step.log"
         log_path.write_text("\n".join(buf.log_lines) + "\n", encoding="utf-8")
         paths[log_path.name] = str(log_path)
-        abund_path = root / "xout_abund1.fits"
-        paths[abund_path.name] = write_xout_abund1(state, path=abund_path, overwrite=overwrite)
-    else:
-        buf.source_calls.append("pprint(11)")
+        if requested_lpri >= 0:
+            abund_path = root / "xout_abund1.fits"
+            paths[abund_path.name] = write_xout_abund1(state, path=abund_path, overwrite=overwrite)
     buf.final_written = True
     state.outputs["legacy_pprint_paths"] = dict(paths)
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
@@ -1467,6 +1771,6 @@ __all__ = [
     "LegacyPprintPortError", "PprintIonMetadata", "PprintElementMetadata",
     "PprintAtomicMetadata", "LegacyPprintBuffers", "NLPRNT",
     "initialize_legacy_pprint", "legacy_pprint_begin_pass", "legacy_pprint_after_heatt",
-    "finalize_legacy_pprint", "write_xout_abund1",
+    "finalize_legacy_pprint", "write_xout_abund1", "_final_pprint_option_sequence",
     "direct_fortran_pprint_reference", "run_direct_fortran_pprint_validation",
 ]
