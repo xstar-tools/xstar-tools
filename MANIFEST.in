@@ -194,3 +194,13 @@ include tools/qualification/check_canonical_terminal_step_endpoint_0_6_82_6.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 include docs/developer/canonical_terminal_step_endpoint_0_6_82_6.md
 include tests/test_canonical_terminal_step_endpoint_0_6_82_6.py
+
+# 0.6.82.7 canonical Type-63 low-temperature source cutoff.
+include qualification/type63_source_cutoff_0_6_82_7.json
+recursive-include qualification/type63_source_cutoff_0_6_82_7 *.json
+include tools/qualification/check_type63_source_cutoff_0_6_82_7.py
+include tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
+include docs/developer/type63_source_cutoff_0_6_82_7.md
+include tests/test_type63_source_cutoff_0_6_82_7.py
+include tests/test_type63_source_cutoff_manifest_0_6_82_7.py

@@ -1,5 +1,22 @@
 # CHANGELOG
 
+# 0.6.82.7 — canonical Type-63 low-temperature source cutoff - 2026-08-16
+
+- Restore the literal `ucalc.f90` Type-63 pre-branch gate: compute `elin`,
+  `ekt=0.861707*T4`, `delt=12398.4016/elin/ekt`, and return all six channels
+  as zero only when `delt > 50`.  `delt == 50` remains evaluable, matching
+  the FORTRAN `.gt.` condition.
+- Apply the same source gate to the Python Type-63 record-order and same-n
+  paths when endpoint energies are available.
+- Add direct native-kernel tests at DeltaE~70.41159 eV for T4=1.351,
+  T4=2.110, and the exact/next-representable threshold boundary.
+- Record the 16 C V Type-63 records that canonical FORTRAN suppresses at the
+  accepted rlogxi=1.2 first state but 0.6.82.6 evaluated nonzero.
+- Keep the 0.6.82.6 canonical terminal STEP endpoint restoration frozen.
+- Qualification order remains: rlogxi 1.2/1.3 first, then 1.0..1.5, then
+  the five historical rlogxi=1.5 density cases; only after those close do we
+  widen to the normal -5..+5 ionization-parameter range.
+
 # 0.6.82.6 — canonical terminal STEP endpoint restoration - 2026-08-16
 
 - Restore the XSTAR 2.59g post-loop `pprint(9)` endpoint to STEP Option 17.  The endpoint after the final STPCUT/TRNFRN commit is a physical radial publication row, not the later zero-thickness `pprint(22)` reset/final-evaluation state.
