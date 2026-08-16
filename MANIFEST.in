@@ -212,3 +212,11 @@ include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 include docs/developer/lte_rnisi_workspace_0_6_82_8.md
 include tests/test_lte_rnisi_workspace_0_6_82_8.py
 include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
+
+# 0.6.82.9 source-faithful msolvelucy fixed-loop closure
+include qualification/msolvelucy_fixed_loop_0_6_82_9.json
+include tools/qualification/check_msolvelucy_fixed_loop_0_6_82_9.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_9.py
+include docs/developer/msolvelucy_fixed_loop_0_6_82_9.md
+include tests/test_msolvelucy_fixed_loop_0_6_82_9.py

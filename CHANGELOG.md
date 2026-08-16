@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.82.9 — source-faithful `msolvelucy` fixed-point loop control - 2026-08-16
+
+- Remove the C++-only `if (fixed_diff >= 1.0e3) break;` from the Lucy fixed-point loop. Canonical `msolvelucy.f90` uses `diff2 >= 1.e3` only to stop the per-row *difference accumulation* inside an iteration; the fixed-point loop itself continues until `nitmx2` or `crit2`.
+- Preserve the source `diff2`/`diff` tolerances, superlevel/LU loop, matrix terms, Type-63 cutoff, 0.6.82.8 persistent `rnisi(nd=20000)` workspace, and 0.6.82.6 terminal STEP endpoint unchanged.
+- On the exact H+He+C `rlogxi=0`, call-1/eval-1 Carbon replay, the correction changes C++ from `outer=5,total_fixed=603,heat=481.8847,cool=21456.0737` to `outer=3,total_fixed=600,heat=508.0654,cool=9231.9349`, matching canonical FORTRAN (`3,600,~508.1,~9232`) before DSEC branching.
+- Host `rlogxi=0` validation now reproduces FORTRAN from the first DSEC state through most of the radial trajectory, including the canonical first-row `h-c=-0.05, ntotit=42`; the first remaining late divergence appears around `log(N)=19.80` (`FORTRAN h-c=0.00, ntotit=8`; C++ `h-c=0.13, ntotit=16`). This release therefore records the late low-xi divergence as **open** and does not claim full `rlogxi<=0` closure.
+- Reject the earlier Type-73 `expo(-delt)` and `T4 -> K -> T4` experiments as root causes for this trajectory defect; neither is included in production 0.6.82.9.
+
 # 0.6.82.8 — source-faithful fixed-size `rnisi` LTE workspace lifetime - 2026-08-16
 
 - Reproduce canonical `levwkelement.f90` storage semantics for `real(8) rnisi(nd)` with source `nd=20000`: one zero-initialized workspace is retained on the reusable fixed-state context across elements and DSEC/fixed-state evaluations.
