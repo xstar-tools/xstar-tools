@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.82.3 — broad multi-element radius/Fe thermal closure + live zone progress - 2026-08-16
+
+- Preserve `0.6.82.2` as the rejected broad-science host milestone.  Its 15-element ATDB lowering and Type-51 fallback complete, but the canonical broad fixture exposed an incorrect retained radius/log-xi, effectively missing Fe Type-85 heating, and a roughly 3.7x native runtime penalty relative to FORTRAN.
+- Preserve the controller-owned source `rread1` radius when constructing retained/public product workspaces.  The public `.par -> JSON` envelope intentionally has no `initial_radius_cm`; `0.6.82.2` incorrectly replaced the live controller radius with a historical `1.778279410038923e17` fallback, changing the broad fixture from canonical `log(r)=15.50, log(xi)=1.00` to `17.25,-2.50` and multiplying radius-squared luminosity products by about 3162.
+- Correct Fe Type-85 post-`phintfo` thermal channel ownership against XSTAR 2.59g `ucalc.f90`: after the Type-85 zeroing/swap, retain `ans4=-piht` and `ans6=-piht2` while reverse channels remain zero.  The previous C++ mapping accidentally selected recombination-cooling channels and reduced Fe heating/cooling in the broad fixture to effectively zero.
+- Stream each accepted native radial zone immediately for public `xstar-cpp --progress text` runs instead of waiting for the entire controller trajectory to finish.  Live progress is read-only, flushed per zone, and does not feed controller, transport, rate, matrix, opacity, emissivity, or publication state.
+- Propagate the public frontend progress mode through `XSTAR_CPP_PROGRESS_MODE`; the `0.6.82.3` host runner tees combined output live to the terminal while retaining `host_smoke.log` and refuses stale binaries.
+- Keep the accepted historical science revision and ABIs unchanged.  The radius and Type-85 corrections qualify a previously rejected broad multi-element surface; already accepted frozen surfaces remain protected by aggregate parity.
+- Do not claim broad-host parity from source-only qualification.  Canonical `atdb.fits` remains an external host gate.  The broad performance problem is recorded but is deliberately not optimized in this release before corrected science is remeasured.
+
 # 0.6.82.2 — broad-element Type-51 production fallback closure - 2026-08-16
 
 - Preserve `0.6.82.1` as the rejected broad-host milestone: its generic multi-element ATDB lowering reached 15 active elements successfully, but the first production evaluation still aborted on a legacy Type-51 payload.

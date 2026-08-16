@@ -159,3 +159,14 @@ include tools/qualification/check_type51_broad_element_closure_0_6_82_2.py
 include tools/qualification/run_multi_element_host_smoke_0_6_82_2.py
 include docs/developer/type51_broad_element_closure_0_6_82_2.md
 include tests/test_type51_broad_element_closure_0_6_82_2.py
+
+# 0.6.82.3 broad multi-element radius/Fe thermal closure + live zone progress.
+include qualification/live_zone_progress_0_6_82_3.json
+include qualification/broad_multi_element_science_0_6_82_3.json
+include tools/qualification/check_live_zone_progress_0_6_82_3.py
+include tools/qualification/check_broad_multi_element_science_0_6_82_3.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_3.py
+include docs/developer/live_zone_progress_0_6_82_3.md
+include docs/developer/broad_multi_element_science_0_6_82_3.md
+include tests/test_live_zone_progress_0_6_82_3.py
+include tests/test_broad_multi_element_science_0_6_82_3.py

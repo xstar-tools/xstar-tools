@@ -580,6 +580,10 @@ int run_frontend(const std::filesystem::path& native,FrontendInput& input) {
     if(!verify_runtime_abi(std::cerr,&abi)) return kAbiMismatchExit;
     if(input.threads>0) ::setenv("OMP_NUM_THREADS",std::to_string(input.threads).c_str(),1);
     if(input.deterministic) ::setenv("XSTAR_TOOLS_REPRODUCIBLE","1",1);
+    // 0.6.82.3: propagate the public progress mode to the native production
+    // process.  The standalone controller uses this only for live textual
+    // zone observability; no scientific state consumes the variable.
+    ::setenv("XSTAR_CPP_PROGRESS_MODE", input.progress.c_str(), 1);
     const bool retain_parameters=!input.parameters_out.empty();
     const auto parameters=write_envelope(input);
     auto remove_ephemeral_parameters=[&]() {

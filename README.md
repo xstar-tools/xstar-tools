@@ -2,7 +2,7 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82`  
+**Distribution:** `0.6.82.3`  
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -303,6 +303,12 @@ xstar-tools version
 For the 0.6.82.1 physical acceptance on a host with canonical XSTAR data, `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py --data-dir /path/to/xstar/data --replace` verifies the full 15-element path and the public `xstar-cpp` file-silent frontend boundary.
 
 
+
+### 0.6.82.3 broad multi-element science closure and live progress
+
+`0.6.82.3` addresses two source-concordance defects exposed by the first completed 15-element `0.6.82.2` host comparison.  Retained products now keep the radius already derived by the controller from the XSTAR `rread1` semantics instead of substituting a historical benchmark fallback when the public JSON envelope omits `initial_radius_cm`.  Fe Type-85 photoionization heating now follows the XSTAR 2.59g `ucalc.f90` post-`phintfo` channel mapping (`ans4=-piht`, `ans6=-piht2`) rather than selecting recombination-cooling channels.
+
+Long native runs are also observable: with `xstar-cpp --progress text`, the XSTAR-style header is emitted before the controller starts and each accepted radial-zone row is flushed immediately when that zone completes.  The version-locked broad-mixture host runner tees the native transcript live while retaining `host_smoke.log`.  The canonical broad FORTRAN fixture remains an external acceptance gate; this release does not claim host parity until that run is returned.
 
 ### 0.6.82.2 broad-element Type-51 closure
 

@@ -2735,6 +2735,135 @@ struct FixedDsecSnapshot {
     std::vector<xstar_run_state::ElementThermalProductState> element_thermal_products;
 };
 
+
+// 0.6.82.3 live textual progress.  This is an observability-only surface:
+// it reads an already accepted boundary and never feeds controller, transport,
+// publication, or convergence state.  std::cerr is intentional because normal
+// production redirects std::cout while suppressing legacy diagnostic chatter.
+thread_local std::size_t g_live_zone_rows = 0u;
+
+bool live_text_zone_progress_enabled() {
+    const char* mode = std::getenv("XSTAR_CPP_PROGRESS_MODE");
+    return mode && std::string(mode) == "text";
+}
+
+std::size_t live_option17_reference_bin_zero_based(
+    const std::vector<double>& energy) {
+    const std::size_t n = energy.size();
+    if (n == 0u) return 0u;
+    const std::size_t numcon2 = std::max<std::size_t>(2u, n / 50u);
+    const std::size_t nn = n > numcon2 ? n - numcon2 : 1u;
+    if (nn < 2u) return 0u;
+    constexpr double floor = 1.0e-36;
+    const double x = 13.6;
+    const double xx1 = energy[0], xx2 = energy[1], xxn = energy[nn - 1u];
+    std::size_t jlo_one_based = 1u;
+    if (x >= floor && xx1 > floor && xxn > floor) {
+        const double xtmp = std::max(x, xx2);
+        const double denom = std::log(xxn / xx1);
+        if (std::isfinite(denom) && denom != 0.0) {
+            const double raw = static_cast<double>(nn - 1u) * std::log(xtmp / xx1) / denom;
+            if (std::isfinite(raw)) {
+                const long long base = static_cast<long long>(raw);
+                jlo_one_based = static_cast<std::size_t>(std::max<long long>(1ll, base + 1ll));
+            }
+        }
+        if (jlo_one_based < nn) {
+            const std::size_t a = jlo_one_based - 1u, b = jlo_one_based;
+            const double tst = std::abs(std::log(x / (floor + energy[a])));
+            const double tst2 = std::abs(std::log(x / (floor + energy[b])));
+            if (tst2 < tst) ++jlo_one_based;
+        }
+    }
+    jlo_one_based = std::max<std::size_t>(1u, std::min(nn, jlo_one_based));
+    return std::min(n - 1u, jlo_one_based);
+}
+
+bool live_radiation_balance_percent(
+    const FixedDsecSnapshot& snapshot,
+    double& percent) {
+    const auto& energy = snapshot.radiation_energy_ev;
+    const std::size_t n = energy.size();
+    if (n < 2u || snapshot.zrems.size() < n) return false;
+    const auto& incident = snapshot.zremsz.size() >= n ? snapshot.zremsz : snapshot.radiation_flux;
+    if (incident.size() < n) return false;
+    double sum_in = 0.0, sum_out = 0.0;
+    double in_prev = std::isfinite(incident[0]) ? incident[0] : 0.0;
+    double out_prev = std::isfinite(snapshot.zrems[0]) ? snapshot.zrems[0] : 0.0;
+    for (std::size_t i = 1u; i < n; ++i) {
+        const double in_cur = std::isfinite(incident[i]) ? incident[i] : 0.0;
+        const double out_cur = std::isfinite(snapshot.zrems[i]) ? snapshot.zrems[i] : 0.0;
+        const double de = energy[i] - energy[i - 1u];
+        if (std::isfinite(de)) {
+            sum_in += 0.5 * (in_cur + in_prev) * de;
+            sum_out += 0.5 * (out_cur + out_prev) * de;
+        }
+        in_prev = in_cur;
+        out_prev = out_cur;
+    }
+    const double denom = sum_in + 1.0e-24;
+    if (!std::isfinite(sum_in) || !std::isfinite(sum_out) || denom == 0.0) return false;
+    percent = 100.0 * (sum_in - sum_out) / denom;
+    return std::isfinite(percent);
+}
+
+void print_xstar_style_live_header() {
+    std::cerr << " xstar_tools version " << XSTAR_API_VERSION_STRING << "\n\n"
+              << " pass number=" << std::setw(12) << 1 << std::setw(12) << -1 << "\n"
+              << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
+              << "                                                                  fwd    rev\n"
+              << std::flush;
+}
+
+void print_xstar_style_live_zone(
+    const FixedDsecSnapshot& snapshot,
+    const xstar_atdb_runtime::ProductionParameters& params,
+    double source_depth_cm,
+    std::size_t dsec_evaluations) {
+    auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
+    const double radius = params.initial_radius_cm + source_depth_cm;
+    const double depth = std::max(0.0, source_depth_cm);
+    const double column = params.density_cm3 * depth;
+    const double log_rel = radius > 0.0 && depth > 0.0 ? std::log10(depth / radius) : -36.0;
+    const double r19 = radius * static_cast<double>(static_cast<float>(1.0e-19));
+    const double live_xi = (r19 > 0.0 && params.density_cm3 > 0.0)
+        ? params.luminosity_1e38 / (r19 * r19 * params.density_cm3) : 0.0;
+    const double log_xi = live_xi > 0.0 ? std::log10(live_xi) : -10.0;
+    const double log_temp = snapshot.temperature_t4 > 0.0
+        ? 4.0 + std::log10(snapshot.temperature_t4) : -10.0;
+
+    double log_fwd = -10.0, log_rev = -10.0;
+    const auto& energy = snapshot.radiation_energy_ev;
+    if (energy.size() >= 2u && snapshot.dpthc.size() >= 2u * energy.size()) {
+        const std::size_t rb = live_option17_reference_bin_zero_based(energy);
+        const double fwd = std::max(0.0, snapshot.dpthc[rb]);
+        const double rev = std::max(0.0, snapshot.dpthc[energy.size() + rb]);
+        log_fwd = fwd > 0.0 ? std::log10(fwd) : -10.0;
+        log_rev = rev > 0.0 ? std::log10(rev) : -10.0;
+    }
+    double radiation_balance = 0.0;
+    (void)live_radiation_balance_percent(snapshot, radiation_balance);
+    const std::size_t numrec = dsec_evaluations > 0u ? dsec_evaluations - 1u : 0u;
+
+    std::cerr << std::fixed << std::setprecision(2)
+              << std::setw(8) << safe_log(radius, -10.0)
+              << std::setw(7) << log_rel
+              << std::setw(7) << safe_log(column, -10.0)
+              << std::setw(7) << log_xi
+              << std::setw(7) << snapshot.computed_electron_fraction
+              << std::setw(7) << safe_log(params.density_cm3, -10.0)
+              << std::setw(7) << log_temp
+              << std::setw(7) << std::clamp(100.0 * snapshot.hmctot, -99.99, 99.99)
+              << std::setw(7) << std::clamp(radiation_balance, -99.99, 99.99)
+              << std::setw(7) << log_fwd
+              << std::setw(7) << log_rev
+              << std::setw(3) << numrec << "\n"
+              << std::flush;
+    std::cerr.unsetf(std::ios::floatfield);
+    std::cerr << std::setprecision(17);
+    ++g_live_zone_rows;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement production zone mark complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
@@ -9987,8 +10116,24 @@ void retain_controller_owned_product_workspaces(
             return e.abundance > 0.0 && e.atomic_number != 1 && e.atomic_number != 2 &&
                    e.atomic_number != 6 && e.atomic_number != 12;
         });
-    const double radius0 = json_number_value(json, "initial_radius_cm",
-        json_number_value(json, "radius", 1.778279410038923e17));
+    // 0.6.82.3: preserve the radius already owned by the accepted controller
+    // boundary.  The public .par -> JSON envelope intentionally does not carry
+    // an initial_radius_cm field, so reconstructing geometry here from a
+    // hard-coded historical benchmark fallback changed a valid rread1-derived
+    // radius (and therefore xi and luminosity normalization) for broad
+    // multi-element production.  Older diagnostic-only retained-state paths
+    // may not carry live geometry; keep their explicit historical fallback.
+    const auto& first_live_zone_v06823 = whole.radial_zones.front();
+    const double first_live_depth_v06823 = std::max(first_live_zone_v06823.delta_radius_cm, 0.0);
+    const double controller_radius0_v06823 = first_live_zone_v06823.radius_cm - first_live_depth_v06823;
+    const bool controller_radius_valid_v06823 =
+        std::isfinite(first_live_zone_v06823.radius_cm) && first_live_zone_v06823.radius_cm > 0.0 &&
+        std::isfinite(first_live_zone_v06823.delta_radius_cm) && first_live_zone_v06823.delta_radius_cm >= 0.0 &&
+        std::isfinite(controller_radius0_v06823) && controller_radius0_v06823 > 0.0;
+    const double radius0 = controller_radius_valid_v06823
+        ? controller_radius0_v06823
+        : json_number_value(json, "initial_radius_cm",
+            json_number_value(json, "radius", 1.778279410038923e17));
     const double total_depth = density > 0.0 && column > 0.0 ? column / density : 0.0;
 
     // The controller now owns the public pprint(12) event sequence.  The four
@@ -17390,6 +17535,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             g_shared_zone_dsec_v0648110.push_back(dsec_count);
             production_zone_mark_complete(
                 call, finals.back(), dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
+            if (live_text_zone_progress_enabled()) {
+                print_xstar_style_live_zone(
+                    finals.back(), params, source_boundary_depth_cm.back(), dsec_count);
+            }
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -18827,6 +18976,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
         double controller_seconds = 0.0;
         std::size_t evaluations = 0;
         const bool quiet_controller_v064897 = !verbose_controller_diagnostics();
+        const bool live_text_progress = live_text_zone_progress_enabled();
+        g_live_zone_rows = 0u;
+        if (live_text_progress) print_xstar_style_live_header();
         auto product = [&]() {
             ScopedCoutSilenceV064897 silence(quiet_controller_v064897);
             return build_general_standalone_product(
@@ -18861,7 +19013,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
                   << (forced_096_provenance_v064897 ? "LEGACY_096_RETAIN_ALL" : "COMPACT_DEFERRED_DSEC_ELISION") << "\n"
                   << "V064897_BOUND_FREE_095=FROZEN_PREPARED_LAZY\n"
                   << "V064897_BOUNDARY_CORRECTNESS_0942=FROZEN_EXACT_RECOMPUTE\n";
-        print_xstar_style_progress(product);
+        if (!live_text_progress) {
+            print_xstar_style_progress(product);
+        }
         const auto trajectory = summarize_standalone_trajectory(product);
         const bool reference_benchmark = is_reference_mg11_benchmark(params);
         if (!product.product_state_complete) throw std::runtime_error("product state incomplete before publication");
