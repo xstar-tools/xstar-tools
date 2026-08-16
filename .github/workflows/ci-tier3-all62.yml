@@ -1,0 +1,77 @@
+name: ci-tier3-all62
+
+on:
+  schedule:
+    - cron: '41 1 * * *'
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*rc*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xstar-tools-all62
+  cancel-in-progress: false
+
+jobs:
+  all62-release-qualification:
+    runs-on: [self-hosted, linux, x64, xstar-science]
+    timeout-minutes: 1440
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resolve canonical science and frozen C++ assets
+        id: assets
+        run: python tools/ci/require_science_assets.py --need-cpp44 --github-output "$GITHUB_OUTPUT"
+      - name: Install source package
+        env:
+          XSTAR_TOOLS_NATIVE: required
+        run: python -m pip install -e .
+      - name: Run canonical all-62 C++ qualification plus selected Python subset
+        run: |
+          python -m xstar_tools.cli.main qualify benchmark run \
+            --package "$GITHUB_WORKSPACE" \
+            --data '${{ steps.assets.outputs.data }}' \
+            --suite-archive '${{ steps.assets.outputs.suite }}' \
+            --out tier3-all62 \
+            --python-case helike_type69/o7_ne1e10 \
+            --python-case helike_type69/mg11_ne1e8 \
+            --python-case helike_type69/ca19_xi2_ne1 \
+            --build-cpp \
+            --jobs 1
+      - name: Compare all available runs with canonical references
+        run: |
+          python -m xstar_tools.cli.main qualify benchmark compare \
+            --package "$GITHUB_WORKSPACE" \
+            --run-root tier3-all62 \
+            --fortran-reference-archive '${{ steps.assets.outputs.fortran }}' \
+            --cpp-reference-archive '${{ steps.assets.outputs.cpp44 }}' \
+            --out tier3-all62/comparisons
+      - name: Enforce all-62 scientific and frozen-C++ gates
+        run: |
+          python tools/ci/check_science_results.py \
+            --run-root tier3-all62 \
+            --comparison-root tier3-all62/comparisons \
+            --require-cpp44-exact
+      - name: Report by element, density regime, ionization regime, backend, and runtime
+        run: |
+          python tools/ci/report_benchmark_results.py \
+            --run-manifest tier3-all62/run_manifest.csv \
+            --model-summary tier3-all62/comparisons/fortran_model_summary.csv \
+            --out tier3-all62/report
+      - name: Upload Tier-3 release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier3-all62
+          retention-days: 30
+          path: |
+            tier3-all62/run_manifest.csv
+            tier3-all62/run_summary.json
+            tier3-all62/comparisons/
+            tier3-all62/report/
+            tier3-all62/logs/

@@ -1,0 +1,43 @@
+name: release-candidate-boundary
+
+on:
+  push:
+    tags:
+      - 'v*rc*'
+  workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: 'Optional tag to validate, e.g. v0.6.81rc1'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  static-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate current reference catalog
+        run: python tools/qualification/check_reference_normalization_0_6_79.py
+      - name: Validate release-candidate static boundary
+        shell: bash
+        run: |
+          TAG=""
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="$GITHUB_REF_NAME"; fi
+          if [[ -n '${{ inputs.candidate_tag }}' ]]; then TAG='${{ inputs.candidate_tag }}'; fi
+          if [[ -n "$TAG" ]]; then
+            python tools/release/check_release_candidate_boundary.py --tag "$TAG"
+          else
+            python tools/release/check_release_candidate_boundary.py
+          fi
+      - name: Release-candidate dynamic evidence reminder
+        run: |
+          echo 'Tier-3 all-62, packaging, conda, and docs run as independent tag workflows.'
+          echo 'Tier-2 backend parity is required release evidence before publication.'
+          echo 'Performance is report-only and remains separate from science acceptance.'
