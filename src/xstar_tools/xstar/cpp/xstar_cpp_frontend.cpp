@@ -415,7 +415,23 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
     std::error_code ec;
     std::filesystem::create_directories(input.output_dir,ec);
     if(ec) throw std::runtime_error("could not create output directory: "+input.output_dir.string());
-    auto path=input.parameters_out.empty()?input.output_dir/".xstar-cpp-parameters.json":input.parameters_out;
+
+    // The native production operator deliberately validates artifact_profile=none
+    // before returning: only XSTAR science products may exist in the requested
+    // output directory at that boundary.  A frontend-generated parameter
+    // envelope is orchestration state, not an XSTAR product, so keep the default
+    // envelope in the system temporary directory and remove it after the run.
+    // --parameters-out remains the explicit opt-in for retaining the envelope.
+    std::filesystem::path path;
+    if(input.parameters_out.empty()) {
+        const auto temp_dir=std::filesystem::temp_directory_path(ec);
+        if(ec) throw std::runtime_error("could not resolve temporary directory for parameter envelope");
+        path=temp_dir/("xstar-cpp-parameters-"+std::to_string(static_cast<long long>(::getpid()))+".json");
+        std::filesystem::remove(path,ec);
+        ec.clear();
+    } else {
+        path=input.parameters_out;
+    }
     if(path.has_parent_path()) std::filesystem::create_directories(path.parent_path(),ec);
     if(ec) throw std::runtime_error("could not create parameter-envelope directory: "+path.parent_path().string());
     std::ofstream out(path); if(!out) throw std::runtime_error("could not write parameter envelope: "+path.string());
@@ -564,17 +580,29 @@ int run_frontend(const std::filesystem::path& native,FrontendInput& input) {
     if(!verify_runtime_abi(std::cerr,&abi)) return kAbiMismatchExit;
     if(input.threads>0) ::setenv("OMP_NUM_THREADS",std::to_string(input.threads).c_str(),1);
     if(input.deterministic) ::setenv("XSTAR_TOOLS_REPRODUCIBLE","1",1);
+    const bool retain_parameters=!input.parameters_out.empty();
     const auto parameters=write_envelope(input);
+    auto remove_ephemeral_parameters=[&]() {
+        if(retain_parameters) return;
+        std::error_code ec;
+        std::filesystem::remove(parameters,ec);
+    };
     progress_event(input,"run_started",input.output_dir.string());
     const auto start=std::chrono::steady_clock::now();
     const int rc=run_native_wait(native,{"run-production","--parameters",parameters.string(),"--output-dir",input.output_dir.string()});
     const double wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
-    const auto default_provenance=input.output_dir/"xstar_execution_provenance.json";
-    write_execution_provenance(default_provenance,input,abi,rc,wall);
-    if(!input.provenance_path.empty() && std::filesystem::absolute(input.provenance_path)!=std::filesystem::absolute(default_provenance))
-        write_execution_provenance(input.provenance_path,input,abi,rc,wall);
-    if(!input.json_summary.empty()) write_summary(input.json_summary,input,abi,rc,wall,parameters);
-    if(!input.profile_path.empty()) write_profile(input.profile_path,input,rc,wall);
+    try {
+        const auto default_provenance=input.output_dir/"xstar_execution_provenance.json";
+        write_execution_provenance(default_provenance,input,abi,rc,wall);
+        if(!input.provenance_path.empty() && std::filesystem::absolute(input.provenance_path)!=std::filesystem::absolute(default_provenance))
+            write_execution_provenance(input.provenance_path,input,abi,rc,wall);
+        if(!input.json_summary.empty()) write_summary(input.json_summary,input,abi,rc,wall,parameters);
+        if(!input.profile_path.empty()) write_profile(input.profile_path,input,rc,wall);
+        remove_ephemeral_parameters();
+    } catch(...) {
+        remove_ephemeral_parameters();
+        throw;
+    }
     progress_event(input,rc==0?"run_completed":"run_failed","return_code="+std::to_string(rc));
     if(rc==0 && input.print_option>=0) {
         if(!print_step_option(input.output_dir/"xout_step.log",input.print_option,std::cout)) {

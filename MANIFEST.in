@@ -143,3 +143,19 @@ include tools/qualification/check_xstar_parameter_contract_0_6_82.py
 include qualification/xstar_parameter_contract_0_6_82.json
 include docs/developer/xstar_parameter_contract_0_6_82.md
 include tests/test_xstar_parameter_contract_0_6_82.py
+
+# 0.6.82.1 full multi-element native ATDB/lowering closure.
+include qualification/multi_element_atdb_lowering_0_6_82_1.json
+include tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
+include docs/developer/multi_element_atdb_lowering_0_6_82_1.md
+include tests/test_multi_element_atdb_lowering_0_6_82_1.py
+include examples/xstar_example.par
+include docs/developer/xstar_cpp_file_silent_0_6_82_1.md
+include tools/qualification/run_multi_element_host_smoke_0_6_82_1.py
+
+# 0.6.82.2 broad-element Type-51 production fallback closure.
+include qualification/type51_broad_element_closure_0_6_82_2.json
+include tools/qualification/check_type51_broad_element_closure_0_6_82_2.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_2.py
+include docs/developer/type51_broad_element_closure_0_6_82_2.md
+include tests/test_type51_broad_element_closure_0_6_82_2.py

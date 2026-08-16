@@ -780,8 +780,19 @@ int row_for_local(const Layout& l,int ion,int local) {
 // Purpose: Provide row for idest as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-int row_for_idest(const Layout& l,const Block& b,int idest) {
-    int row=b.compact_start+idest-1; if (row<1 || row>l.n_rows) throw std::runtime_error("destination outside compact element basis"); return row;
+int row_for_idest(const Layout&,const Block& b,int idest) {
+    // Source calc_hmc_ion keeps idest values relative to the current ion and
+    // calc_hmc_element shifts them by ipmat2.  The resulting matrix endpoint
+    // may lie above the element's active compact dimension; msolvelucy.f90
+    // aliases such endpoints to the final compact row with min(ipmat,indb).
+    // Preserve the raw shifted endpoint here and defer that aliasing to the
+    // matrix-consumption boundary instead of rejecting a source-valid record
+    // during ATDB lowering.
+    if (idest <= 0) throw std::runtime_error("ATDB destination endpoint is non-positive");
+    const long long row = static_cast<long long>(b.compact_start) + static_cast<long long>(idest) - 1LL;
+    if (row < 1LL || row > static_cast<long long>(std::numeric_limits<int>::max()))
+        throw std::runtime_error("ATDB destination endpoint overflows native compact index");
+    return static_cast<int>(row);
 }
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide row for source endpoint as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
@@ -875,6 +886,34 @@ const LevelValue* find_level(const Layout& l,int ion,int local) {
 // XSTAR-FUNCTION-COMMENT-END
 const LevelValue* find_snapshot(const Layout& l,int ion,int column) {
     auto ti=l.snapshots.find(ion); if (ti==l.snapshots.end()) return nullptr; auto vi=ti->second.find(column); return vi==ti->second.end()?nullptr:&vi->second;
+}
+
+// Resolve the mutable source leveltemp value visible to UCalc for an idest
+// column.  This is intentionally separate from the compact matrix row: source
+// idest values above the active matrix dimension may still refer to a live (or
+// retained) leveltemp column, while msolvelucy later clamps the matrix endpoint.
+const LevelValue* source_endpoint_level(const Layout& l,const Block& b,int idest) {
+    if (idest <= 0) return nullptr;
+    if (const auto* v=find_snapshot(l,b.ion_index,idest)) return v;
+    if (const auto* v=find_level(l,b.ion_index,idest)) return v;
+    return nullptr;
+}
+
+double source_endpoint_energy(const Layout& l,const Block& b,int idest,int raw_row) {
+    // Preserve every previously qualified in-bounds compact-row value exactly.
+    // Only an endpoint that lies beyond ipmat needs the retained source
+    // leveltemp workspace; msolvelucy aliases its matrix row later.
+    if (raw_row >= 1 && raw_row <= l.n_rows) return row_energy(l,raw_row);
+    if (const auto* v=source_endpoint_level(l,b,idest)) return v->energy;
+    const int clamped=std::min(std::max(raw_row,1),l.n_rows);
+    return row_energy(l,clamped);
+}
+
+double source_endpoint_weight(const Layout& l,const Block& b,int idest,int raw_row) {
+    if (raw_row >= 1 && raw_row <= l.n_rows) return row_weight(l,raw_row);
+    if (const auto* v=source_endpoint_level(l,b,idest)) return std::max(v->weight,1.0e-300);
+    const int clamped=std::min(std::max(raw_row,1),l.n_rows);
+    return row_weight(l,clamped);
 }
 
 // v82 patch 5.20.7: literal ucalc/deleafnd Type-50 damping ownership.
@@ -976,8 +1015,8 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     if (dt==1) { need(rr.size()>=2,"short payload"); out.reals.assign(rr.begin(),rr.begin()+2); out.ints.clear(); matrix=false; }
     else if (dt==2) { need(rr.size()>=4,"short payload"); lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==7) { need(rr.size()>=4,"short payload"); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); matrix=false; }
-    else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
-    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(source_endpoint_energy(l,b,(ii.size()>1?b.nlev+static_cast<int>(ii[1])-1:b.nlev),upper)-source_endpoint_energy(l,b,(ii.size()>1?static_cast<int>(ii[0]):1),lower)); }
+    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(source_endpoint_energy(l,b,b.nlev,upper)-source_endpoint_energy(l,b,id1,lower)); }
     else if (dt==30) { need(!ii.empty(),"missing nmax"); out.reals.clear(); out.ints={ii[0]}; matrix=false; }
     else if (dt==38 || dt==39) { need((dt==38&&rr.size()>=4)||(dt==39&&rr.size()>=2),"short payload"); out.ints.clear(); matrix=false; }
     // Types 50 and 91 are bound-bound radiative line records: wavelength and
@@ -1019,7 +1058,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             energy=rr[0];
         }
         const double gglo=row_weight(l,row_for_local(l,ion,1));
-        const double ggup=source_zero?1.0:row_weight(l,upper);
+        const double ggup=source_zero?1.0:source_endpoint_weight(l,b,id2,upper);
         out.reals=rr;
         out.reals.push_back(gglo);
         out.reals.push_back(ggup);
@@ -1072,15 +1111,15 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         auto set_pair = [&](int id1, int id2, bool enabled=true) {
             if (!enabled || id1 <= 0 || id2 <= 0) { lower=upper=0; matrix=false; return; }
             lower=row_for_idest(l,b,id1); upper=row_for_idest(l,b,id2);
-            energy=std::abs(row_energy(l,upper)-row_energy(l,lower));
+            energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower));
         };
         auto energy_order_pair = [&](int a, int c) {
             int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
-            if (row_energy(l,ra) <= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
+            if (source_endpoint_energy(l,b,a,ra) <= source_endpoint_energy(l,b,c,rc)) set_pair(a,c); else set_pair(c,a);
         };
         auto upper_lower_pair = [&](int a, int c) {
             int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
-            if (row_energy(l,ra) >= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
+            if (source_endpoint_energy(l,b,a,ra) >= source_endpoint_energy(l,b,c,rc)) set_pair(a,c); else set_pair(c,a);
         };
         switch (dt) {
             case 3: set_pair(1,1); break;
@@ -1147,7 +1186,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==74) { need(ii.size()>=2,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-2]);upper=row_for_local(l,ion,b.nlev);out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     // Type 86 stores K-vacancy Auger/radiative widths and level identities.
     // These widths contribute to damping/lifetime handling rather than a PI grid.
-    else if (dt==86) { need(ii.size()>=5&&rr.size()>=2,"short payload");int id1=ii[ii.size()-4],id2=b.nlev+ii[ii.size()-5]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);out.reals={rr[1]};out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==86) { need(ii.size()>=5&&rr.size()>=2,"short payload");int id1=ii[ii.size()-4],id2=b.nlev+ii[ii.size()-5]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);out.reals={rr[1]};out.ints.clear();energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower)); }
     // Type 88 stores the damped excess photoionization cross section to a
     // K-shell superlevel as energy/cross-section pairs; ucalc extrapolates from
     // the source threshold and applies the inner-shell photoabsorption ownership.
@@ -1167,7 +1206,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         out.ints={static_cast<std::int64_t>(rr.size()/2),owner,local,calc_emis_idest2};energy=threshold; }
     // Type 95 is the level collisional-ionization fit: threshold energy,
     // temperature scale, and tabulated effective-collision-strength values.
-    else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);}else lower=upper=row_for_local(l,ion,1);out.ints.push_back(row_for_local(l,ion,b.nlev));energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower));}else {lower=upper=row_for_local(l,ion,1);energy=0.0;}out.ints.push_back(row_for_local(l,ion,b.nlev)); }
     // Type 99 is the newer superlevel recombination/photoionization table.
     // Like Type 70 it combines density/temperature recombination data with a
     // photoionization grid, but Appendix A records the updated coefficient layout.

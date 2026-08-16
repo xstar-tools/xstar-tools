@@ -297,3 +297,13 @@ For the exact software identity used in a run:
 ```bash
 xstar-tools version
 ```
+### Realistic multi-element native example
+
+`examples/xstar_example.par` is a ready-to-run broad-composition parameter file for `xstar-cpp`.  It enables H, He, C, N, O, Ne, Mg, Al, Si, S, Ar, Ca, Cr, Fe, and Ni and exercises the general native ATDB lowering path rather than a single-metal smoke case.  See `examples/README.md` for the command.
+For the 0.6.82.1 physical acceptance on a host with canonical XSTAR data, `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py --data-dir /path/to/xstar/data --replace` verifies the full 15-element path and the public `xstar-cpp` file-silent frontend boundary.
+
+
+
+### 0.6.82.2 broad-element Type-51 closure
+
+`0.6.82.2` keeps the accepted `0.6.82.1` multi-element lowering and file-silent frontend repairs, and closes the downstream Type-51 production abort exposed by the real 15-element host run. Finite legacy Type-51 results remain the compatibility result; source-faithful Type-51 is used only when that legacy evaluator cannot represent an otherwise valid canonical record. The physical broad-mixture gate is version-locked through `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py`.

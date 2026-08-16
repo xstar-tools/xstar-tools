@@ -3985,9 +3985,12 @@ void validate_program(Program& p) {
         if (r.next_index < -1 || r.next_index >= static_cast<int>(p.records.size())) throw std::runtime_error("record next_index out of range");
         if (r.real_offset + r.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
         if (r.int_offset + r.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
-        const auto& e = p.elements[static_cast<std::size_t>(r.element_index)];
         if (r.matrix_enabled) {
-            if (r.lower_row < 1 || r.lower_row > e.n_rows || r.upper_row < 1 || r.upper_row > e.n_rows) throw std::runtime_error("record endpoint out of compact element range");
+            // Source calc_hmc_element may retain raw idest endpoints above the
+            // compact element dimension.  msolvelucy.f90 applies
+            // min(ipmat,indb(...)) when the matrix is consumed, so only
+            // non-positive endpoints are invalid at program-load time.
+            if (r.lower_row < 1 || r.upper_row < 1) throw std::runtime_error("record endpoint is non-positive");
         } else if (r.lower_row != 0 || r.upper_row != 0) {
             throw std::runtime_error("scalar-only record endpoints must be zero");
         }
@@ -4328,16 +4331,26 @@ double type51_upsilon_legacy(
     const double* r, std::size_t n, const std::int64_t* ints,
     std::size_t ni, double temperature_k
 ) {
-    if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0) return -1.0;
+    if (!r || n < 7 || !ints || ni < 1 || !std::isfinite(r[0]) ||
+        !std::isfinite(r[1]) || r[0] <= 0.0)
+        return std::numeric_limits<double>::quiet_NaN();
     const int bt_type = static_cast<int>(ints[0]);
     const double eij_ryd = r[0], c = r[1];
     const double u = temperature_k / (eij_ryd * 157887.0);
-    if (!(u > 0.0)) return -1.0;
+    if (!(u > 0.0)) return std::numeric_limits<double>::quiet_NaN();
     double x = 0.0;
     switch (bt_type) {
-        case 1: case 4: x = 1.0 - std::log(c) / std::log(u + c); break;
-        case 2: case 3: case 5: case 6: x = u / (u + c); break;
-        default: return -1.0;
+        case 1: case 4:
+            if (!(c > 0.0) || !(u + c > 0.0) || std::log(u + c) == 0.0)
+                return std::numeric_limits<double>::quiet_NaN();
+            x = 1.0 - std::log(c) / std::log(u + c);
+            break;
+        case 2: case 3: case 5: case 6:
+            if ((u + c) == 0.0 || !std::isfinite(u + c))
+                return std::numeric_limits<double>::quiet_NaN();
+            x = u / (u + c);
+            break;
+        default: return std::numeric_limits<double>::quiet_NaN();
     }
     double scaled = 0.0;
     if (n == 7) {
@@ -4348,7 +4361,7 @@ double type51_upsilon_legacy(
         scaled = y[k] + f * (y[k + 1] - y[k]);
     } else if (n >= 11) {
         scaled = natural_spline9(r + 2, x);
-    } else return -1.0;
+    } else return std::numeric_limits<double>::quiet_NaN();
     switch (bt_type) {
         case 1: return scaled * std::log(u + std::exp(1.0));
         case 2: return scaled;
@@ -4356,7 +4369,7 @@ double type51_upsilon_legacy(
         case 4: return scaled * std::log(u + c);
         case 5: return scaled / u;
         case 6: return std::pow(10.0, scaled);
-        default: return -1.0;
+        default: return std::numeric_limits<double>::quiet_NaN();
     }
 }
 
@@ -4386,7 +4399,8 @@ Type51UpsilonEvaluation type51_upsilon(
     std::size_t ni, double temperature_k
 ) {
     Type51UpsilonEvaluation result;
-    if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0 || !(temperature_k > 0.0)) return result;
+    if (!r || n < 7 || !ints || ni < 1 || !std::isfinite(r[0]) ||
+        !std::isfinite(r[1]) || r[0] <= 0.0 || !(temperature_k > 0.0)) return result;
     result.bt_type = static_cast<int>(ints[0]);
     result.point_count = n == 7 ? 5 : (n >= 11 ? 9 : 0);
     result.eij_ryd = r[0];
@@ -4403,6 +4417,7 @@ Type51UpsilonEvaluation type51_upsilon(
     double x = 0.0;
     if (result.point_count == 5) {
         if (result.bt_type == 1 || result.bt_type == 4) {
+            if (!(result.scaling_c > 0.0) || !(u + result.scaling_c > 0.0)) return result;
             const double denom = std::log(u + result.scaling_c);
             if (denom == 0.0 || !std::isfinite(denom)) return result;
             x = std::log((u + result.scaling_c) / result.scaling_c) / denom;
@@ -4412,18 +4427,23 @@ Type51UpsilonEvaluation type51_upsilon(
             // while using the later type-5/type-6 transforms.  The source
             // interpolation remains splinem5; only the temperature transform
             // and final inverse scaling follow the general BT definitions.
-            x = u / (u + result.scaling_c);
+            const double denom = u + result.scaling_c;
+            if (denom == 0.0 || !std::isfinite(denom)) return result;
+            x = u / denom;
         } else {
             return result;
         }
         result.scaled_upsilon = type51_splinem5(r + 2, x);
     } else if (result.point_count == 9) {
         if (result.bt_type == 1 || result.bt_type == 4) {
+            if (!(result.scaling_c > 0.0) || !(u + result.scaling_c > 0.0)) return result;
             const double denom = std::log(u + result.scaling_c);
             if (denom == 0.0 || !std::isfinite(denom)) return result;
             x = 1.0 - std::log(result.scaling_c) / denom;
         } else if (result.bt_type == 2 || result.bt_type == 3 || result.bt_type == 5 || result.bt_type == 6) {
-            x = u / (u + result.scaling_c);
+            const double denom = u + result.scaling_c;
+            if (denom == 0.0 || !std::isfinite(denom)) return result;
+            x = u / denom;
         } else {
             return result;
         }
@@ -6616,8 +6636,12 @@ EvaluatedRecord evaluate_record(
     const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
     const auto* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
     const ElementRow scalar_dummy{};
-    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
-    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
+    // Preserve source raw idest values on the record, but evaluate any compact
+    // row fallback through the same terminal-row alias used by msolvelucy.
+    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
+    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
     const double delta_ev = record.line_energy_ev > 0.0 ? record.line_energy_ev : (record.matrix_enabled ? std::abs(upper.energy_ev - lower.energy_ev) : 0.0);
     const double ne = rate_context.ne;
     const double t4 = rate_context.t4;
@@ -7944,31 +7968,16 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION: {
-            const double legacy_ups = type51_upsilon_legacy(
-                r, record.real_count, ints, record.int_count, input.temperature_k
-            );
-            if (!(legacy_ups >= 0.0) || !std::isfinite(legacy_ups)) {
-                throw std::runtime_error("invalid legacy type51 payload");
-            }
-            const double legacy_root_t = std::sqrt(input.temperature_k);
-            const double legacy_kt_ev =
-                xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
-            const double legacy_qex =
-                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
-                std::exp(-delta_ev / legacy_kt_ev) /
-                (lower.statistical_weight * legacy_root_t);
-            const double legacy_qde =
-                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
-                (upper.statistical_weight * legacy_root_t);
-            const std::array<double,6> legacy_ans{{
-                legacy_qex * ne,
-                legacy_qde * ne,
-                0.0,
-                0.0,
-                legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-            }};
+            // XSTAR ucalc.f90 label 51 evaluates only nrdt=7 (five-point)
+            // and nrdt=11 (nine-point) Burgess-Tully records.  Other payload
+            // lengths follow the source no-contribution path rather than
+            // terminating the model.
+            if (record.real_count != 7 && record.real_count != 11) break;
 
+            // Evaluate the canonical/source-faithful representation first.
+            // The legacy evaluator remains the committed compatibility path
+            // wherever it produces a finite result, preserving all accepted
+            // pre-0.6.82.2 outputs.
             const auto bt = type51_upsilon(
                 r, record.real_count, ints, record.int_count, input.temperature_k
             );
@@ -8007,25 +8016,63 @@ EvaluatedRecord evaluate_record(
                 source_ans2 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
                 source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
             }};
+
+            const double legacy_ups = type51_upsilon_legacy(
+                r, record.real_count, ints, record.int_count, input.temperature_k
+            );
+            const bool legacy_valid = std::isfinite(legacy_ups);
+            std::array<double,6> legacy_ans{{
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                0.0,
+                0.0,
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+            }};
+            if (legacy_valid) {
+                const double legacy_root_t = std::sqrt(input.temperature_k);
+                const double legacy_kt_ev =
+                    xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+                const double legacy_qex =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
+                    std::exp(-delta_ev / legacy_kt_ev) /
+                    (lower.statistical_weight * legacy_root_t);
+                const double legacy_qde =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
+                    (upper.statistical_weight * legacy_root_t);
+                legacy_ans = {{
+                    legacy_qex * ne,
+                    legacy_qde * ne,
+                    0.0,
+                    0.0,
+                    legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                    legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                }};
+            }
             // v0.6.48.7.46.21.8: the source Type-51 evaluator contract is
             // element-independent.  The earlier Mg-only promotion left the
             // Hydrogen and Helium collision energy channels on the legacy
             // constants/path even during independent Thermal qualification.
             // Preserve the old Mg flag as a compatibility alias, while the
             // general flag promotes the same source-faithful path for H/He/Mg.
-            const bool source_faithful =
+            const bool source_faithful_requested =
                 environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL") ||
                 (element.element_z == 12 &&
                  environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL"));
-            const auto& committed = source_faithful ? source_ans : legacy_ans;
+            // A non-finite legacy sentinel means the compatibility evaluator
+            // cannot represent this source-valid record.  In that case use
+            // the canonical result instead of aborting broad-element runs.
+            const bool source_faithful_committed =
+                source_faithful_requested || !legacy_valid;
+            const auto& committed = source_faithful_committed ? source_ans : legacy_ans;
             c.ans1 = committed[0]; c.ans2 = committed[1];
             c.ans3 = committed[2]; c.ans4 = committed[3];
             c.ans5 = committed[4]; c.ans6 = committed[5];
 
             auto& shadow = out.type51_shadow;
             shadow.valid = true;
-            shadow.source_faithful_mode = source_faithful;
-            shadow.replacement_applied = source_faithful;
+            shadow.source_faithful_mode = source_faithful_committed;
+            shadow.replacement_applied = source_faithful_committed;
             shadow.endpoint_order_exact = lower.energy_ev <= upper.energy_ev;
             shadow.bt_type = bt.bt_type;
             shadow.point_count = bt.point_count;
@@ -8783,8 +8830,12 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     if (record.real_offset + record.real_count > program.reals.size()) return shadow;
     const double* r = program.reals.data() + record.real_offset;
     const ElementRow scalar_dummy{};
-    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
-    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
+    // Preserve source raw idest values on the record, but evaluate any compact
+    // row fallback through the same terminal-row alias used by msolvelucy.
+    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
+    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
     Type53RecordContext record_context = evaluated.bound_free_record_context_v064895;
     const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
     if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
@@ -9185,8 +9236,8 @@ void apply_magnesium_type99_persistent_leveltemp(
                 !(resolved.threshold_ev > 0.0)) {
                 throw std::runtime_error("Mg Type-99 resolved energy/weight context is invalid");
             }
-            const ElementRow& lower = row_at(element, record.lower_row);
-            const ElementRow& upper = row_at(element, record.upper_row);
+            const ElementRow& lower = row_at(element, std::min(record.lower_row, element.n_rows));
+            const ElementRow& upper = row_at(element, std::min(record.upper_row, element.n_rows));
             xstar_element_contribution_v1 corrected = contribution;
             Type99SourceShadow corrected_shadow{};
             if (!evaluate_type99_source_faithful(

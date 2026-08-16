@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.82.2 — broad-element Type-51 production fallback closure - 2026-08-16
+
+- Preserve `0.6.82.1` as the rejected broad-host milestone: its generic multi-element ATDB lowering reached 15 active elements successfully, but the first production evaluation still aborted on a legacy Type-51 payload.
+- Preserve every previously accepted finite legacy Type-51 result. When the legacy evaluator cannot represent a source-valid record, commit the canonical source-faithful Type-51 result instead of aborting the model.
+- Match canonical `ucalc.f90` payload-length semantics: only `nrdt=7` and `nrdt=11` are evaluated; other Type-51 payloads follow the source no-contribution path.
+- Allow rational Burgess-Tully transforms (types 2/3/5/6) whenever their denominator is finite and non-zero; keep positive-domain checks only where the logarithmic transforms (types 1/4) require them.
+- Add version-locked `run_multi_element_host_smoke_0_6_82_2.py`; it refuses to run unless `xstar-cpp --version` reports package version `0.6.82.2`, preventing stale binaries from being mistaken for the current source.
+- Add a regression that protects the adjacent Type-54, Type-57, and Type-59 production cases from accidental deletion while changing the Type-51 switch branch.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ reference `0.6.48.12.3.44`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60488`, and XSPEC-table ABI `1`.
+
 # 0.6.82 — XSTAR public parameter-contract closure - 2026-08-16
 
 - Add source-concordant `abundtbl` support for the ten XSTAR abundance bases documented by the manual: `xdef`, `angr`, `aspl`, `feld`, `aneb`, `grsa`, `wilm`, `lodd`, `lpgp`, and `lpgs`; also accept the supplied 2.59g source spellings `lgpp`/`lgps` as aliases.
