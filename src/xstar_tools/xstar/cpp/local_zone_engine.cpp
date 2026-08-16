@@ -11,7 +11,6 @@
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
 #include "xstar_local_zone_engine.h"
-#include "xstar_local_zone_internal.hpp"
 #include "source_real_energy_grid.hpp"
 #include "source_order_thermal_reducer.hpp"
 #include "canonical_thermal_term.hpp"
@@ -54,12 +53,6 @@ using clock_type = std::chrono::steady_clock;
 constexpr double kBoltzmannEvK = xstar_constants::kModernBoltzmannEvPerK;
 constexpr double kErgPerEv = xstar_constants::kModernErgPerEv;
 constexpr std::size_t kSourceLeveltempNdlV06481231 = 5000u;
-// XSTAR 2.59g globaldata/PARAM declares nd=20000.  levwkelement.f90's
-// local real(8) rnisi(nd) is a large fixed-size workspace.  In the canonical
-// gfortran build it has static storage lifetime, is zero-filled initially, and
-// retains entries outside the 1:nlev slice overwritten by each levwk call.
-// Preserve that source lifetime explicitly on the reusable C++ context.
-constexpr std::size_t kSourceLevWkRnisiNdV06828 = 20000u;
 constexpr double kRydEv = 13.60569253;
 // The v0.6.47.2 type-53 evaluator uses the historical rounded Rydberg
 // constant.  Keep it separate from the newer global constant: changing this
@@ -297,7 +290,17 @@ bool native_promoted_flag(const char* name) {
     if (!native_production_mode()) return false;
     static const std::unordered_set<std::string> promoted = {
         "XSTAR_QUALIFICATION_REPLACEMENT",
+        "XSTAR_QUALIFICATION_HYDROGEN_TYPE53_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_HELIUM_TYPE53_INTERVAL_SOURCE_ORDER",
+        "XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION",
         "XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION",
+        "XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE",
+        "XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD",
+        "XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY",
+        "XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL",
         "XSTAR_QUALIFICATION_SOLVE_RESPONSE",
         "XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER",
         "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE",
@@ -305,6 +308,12 @@ bool native_promoted_flag(const char* name) {
         "XSTAR_NATIVE_SEQUENCE1_THERMAL_DIAGONAL_RECONSTRUCTION",
         "XSTAR_NATIVE_SEQUENCE1_SOURCE_FAITHFUL_POPULATION_SEED",
         "XSTAR_NATIVE_SEQUENCE1_THERMAL_SOURCE_ORDER",
+        "XSTAR_QUALIFICATION_MG_TYPE99_SECONDARY_ENERGY_CORRECTION",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY",
+        "XSTAR_QUALIFICATION_TYPE68_SOURCE_CONSTANTS",
         "XSTAR_QUALIFICATION_CONTINUUM_WORKSPACE_SOURCE_FAITHFUL",
         "XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW"
     };
@@ -1194,9 +1203,8 @@ magnesium_primary_cooling_order_state() {
     return found->second;
 }
 
-// Literal pescl.f90 line escape probability.  Source declares REAL(8) pi
-// but initializes it from the default-REAL literal 3.1415927, so canonical
-// execution promotes the source-rounded binary32 value to REAL(8).
+// Literal v0.6.47.2 Python translation of pescl.f90.  The accepted source
+// reference uses Python binary64 math.pi and libm exp/log/sqrt semantics.
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement pescl as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
@@ -1212,8 +1220,8 @@ double pescl(double tau) {
         }
     } else {
         const double bb = 0.5 * std::sqrt(std::max(std::log(tau), 0.0)) / (1.0 + tau / 1.0e5);
-        constexpr double kSourcePesclPi = static_cast<double>(3.1415927f);
-        value = 1.0 / (tau * std::sqrt(kSourcePesclPi) * (1.2 + bb));
+        constexpr double kPythonPi = 3.1451653589793238462643383279502884;
+        value = 1.0 / (tau * std::sqrt(kPythonPi) * (1.2 + bb));
     }
     return value / 2.0;
 }
@@ -1537,7 +1545,6 @@ struct Type99PersistentLeveltempContextV048746223 {
     std::uint32_t parent_mask = 0;
     std::uint32_t destination_mask = 0;
     int excited_parent_mode = 0;
-    int stage_count = 0;
     double incoming_bound_energy_ev = 0.0;
     double incoming_bound_statistical_weight = 0.0;
     double incoming_parent_energy_ev = 0.0;
@@ -1546,12 +1553,12 @@ struct Type99PersistentLeveltempContextV048746223 {
     double incoming_destination_statistical_weight = 0.0;
     double excited_parent_energy_ev = 0.0;
     double excited_parent_statistical_weight = 0.0;
-    std::array<double,30> bound_candidate_energy_ev{};
-    std::array<double,30> bound_candidate_statistical_weight{};
-    std::array<double,30> parent_candidate_energy_ev{};
-    std::array<double,30> parent_candidate_statistical_weight{};
-    std::array<double,30> destination_candidate_energy_ev{};
-    std::array<double,30> destination_candidate_statistical_weight{};
+    std::array<double,12> bound_candidate_energy_ev{};
+    std::array<double,12> bound_candidate_statistical_weight{};
+    std::array<double,12> parent_candidate_energy_ev{};
+    std::array<double,12> parent_candidate_statistical_weight{};
+    std::array<double,12> destination_candidate_energy_ev{};
+    std::array<double,12> destination_candidate_statistical_weight{};
 };
 
 struct Type99ResolvedLeveltempContextV048746223 {
@@ -1660,10 +1667,6 @@ struct EvaluatedRecord {
     std::vector<double> generic_bound_free_sigma_cm2_v0648120;
     Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
-    // 0.6.82.19: calc_emis_all revisits Type-50 on the full epi/bremsa
-    // grid after the reduced calc_hmc/calc_emisab stages. Keep that source
-    // lifetime distinct; cfrac=1 hid this because photoexcitation is zero.
-    Type50SourceShadow type50_calc_emis_shadow{};
     Type99SourceShadow type99_shadow{};
 };
 
@@ -3591,23 +3594,12 @@ struct xstar_fixed_state_context_impl {
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
-    // 0.6.82.29.2 publication-only retention of literal calc_ion_rates
-    // full-stage totals.  These are intentionally separate from the active
-    // compact matrix window used by the solver.
-    std::map<int, std::vector<double>> last_source_ionization_rates_v0682292;
-    std::map<int, std::vector<double>> last_source_recombination_rates_v0682292;
     // v0.6.48.12.3.1: source leveltemp(2,1:5000) is one mutable workspace
     // shared across element solves and fixed-state evaluations.  Type49/53
     // destination-energy ownership therefore cannot be reconstructed from a
     // per-ion static ATDB snapshot when no active ion writes a destination
     // column.  Preserve the source workspace explicitly.
     std::vector<double> source_leveltemp_energy_workspace_v06481231;
-    // 0.6.82.8: source-faithful levwkelement.f90 rnisi(nd) lifetime.  This
-    // workspace is shared by every element and retained across fixed-state
-    // evaluations, exactly like the canonical large fixed local array.  Index
-    // zero is intentionally unused so source 1-based rnisi(1:nd) maps directly.
-    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>
-        source_levwk_rnisi_workspace_v06828{};
     // v0.6.48.11.4: model runtime calc_hmc_element critf.  Keep this on
     // the context so the historical xstar_fixed_state_input_v1 ABI remains
     // byte-for-byte unchanged.
@@ -3993,12 +3985,9 @@ void validate_program(Program& p) {
         if (r.next_index < -1 || r.next_index >= static_cast<int>(p.records.size())) throw std::runtime_error("record next_index out of range");
         if (r.real_offset + r.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
         if (r.int_offset + r.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
+        const auto& e = p.elements[static_cast<std::size_t>(r.element_index)];
         if (r.matrix_enabled) {
-            // Source calc_hmc_element may retain raw idest endpoints above the
-            // compact element dimension.  msolvelucy.f90 applies
-            // min(ipmat,indb(...)) when the matrix is consumed, so only
-            // non-positive endpoints are invalid at program-load time.
-            if (r.lower_row < 1 || r.upper_row < 1) throw std::runtime_error("record endpoint is non-positive");
+            if (r.lower_row < 1 || r.lower_row > e.n_rows || r.upper_row < 1 || r.upper_row > e.n_rows) throw std::runtime_error("record endpoint out of compact element range");
         } else if (r.lower_row != 0 || r.upper_row != 0) {
             throw std::runtime_error("scalar-only record endpoints must be zero");
         }
@@ -4339,26 +4328,16 @@ double type51_upsilon_legacy(
     const double* r, std::size_t n, const std::int64_t* ints,
     std::size_t ni, double temperature_k
 ) {
-    if (!r || n < 7 || !ints || ni < 1 || !std::isfinite(r[0]) ||
-        !std::isfinite(r[1]) || r[0] <= 0.0)
-        return std::numeric_limits<double>::quiet_NaN();
+    if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0) return -1.0;
     const int bt_type = static_cast<int>(ints[0]);
     const double eij_ryd = r[0], c = r[1];
     const double u = temperature_k / (eij_ryd * 157887.0);
-    if (!(u > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+    if (!(u > 0.0)) return -1.0;
     double x = 0.0;
     switch (bt_type) {
-        case 1: case 4:
-            if (!(c > 0.0) || !(u + c > 0.0) || std::log(u + c) == 0.0)
-                return std::numeric_limits<double>::quiet_NaN();
-            x = 1.0 - std::log(c) / std::log(u + c);
-            break;
-        case 2: case 3: case 5: case 6:
-            if ((u + c) == 0.0 || !std::isfinite(u + c))
-                return std::numeric_limits<double>::quiet_NaN();
-            x = u / (u + c);
-            break;
-        default: return std::numeric_limits<double>::quiet_NaN();
+        case 1: case 4: x = 1.0 - std::log(c) / std::log(u + c); break;
+        case 2: case 3: case 5: case 6: x = u / (u + c); break;
+        default: return -1.0;
     }
     double scaled = 0.0;
     if (n == 7) {
@@ -4369,7 +4348,7 @@ double type51_upsilon_legacy(
         scaled = y[k] + f * (y[k + 1] - y[k]);
     } else if (n >= 11) {
         scaled = natural_spline9(r + 2, x);
-    } else return std::numeric_limits<double>::quiet_NaN();
+    } else return -1.0;
     switch (bt_type) {
         case 1: return scaled * std::log(u + std::exp(1.0));
         case 2: return scaled;
@@ -4377,7 +4356,7 @@ double type51_upsilon_legacy(
         case 4: return scaled * std::log(u + c);
         case 5: return scaled / u;
         case 6: return std::pow(10.0, scaled);
-        default: return std::numeric_limits<double>::quiet_NaN();
+        default: return -1.0;
     }
 }
 
@@ -4407,8 +4386,7 @@ Type51UpsilonEvaluation type51_upsilon(
     std::size_t ni, double temperature_k
 ) {
     Type51UpsilonEvaluation result;
-    if (!r || n < 7 || !ints || ni < 1 || !std::isfinite(r[0]) ||
-        !std::isfinite(r[1]) || r[0] <= 0.0 || !(temperature_k > 0.0)) return result;
+    if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0 || !(temperature_k > 0.0)) return result;
     result.bt_type = static_cast<int>(ints[0]);
     result.point_count = n == 7 ? 5 : (n >= 11 ? 9 : 0);
     result.eij_ryd = r[0];
@@ -4425,7 +4403,6 @@ Type51UpsilonEvaluation type51_upsilon(
     double x = 0.0;
     if (result.point_count == 5) {
         if (result.bt_type == 1 || result.bt_type == 4) {
-            if (!(result.scaling_c > 0.0) || !(u + result.scaling_c > 0.0)) return result;
             const double denom = std::log(u + result.scaling_c);
             if (denom == 0.0 || !std::isfinite(denom)) return result;
             x = std::log((u + result.scaling_c) / result.scaling_c) / denom;
@@ -4435,23 +4412,18 @@ Type51UpsilonEvaluation type51_upsilon(
             // while using the later type-5/type-6 transforms.  The source
             // interpolation remains splinem5; only the temperature transform
             // and final inverse scaling follow the general BT definitions.
-            const double denom = u + result.scaling_c;
-            if (denom == 0.0 || !std::isfinite(denom)) return result;
-            x = u / denom;
+            x = u / (u + result.scaling_c);
         } else {
             return result;
         }
         result.scaled_upsilon = type51_splinem5(r + 2, x);
     } else if (result.point_count == 9) {
         if (result.bt_type == 1 || result.bt_type == 4) {
-            if (!(result.scaling_c > 0.0) || !(u + result.scaling_c > 0.0)) return result;
             const double denom = std::log(u + result.scaling_c);
             if (denom == 0.0 || !std::isfinite(denom)) return result;
             x = 1.0 - std::log(result.scaling_c) / denom;
         } else if (result.bt_type == 2 || result.bt_type == 3 || result.bt_type == 5 || result.bt_type == 6) {
-            const double denom = u + result.scaling_c;
-            if (denom == 0.0 || !std::isfinite(denom)) return result;
-            x = u / denom;
+            x = u / (u + result.scaling_c);
         } else {
             return result;
         }
@@ -5574,22 +5546,19 @@ Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_con
     const std::int64_t* ints,
     std::size_t core_real_count
 ) {
-    constexpr std::int64_t kLegacyLayoutMagic = 223;
-    constexpr std::int64_t kZ1Z30LayoutMagicV068213 = 226;
+    constexpr std::int64_t kLayoutMagic = 223;
+    constexpr std::size_t kContextRealCount = 83;  // v36 compatibility 3 + v21.13 context 80
+    constexpr std::size_t kContextRealCountWithErrcV82Patch5205 = 84;
     constexpr int kContextIntCount = 8;
     Type99PersistentLeveltempContextV048746223 context{};
-    if (!ints || record.int_count < kContextIntCount) return context;
-    const std::int64_t magic = ints[record.int_count - 1];
-    if (magic != kLegacyLayoutMagic && magic != kZ1Z30LayoutMagicV068213) return context;
-
-    const int stage_count = magic == kZ1Z30LayoutMagicV068213 ? 30 : 12;
-    const std::size_t context_real_count = static_cast<std::size_t>(11 + 6 * stage_count);
+    const bool has_magic = ints && record.int_count >= kContextIntCount &&
+        ints[record.int_count - 1] == kLayoutMagic;
+    if (!has_magic) return context;
     if (!payload ||
-        (record.real_count != core_real_count + context_real_count &&
-         record.real_count != core_real_count + context_real_count + 1)) {
-        throw std::runtime_error("Type-99 persistent leveltemp real payload is malformed");
+        (record.real_count != core_real_count + kContextRealCount &&
+         record.real_count != core_real_count + kContextRealCountWithErrcV82Patch5205)) {
+        throw std::runtime_error("Mg Type-99 persistent leveltemp real payload is malformed");
     }
-
     const int ibase = record.int_count - kContextIntCount;
     context.bound_column = static_cast<int>(ints[ibase + 0]);
     context.parent_column = static_cast<int>(ints[ibase + 1]);
@@ -5598,17 +5567,14 @@ Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_con
     context.parent_mask = static_cast<std::uint32_t>(ints[ibase + 4]);
     context.destination_mask = static_cast<std::uint32_t>(ints[ibase + 5]);
     context.excited_parent_mode = static_cast<int>(ints[ibase + 6]);
-    context.stage_count = stage_count;
-    const std::uint32_t allowed_mask = stage_count == 30 ? 0x3fffffffu : 0x00000fffu;
     if (context.bound_column <= 0 || context.parent_column <= 0 ||
         context.destination_column <= 0 ||
-        (context.bound_mask & ~allowed_mask) != 0u ||
-        (context.parent_mask & ~allowed_mask) != 0u ||
-        (context.destination_mask & ~allowed_mask) != 0u ||
+        (context.bound_mask & ~0x0fffu) != 0u ||
+        (context.parent_mask & ~0x0fffu) != 0u ||
+        (context.destination_mask & ~0x0fffu) != 0u ||
         (context.excited_parent_mode != 0 && context.excited_parent_mode != 1)) {
-        throw std::runtime_error("Type-99 persistent leveltemp integer metadata is invalid");
+        throw std::runtime_error("Mg Type-99 persistent leveltemp integer metadata is invalid");
     }
-
     const std::size_t base = core_real_count;
     context.incoming_bound_energy_ev = payload[base + 3];
     context.incoming_bound_statistical_weight = payload[base + 4];
@@ -5618,32 +5584,23 @@ Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_con
     context.incoming_destination_statistical_weight = payload[base + 8];
     context.excited_parent_energy_ev = payload[base + 9];
     context.excited_parent_statistical_weight = payload[base + 10];
-
-    const std::size_t n = static_cast<std::size_t>(stage_count);
-    const std::size_t bound_e = base + 11;
-    const std::size_t bound_w = bound_e + n;
-    const std::size_t parent_e = bound_w + n;
-    const std::size_t parent_w = parent_e + n;
-    const std::size_t dest_e = parent_w + n;
-    const std::size_t dest_w = dest_e + n;
-    for (std::size_t stage = 0; stage < n; ++stage) {
-        context.bound_candidate_energy_ev[stage] = payload[bound_e + stage];
-        context.bound_candidate_statistical_weight[stage] = payload[bound_w + stage];
-        context.parent_candidate_energy_ev[stage] = payload[parent_e + stage];
-        context.parent_candidate_statistical_weight[stage] = payload[parent_w + stage];
-        context.destination_candidate_energy_ev[stage] = payload[dest_e + stage];
-        context.destination_candidate_statistical_weight[stage] = payload[dest_w + stage];
+    for (std::size_t stage = 0; stage < 12; ++stage) {
+        context.bound_candidate_energy_ev[stage] = payload[base + 11 + stage];
+        context.bound_candidate_statistical_weight[stage] = payload[base + 23 + stage];
+        context.parent_candidate_energy_ev[stage] = payload[base + 35 + stage];
+        context.parent_candidate_statistical_weight[stage] = payload[base + 47 + stage];
+        context.destination_candidate_energy_ev[stage] = payload[base + 59 + stage];
+        context.destination_candidate_statistical_weight[stage] = payload[base + 71 + stage];
     }
-    const auto validate_candidates = [stage_count](std::uint32_t mask,
-                                        const std::array<double,30>& energies,
-                                        const std::array<double,30>& weights,
+    const auto validate_candidates = [](std::uint32_t mask,
+                                        const std::array<double,12>& energies,
+                                        const std::array<double,12>& weights,
                                         const char* label) {
-        for (int stage = 0; stage < stage_count; ++stage) {
-            if ((mask & (1u << static_cast<unsigned>(stage))) == 0u) continue;
-            if (!std::isfinite(energies[static_cast<std::size_t>(stage)]) ||
-                !std::isfinite(weights[static_cast<std::size_t>(stage)]) ||
-                !(weights[static_cast<std::size_t>(stage)] > 0.0)) {
-                throw std::runtime_error(std::string("Type-99 non-finite/invalid ") +
+        for (std::size_t stage = 0; stage < 12; ++stage) {
+            if ((mask & (1u << stage)) == 0u) continue;
+            if (!std::isfinite(energies[stage]) || !std::isfinite(weights[stage]) ||
+                !(weights[stage] > 0.0)) {
+                throw std::runtime_error(std::string("Mg Type-99 non-finite/invalid ") +
                     label + " candidate");
             }
         }
@@ -5664,12 +5621,12 @@ Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_con
             context.excited_parent_energy_ev,
             context.excited_parent_statistical_weight}) {
         if (!std::isfinite(value)) {
-            throw std::runtime_error("Type-99 incoming/literal persistent context is non-finite");
+            throw std::runtime_error("Mg Type-99 incoming/literal persistent context is non-finite");
         }
     }
     if (context.excited_parent_mode == 1 &&
         !(context.excited_parent_statistical_weight > 0.0)) {
-        throw std::runtime_error("Type-99 excited-parent weight is invalid");
+        throw std::runtime_error("Mg Type-99 excited-parent weight is invalid");
     }
     context.valid = true;
     return context;
@@ -5807,8 +5764,8 @@ bool evaluate_type99_source_faithful(
     contribution.ans4 = -ans3_pre;
     const double energy_difference = destination_energy_ev - bound_energy_ev;
     const bool destination_threshold_identity = energy_difference == threshold_ev;
-    // 0.6.82.13: this is a source algebra identity, not an Mg option.
-    const bool destination_identity_correction_applied = destination_threshold_identity;
+    const bool destination_identity_correction_applied =
+        destination_threshold_identity && environment_flag("XSTAR_QUALIFICATION_MG_TYPE99_SECONDARY_ENERGY_CORRECTION");
     const double ans6_energy_numerator =
         std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1;
     const double ans6_energy_denominator =
@@ -5843,15 +5800,12 @@ bool evaluate_type99_source_faithful(
         // Lowerers append the literal xstarsetup errc energy after the pre-5.20.5
         // Type-99 payload.  Mg v21.13 context has 83 reals beyond the core;
         // H/He compatibility payload has only the three destination values.
-        constexpr std::int64_t kType99LegacyLayoutMagic = 223;
-        constexpr std::int64_t kType99Z1Z30LayoutMagicV068213 = 226;
-        const std::int64_t layout_magic = record.int_count >= 8 ? ints[record.int_count - 1] : 0;
-        if (layout_magic == kType99Z1Z30LayoutMagicV068213 && record.real_count >= need + 192)
-            shadow->source_errc_rank_energy_ev = payload[need + 191];
-        else if (layout_magic == kType99LegacyLayoutMagic && record.real_count >= need + 84)
+        constexpr std::int64_t kType99LayoutMagicV82Patch5205 = 223;
+        const bool mg_context_v82_patch5205 = record.int_count >= 8 &&
+            ints[record.int_count - 1] == kType99LayoutMagicV82Patch5205;
+        if (mg_context_v82_patch5205 && record.real_count >= need + 84)
             shadow->source_errc_rank_energy_ev = payload[need + 83];
-        else if (layout_magic != kType99LegacyLayoutMagic &&
-                 layout_magic != kType99Z1Z30LayoutMagicV068213 && record.real_count >= need + 4)
+        else if (!mg_context_v82_patch5205 && record.real_count >= need + 4)
             shadow->source_errc_rank_energy_ev = payload[need + 3];
         else
             shadow->source_errc_rank_energy_ev = std::max(0.1, threshold_ev);
@@ -6662,12 +6616,8 @@ EvaluatedRecord evaluate_record(
     const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
     const auto* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
     const ElementRow scalar_dummy{};
-    // Preserve source raw idest values on the record, but evaluate any compact
-    // row fallback through the same terminal-row alias used by msolvelucy.
-    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
-    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
-    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
-    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
     const double delta_ev = record.line_energy_ev > 0.0 ? record.line_energy_ev : (record.matrix_enabled ? std::abs(upper.energy_ev - lower.energy_ev) : 0.0);
     const double ne = rate_context.ne;
     const double t4 = rate_context.t4;
@@ -6947,13 +6897,9 @@ EvaluatedRecord evaluate_record(
             c.ans5 = recomb * threshold * kErgPerEv;
             c.ans6 = heat;
             const std::array<double,6> legacy_type53_ans{{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6}};
-            // 0.6.82.13: normal native production follows the generic FORTRAN
-            // Type-53 path for every element.  The historical He row-46
-            // captured oracle is retained only for explicit non-production
-            // qualification runs.
-            const bool use_row46_contract = !native_production_mode() && (
+            const bool use_row46_contract =
                 environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") ||
-                environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION"));
+                environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
             const auto* row46_contract = use_row46_contract
                 ? find_type53_row46_dsec_runtime_oracle_entry(record.source_position, record.record)
                 : nullptr;
@@ -6963,66 +6909,40 @@ EvaluatedRecord evaluate_record(
             double contract_tau_in = 0.0;
             double contract_tau_out = 0.0;
             double contract_covering = input.covering_fraction;
-            // 0.6.82.13: Type-53 source semantics are target-element generic.
-            // Legacy H/Mg compatibility switches remain available only for
-            // explicit non-production fixtures; native production always
-            // commits the same canonical phint53/Milne result for every Z.
-            const bool production_source_faithful_type53 = record_context.valid;
-            const bool hydrogen_source_faithful = !production_source_faithful_type53 &&
+            const bool hydrogen_source_faithful =
                 element.element_z == 1 &&
                 environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE53_SOURCE_FAITHFUL");
-            const bool magnesium_finite_state = !production_source_faithful_type53 &&
+            const bool magnesium_finite_state =
                 element.element_z == 12 &&
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
-            const bool magnesium_source_faithful = !production_source_faithful_type53 &&
+            const bool magnesium_source_faithful =
                 element.element_z == 12 &&
                 (environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL") ||
                  environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD") ||
                  environment_flag("XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY"));
-            const bool magnesium_replacement = magnesium_finite_state || magnesium_source_faithful;
-            const bool carbon_source_faithful = !production_source_faithful_type53 && element.element_z == 6;
-            const bool generic_source_faithful_bound_free = production_source_faithful_type53 ||
-                (element.element_z != 1 && element.element_z != 2 &&
-                 element.element_z != 6 && element.element_z != 12);
+            const bool magnesium_replacement =
+                magnesium_finite_state || magnesium_source_faithful;
+            // v0.6.48.11.9: carbon Type-53 now uses the same source-faithful
+            // phint53/Milne integral that was already computed as a shadow.
+            // 11.8 showed the legacy +threshold/kT approximation generating
+            // 1e74--1e97 reverse rates for records 6276/7013 and collapsing
+            // the C VI/terminal populations.  No line, STEP, solver, or
+            // matrix-specific scale factor is introduced here.
+            const bool carbon_source_faithful = element.element_z == 6;
+            // v0.6.48.12.3: H/He/C/Mg retain their already-qualified
+            // compatibility paths.  Every other element is the generic
+            // all-element path and must commit the source-faithful phint53/
+            // Milne result that was previously computed only as a shadow.
+            // This is an element-general source-semantic promotion, not a
+            // Ca-specific correction and introduces no empirical scaling.
+            const bool generic_source_faithful_bound_free =
+                element.element_z != 1 &&
+                element.element_z != 2 &&
+                element.element_z != 6 &&
+                element.element_z != 12;
             const auto pescv_source = [](double tau) {
                 return std::max(std::exp(-tau), 1.0e-12) / 2.0;
             };
-
-            // v0.6.82.10: canonical calc_hmc_ion applies Type-53/RRC
-            // escape factors to every element. Bind the record-local live
-            // continuum optical depths and covering fraction once here,
-            // before any historical element-specific compatibility/audit
-            // branches. The source equations are valid for the full cfrac
-            // domain [0,1]:
-            //   ptmp1 = pescv(tau_in) * (1-cfrac)
-            //   ptmp2 = pescv(tau_out) * (1-cfrac)
-            //         + 2*pescv(tau_in+tau_out) * cfrac.
-            // The explicit helium row-46 oracle below may override this live
-            // state only for its captured historical contract.
-            if (!row46_contract) {
-                if (!record_context.valid || record_context.continuum_index_one_based <= 0) {
-                    throw std::runtime_error(
-                        "Type-53 source-faithful evaluation requires lowered continuum-index context for every element");
-                }
-                const int type53_continuum_index = record_context.continuum_index_one_based;
-                const bool has_type53_continuum_workspace =
-                    input.continuum_tau_in && input.continuum_tau_out &&
-                    static_cast<std::size_t>(type53_continuum_index) <= input.continuum_tau_count;
-                if (!has_type53_continuum_workspace) {
-                    throw std::runtime_error(
-                        "Type-53 source-faithful evaluation requires canonical live continuum optical depths for every element");
-                }
-                contract_tau_in = input.continuum_tau_in[type53_continuum_index - 1];
-                contract_tau_out = input.continuum_tau_out[type53_continuum_index - 1];
-                const bool type53_has_dsec_covering =
-                    (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
-                contract_covering = std::clamp(
-                    type53_has_dsec_covering ? input.dsec_covering_fraction : input.covering_fraction,
-                    0.0, 1.0);
-                contract_ptmp1 = pescv_source(contract_tau_in) * (1.0 - contract_covering);
-                contract_ptmp2 = pescv_source(contract_tau_out) * (1.0 - contract_covering) +
-                    2.0 * pescv_source(contract_tau_in + contract_tau_out) * contract_covering;
-            }
             if (hydrogen_source_faithful) {
                 if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error(
@@ -7324,8 +7244,9 @@ EvaluatedRecord evaluate_record(
                     out.type53_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
                     out.type53_shadow.continuum_tau_count = input.continuum_tau_count;
                 }
-                const bool helium_source_faithful = !production_source_faithful_type53 &&
-                    element.element_z == 2 && (record_context.valid || record.ion_stage == 2);
+                const bool helium_source_faithful =
+                    element.element_z == 2 &&
+                    (record_context.valid || record.ion_stage == 2);
                 if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error(
                         "Mg Type-53 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -7700,33 +7621,38 @@ EvaluatedRecord evaluate_record(
                     out.type49_calc_emis_shadow.phextrap_applied = true;
                 }
             }
-            // v0.6.82.11: canonical ucalc Type-49 is element-independent.
-            // Earlier native releases promoted the already-computed phint53/
-            // Milne result only for Mg and for elements outside the historical
-            // H/He/C/Mg compatibility set.  That preserved an early
-            // H+He+Mg development boundary inside production science and left
-            // H/He/C on the approximate legacy evaluator.  Commit the same
-            // source-faithful Type-49 result for every element whenever the
-            // lowered source context is available.  Native production fails
-            // closed if the canonical continuum context/tauc workspace is
-            // missing; compact historical unit fixtures may still use the
-            // legacy fallback when they intentionally lack lowered context.
-            const bool all_element_source_faithful_type49 = source_exact;
-            if (native_production_mode()) {
-                if (!record_context.valid) {
-                    throw std::runtime_error(
-                        "all-element Type-49 source-faithful evaluation requires lowered source context");
-                }
-                if (!has_continuum_workspace) {
-                    throw std::runtime_error(
-                        "all-element Type-49 source-faithful evaluation requires canonical live continuum optical depths");
-                }
-                if (!source_exact) {
-                    throw std::runtime_error(
-                        "all-element Type-49 source-faithful Milne evaluator did not produce a result");
-                }
+            const bool magnesium_finite_state = element.element_z == 12 &&
+                environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
+            const bool magnesium_source_faithful = element.element_z == 12 &&
+                (environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL") ||
+                 environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD") ||
+                 environment_flag("XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY"));
+            const bool magnesium_replacement = magnesium_finite_state || magnesium_source_faithful;
+            // v0.6.48.12.3: generic elements commit the source-faithful
+            // Type-49 phint53/Milne shadow.  H/He/C/Mg keep their frozen
+            // compatibility behavior; there is no Ca-specific branch.
+            const bool generic_source_faithful_bound_free =
+                element.element_z != 1 &&
+                element.element_z != 2 &&
+                element.element_z != 6 &&
+                element.element_z != 12;
+            if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+                throw std::runtime_error(
+                    "Mg Type-49 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
             }
-            if (all_element_source_faithful_type49) {
+            if (magnesium_replacement && !record_context.valid) {
+                throw std::runtime_error("Mg Type-49 finite-state replacement requires lowered source context");
+            }
+            if (magnesium_replacement && !has_continuum_workspace) {
+                throw std::runtime_error("Mg Type-49 finite-state replacement requires canonical live continuum state");
+            }
+            if (magnesium_replacement && !source_exact) {
+                throw std::runtime_error("Mg Type-49 finite-state shadow did not produce a result");
+            }
+            if (generic_source_faithful_bound_free && !source_exact) {
+                throw std::runtime_error("generic Type-49 source-faithful Milne evaluator did not produce a result");
+            }
+            if ((magnesium_replacement || generic_source_faithful_bound_free) && source_exact) {
                 c.ans1 = source_shadow.ans1;
                 c.ans2 = source_shadow.ans2;
                 c.ans3 = source_shadow.ans3;
@@ -7749,8 +7675,10 @@ EvaluatedRecord evaluate_record(
             constexpr double kImplausibleBoundFreeRate = 1.0e40;
             out.type49_shadow.legacy_implausible = out.type49_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
             out.type49_shadow.committed_implausible = out.type49_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-            out.type49_shadow.source_faithful_mode = all_element_source_faithful_type49;
-            out.type49_shadow.replacement_applied = all_element_source_faithful_type49;
+            out.type49_shadow.source_faithful_mode =
+                magnesium_source_faithful || generic_source_faithful_bound_free;
+            out.type49_shadow.replacement_applied =
+                (magnesium_replacement || generic_source_faithful_bound_free) && source_exact;
             out.type49_shadow.tau_in = tau_in;
             out.type49_shadow.tau_out = tau_out;
             out.type49_shadow.ptmp1 = ptmp1;
@@ -7773,10 +7701,9 @@ EvaluatedRecord evaluate_record(
                 (r && pair_real_count >= 2)
                     ? std::max(1.0e-34, r[0] * source_type49_rydberg_ev_v82_patch5209)
                     : std::max(1.0e-34, out.type49_shadow.base_threshold_ev);
-            if (all_element_source_faithful_type49 &&
+            if (magnesium_replacement &&
                 (out.type49_shadow.committed_nonfinite || out.type49_shadow.committed_implausible)) {
-                throw std::runtime_error(
-                    "all-element Type-49 source-faithful result remained nonfinite or implausibly large");
+                throw std::runtime_error("Mg Type-49 finite-state replacement remained nonfinite or implausibly large");
             }
             // Native product-state retention: Type-49 records share the
             // phint53/Milne bound-free reduction path and must be committed to
@@ -7825,7 +7752,8 @@ EvaluatedRecord evaluate_record(
             // both mutable leveltemp endpoint values inline.  This is the
             // native path for all Mg Type-50 rows; the optional legacy escape
             // map below remains a compatibility override for older fixtures.
-            if (record.real_count >= 6 && record.int_count >= 2 && ints &&
+            if (element.element_z == 12 && record.real_count >= 6 &&
+                record.int_count >= 2 && ints &&
                 std::isfinite(r[4]) && std::isfinite(r[5])) {
                 source_idest1 = static_cast<int>(ints[0]);
                 source_idest2 = static_cast<int>(ints[1]);
@@ -7837,10 +7765,7 @@ EvaluatedRecord evaluate_record(
             int line_index_one_based = 0;
             double line_tau_in = 0.0;
             double line_tau_out = 0.0;
-            // 0.6.82.13: live Type-50 escape is a source/runtime-state
-            // contract for every backend and element, not an xstar-cpp-only
-            // or H/Mg compatibility path.
-            const bool native_runtime_escape =
+            const bool native_runtime_escape = native_production_mode() &&
                 (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE) != 0u &&
                 record.line_index_one_based > 0 &&
                 program.runtime_line_tau_in.size() == program.runtime_line_tau_out.size() &&
@@ -7911,70 +7836,20 @@ EvaluatedRecord evaluate_record(
             const bool high_wavelength_zero = stored_wavelength_a > 0.99e9;
             const double cover = std::max(0.0, 1.0 - cfrac);
             double photo = 0.0;
-            // Canonical ucalc label 50 samples the radiation at
-            // ener=abs(eeup-eelo), i.e. the live leveltemp endpoint energy.
-            // The earlier native path used the lowered/static delta_ev. This
-            // was invisible at cfrac=1 because the pumping channel is zero.
-            const double pumping_energy_ev = endpoint_energy_ev;
             if (!high_wavelength_zero && cover != 0.0) {
-                // FORTRAN xstarcalc calls calc_hmc_all with the fixed 999-bin
-                // epim/bremsam workspace.  Type-50 DSEC pumping must therefore
-                // sample the caller-owned reduced calc_hmc_input, not the full
-                // call-start radiation arrays held by input.
-                if (calc_hmc_input.dsec_radiation_energy_ev && calc_hmc_input.dsec_bremsa &&
-                    calc_hmc_input.dsec_radiation_bin_count >= 3) {
+                if (input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3) {
                     nb1_one_based = type99_nbinc_fortran_value(
-                        pumping_energy_ev, calc_hmc_input.dsec_radiation_energy_ev,
-                        calc_hmc_input.dsec_radiation_bin_count);
-                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <=
-                        calc_hmc_input.dsec_radiation_bin_count) {
-                        bremsa_nb1 = calc_hmc_input.dsec_bremsa[static_cast<std::size_t>(nb1_one_based - 1)];
+                        delta_ev, input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <= input.dsec_radiation_bin_count) {
+                        bremsa_nb1 = input.dsec_bremsa[static_cast<std::size_t>(nb1_one_based - 1)];
                         used_dsec_radiation = true;
                     }
-                } else if (calc_hmc_input.radiation_energy_ev && calc_hmc_input.radiation_flux &&
-                           calc_hmc_input.radiation_bin_count >= 3) {
-                    nb1_one_based = type99_nbinc_fortran_value(
-                        pumping_energy_ev, calc_hmc_input.radiation_energy_ev,
-                        calc_hmc_input.radiation_bin_count);
-                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <=
-                        calc_hmc_input.radiation_bin_count) {
-                        bremsa_nb1 = calc_hmc_input.radiation_flux[static_cast<std::size_t>(nb1_one_based - 1)];
-                    }
+                } else if (input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count > 0) {
+                    bremsa_nb1 = interp_linear(
+                        input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, delta_ev);
                 }
                 photo = 0.02655 * oscillator * stored_wavelength_a * 1.0e-8 *
                     bremsa_nb1 / 3.0e10 * cover;
-            }
-
-            // Source xstarcalc calls calc_hmc_all/calc_emisab_all on the
-            // reduced epim/bremsam grid, then calc_emis_all calls ucalc again
-            // on the full epi/bremsa grid before fline/rcem are formed.
-            // Retain that second Type-50 answer independently. At cfrac=1
-            // full_photo is identically zero, which is why this ownership bug
-            // survived all previous covering-fraction-one qualification.
-            double full_bremsa_nb1 = 0.0;
-            int full_nb1_one_based = 0;
-            double full_photo = photo;
-            bool full_grid_available = false;
-            // calc_emis_ion calls ucalc again on the live transported full
-            // epi/bremsa pair.  input.radiation_flux is the incident/controller
-            // spectrum and is not the FORTRAN bremsa owner at this stage.
-            const double* full_source_energy_ev = rate_context.type59_full_source_energy_ev;
-            const double* full_source_bremsa = rate_context.type59_full_source_bremsa;
-            const std::size_t full_source_count = rate_context.type59_full_source_count;
-            if (!high_wavelength_zero && cover != 0.0 &&
-                full_source_energy_ev && full_source_bremsa && full_source_count >= 3) {
-                full_nb1_one_based = type99_nbinc_fortran_value(
-                    pumping_energy_ev, full_source_energy_ev, full_source_count);
-                if (full_nb1_one_based > 0 &&
-                    static_cast<std::size_t>(full_nb1_one_based) <= full_source_count) {
-                    full_bremsa_nb1 = full_source_bremsa[static_cast<std::size_t>(full_nb1_one_based - 1)];
-                    full_photo = 0.02655 * oscillator * stored_wavelength_a * 1.0e-8 *
-                        full_bremsa_nb1 / 3.0e10 * cover;
-                    full_grid_available = true;
-                }
-            } else if (cover == 0.0 || high_wavelength_zero) {
-                full_photo = 0.0;
-                full_grid_available = full_source_energy_ev && full_source_bremsa && full_source_count >= 3;
             }
 
             // Literal ucalc.f90 Type-50 post-swap answer convention.
@@ -8010,18 +7885,6 @@ EvaluatedRecord evaluate_record(
             out.type50_shadow.line_index_one_based = line_index_one_based;
             out.type50_shadow.line_tau_in = line_tau_in;
             out.type50_shadow.line_tau_out = line_tau_out;
-
-            out.type50_calc_emis_shadow = out.type50_shadow;
-            out.type50_calc_emis_shadow.ans = {
-                full_photo, escaped,
-                -escaped * endpoint_energy_ev * kErgPerEv,
-                -full_photo * endpoint_energy_ev * kErgPerEv,
-                0.0, 0.0};
-            out.type50_calc_emis_shadow.bremsa_nb1 =
-                full_grid_available ? full_bremsa_nb1 : bremsa_nb1;
-            out.type50_calc_emis_shadow.nb1_one_based =
-                full_grid_available ? full_nb1_one_based : nb1_one_based;
-            out.type50_calc_emis_shadow.used_dsec_radiation = false;
 
             const bool use_fixed_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_MANIFOLD_ORACLE");
             const bool use_dsec_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_DSEC_RUNTIME_ORACLE");
@@ -8081,16 +7944,31 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION: {
-            // XSTAR ucalc.f90 label 51 evaluates only nrdt=7 (five-point)
-            // and nrdt=11 (nine-point) Burgess-Tully records.  Other payload
-            // lengths follow the source no-contribution path rather than
-            // terminating the model.
-            if (record.real_count != 7 && record.real_count != 11) break;
+            const double legacy_ups = type51_upsilon_legacy(
+                r, record.real_count, ints, record.int_count, input.temperature_k
+            );
+            if (!(legacy_ups >= 0.0) || !std::isfinite(legacy_ups)) {
+                throw std::runtime_error("invalid legacy type51 payload");
+            }
+            const double legacy_root_t = std::sqrt(input.temperature_k);
+            const double legacy_kt_ev =
+                xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+            const double legacy_qex =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
+                std::exp(-delta_ev / legacy_kt_ev) /
+                (lower.statistical_weight * legacy_root_t);
+            const double legacy_qde =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
+                (upper.statistical_weight * legacy_root_t);
+            const std::array<double,6> legacy_ans{{
+                legacy_qex * ne,
+                legacy_qde * ne,
+                0.0,
+                0.0,
+                legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+            }};
 
-            // Evaluate the canonical/source-faithful representation first.
-            // The legacy evaluator remains the committed compatibility path
-            // wherever it produces a finite result, preserving all accepted
-            // pre-0.6.82.2 outputs.
             const auto bt = type51_upsilon(
                 r, record.real_count, ints, record.int_count, input.temperature_k
             );
@@ -8129,63 +8007,25 @@ EvaluatedRecord evaluate_record(
                 source_ans2 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
                 source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
             }};
-
-            const double legacy_ups = type51_upsilon_legacy(
-                r, record.real_count, ints, record.int_count, input.temperature_k
-            );
-            const bool legacy_valid = std::isfinite(legacy_ups);
-            std::array<double,6> legacy_ans{{
-                std::numeric_limits<double>::quiet_NaN(),
-                std::numeric_limits<double>::quiet_NaN(),
-                0.0,
-                0.0,
-                std::numeric_limits<double>::quiet_NaN(),
-                std::numeric_limits<double>::quiet_NaN(),
-            }};
-            if (legacy_valid) {
-                const double legacy_root_t = std::sqrt(input.temperature_k);
-                const double legacy_kt_ev =
-                    xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
-                const double legacy_qex =
-                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
-                    std::exp(-delta_ev / legacy_kt_ev) /
-                    (lower.statistical_weight * legacy_root_t);
-                const double legacy_qde =
-                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
-                    (upper.statistical_weight * legacy_root_t);
-                legacy_ans = {{
-                    legacy_qex * ne,
-                    legacy_qde * ne,
-                    0.0,
-                    0.0,
-                    legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                    legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                }};
-            }
-            // v0.6.82.12: canonical ucalc Type-51 is element-independent and
-            // is now the normal native-production contract for every active
-            // element.  Keep the historical qualification flags only as
-            // explicit non-production compatibility controls; do not use
-            // element identity to decide whether the canonical result commits.
-            const bool source_faithful_requested [[maybe_unused]] =
+            // v0.6.48.7.46.21.8: the source Type-51 evaluator contract is
+            // element-independent.  The earlier Mg-only promotion left the
+            // Hydrogen and Helium collision energy channels on the legacy
+            // constants/path even during independent Thermal qualification.
+            // Preserve the old Mg flag as a compatibility alias, while the
+            // general flag promotes the same source-faithful path for H/He/Mg.
+            const bool source_faithful =
                 environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL") ||
                 (element.element_z == 12 &&
                  environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL"));
-            // Native production always commits the canonical Burgess-Tully
-            // source result.  A non-finite legacy sentinel also falls through
-            // to the canonical result for old fixture/non-production callers.
-            // 0.6.82.13: every C++ backend commits the canonical Type-51
-            // result.  Historical flags/legacy arithmetic are diagnostic-only.
-            const bool source_faithful_committed = true;
-            const auto& committed = source_faithful_committed ? source_ans : legacy_ans;
+            const auto& committed = source_faithful ? source_ans : legacy_ans;
             c.ans1 = committed[0]; c.ans2 = committed[1];
             c.ans3 = committed[2]; c.ans4 = committed[3];
             c.ans5 = committed[4]; c.ans6 = committed[5];
 
             auto& shadow = out.type51_shadow;
             shadow.valid = true;
-            shadow.source_faithful_mode = source_faithful_committed;
-            shadow.replacement_applied = source_faithful_committed;
+            shadow.source_faithful_mode = source_faithful;
+            shadow.replacement_applied = source_faithful;
             shadow.endpoint_order_exact = lower.energy_ev <= upper.energy_ev;
             shadow.bt_type = bt.bt_type;
             shadow.point_count = bt.point_count;
@@ -8244,9 +8084,8 @@ EvaluatedRecord evaluate_record(
             const int source_local_level = record.int_count >= 3
                 ? static_cast<int>(ints[2]) : record.lower_row;
             if (i57<=0 || source_local_level<=1) break;
-            // 0.6.82.13: canonical Type-57 source semantics are production
-            // semantics for every applicable record, independent of element.
-            const bool source_faithful = true;
+            const bool source_faithful =
+                environment_flag("XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY");
             double e1=lower.energy_ev;
             double eth=std::max(upper.energy_ev-e1,0.0);
             if (source_faithful) {
@@ -8432,9 +8271,8 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE60_CALLAWAY_COLLISION:
         case XSTAR_FIXED_OPCODE_TYPE62_CALLAWAY_COLLISION: {
-            // 0.6.82.13: canonical H-like Type-60/62 semantics are always
-            // used wherever the FORTRAN data model supplies these records.
-            const bool source_faithful = true;
+            const bool source_faithful =
+                environment_flag("XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL");
             const double ups=callaway_upsilon(
                 record.data_type,r,record.real_count,input.temperature_k,delta_ev,source_faithful
             );
@@ -8485,9 +8323,8 @@ EvaluatedRecord evaluate_record(
             if (!ints||record.int_count<1) throw std::runtime_error("type68 payload requires Z");
             const double wav=delta_ev>0.0?12398.4016/delta_ev:0.0;
             const double ups=type68_upsilon(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k,wav);
-            // 0.6.82.13: canonical He-like Type-68 constants/order are always
-            // used wherever the FORTRAN data model supplies Type-68.
-            const bool source_constants = true;
+            const bool source_constants =
+                environment_flag("XSTAR_QUALIFICATION_TYPE68_SOURCE_CONSTANTS");
             if (source_constants) {
                 // Frozen v0.6.47.2 ucalc Type-68 combines the legacy XSTAR
                 // Boltzmann coefficient and collision-channel eV-to-erg
@@ -8732,15 +8569,7 @@ EvaluatedRecord evaluate_record(
                     else if(dt==36||dt==12||dt==55){threshold=std::abs(upper.energy_ev-lower.energy_ev);double z=(dt==55)?static_cast<double>(element.element_z-record.ion_stage):static_cast<double>(element.element_z-record.ion_stage+1);z=std::max(z,1.0);double nq=(dt==55)?1.0:std::min<double>(10.0,ints&&record.int_count?ints[0]:1.0),sg0=6.3e-18*nq*nq/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
                     else if(dt==15){int na=ints&&record.int_count>=5?std::max<int>(1,ints[record.int_count-5]):1;std::vector<double>bs;std::vector<std::array<double,11>>co;double d=0;threshold=0;for(int sh=0;sh<na;++sh){std::size_t off=15u*sh;if(off+13>=record.real_count)break;threshold=r[off];d=r[off+1];bs.push_back(r[off+2]);std::array<double,11>a{};for(int q=0;q<11;++q)a[q]=r[off+3+q];co.push_back(a);}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&!bs.empty()){double xx=epi[k]*1e-3-d;if(xx>0){std::size_t j=0;while(j+1<bs.size()&&xx>=bs[j])++j;double yy=std::log10(std::max(xx,1e-300)),tmp=0;for(int q=10;q>=0;--q)tmp=co[j][q]+yy*tmp;tmp=std::clamp(tmp,-50.0,24.0);sigma[k]=std::pow(10.0,tmp-24.0);}}}
                     else if(dt==64){threshold=std::abs(upper.energy_ev-lower.energy_ev);int nq=ints&&record.int_count?std::max<int>(ints[0],1):1,l=ints&&record.int_count>1?std::max<int>(ints[1],0):0,charge=ints&&record.int_count>2?std::max<int>(ints[2],1):1;std::vector<double>er(n),smb(n);for(std::size_t k=0;k<n;++k){er[k]=std::max((epi[k]-threshold)/13.605692,0.0);smb[k]=source_hphotx_mb_generic(er[k],charge,nq,l);sigma[k]=smb[k]*1e-18;}sw=lower.statistical_weight;commit_phint(sigma,threshold,sw,false);c.ans2=type99_milne_alpha(er,smb,threshold/13.6,input.temperature_k)*sw;break;}
-                    else if(dt==85){int nmin=ints&&record.int_count?static_cast<int>(ints[0]):1,id3=ints&&record.int_count?static_cast<int>(ints[record.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);
-                        // 0.6.82.5 Fe Type-85 source-faithful post-phintfo rearrangement.
-                        // source_phintfo_sigma_generic already returns the ordinary ucalc
-                        // channel ordering used by the generic bound-free path.  The Type-85
-                        // branch then applies the additional source label-85 rearrangement:
-                        // reverse channels are zeroed and photoionization heating is taken
-                        // from the negated ordinary ans3/ans5 slots.  Keep the 0.6.82.4
-                        // energy-ordered endpoint ownership from xstar_atdb_runtime.cpp.
-                        c.ans1=ph.ans[0];c.ans2=0.0;c.ans3=0.0;c.ans4=-ph.ans[2];c.ans5=0.0;c.ans6=-ph.ans[4];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
+                    else if(dt==85){int nmin=ints&&record.int_count?static_cast<int>(ints[0]):1,id3=ints&&record.int_count?static_cast<int>(ints[record.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);c.ans1=ph.ans[0];c.ans4=-ph.ans[2];c.ans6=-ph.ans[4];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
                     if (dt != 64 && dt != 85) {
                         commit_phint(sigma, threshold, sw, zero_reverse);
                     }
@@ -8748,19 +8577,7 @@ EvaluatedRecord evaluate_record(
                 }
                 case 70:{
                     if(!r||!ints||record.int_count<5)throw std::runtime_error("type70 payload");
-                    constexpr std::int64_t kType70SourceIonIdentityMagicV068213 = 227;
-                    bool source_global_hydrogen_ion = false;
-                    if (record.int_count >= 2 && ints[record.int_count-1] == kType70SourceIonIdentityMagicV068213) {
-                        source_global_hydrogen_ion = ints[record.int_count-2] == 1;
-                    } else {
-                        // Compatibility fallback for older synthetic programs
-                        // that predate the global-source-ion tail.  Hydrogen's
-                        // first ion is the only physical source identity that
-                        // can satisfy jkion.eq.1; never use the compact
-                        // per-element record.ion_index here.
-                        source_global_hydrogen_ion = element.element_z == 1 && record.ion_stage == 1;
-                    }
-                    double threshold=delta_ev;double density=input.hydrogen_density_cm3;if(source_global_hydrogen_ion)density=std::min(density,1e8);
+                    double threshold=delta_ev;double density=input.hydrogen_density_cm3;if(record.ion_index==1)density=std::min(density,1e8);
                     auto cal=source_calt70_generic(r,record.real_count,ints,record.int_count,input.temperature_k,density,threshold/13.6);if(!cal.valid)break;
                     std::vector<double> payload;payload.reserve(2*cal.e_ryd.size());for(std::size_t q=0;q<cal.e_ryd.size();++q){payload.push_back(cal.e_ryd[q]);payload.push_back(cal.xs_mb[q]*1e-18);}
                     xstar_element_contribution_v1 ph{};Type53SourceShadow sh{};bool ok=evaluate_type53_source_integral(payload.data(),payload.size(),lower,upper,calc_hmc_input,threshold,1.0,nullptr,nullptr,static_cast<int>(record.record),false,false,ph,&sh,nullptr);
@@ -8966,12 +8783,8 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     if (record.real_offset + record.real_count > program.reals.size()) return shadow;
     const double* r = program.reals.data() + record.real_offset;
     const ElementRow scalar_dummy{};
-    // Preserve source raw idest values on the record, but evaluate any compact
-    // row fallback through the same terminal-row alias used by msolvelucy.
-    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
-    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
-    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
-    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
     Type53RecordContext record_context = evaluated.bound_free_record_context_v064895;
     const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
     if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
@@ -9249,16 +9062,16 @@ Type99ResolvedValueV048746223 resolve_type99_leveltemp_value(
     const xstar_element_contribution_v1& contribution,
     int column,
     std::uint32_t mask,
-    const std::array<double,30>& candidate_energy_ev,
-    const std::array<double,30>& candidate_statistical_weight,
+    const std::array<double,12>& candidate_energy_ev,
+    const std::array<double,12>& candidate_statistical_weight,
     double incoming_energy_ev,
     double incoming_statistical_weight
 ) {
-    if (column <= 0 || (mask & ~0x3fffffffu) != 0u) {
-        throw std::runtime_error("Type-99 persistent leveltemp column/mask is invalid");
+    if (column <= 0 || (mask & ~0x0fffu) != 0u) {
+        throw std::runtime_error("Mg Type-99 persistent leveltemp column/mask is invalid");
     }
     const auto present = [&](int stage) {
-        return stage >= 1 && stage <= 30 &&
+        return stage >= 1 && stage <= 12 &&
             (mask & (1u << static_cast<unsigned>(stage - 1))) != 0u;
     };
     int owner = 0;
@@ -9282,7 +9095,7 @@ Type99ResolvedValueV048746223 resolve_type99_leveltemp_value(
             candidate_statistical_weight[static_cast<std::size_t>(owner - 1)];
     }
     if (!std::isfinite(value.energy_ev) || !std::isfinite(value.statistical_weight)) {
-        throw std::runtime_error("Type-99 resolved persistent leveltemp value is non-finite");
+        throw std::runtime_error("Mg Type-99 resolved persistent leveltemp value is non-finite");
     }
     return value;
 }
@@ -9291,7 +9104,7 @@ Type99ResolvedValueV048746223 resolve_type99_leveltemp_value(
 // Purpose: Apply magnesium type99 persistent leveltemp to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-void apply_type99_persistent_leveltemp_z1_z30(
+void apply_magnesium_type99_persistent_leveltemp(
     const Program& program,
     const ElementProgram& element,
     const ActiveElementView& active,
@@ -9299,11 +9112,10 @@ void apply_type99_persistent_leveltemp_z1_z30(
     std::vector<EvaluatedRecord>& evaluated,
     const std::vector<const ProgramRecord*>& evaluated_records
 ) {
-    // 0.6.82.13: Type-99 persistent leveltemp ownership is source-global,
-    // not magnesium-specific.  Apply it to every element when the canonical
-    // Z=1..30 context is present.  Legacy direct fixtures without that context
-    // remain readable outside native production.
-    if (element.element_z < 1 || element.element_z > 30) return;
+    if (element.element_z != 12 ||
+        !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP")) {
+        return;
+    }
     const std::size_t count = std::min(evaluated.size(), evaluated_records.size());
     for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
         const ProgramRecord* record_ptr = evaluated_records[ordinal];
@@ -9319,26 +9131,21 @@ void apply_type99_persistent_leveltemp_z1_z30(
             const std::int64_t* ints = record.int_count
                 ? program.ints.data() + record.int_offset : nullptr;
             if (!payload || !ints || record.int_count < 3) {
-                if (native_production_mode())
-                    throw std::runtime_error("Type-99 persistent context requires payloads");
-                continue;
+                throw std::runtime_error("Mg Type-99 persistent context requires payloads");
             }
             const int nden = static_cast<int>(ints[0]);
             const int ntem = static_cast<int>(ints[1]);
             const int nxs = static_cast<int>(ints[2]);
             if (nden <= 0 || ntem <= 1 || nxs <= 1) {
-                throw std::runtime_error("Type-99 persistent context has invalid calt99 dimensions");
+                throw std::runtime_error("Mg Type-99 persistent context has invalid calt99 dimensions");
             }
             const std::size_t core_real_count = static_cast<std::size_t>(
                 nden + ntem + nden * ntem + 2 * nxs);
             const auto context = parse_type99_persistent_leveltemp_context(
                 record, payload, ints, core_real_count);
             if (!context.valid) {
-                if (native_production_mode()) {
-                    throw std::runtime_error(
-                        "source-faithful Type-99 requires persistent leveltemp context");
-                }
-                continue;
+                throw std::runtime_error(
+                    "source-faithful Mg Type-99 requires v21.13 persistent leveltemp context");
             }
             const auto bound = resolve_type99_leveltemp_value(
                 active, contribution, context.bound_column, context.bound_mask,
@@ -9376,24 +9183,24 @@ void apply_type99_persistent_leveltemp_z1_z30(
                 !(resolved.parent_statistical_weight > 0.0) ||
                 !(resolved.destination_statistical_weight > 0.0) ||
                 !(resolved.threshold_ev > 0.0)) {
-                throw std::runtime_error("Type-99 resolved energy/weight context is invalid");
+                throw std::runtime_error("Mg Type-99 resolved energy/weight context is invalid");
             }
-            const ElementRow& lower = row_at(element, std::min(record.lower_row, element.n_rows));
-            const ElementRow& upper = row_at(element, std::min(record.upper_row, element.n_rows));
+            const ElementRow& lower = row_at(element, record.lower_row);
+            const ElementRow& upper = row_at(element, record.upper_row);
             xstar_element_contribution_v1 corrected = contribution;
             Type99SourceShadow corrected_shadow{};
             if (!evaluate_type99_source_faithful(
                     record, payload, ints, lower, upper, input,
                     corrected, &corrected_shadow, &resolved)) {
                 throw std::runtime_error(
-                    "Type-99 persistent leveltemp integral reevaluation failed");
+                    "Mg Type-99 persistent leveltemp integral reevaluation failed");
             }
             contribution = corrected;
             item.type99_shadow = corrected_shadow;
         }
     }
     if (evaluated.size() != evaluated_records.size()) {
-        throw std::runtime_error("Type-99 sparse record/evaluation alignment mismatch");
+        throw std::runtime_error("Mg Type-99 sparse record/evaluation alignment mismatch");
     }
 }
 
@@ -10053,7 +9860,6 @@ std::vector<double> compute_element_lte_populations(
     const xstar_fixed_state_input_v1& input,
     int active_min_stage,
     int active_max_stage,
-    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>& rnisi,
     bool* used_exact_source_topology = nullptr
 ) {
     if (element.rows.empty() || element.n_rows <= 0) {
@@ -10106,13 +9912,11 @@ std::vector<double> compute_element_lte_populations(
     const double source_cap66 = 1.0e66;
 
     std::vector<double> rnise(static_cast<std::size_t>(element.n_rows) + 1u, 0.0);
+    std::vector<double> rnisi;
     int last_nlev = 0;
     int ipmatsv = 0;
     for (const auto& topo : topology) {
         const int nlev = topo.nlev;
-        if (nlev > static_cast<int>(kSourceLevWkRnisiNdV06828)) {
-            throw std::runtime_error("LTE source ion nlev exceeds levwkelement rnisi(nd=20000)");
-        }
         const bool active = topo.ion_stage >= active_min_stage && topo.ion_stage <= active_max_stage;
         if (active) {
             const LteLevelData* terminal_level = exact_leveltemp
@@ -10124,9 +9928,7 @@ std::vector<double> compute_element_lte_populations(
             const double terminal_energy = terminal_level ? terminal_level->energy_ev : topo.terminal_energy_ev;
             const double terminal_weight = terminal_level ? terminal_level->statistical_weight : topo.terminal_statistical_weight;
             const double rs = q2 / terminal_weight;
-            // Literal levwk.f90 lifetime: overwrite rnisi(1:nlev) only.
-            // Entries above nlev deliberately retain values from earlier
-            // element/evaluation calls in the same model context.
+            rnisi.assign(static_cast<std::size_t>(nlev) + 1u, 0.0);
             rnisi[static_cast<std::size_t>(nlev)] = 1.0;
             double bb = 1.0;
             for (int local = 1; local < nlev; ++local) {
@@ -10201,16 +10003,9 @@ std::vector<double> compute_element_lte_populations(
         last_nlev = nlev;
     }
 
-    if (last_nlev < 2 ||
-        last_nlev > static_cast<int>(kSourceLevWkRnisiNdV06828) ||
-        ipmatsv + 1 != element.n_rows) {
+    if (last_nlev < 2 || ipmatsv + 1 != element.n_rows || rnisi.size() <= static_cast<std::size_t>(last_nlev)) {
         throw std::runtime_error("LTE fully stripped source topology is invalid");
     }
-    // levwkelement.f90 intentionally uses rnisi(nlev:nlev-1) after the source
-    // ion loop even when the final source ion is outside mml:mmu.  Because the
-    // canonical rnisi(nd) has persistent static storage, these values may be
-    // retained from a prior levwk call.  Do not require the current active ion
-    // window to have written them.
     rnise[static_cast<std::size_t>(ipmatsv + 1)] =
         rnise[static_cast<std::size_t>(ipmatsv)] *
         rnisi[static_cast<std::size_t>(last_nlev)] /
@@ -10272,8 +10067,7 @@ std::vector<double> compute_element_lte_populations(
 std::vector<double> compute_exact_lte_populations(
     const Program& program,
     const xstar_fixed_state_input_v1& input,
-    const std::map<int, std::pair<int,int>>& active_stage_windows,
-    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>& rnisi_workspace
+    const std::map<int, std::pair<int,int>>& active_stage_windows
 ) {
     if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) {
         throw std::runtime_error("LTE population inputs are invalid");
@@ -10296,8 +10090,7 @@ std::vector<double> compute_exact_lte_populations(
         }
         bool exact_topology = false;
         auto full_lte = compute_element_lte_populations(
-            program, element, input, active_min_stage, active_max_stage,
-            rnisi_workspace, &exact_topology);
+            program, element, input, active_min_stage, active_max_stage, &exact_topology);
 
         if (source_sequence == 58 && element.element_z == 12) {
             const auto topology = lte_topology_for_element(program, element);
@@ -11320,8 +11113,6 @@ int run_impl(
     ctx.last_element_diagnostics.clear();
     ctx.last_detail_pre_mapback_populations_v064812318.clear();
     ctx.last_active_stage_windows_v064812318.clear();
-    ctx.last_source_ionization_rates_v0682292.clear();
-    ctx.last_source_recombination_rates_v0682292.clear();
     ctx.last_element_thermal_budget.clear();
     ctx.last_computed_element_thermal_budget.clear();
     ctx.last_element_electron_contribution.clear();
@@ -11450,6 +11241,30 @@ int run_impl(
         if (!magnesium_primary_thermal_correction) {
             throw std::runtime_error(
                 "independent Thermal parity requires the generalized Mg primary Thermal correction contract");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the all-element source-faithful Type-51 contract");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the source-faithful Type-60/62 collision contract");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires source-local Type-57 energy transport");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires Mg Type-53 persistent leveltemp semantics");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires Mg Type-49 persistent leveltemp semantics");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires Mg Type-99 persistent leveltemp energy/weight semantics");
         }
         if (!helium_non_type53_type50_energy_reduction) {
             throw std::runtime_error(
@@ -11587,8 +11402,6 @@ int run_impl(
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     const bool defer_product_projection =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
-    const bool dsec_hmc_only_v06824 =
-        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY) != 0u;
     // v0.6.48.9.7: the ordinary DSEC hot path never exposes record-product
     // provenance to the standalone writer; exact product diagnostics are
     // consumed only from the non-deferred accepted-boundary/final evaluations.
@@ -11733,23 +11546,10 @@ int run_impl(
     const bool mg_type53_kernel_audit_v82_patch512 = !defer_product_projection &&
         source_sequence_v82_patch511 == 59 && mg_type53_kernel_path_v82_patch512 && *mg_type53_kernel_path_v82_patch512;
     std::vector<MgType53OpacityKernelRowV82Patch512> mg_type53_kernel_rows_v82_patch512;
-    // 0.6.82.22: these large producer-attribution buffers are diagnostic-only.
-    // The old production path allocated/zero-filled them on every fixed-state
-    // evaluation even when no producer/absorption audit was enabled.  Low-xi
-    // models execute thousands of evaluations, so that generated substantial
-    // allocator and memory-bandwidth overhead with zero science effect.
-    std::vector<OpacityProducerTopV82Patch511> bound_free_top;
-    std::vector<OpacityProducerTopV82Patch511> line_top;
-    std::vector<double> producer_temp_opacity;
-    std::vector<double> producer_temp_rrc;
-    if (opacity_producer_audit_v82_patch511 || exact_absorption_audit_v82_patch5203) {
-        producer_temp_opacity.assign(input.radiation_bin_count, 0.0);
-        producer_temp_rrc.assign(2u * input.radiation_bin_count, 0.0);
-    }
-    if (opacity_producer_audit_v82_patch511) {
-        bound_free_top.resize(input.radiation_bin_count);
-        line_top.resize(input.radiation_bin_count);
-    }
+    std::vector<OpacityProducerTopV82Patch511> bound_free_top(input.radiation_bin_count);
+    std::vector<OpacityProducerTopV82Patch511> line_top(input.radiation_bin_count);
+    std::vector<double> producer_temp_opacity(input.radiation_bin_count, 0.0);
+    std::vector<double> producer_temp_rrc(2 * input.radiation_bin_count, 0.0);
     std::size_t phint53_records_mapped_v82_patch57 = 0;
     std::size_t phint53_bins_accumulated_v82_patch57 = 0;
     std::optional<SourceCompactOracle> source_compact_oracle;
@@ -11907,22 +11707,6 @@ int run_impl(
         residual_audit_v064812339.preliminary_balance_seconds = elapsed(preliminary_balance_started_v064812339);
         write_preliminary_ion_balance_audit(
             element, preliminary, ctx.critical_ion_fraction);
-        // pprint(10) consumes calc_ion_rates totals for every source stage,
-        // not only the compact active matrix window.  Retain the literal
-        // source eligibility sums before active-stage truncation.
-        std::vector<double> source_pirt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
-        std::vector<double> source_rrrt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
-        for (const auto& row_v0682292 : preliminary.audit_rows_v0648117) {
-            const int stage_v0682292 = row_v0682292.ion_stage;
-            if (stage_v0682292 < 1 || stage_v0682292 > element.element_z) continue;
-            const std::size_t slot_v0682292 = static_cast<std::size_t>(stage_v0682292 - 1);
-            if (row_v0682292.source_ionization_eligible)
-                source_pirt_v0682292[slot_v0682292] += row_v0682292.ans1;
-            if (row_v0682292.source_recombination_eligible)
-                source_rrrt_v0682292[slot_v0682292] += row_v0682292.ans1;
-        }
-        ctx.last_source_ionization_rates_v0682292[element.element_z] = std::move(source_pirt_v0682292);
-        ctx.last_source_recombination_rates_v0682292[element.element_z] = std::move(source_rrrt_v0682292);
         PreliminaryIonBalance active_balance = preliminary;
         const bool retain_active_stage_window =
             (input.runtime_state_flags &
@@ -12112,7 +11896,7 @@ int run_impl(
         traversal_audit_v064812340.pass12_nonrate_seconds = residual_audit_v064812339.pass12_nonrate_seconds;
         const auto post_pass2_prebuffer_started_v064812339 = clock_type::now();
 
-        apply_type99_persistent_leveltemp_z1_z30(
+        apply_magnesium_type99_persistent_leveltemp(
             ctx.program, element, active, input, evaluated, evaluated_records);
         // v0.6.48.12.3.1: source leveltemp is shared across elements and
         // evaluations.  Capture the incoming workspace above, reproduce the
@@ -13310,16 +13094,6 @@ int run_impl(
             }
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;
-            // 0.6.82.19: calc_emis_all performs a second Type-50 UCalc call
-            // on full epi/bremsa. fline/rcem must consume that answer, not
-            // the earlier reduced-grid calc_hmc answer retained in rec.ans*.
-            if (!evaluated[k].bound_free_spectral &&
-                evaluated[k].type50_calc_emis_shadow.valid) {
-                sc.ans1 = evaluated[k].type50_calc_emis_shadow.ans[0];
-                sc.ans2 = evaluated[k].type50_calc_emis_shadow.ans[1];
-                sc.ans3 = evaluated[k].type50_calc_emis_shadow.ans[2];
-                sc.ans4 = evaluated[k].type50_calc_emis_shadow.ans[3];
-            }
             // v82 patch 5.20.9.4: the broad bound-free spectral commit is
             // exactly the calc_emisab_all phase.  Both Type-53 and Type-49
             // therefore publish their reduced epim/bremsam answers into
@@ -13452,8 +13226,7 @@ int run_impl(
             throw std::runtime_error("fixed-state source-workspace ABI mismatch");
         }
         const auto lte_populations = compute_exact_lte_populations(
-            ctx.program, input, ctx.retained_active_stage_windows,
-            ctx.source_levwk_rnisi_workspace_v06828);
+            ctx.program, input, ctx.retained_active_stage_windows);
         // Small (~population-row sized) state; retain it on every controller
         // evaluation so the final accepted DSEC snapshot can be promoted
         // without recomputing LTE solely for product publication.
@@ -13565,12 +13338,7 @@ int run_impl(
     stats.continuum_seconds += elapsed(continuum_start);
 
     const auto spectral_start = clock_type::now();
-    // Source dsec.f90 stops after calc_hmc_all.  Only xstarcalc product
-    // boundaries proceed through calc_emisab_all/calc_emis_all and linopac.
-    // This production-only flag removes a previously duplicated spectral
-    // projection from every DSEC trial while leaving all rate/matrix/thermal
-    // work and every accepted-boundary product calculation unchanged.
-    if (!dsec_hmc_only_v06824 && !spectral.empty() && input.radiation_bin_count > 0) {
+    if (!spectral.empty() && input.radiation_bin_count > 0) {
         // Line records and continuum bins are different index spaces.  The
         // contribution engine owns per-line luminosity/opacity records; the
         // exact native Gaussian/Voigt path then projects those luminosities to
@@ -13700,45 +13468,24 @@ int run_impl(
             std::unordered_map<int,int> element_z_by_index_v82_patch52010;
             for (const auto& em : ctx.program.elements)
                 element_z_by_index_v82_patch52010[em.element_index] = em.element_z;
-            // 0.6.82.27.5: calc_emis_ion.f90 is rate-type-major, not raw
-            // source-position-major.  For one ion it walks the complete rate-7
-            // npfi/npnxt chain first.  kkkl therefore retains the *final*
-            // npconi2 slot of that ion's rate-7 chain when the later rate-42
-            // Type-88 chain starts.  The .27.4 implementation interleaved
-            // rate-7 and rate-42 records by global source_position, causing
-            // different Type-88 records to overwrite different RRC opakab
-            // slots and then STPCUT to accumulate those misplaced values into
-            // tauc.  Resolve the final rate-7 owner once per ion, then replay
-            // only the active/deferred Type-88 records in their own source
-            // order against that single retained kkkl slot.
-            for (const auto& pr : ctx.program.records) {
-                if (pr.rate_type != 7 || pr.continuum_index_one_based <= 0) continue;
-                const auto key = std::make_pair(pr.element_index, pr.ion_index);
-                const auto found = retained_rate7_v82_patch52010.find(key);
-                if (found == retained_rate7_v82_patch52010.end() ||
-                    pr.source_position > static_cast<std::int64_t>(found->second.source_position)) {
-                    retained_rate7_v82_patch52010[key] = RetainedRate7SlotV82Patch52010{
-                        pr.continuum_index_one_based, pr.record,
-                        static_cast<std::uint64_t>(pr.source_position)};
-                }
-            }
-            std::vector<const ProgramRecord*> type88_source_order_v0682275;
-            type88_source_order_v0682275.reserve(type88_deferred_v82_patch52010.size());
-            for (const auto& pr : ctx.program.records) {
-                if (pr.rate_type != 42 || pr.opcode != XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) continue;
-                const auto identity = std::make_pair(
-                    static_cast<std::uint64_t>(pr.source_position), pr.record);
-                if (type88_deferred_v82_patch52010.find(identity) != type88_deferred_v82_patch52010.end())
-                    type88_source_order_v0682275.push_back(&pr);
-            }
-            std::stable_sort(type88_source_order_v0682275.begin(), type88_source_order_v0682275.end(),
+            std::vector<const ProgramRecord*> source_order_v82_patch52010;
+            source_order_v82_patch52010.reserve(ctx.program.records.size());
+            for (const auto& pr : ctx.program.records) source_order_v82_patch52010.push_back(&pr);
+            std::stable_sort(source_order_v82_patch52010.begin(), source_order_v82_patch52010.end(),
                 [](const ProgramRecord* a, const ProgramRecord* b) {
                     return a->source_position < b->source_position;
                 });
-            for (const ProgramRecord* prp : type88_source_order_v0682275) {
+            for (const ProgramRecord* prp : source_order_v82_patch52010) {
                 if (!prp) continue;
                 const ProgramRecord& pr = *prp;
                 const auto key = std::make_pair(pr.element_index, pr.ion_index);
+                if (pr.rate_type == 7 && pr.continuum_index_one_based > 0) {
+                    retained_rate7_v82_patch52010[key] = RetainedRate7SlotV82Patch52010{
+                        pr.continuum_index_one_based, pr.record,
+                        static_cast<std::uint64_t>(pr.source_position)};
+                    continue;
+                }
+                if (pr.rate_type != 42 || pr.opcode != XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) continue;
                 const auto dit = type88_deferred_v82_patch52010.find({
                     static_cast<std::uint64_t>(pr.source_position), pr.record});
                 if (dit == type88_deferred_v82_patch52010.end() || !dit->second) continue;
@@ -15826,22 +15573,6 @@ int run_impl(
 
 struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 
-namespace xstar_local_zone_internal {
-
-void capture_publication_state_v0682292(
-    const xstar_fixed_state_context* context,
-    PublicationStateV0682292& out) {
-    out = PublicationStateV0682292{};
-    if (!context) return;
-    out.ionization_rates = context->last_source_ionization_rates_v0682292;
-    out.recombination_rates = context->last_source_recombination_rates_v0682292;
-    out.element_thermal = context->last_element_thermal_budget;
-    out.free_free_heating = context->last_htfreef;
-    out.brems_cooling = context->last_clbrems;
-}
-
-} // namespace xstar_local_zone_internal
-
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement create context from program as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
@@ -16290,7 +16021,6 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
         context->source_leveltemp_energy_workspace_v06481231.begin(),
         context->source_leveltemp_energy_workspace_v06481231.end(),
         0.0);
-    context->source_levwk_rnisi_workspace_v06828.fill(0.0);
     context->last_record_diagnostics.clear();
     context->last_element_diagnostics.clear();
     context->last_source_workspaces_valid_v064894 = false;

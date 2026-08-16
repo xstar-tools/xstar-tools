@@ -34,19 +34,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 PROGRAM_ABI = 60485
-# Canonical xdef abundance base from xstarsetup.f90, Z=1..30.  Public
-# habund..znabund multipliers are applied separately by the caller; these
-# values only supply the source default when a compact native program is
-# lowered directly from the ATDB.
-QUALIFIED_XDEF_ABUNDANCES_BY_Z: dict[int, float] = {
-    1: 1.0, 2: 1.0e-1, 3: 1.0e-10, 4: 1.0e-10, 5: 1.0e-10,
-    6: 3.70e-4, 7: 1.10e-4, 8: 6.80e-4, 9: 3.98e-8, 10: 2.80e-5,
-    11: 1.78e-6, 12: 3.50e-5, 13: 2.45e-6, 14: 3.50e-5,
-    15: 3.31e-7, 16: 1.60e-5, 17: 3.98e-7, 18: 4.50e-6,
-    19: 8.91e-8, 20: 2.10e-6, 21: 1.66e-9, 22: 1.35e-7,
-    23: 2.51e-8, 24: 7.08e-7, 25: 2.51e-7, 26: 2.50e-5,
-    27: 1.26e-7, 28: 2.00e-6, 29: 3.16e-8, 30: 1.58e-8,
-}
+QUALIFIED_XDEF_ABUNDANCES_BY_Z: dict[int, float] = {1: 1.0, 2: 0.1, 12: 3.5e-5}
 # v0.6.47.2 physical_runner.py constructs the reduced ucalc rate grid with
 # ncn2m=999.  Type-49 phextrap uses that reduced-grid length as its capacity
 # even though phint53 subsequently integrates on the full 9999-bin live grid.
@@ -54,9 +42,6 @@ TYPE49_PHEXTRAP_MAX_POINTS = 999
 TYPE53_LEVELTEMP_LAYOUT_MAGIC_V048746221 = 221
 TYPE49_LEVELTEMP_LAYOUT_MAGIC_V048746222 = 222
 TYPE99_LEVELTEMP_LAYOUT_MAGIC_V048746223 = 223
-TYPE53_LEVELTEMP_LAYOUT_MAGIC_Z1Z30_V068213 = 224
-TYPE49_LEVELTEMP_LAYOUT_MAGIC_Z1Z30_V068213 = 225
-TYPE99_LEVELTEMP_LAYOUT_MAGIC_Z1Z30_V068213 = 226
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -80,26 +65,13 @@ def _parse_abundance_spec(text: str) -> dict[int, float]:
     if not result:
         raise ValueError("at least one element abundance is required")
     return result
-# All physical UCalc labels in canonical FORTRAN.  The complementary 24
-# labels are source metadata/no-op branches and are intentionally not lowered
-# as executable rate records.  This catalog is element-independent; actual
-# applicability is still determined by the ATDB record and ion sequence.
-PHYSICAL_DATA_TYPES = {
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20,
-    21, 22, 23, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
-    49, 50, 51, 52, 53, 54, 55, 56, 57, 59, 60, 62, 63, 64, 65, 66, 67,
-    68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 79, 81, 82, 85, 86, 88, 89,
-    91, 92, 95, 96, 97, 98, 99, 101, 102,
-}
-# Opcodes retained as direct native kernels for compatibility/performance.
-# All remaining physical labels use the generic source-faithful UCalc opcode.
-DIRECT_NATIVE_DATA_TYPES = {
-    1, 2, 7, 9, 10, 30, 38, 39, 49, 50, 51, 53, 54, 56, 57, 59, 60,
-    62, 63, 66, 68, 69, 71, 72, 73, 74, 76, 77, 86, 88, 95, 99,
-}
-SOURCE_UCALC_GENERIC_OPCODE = 200
-ENGINE_RECOGNIZED_OPCODES = DIRECT_NATIVE_DATA_TYPES | {SOURCE_UCALC_GENERIC_OPCODE}
-ACTIVE_LOWERER_DATA_TYPES = set(PHYSICAL_DATA_TYPES)
+SIMPLE_DATA_TYPES = {1, 2, 3, 7, 8, 20}
+ENGINE_RECOGNIZED_OPCODES = {1, 2, 9, 30, 38, 39, 49, 50, 51, 53, 54, 56, 57, 60, 62, 63, 68, 69, 71, 72, 73, 74, 76, 77, 86, 88, 95, 99}
+# v0.6.48.7.13 completes every executable data type reached by the qualified
+# H/He/Mg parent-owned traversal.  Types 1/30/38/39 are executable scalar
+# ion-rate families and are serialized with matrix_enabled=0 rather than being
+# mislabeled as topology metadata.
+ACTIVE_LOWERER_DATA_TYPES = {1, 2, 9, 30, 38, 39, 49, 50, 51, 53, 54, 56, 57, 60, 62, 63, 68, 69, 71, 72, 73, 74, 76, 77, 86, 88, 95, 99}
 TOPOLOGY_RATE_TYPES = {11, 12, 13}
 FORBIDDEN_KEYS = {
     "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
@@ -107,16 +79,7 @@ FORBIDDEN_KEYS = {
     "hmctot", "elcter", "science_file", "science_files",
     "trajectory", "reference_output", "reference_outputs",
 }
-ATOMIC_MASS_AMU = {
-    1: 1.00794, 2: 4.002602, 3: 6.941, 4: 9.012182, 5: 10.811,
-    6: 12.0107, 7: 14.0067, 8: 15.9994, 9: 18.9984032, 10: 20.1797,
-    11: 22.98976928, 12: 24.3050, 13: 26.9815386, 14: 28.0855,
-    15: 30.973762, 16: 32.065, 17: 35.453, 18: 39.948, 19: 39.0983,
-    20: 40.078, 21: 44.955912, 22: 47.867, 23: 50.9415, 24: 51.9961,
-    25: 54.938045, 26: 55.845, 27: 58.933195, 28: 58.6934,
-    29: 63.546, 30: 65.38,
-}
-TYPE70_SOURCE_ION_IDENTITY_MAGIC_V068213 = 227
+ATOMIC_MASS_AMU = {1: 1.00794, 2: 4.002602, 12: 24.305}
 
 
 @dataclass(frozen=True)
@@ -385,8 +348,10 @@ def validate_program_directory(directory: str | Path) -> ProgramValidation:
 def _classify_record(rate_type: int, data_type: int) -> str:
     if rate_type in TOPOLOGY_RATE_TYPES:
         return "topology_metadata"
-    if data_type in PHYSICAL_DATA_TYPES:
+    if data_type in ACTIVE_LOWERER_DATA_TYPES:
         return "native_executable"
+    if data_type in ENGINE_RECOGNIZED_OPCODES or data_type in SIMPLE_DATA_TYPES:
+        return "recognized_but_not_active_lowered"
     return "unsupported_physics"
 
 
@@ -893,7 +858,6 @@ def _lower_record(
         raise ValueError(f"record {rec} has no active parent ion")
     block = blocks[ion_index]
     stage = int(derived.ion_stage[ion_index])
-    current_snapshot = leveltemp_value_snapshots.get(ion_index, {})
 
     # XSTAR-FUNCTION-COMMENT-BEGIN
     # Purpose: Implement the local pair operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
@@ -904,79 +868,12 @@ def _lower_record(
         rb = _compact_row_for_local(basis, ion_index, b)
         return (ra, rb) if _row_energy(rows, ra) <= _row_energy(rows, rb) else (rb, ra)
 
-    # Canonical UCalc reads endpoint energies/statistical weights from the
-    # mutable ``leveltemp`` workspace.  For destinations outside the current
-    # local level block this workspace can deliberately retain a value written
-    # by another ion earlier in source order.  The compact row is therefore a
-    # fallback, not the authoritative endpoint value.
-    def source_endpoint_energy(idest: int, compact_row: int) -> float:
-        value = current_snapshot.get(int(idest))
-        if value is not None:
-            return float(value.get("energy_ev", _row_energy(rows, compact_row)))
-        return _row_energy(rows, compact_row)
-
-    def source_endpoint_weight(idest: int, compact_row: int) -> float:
-        value = current_snapshot.get(int(idest))
-        if value is not None:
-            return max(float(value.get("statistical_weight", _row_weight(rows, compact_row))), 1.0e-300)
-        return _row_weight(rows, compact_row)
-
-    def set_source_pair(idest1: int, idest2: int, *, enabled: bool = True) -> None:
-        nonlocal lower_row, upper_row, line_energy, matrix_enabled
-        if not enabled or idest1 <= 0 or idest2 <= 0:
-            lower_row = upper_row = 0
-            line_energy = 0.0
-            matrix_enabled = False
-            return
-        lower_row = _compact_row_for_idest(basis, block, idest1)
-        upper_row = _compact_row_for_idest(basis, block, idest2)
-        line_energy = abs(
-            source_endpoint_energy(idest2, upper_row) -
-            source_endpoint_energy(idest1, lower_row)
-        )
-
-    def energy_order_source_pair(a: int, b: int) -> None:
-        ra = _compact_row_for_idest(basis, block, a)
-        rb = _compact_row_for_idest(basis, block, b)
-        if source_endpoint_energy(a, ra) <= source_endpoint_energy(b, rb):
-            set_source_pair(a, b)
-        else:
-            set_source_pair(b, a)
-
-    def upper_lower_source_pair(a: int, b: int) -> None:
-        ra = _compact_row_for_idest(basis, block, a)
-        rb = _compact_row_for_idest(basis, block, b)
-        if source_endpoint_energy(a, ra) >= source_endpoint_energy(b, rb):
-            set_source_pair(a, b)
-        else:
-            set_source_pair(b, a)
-
     payload_reals = list(raw_reals)
     payload_ints = list(raw_ints)
     lower_row = upper_row = 0
     line_energy = 0.0
     matrix_enabled = True
-    element_z = int(derived.ion_element_z[ion_index])
-    if element_z not in ATOMIC_MASS_AMU:
-        raise ValueError(f"unsupported atomic mass for Z={element_z}; native ATDB lowering supports Z=1..30")
-    # Literal ucalc.f90 Type-50 and binemislin.f90 obtain the nuclear mass by
-    # following line -> ion -> element and reading rdat1(np1r+1) from the
-    # rate-type-11 element record.  Do not replace this source-owned value
-    # with a modern periodic-table constant in production lowering.
-    mass = None
-    try:
-        ion_record = int(derived.npar[int(rec)])
-        element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
-        element_reals = master.record_reals(element_record) if element_record > 0 else ()
-        if len(element_reals) >= 2:
-            candidate_mass = float(element_reals[1])
-            if np.isfinite(candidate_mass) and candidate_mass > 0.0:
-                mass = candidate_mass
-    except Exception:
-        mass = None
-    if mass is None:
-        # Synthetic qualification fixtures may omit the topology record.
-        mass = float(ATOMIC_MASS_AMU[element_z])
+    mass = ATOMIC_MASS_AMU.get(int(derived.ion_element_z[ion_index]), float(max(1, int(derived.ion_element_z[ion_index]) * 2)))
 
     if dt == 1:
         if len(raw_reals) < 2:
@@ -992,12 +889,6 @@ def _lower_record(
         payload_reals = list(raw_reals[:4])
         payload_ints = []
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
-    elif dt == 7:
-        if len(raw_reals) < 4:
-            raise ValueError(f"type7 record {rec} has short payload")
-        payload_reals = list(raw_reals[:4])
-        payload_ints = []
-        matrix_enabled = False
     elif dt == 9:
         if len(raw_reals) < 4:
             raise ValueError(f"type9 record {rec} has short payload")
@@ -1008,28 +899,11 @@ def _lower_record(
             upper_row = _compact_row_for_idest(basis, block, id2)
             payload_ints = [1]
         else:
-            id1 = 1
-            id2 = int(block.nlev)
             lower_row = _compact_row_for_local(basis, ion_index, 1)
             upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
             payload_ints = [0]
         payload_reals = list(raw_reals[:4])
-        line_energy = abs(
-            source_endpoint_energy(id2, upper_row) -
-            source_endpoint_energy(id1, lower_row)
-        )
-    elif dt == 10:
-        if len(raw_reals) < 4 or not raw_ints:
-            raise ValueError(f"type10 record {rec} has short payload")
-        id1 = int(raw_ints[0])
-        lower_row = _compact_row_for_idest(basis, block, id1)
-        upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
-        payload_reals = list(raw_reals)
-        payload_ints = [id1]
-        line_energy = abs(
-            source_endpoint_energy(int(block.nlev), upper_row) -
-            source_endpoint_energy(id1, lower_row)
-        )
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 30:
         if not raw_ints:
             raise ValueError(f"type30 record {rec} has no nmax integer")
@@ -1042,7 +916,7 @@ def _lower_record(
         payload_reals = list(raw_reals)
         payload_ints = []
         matrix_enabled = False
-    elif dt in {50, 91}:
+    elif dt == 50:
         if len(raw_ints) < 2 or len(raw_reals) < 3:
             raise ValueError(f"type50 record {rec} has short payload")
         # v0.6.48.7.46.21.5: matrix endpoint orientation must follow the
@@ -1055,10 +929,16 @@ def _lower_record(
         idest1, idest2 = int(raw_ints[0]), int(raw_ints[1])
         row1 = _compact_row_for_local(basis, ion_index, idest1)
         row2 = _compact_row_for_local(basis, ion_index, idest2)
+        current_snapshot = leveltemp_value_snapshots.get(ion_index, {})
         e1 = float(current_snapshot.get(idest1, {}).get("energy_ev", _row_energy(rows, row1)))
         e2 = float(current_snapshot.get(idest2, {}).get("energy_ev", _row_energy(rows, row2)))
-        # 0.6.82.13: Type-50 consumes the mutable source leveltemp endpoint
-        # workspace for every element; no Mg-only low-ion override.
+        # Mg III-IV are evaluated before the retained leveltemp columns are
+        # source-owned by their local stage.  The source Type-50 thermal
+        # endpoint nevertheless uses the literal compact bound-level pair for
+        # these low-ion rows.  Higher stages consume the persistent workspace.
+        if int(block.element_z) == 12 and int(block.ion_stage) <= 4:
+            e1 = _row_energy(rows, row1)
+            e2 = _row_energy(rows, row2)
         if (e1 / (1.0e-24 + e2) - 1.0) < 1.0e-8:
             lower_row, upper_row = row1, row2
         else:
@@ -1162,29 +1042,6 @@ def _lower_record(
         # exact zero gate to idest1 before compact-row aliasing.
         payload_ints = [i57, principal_n, local]
         line_energy = source_eth_ev
-    elif dt in {59, 52}:
-        if len(raw_ints) < 4 or len(raw_reals) < 6:
-            raise ValueError(f"type{dt} record {rec} has short payload")
-        id3 = int(raw_ints[-1])
-        id4 = int(raw_ints[-3])
-        id1 = int(raw_ints[-2])
-        off = int(raw_ints[-4])
-        source_zero = id4 > id3 + 1
-        id2 = max(int(block.nlev) + off - 1, 1)
-        l2 = 0 if len(raw_reals) == 9 else (int(raw_ints[2]) if len(raw_ints) > 2 else 0)
-        if not source_zero:
-            if id1 <= 0 or id1 > int(block.nlev):
-                raise ValueError(f"type{dt} record {rec} has invalid idest1={id1}")
-            lower_row = _compact_row_for_local(basis, ion_index, id1)
-            upper_row = _compact_row_for_idest(basis, block, id2)
-            line_energy = float(raw_reals[0])
-        else:
-            lower_row = upper_row = 0
-            matrix_enabled = False
-        gglo = _row_weight(rows, _compact_row_for_local(basis, ion_index, 1))
-        ggup = 1.0 if source_zero else source_endpoint_weight(id2, upper_row)
-        payload_reals = list(raw_reals) + [gglo, ggup]
-        payload_ints = [len(raw_reals), l2, int(source_zero), id1, id2, id3, id4]
     elif dt in {60, 62}:
         minimum_reals = 3 if dt == 60 else 6
         if len(raw_ints) < 2 or len(raw_reals) < minimum_reals:
@@ -1193,16 +1050,6 @@ def _lower_record(
         payload_reals = list(raw_reals)
         payload_ints = []
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
-    elif dt == 66:
-        if len(raw_ints) < 2 or len(raw_reals) < 6:
-            raise ValueError(f"type66 record {rec} has short payload")
-        lower_row, upper_row = local_pair(int(raw_ints[0]), int(raw_ints[1]))
-        payload_reals = list(raw_reals)
-        payload_ints = [int(raw_ints[0]), int(raw_ints[1])]
-        line_energy = (
-            float(raw_reals[0]) if float(raw_reals[0]) > 0.0
-            else abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
-        )
     elif dt == 68:
         if len(raw_ints) < 3 or len(raw_reals) < 3:
             raise ValueError(f"type68 record {rec} has short payload")
@@ -1360,7 +1207,7 @@ def _lower_record(
                 float(excited_parent_energy_ev),
                 float(excited_parent_weight),
             ]
-            if dt in {49, 53} and 1 <= int(block.element_z) <= 30:
+            if dt in {49, 53} and int(block.element_z) == 12:
                 # Context v3 carries the literal Type-13 value visible at the
                 # requested mutable leveltemp column for every Mg ion stage.
                 # Runtime active-stage selection then replays the exact
@@ -1372,7 +1219,7 @@ def _lower_record(
                 }
                 candidate_energies: list[float] = []
                 candidate_mask = 0
-                for candidate_stage in range(1, 31):
+                for candidate_stage in range(1, 13):
                     candidate_block = stage_to_block.get(candidate_stage)
                     candidate_level = None
                     if candidate_block is not None:
@@ -1411,221 +1258,14 @@ def _lower_record(
         payload_ints = [continuum_index]
         if dt == 49:
             payload_ints.append(TYPE49_PHEXTRAP_MAX_POINTS)
-        if dt in {49, 53} and literal_context_supplied and 1 <= int(block.element_z) <= 30:
+        if dt in {49, 53} and literal_context_supplied and int(block.element_z) == 12:
             payload_ints.extend([
                 int(id2),
                 int(candidate_mask),
-                TYPE49_LEVELTEMP_LAYOUT_MAGIC_Z1Z30_V068213 if dt == 49
-                else TYPE53_LEVELTEMP_LAYOUT_MAGIC_Z1Z30_V068213,
+                TYPE49_LEVELTEMP_LAYOUT_MAGIC_V048746222 if dt == 49
+                else TYPE53_LEVELTEMP_LAYOUT_MAGIC_V048746221,
             ])
         line_energy = float(corrected_threshold_ev)
-    elif dt not in DIRECT_NATIVE_DATA_TYPES and dt not in {52, 91}:
-        # Source-generic UCalc lowering for all remaining physical FORTRAN
-        # labels.  Preserve raw record payloads and only derive the compact
-        # endpoint/matrix identity that calc_hmc_ion needs around UCalc.  The
-        # generic native evaluator dispatches by ``data_type`` and therefore
-        # keeps source-defined sequence/data-family restrictions intact.
-        if dt == 3:
-            set_source_pair(1, 1)
-        elif dt == 4:
-            if len(raw_ints) < 2 or len(raw_reals) < 5:
-                raise ValueError(f"type4 record {rec} has short payload")
-            upper_lower_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 5:
-            if len(raw_ints) < 2 or len(raw_reals) < 6:
-                raise ValueError(f"type5 record {rec} has short payload")
-            set_source_pair(int(raw_ints[1]), int(raw_ints[0]))
-        elif dt == 6:
-            if len(raw_ints) < 2:
-                raise ValueError(f"type6 record {rec} has short integer payload")
-            set_source_pair(int(raw_ints[-2]), 0, enabled=False)
-        elif dt == 8:
-            if len(raw_reals) < 8:
-                raise ValueError(f"type8 record {rec} has short payload")
-            set_source_pair(1, 0, enabled=False)
-        elif dt == 11:
-            if len(raw_ints) < 2 or len(raw_reals) < 4:
-                raise ValueError(f"type11 record {rec} has short payload")
-            set_source_pair(int(raw_ints[1]), int(raw_ints[0]))
-        elif dt in {12, 36}:
-            if len(raw_ints) < 2:
-                raise ValueError(f"type{dt} record {rec} has short integer payload")
-            set_source_pair(int(raw_ints[-2]), int(block.nlev))
-        elif dt == 15:
-            if len(raw_ints) < 5 or len(raw_reals) < 14:
-                raise ValueError(f"type15 record {rec} has short payload")
-            set_source_pair(int(raw_ints[-2]), int(raw_ints[-3]) - int(raw_ints[-1]))
-        elif dt == 16:
-            set_source_pair(1, int(block.nlev) if rt == 5 else 1)
-        elif dt == 17:
-            if len(raw_ints) < 2 or len(raw_reals) < 2:
-                raise ValueError(f"type17 record {rec} has short payload")
-            energy_order_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 18:
-            if not raw_ints or len(raw_reals) < 4:
-                raise ValueError(f"type18 record {rec} has short payload")
-            set_source_pair(int(raw_ints[0]), 0, enabled=False)
-        elif dt == 19:
-            if not raw_ints or len(raw_reals) < 5:
-                raise ValueError(f"type19 record {rec} has short payload")
-            set_source_pair(int(raw_ints[0]), int(block.nlev))
-            line_energy = float(raw_reals[4])
-        elif dt == 20:
-            if len(raw_reals) < 5:
-                raise ValueError(f"type20 record {rec} has short payload")
-            set_source_pair(1, int(block.nlev))
-        elif dt == 21:
-            if len(raw_reals) < 3:
-                raise ValueError(f"type21 record {rec} has short payload")
-            set_source_pair(1, 0, enabled=False)
-        elif dt == 22:
-            if len(raw_reals) < 5:
-                raise ValueError(f"type22 record {rec} has short payload")
-            set_source_pair(1, 0, enabled=False)
-        elif dt == 23:
-            if not raw_ints:
-                raise ValueError(f"type23 record {rec} is missing its level index")
-            id1 = int(raw_ints[-2]) if len(raw_ints) >= 2 else int(raw_ints[0])
-            set_source_pair(id1, int(block.nlev))
-        elif dt == 25:
-            if len(raw_reals) < 5:
-                raise ValueError(f"type25 record {rec} has short payload")
-            id1 = int(raw_ints[-2]) if rt == 5 and len(raw_ints) >= 2 else 1
-            set_source_pair(id1, int(block.nlev) if rt == 5 else 1)
-            line_energy = float(raw_reals[0])
-        elif dt == 26:
-            lower_row = upper_row = 0
-            line_energy = 0.0
-            matrix_enabled = False
-        elif dt == 27:
-            if rt == 1:
-                lower_row = upper_row = 0
-                line_energy = 0.0
-                matrix_enabled = False
-            else:
-                set_source_pair(1, int(block.nlev))
-        elif dt == 28:
-            if len(raw_ints) < 2 or len(raw_reals) < 5:
-                raise ValueError(f"type28 record {rec} has short payload")
-            energy_order_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 31:
-            if len(raw_ints) < 2 or len(raw_reals) < 2:
-                raise ValueError(f"type31 record {rec} has short payload")
-            set_source_pair(int(raw_ints[1]), int(raw_ints[0]))
-        elif dt == 32:
-            if not raw_ints:
-                raise ValueError(f"type32 record {rec} is missing its level index")
-            set_source_pair(int(raw_ints[0]), 0, enabled=False)
-        elif dt == 33:
-            if len(raw_ints) < 2 or len(raw_reals) < 4:
-                raise ValueError(f"type33 record {rec} has short payload")
-            set_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 34:
-            if len(raw_ints) < 2 or len(raw_reals) < 5:
-                raise ValueError(f"type34 record {rec} has short payload")
-            upper_lower_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 35:
-            if len(raw_ints) < 3 or len(raw_reals) < 5:
-                raise ValueError(f"type35 record {rec} has short payload")
-            id1 = int(raw_ints[5]) if len(raw_ints) > 5 else int(raw_ints[-2])
-            id2 = (int(raw_ints[4]) if len(raw_ints) > 4 else int(block.nlev)) - (
-                int(raw_ints[6]) if len(raw_ints) > 6 else 0
-            )
-            set_source_pair(id1, id2)
-            line_energy = float(raw_reals[0])
-        elif dt == 37:
-            set_source_pair(1, 0, enabled=False)
-        elif dt == 55:
-            if len(raw_ints) < 2:
-                raise ValueError(f"type55 record {rec} has short integer payload")
-            set_source_pair(int(raw_ints[-2]), int(block.nlev))
-        elif dt == 64:
-            if len(raw_ints) < 3:
-                raise ValueError(f"type64 record {rec} has short integer payload")
-            set_source_pair(int(raw_ints[-2]), int(block.nlev))
-        elif dt == 65:
-            if len(raw_ints) < 2 or not raw_reals:
-                raise ValueError(f"type65 record {rec} has short payload")
-            set_source_pair(int(raw_ints[-2]), int(block.nlev))
-        elif dt == 67:
-            if len(raw_ints) < 2 or len(raw_reals) < 3:
-                raise ValueError(f"type67 record {rec} has short payload")
-            energy_order_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 70:
-            if len(raw_ints) < 5:
-                raise ValueError(f"type70 record {rec} has short integer payload")
-            id1 = min(int(raw_ints[-2]), max(int(block.nlev) - 1, 1))
-            id2 = max(int(block.nlev) + int(raw_ints[-3]) - 1, int(block.nlev))
-            set_source_pair(id1, id2)
-            # ucalc.f90 caps density only for jkion==1, where jkion is the
-            # global ATDB ion index, not the per-element compact ion counter.
-            payload_ints = list(raw_ints) + [
-                int(ion_index), TYPE70_SOURCE_ION_IDENTITY_MAGIC_V068213,
-            ]
-        elif dt == 75:
-            if len(raw_ints) < 3 or len(raw_reals) < 2:
-                raise ValueError(f"type75 record {rec} has short payload")
-            id1 = max(int(raw_ints[-3]), 1)
-            id2 = max(int(raw_ints[-2]) + int(block.nlev) - 1, 1)
-            set_source_pair(id1, id2)
-        elif dt == 79:
-            if len(raw_ints) < 2 or len(raw_reals) < 5:
-                raise ValueError(f"type79 record {rec} has short payload")
-            upper_lower_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 81:
-            if len(raw_ints) < 2 or not raw_reals:
-                raise ValueError(f"type81 record {rec} has short payload")
-            energy_order_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 82:
-            if len(raw_ints) < 2 or len(raw_reals) < 4:
-                raise ValueError(f"type82 record {rec} has short payload")
-            upper_lower_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 85:
-            if len(raw_ints) < 3 or len(raw_reals) < 5:
-                raise ValueError(f"type85 record {rec} has short payload")
-            id1 = int(raw_ints[-2])
-            if rt in {7, 41}:
-                set_source_pair(id1, 1)
-            else:
-                energy_order_source_pair(id1, 1)
-        elif dt == 89:
-            if len(raw_ints) < 2 or len(raw_reals) < 3:
-                raise ValueError(f"type89 record {rec} has short payload")
-            upper_lower_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 92:
-            if len(raw_ints) < 3 or len(raw_reals) < 42:
-                raise ValueError(f"type92 record {rec} has short payload")
-            set_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 96:
-            if len(raw_ints) < 3 or len(raw_reals) < 3:
-                raise ValueError(f"type96 record {rec} has short payload")
-            id1 = max(int(raw_ints[-3]), 1)
-            id2 = max(int(raw_ints[-2]) + int(block.nlev) - 1, 1)
-            set_source_pair(id1, id2)
-            line_energy = float(raw_reals[2])
-        elif dt == 97:
-            if len(raw_reals) < 4:
-                raise ValueError(f"type97 record {rec} has short payload")
-            id1 = id2 = 1
-            if rt == 5:
-                id1 = int(raw_ints[0]) if raw_ints else 1
-                id2 = int(block.nlev) - 1 + (int(raw_ints[1]) if len(raw_ints) >= 3 else 1)
-            set_source_pair(id1, id2)
-        elif dt == 98:
-            if len(raw_ints) < 2 or len(raw_reals) < 5:
-                raise ValueError(f"type98 record {rec} has short payload")
-            energy_order_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 101:
-            if len(raw_ints) < 2 or len(raw_reals) < 2:
-                raise ValueError(f"type101 record {rec} has short payload")
-            energy_order_source_pair(int(raw_ints[0]), int(raw_ints[1]))
-        elif dt == 102:
-            if len(raw_ints) < 4 or len(raw_reals) < 7:
-                raise ValueError(f"type102 record {rec} has short payload")
-            energy_order_source_pair(int(raw_ints[2]), int(raw_ints[3]))
-            line_energy = 1000.0 * float(raw_reals[0])
-        else:  # pragma: no cover - PHYSICAL_DATA_TYPES and direct cases guard this
-            raise ValueError(f"missing all-element Python lowerer for physical data type {dt}")
     elif dt == 76:
         if len(raw_ints) < 2 or len(raw_reals) < 1:
             raise ValueError(f"type76 record {rec} has short payload")
@@ -1674,10 +1314,7 @@ def _lower_record(
         upper_row = _compact_row_for_idest(basis, block, id2)
         payload_reals = [float(raw_reals[1])]
         payload_ints = []
-        line_energy = abs(
-            source_endpoint_energy(id2, upper_row) -
-            source_endpoint_energy(id1, lower_row)
-        )
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 88:
         if len(raw_ints) < 2 or len(raw_reals) < 4:
             raise ValueError(f"type88 record {rec} has short payload")
@@ -1734,16 +1371,12 @@ def _lower_record(
             id2 = int(block.nlev) - 1 + int(raw_ints[1]) if len(raw_ints) >= 3 else int(block.nlev)
             lower_row = _compact_row_for_local(basis, ion_index, id1)
             upper_row = _compact_row_for_idest(basis, block, id2)
-            line_energy = abs(
-                source_endpoint_energy(id2, upper_row) -
-                source_endpoint_energy(id1, lower_row)
-            )
         else:
             lower_row = upper_row = _compact_row_for_local(basis, ion_index, 1)
-            line_energy = 0.0
         payload_reals = list(raw_reals)
         parent_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
         payload_ints = list(raw_ints) + [parent_row]
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 99:
         if len(raw_ints) < 4 or len(raw_reals) < 8:
             raise ValueError(f"type99 record {rec} has short payload")
@@ -1821,7 +1454,7 @@ def _lower_record(
         ]
         payload_ints = list(raw_ints)
 
-        if literal_context_supplied and 1 <= int(block.element_z) <= 30:
+        if literal_context_supplied and int(block.element_z) == 12:
             stage_to_block = {
                 int(candidate.ion_stage): candidate for candidate in basis.blocks
             }
@@ -1844,7 +1477,7 @@ def _lower_record(
                 mask = 0
                 energies: list[float] = []
                 weights: list[float] = []
-                for candidate_stage in range(1, 31):
+                for candidate_stage in range(1, 13):
                     candidate_block = stage_to_block.get(candidate_stage)
                     candidate_level = None
                     if candidate_block is not None:
@@ -1871,9 +1504,9 @@ def _lower_record(
             incoming_parent_energy, incoming_parent_weight = incoming_value(parent_column)
             incoming_destination_energy, incoming_destination_weight = incoming_value(destination_column)
 
-            # 0.6.82.13 layout after the three compatibility values: six
-            # incoming energy/weight values, optional literal excited-parent
-            # energy/weight, then 30-stage energy/weight arrays for bound,
+            # v21.13 fixed layout after the three v36 compatibility values:
+            # six incoming energy/weight values, optional literal excited-parent
+            # energy/weight, then 12-stage energy/weight arrays for bound,
             # parent/continuum, and destination columns.
             payload_reals.extend([
                 incoming_bound_energy, incoming_bound_weight,
@@ -1887,7 +1520,7 @@ def _lower_record(
             payload_ints.extend([
                 bound_column, parent_column, destination_column,
                 bound_mask, parent_mask, destination_mask,
-                excited_parent_mode, TYPE99_LEVELTEMP_LAYOUT_MAGIC_Z1Z30_V068213,
+                excited_parent_mode, TYPE99_LEVELTEMP_LAYOUT_MAGIC_V048746223,
             ])
         # v82 patch 5.20.5: retain xstarsetup's independent errc owner after
         # the existing Type-99 compatibility/persistent-leveltemp context.
@@ -1896,20 +1529,11 @@ def _lower_record(
     else:  # pragma: no cover - guarded above
         raise ValueError(f"unhandled active-lowerer type {dt}")
 
-    if dt == 91:
-        opcode = 50
-    elif dt == 52:
-        opcode = 59
-    elif dt in DIRECT_NATIVE_DATA_TYPES:
-        opcode = dt
-    else:
-        opcode = SOURCE_UCALC_GENERIC_OPCODE
-
     return {
         "source_position": int(header.raw_pointer),
         "record": int(rec),
         "element_index": int(element_index),
-        "opcode": int(opcode),
+        "opcode": int(dt),
         "data_type": int(dt),
         "rate_type": int(rt),
         "ion_index": int(block.ion_counter),
@@ -1942,25 +1566,17 @@ def lower_active_atdb(
     abundances_by_z: Mapping[int, float] | None = None,
     allow_partial: bool = False,
 ) -> ActiveLoweringResult:
-    """Lower active Z=1..30 ATDB topology and physical records into a C++ program.
+    """Lower active H/He/Mg topology and supported raw records into a C++ program.
 
     Strict mode is the production-oriented default and refuses to create a
     runnable program while any active executable family is unsupported.
     ``allow_partial=True`` creates a development program plus an explicit
     unsupported-record ledger; its manifest remains promotion-blocked.
-
-    The historical default element tuple remains H/He/Mg for API compatibility;
-    callers may select any supported elements Z=1..30.  Atomic-data formula
-    applicability is determined by the canonical ATDB record/ion sequence, not
-    by a target-element allowlist in this lowerer.
     """
     from .active_subsets import build_active_atdb_subset
     from .atomic_database import load_atomic_database_state
 
     active = tuple(sorted({int(z) for z in element_z if int(z) > 0}))
-    invalid = [z for z in active if z < 1 or z > 30]
-    if invalid:
-        raise ValueError(f"native ATDB lowering supports canonical elements Z=1..30; got {invalid}")
     abundances = dict(QUALIFIED_XDEF_ABUNDANCES_BY_Z if abundances_by_z is None else abundances_by_z)
     missing_abundances = [z for z in active if z not in abundances]
     if missing_abundances:

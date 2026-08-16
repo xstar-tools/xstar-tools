@@ -471,11 +471,8 @@ def calc_ion_rates(
     _coarse_requested = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_CPP", "0")).strip().lower() in _truthy
     _prematrix_requested = _coarse_requested or str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "0")).strip().lower() in _truthy
     _prematrix_shadow = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_SHADOW", os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_SHADOW_CPP", "0"))).strip().lower() in _truthy
-    # 0.6.82.13: retire the Mg-only pre-matrix product accelerator from
-    # science ownership.  The generic Python/Fortran-equivalent path remains
-    # authoritative for every element; Mg diagnostics may still run as shadows.
-    _prematrix_product_candidate = False
-    _prematrix_product = False
+    _prematrix_product_candidate = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_PRODUCT_CANDIDATE", "0")).strip().lower() in _truthy
+    _prematrix_product = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_PRODUCT", os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PRODUCT_CPP", "0"))).strip().lower() in _truthy
     # v0.6.43.1: the inherited Type-53 preliminary kernel is not bit-exact
     # against SourceFaithfulUCalc (the v0.6.43 qualification found one mismatch
     # for every Mg ion/evaluation).  Keep Type-53 on Python until a separately

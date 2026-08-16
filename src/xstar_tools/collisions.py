@@ -892,36 +892,6 @@ def velimp_py(n: int, l: int, temp: float, ic: int, z1: float, rm: float, ne: fl
     return float(max(0.0, cn))
 
 
-def _type63_source_delt_cutoff(
-    temperature_k: float,
-    energy_initial_eV: Optional[float],
-    energy_final_eV: Optional[float],
-) -> Tuple[bool, Optional[float]]:
-    """Return the canonical ucalc.f90 Type-63 ``delt.gt.50`` decision.
-
-    XSTAR evaluates this gate before either Type-63 branch using the literal
-    source operation order ``elin=12398.4016/abs(eeup-eelo+1.d-24)``,
-    ``ekt=0.861707*T4``, and ``delt=12398.4016/elin/ekt``.  The public Python
-    API supplies Kelvin, so convert back to ``T4`` before applying the source
-    expression.  If endpoint energies are unavailable, leave the legacy
-    caller unevaluated by this gate rather than inventing an energy gap.
-    """
-    if temperature_k is None or temperature_k <= 0.0:
-        return False, None
-    if energy_initial_eV is None or energy_final_eV is None:
-        return False, None
-    ei = float(energy_initial_eV)
-    ef = float(energy_final_eV)
-    if not (math.isfinite(ei) and math.isfinite(ef)):
-        return False, None
-    elin = 12398.4016 / abs(ef - ei + 1.0e-24)
-    ekt = 0.861707 * (float(temperature_k) / 1.0e4)
-    if not (math.isfinite(elin) and math.isfinite(ekt)) or ekt <= 0.0:
-        return False, None
-    delt = 12398.4016 / elin / ekt
-    return bool(delt > 50.0), float(delt)
-
-
 def evaluate_type63_same_n_lmixing(
     ni: int,
     li: int,
@@ -962,12 +932,6 @@ def evaluate_type63_same_n_lmixing(
     if ni <= 0 or nf <= 0 or li < 0 or lf < 0 or iq <= 0:
         diag["type63_reason"] = "invalid quantum numbers or ionic charge"
         return None, None, None, diag
-    cutoff, delt = _type63_source_delt_cutoff(temperature_k, energy_initial_eV, energy_final_eV)
-    diag["type63_source_delt"] = delt
-    diag["type63_source_delt_cutoff"] = cutoff
-    if cutoff:
-        diag["type63_reason"] = "source_delt_gt_50_zero"
-        return 0.0, 0.0, 0.0, diag
     if nf != ni:
         diag["type63_reason"] = "not_same_n"
         return None, None, None, diag
@@ -1184,13 +1148,6 @@ def evaluate_type63_nf_ne_ni_xstar_record_order(
         diag["type63_case"] = "not_evaluated"
         diag["type63_reason"] = "invalid record-order quantum numbers or ionic charge"
         return None, None, None, diag
-    cutoff, delt = _type63_source_delt_cutoff(temperature_k, energy_initial_eV, energy_final_eV)
-    diag["type63_source_delt"] = delt
-    diag["type63_source_delt_cutoff"] = cutoff
-    if cutoff:
-        diag["type63_case"] = "source_cutoff"
-        diag["type63_reason"] = "source_delt_gt_50_zero"
-        return 0.0, 0.0, 0.0, diag
     if nf == ni:
         diag["type63_case"] = "same_n"
         diag["type63_reason"] = "same_n_lmixing_uses_separate_amcrs_branch"

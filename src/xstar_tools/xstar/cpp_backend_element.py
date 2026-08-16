@@ -304,14 +304,11 @@ def _env_true(name: str) -> bool:
 def element_engine_cpp_product_enabled(element_z: int) -> bool:
     if not _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP"):
         return False
-    allowed = os.environ.get(
-        "XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ELEMENTS",
-        ",".join(str(z) for z in range(1, 31)),
-    )
+    allowed = os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ELEMENTS", "1,2,12")
     try:
         selected = {int(item.strip()) for item in allowed.split(",") if item.strip()}
     except ValueError:
-        selected = set(range(1, 31))
+        selected = {1, 2, 12}
     return int(element_z) in selected and _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_PRODUCT")
 
 
@@ -322,14 +319,11 @@ def element_engine_cpp_product_enabled(element_z: int) -> bool:
 def element_engine_cpp_shadow_enabled(element_z: int) -> bool:
     if not _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP"):
         return False
-    allowed = os.environ.get(
-        "XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ELEMENTS",
-        ",".join(str(z) for z in range(1, 31)),
-    )
+    allowed = os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ELEMENTS", "1,2,12")
     try:
         selected = {int(item.strip()) for item in allowed.split(",") if item.strip()}
     except ValueError:
-        selected = set(range(1, 31))
+        selected = {1, 2, 12}
     return int(element_z) in selected and _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_SHADOW")
 
 

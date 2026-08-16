@@ -2607,42 +2607,22 @@ class SourceFaithfulUCalc:
                 "source_lower_statistical_weight": source_lower_weight,
                 "source_swapped_endpoints_for_type50_flin": source_swapped_endpoints,
             }
+        bremsa = c.extras.get("bremsa_nb1")
+        # Source label 50 samples bremsa at the line energy.  This context is
+        # unnecessary for cfrac=1, but derive it directly when pumping is live.
+        if bremsa is None and c.radiation is not None and c.covering_fraction < 1.0:
+            try:
+                epi, brem, _ = _radiation_arrays(c.radiation)
+                wavelength = float(decoded.get("wavelength_A") or 0.0)
+                if wavelength > 0.0:
+                    bremsa = float(brem[_nbinc(12398.54 / wavelength, epi)])
+            except Exception:
+                bremsa = None
         endpoint_energy_ev = None
         if id1 > 0 and id2 > 0:
             upper_energy = c.levels.energy(id1)
             lower_energy = c.levels.energy(id2)
             endpoint_energy_ev = abs(float(upper_energy) - float(lower_energy))
-
-        bremsa = c.extras.get("bremsa_nb1")
-        # Canonical label 50 samples bremsa at ener=abs(eeup-eelo), not at
-        # 12398.54/wavelength.  It is also caller-grid sensitive: calc_hmc_all
-        # and calc_emisab_all pass reduced epim/bremsam, while calc_emis_all
-        # calls UCalc again on full epi/bremsa.  cfrac=1 made this branch zero
-        # and hid both ownership errors in earlier qualification.
-        if bremsa is None and c.radiation is not None and c.covering_fraction < 1.0:
-            try:
-                grid_role = str(c.extras.get("bound_free_radiation_grid_role", "reduced") or "reduced").strip().lower()
-                if grid_role == "full":
-                    epi = np.asarray(
-                        getattr(c.radiation, "epi_eV", getattr(c.radiation, "epi", ())),
-                        dtype=float,
-                    ).reshape(-1)
-                    brem = np.asarray(getattr(c.radiation, "bremsa", ()), dtype=float).reshape(-1)
-                    if (epi.size < 3 or brem.size < epi.size or np.any(np.diff(epi) <= 0.0)):
-                        raise ValueError("invalid full calc_emis Type-50 radiation arrays")
-                    brem = brem[: epi.size]
-                else:
-                    epi, brem, _ = _radiation_arrays(c.radiation)
-                if endpoint_energy_ev is not None and endpoint_energy_ev > 0.0:
-                    # Canonical ucalc.f90 Type-50 pumping samples bremsa(nb1)
-                    # with nb1=nbinc(ener,epi,ncn2).  nbinc/huntf chooses the
-                    # nearest logarithmic-grid point and returns a one-based
-                    # index; the generic Python _nbinc() is a lower bracket
-                    # and is not source-equivalent for this channel.
-                    nb1_one_based = _xstar_nbinc_fortran_value(endpoint_energy_ev, epi)
-                    bremsa = float(brem[nb1_one_based - 1])
-            except Exception:
-                bremsa = None
         ev = evaluate_type50_ucalc_record(
             decoded, ptmp1=c.ptmp1, ptmp2=c.ptmp2,
             cfrac=c.covering_fraction, bremsa_nb1=bremsa,

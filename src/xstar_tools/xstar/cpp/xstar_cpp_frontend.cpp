@@ -9,7 +9,6 @@
 // No Python interpreter or Python library is used by this frontend.
 
 #include "xstar_api.h"
-#include "xstar_parameter_contract.hpp"
 #include "xstar_production_zone_bridge.h"
 
 #include <array>
@@ -235,7 +234,6 @@ void usage(std::ostream& out) {
         "Standard input options:\n"
         "  --input PATH           HEASoft/IRAF-style .par parameter file\n"
         "  --data-dir DIR         directory containing atdb.fits and coheat.dat\n"
-        "  --input-dir DIR        source-side directory for fixed-name files such as density.dat\n"
         "  --output DIR           output directory (alias: --output-dir)\n"
         "  --atomic-db PATH       explicit atdb.fits path\n"
         "  --coheat PATH          explicit coheat.dat path\n\n"
@@ -334,7 +332,6 @@ void load_par_file(const std::filesystem::path& path,
 struct FrontendInput {
     std::filesystem::path input_file;
     std::filesystem::path data_dir;
-    std::filesystem::path input_dir{"."};
     std::filesystem::path output_dir{"."};
     std::filesystem::path parameters_out;
     std::filesystem::path json_summary;
@@ -367,7 +364,6 @@ bool parse_frontend(int argc, char** argv, int start, FrontendInput& input, std:
         };
         if(arg=="--input") { const char* v=value_after("--input"); if(!v) return false; input.input_file=v; }
         else if(arg=="--data-dir") { const char* v=value_after("--data-dir"); if(!v) return false; input.data_dir=v; }
-        else if(arg=="--input-dir") { const char* v=value_after("--input-dir"); if(!v) return false; input.input_dir=v; }
         else if(arg=="--output" || arg=="--output-dir") { const char* v=value_after(arg.c_str()); if(!v) return false; input.output_dir=v; }
         else if(arg=="--atomic-db") { const char* v=value_after("--atomic-db"); if(!v) return false; input.atomic_db=v; }
         else if(arg=="--coheat") { const char* v=value_after("--coheat"); if(!v) return false; input.coheat=v; }
@@ -406,28 +402,6 @@ bool parse_frontend(int argc, char** argv, int start, FrontendInput& input, std:
         }
     } catch(const std::exception& exc) { error=exc.what(); return false; }
     if(input.parameters.empty()) { error="no XSTAR parameters were provided"; return false; }
-    // 0.6.82.23: a partial native command receives the same fresh stock
-    // xstar.par defaults as XPI.  This also makes the generated JSON envelope
-    // and provenance a complete record of the public values used by science.
-    for (const auto& rule : xstar_parameter_contract::kRules) {
-        bool present=false;
-        for (const auto& item : input.parameters) if (item.first==rule.name) { present=true; break; }
-        if (!present) set_parameter(input.parameters,rule.name,rule.default_text);
-    }
-    try {
-        for (const auto& item : input.parameters) {
-            if (xstar_parameter_contract::find(item.first)) {
-                xstar_parameter_contract::validate_text(item.first,item.second);
-            } else {
-                static const std::set<std::string> extensions = {
-                    "atomic_database","atomic_db","atdb","coheat_file","coheat",
-                    "temperature_k","initial_radius_cm","initial_electron_fraction","xee",
-                    "standalone_charge_tolerance","standalone_thermal_tolerance","input_dir"
-                };
-                if (!extensions.count(item.first)) throw std::runtime_error("unknown XSTAR parameter: "+item.first);
-            }
-        }
-    } catch(const std::exception& exc) { error=exc.what(); return false; }
     if(!input.data_dir.empty()) {
         if(input.atomic_db.empty()) input.atomic_db=(input.data_dir/"atdb.fits").string();
         if(input.coheat.empty()) input.coheat=(input.data_dir/"coheat.dat").string();
@@ -441,23 +415,7 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
     std::error_code ec;
     std::filesystem::create_directories(input.output_dir,ec);
     if(ec) throw std::runtime_error("could not create output directory: "+input.output_dir.string());
-
-    // The native production operator deliberately validates artifact_profile=none
-    // before returning: only XSTAR science products may exist in the requested
-    // output directory at that boundary.  A frontend-generated parameter
-    // envelope is orchestration state, not an XSTAR product, so keep the default
-    // envelope in the system temporary directory and remove it after the run.
-    // --parameters-out remains the explicit opt-in for retaining the envelope.
-    std::filesystem::path path;
-    if(input.parameters_out.empty()) {
-        const auto temp_dir=std::filesystem::temp_directory_path(ec);
-        if(ec) throw std::runtime_error("could not resolve temporary directory for parameter envelope");
-        path=temp_dir/("xstar-cpp-parameters-"+std::to_string(static_cast<long long>(::getpid()))+".json");
-        std::filesystem::remove(path,ec);
-        ec.clear();
-    } else {
-        path=input.parameters_out;
-    }
+    auto path=input.parameters_out.empty()?input.output_dir/".xstar-cpp-parameters.json":input.parameters_out;
     if(path.has_parent_path()) std::filesystem::create_directories(path.parent_path(),ec);
     if(ec) throw std::runtime_error("could not create parameter-envelope directory: "+path.parent_path().string());
     std::ofstream out(path); if(!out) throw std::runtime_error("could not write parameter envelope: "+path.string());
@@ -469,7 +427,6 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
         out << "  \"" << json_escape(key) << "\": \"" << json_escape(value) << "\"";
     };
     for(const auto& item:input.parameters) emit(item.first,item.second);
-    emit("input_dir", std::filesystem::absolute(input.input_dir).string());
     if(!input.atomic_db.empty()) emit("atomic_database",input.atomic_db);
     if(!input.coheat.empty()) emit("coheat_file",input.coheat);
     out << "\n}\n";
@@ -550,13 +507,6 @@ void write_execution_provenance(const std::filesystem::path& path,const Frontend
     bool first=true;
     if(!input.atomic_db.empty()) { out << "\"atdb_path\": \"" << json_escape(input.atomic_db) << "\", \"atdb_sha256\": " << (atdb_hash?"\""+*atdb_hash+"\"":"null"); first=false; }
     if(!input.coheat.empty()) { if(!first) out << ", "; out << "\"coheat_path\": \"" << json_escape(input.coheat) << "\", \"coheat_sha256\": " << (coheat_hash?"\""+*coheat_hash+"\"":"null"); }
-    out << "},\n  \"parameter_contract\": {\"version\": \"0.6.82.23\", \"validation_envelope\": \"stock xstar.par/XPI\"},\n"
-        << "  \"parameters_used\": {";
-    for (std::size_t i=0;i<input.parameters.size();++i) {
-        if (i) out << ", ";
-        out << "\"" << json_escape(input.parameters[i].first) << "\": \""
-            << json_escape(input.parameters[i].second) << "\"";
-    }
     out << "},\n  \"wall_seconds\": " << std::setprecision(12) << wall_seconds << ",\n"
         << "  \"native_returncode\": " << returncode << "\n}\n";
 }
@@ -614,33 +564,17 @@ int run_frontend(const std::filesystem::path& native,FrontendInput& input) {
     if(!verify_runtime_abi(std::cerr,&abi)) return kAbiMismatchExit;
     if(input.threads>0) ::setenv("OMP_NUM_THREADS",std::to_string(input.threads).c_str(),1);
     if(input.deterministic) ::setenv("XSTAR_TOOLS_REPRODUCIBLE","1",1);
-    // 0.6.82.3: propagate the public progress mode to the native production
-    // process.  The standalone controller uses this only for live textual
-    // zone observability; no scientific state consumes the variable.
-    ::setenv("XSTAR_CPP_PROGRESS_MODE", input.progress.c_str(), 1);
-    const bool retain_parameters=!input.parameters_out.empty();
     const auto parameters=write_envelope(input);
-    auto remove_ephemeral_parameters=[&]() {
-        if(retain_parameters) return;
-        std::error_code ec;
-        std::filesystem::remove(parameters,ec);
-    };
     progress_event(input,"run_started",input.output_dir.string());
     const auto start=std::chrono::steady_clock::now();
     const int rc=run_native_wait(native,{"run-production","--parameters",parameters.string(),"--output-dir",input.output_dir.string()});
     const double wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
-    try {
-        const auto default_provenance=input.output_dir/"xstar_execution_provenance.json";
-        write_execution_provenance(default_provenance,input,abi,rc,wall);
-        if(!input.provenance_path.empty() && std::filesystem::absolute(input.provenance_path)!=std::filesystem::absolute(default_provenance))
-            write_execution_provenance(input.provenance_path,input,abi,rc,wall);
-        if(!input.json_summary.empty()) write_summary(input.json_summary,input,abi,rc,wall,parameters);
-        if(!input.profile_path.empty()) write_profile(input.profile_path,input,rc,wall);
-        remove_ephemeral_parameters();
-    } catch(...) {
-        remove_ephemeral_parameters();
-        throw;
-    }
+    const auto default_provenance=input.output_dir/"xstar_execution_provenance.json";
+    write_execution_provenance(default_provenance,input,abi,rc,wall);
+    if(!input.provenance_path.empty() && std::filesystem::absolute(input.provenance_path)!=std::filesystem::absolute(default_provenance))
+        write_execution_provenance(input.provenance_path,input,abi,rc,wall);
+    if(!input.json_summary.empty()) write_summary(input.json_summary,input,abi,rc,wall,parameters);
+    if(!input.profile_path.empty()) write_profile(input.profile_path,input,rc,wall);
     progress_event(input,rc==0?"run_completed":"run_failed","return_code="+std::to_string(rc));
     if(rc==0 && input.print_option>=0) {
         if(!print_step_option(input.output_dir/"xout_step.log",input.print_option,std::cout)) {

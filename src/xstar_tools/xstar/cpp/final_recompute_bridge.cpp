@@ -118,7 +118,7 @@ extern "C" int xstar_final_recompute_run_v1(
         params.density_cm3 = in->hydrogen_density_cm3;
         params.temperature_k = in->temperature_k;
         params.covering_fraction = in->dsec_covering_fraction;
-        params.emission_multiplier = in->dsec_covering_fraction;  // ABI field retained; fixed-state science uses cfrac
+        params.emission_multiplier = in->emission_covering_fraction;
         params.turbulent_velocity_km_s = in->turbulent_velocity_km_s;
         for (size_t i = 0; i < in->abundance_count; ++i) {
             const double value = in->abundances_by_z ? in->abundances_by_z[i] : 0.0;
@@ -154,7 +154,7 @@ extern "C" int xstar_final_recompute_run_v1(
         input.neutral_h_density_cm3 = in->neutral_h_density_cm3;
         input.ionized_h_density_cm3 = in->ionized_h_density_cm3;
         input.electron_fraction_xee = in->electron_fraction_xee;
-        input.covering_fraction = in->dsec_covering_fraction;
+        input.covering_fraction = in->emission_covering_fraction;
         input.turbulent_velocity_km_s = in->turbulent_velocity_km_s;
         input.radiation_energy_ev = in->radiation_energy_ev;
         input.radiation_flux = in->incident_flux;

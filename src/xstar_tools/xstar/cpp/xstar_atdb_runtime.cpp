@@ -35,11 +35,9 @@ constexpr int kProgramAbi = 60486;
 constexpr int kType49PhextrapMaxPoints = 999;
 constexpr int kType53LayoutMagic = 221; // legacy Mg-only 12-stage payload
 constexpr int kType49LayoutMagic = 222; // legacy Mg-only 12-stage payload
-constexpr int kType99LayoutMagic = 223; // legacy 12-stage payload
-constexpr int kType99LayoutMagicZ1Z30V068213 = 226;
+constexpr int kType99LayoutMagic = 223;
 constexpr int kType53LayoutMagicZ1Z30V06481231 = 224;
 constexpr int kType49LayoutMagicZ1Z30V06481231 = 225;
-constexpr int kType70SourceIonIdentityMagicV068213 = 227;
 constexpr double kEvAngstrom = 12398.419843320026;
 
 // Atomic-database record semantics (XSTAR Manual, Chapter 12; Mendoza et al.
@@ -203,7 +201,7 @@ double source_default_real_literal(double value) {
 double source_rread1_initial_radius_cm(const std::string& text) {
     const int lcpres = static_cast<int>(json_number(text, "lcpres", 0.0));
     const int lcdd = lcpres <= 1 ? 1 - lcpres : lcpres;
-    const double t4 = source_uclgsr8(text, "temperature", 400.0);
+    const double t4 = source_uclgsr8(text, "temperature", 100.0);
     const double pressure = source_uclgsr8(text, "pressure", 0.03);
     double density = source_uclgsr8(text, "density", 1.0e4);
     const double xlum = source_uclgsr8(text, "rlrad38", 1.0e-6);
@@ -213,7 +211,7 @@ double source_rread1_initial_radius_cm(const std::string& text) {
     if (lcdd == 0) {
         density = pressure / 1.38e-12 / std::max(t4, 1.0e-49);
         const double four_pi = source_default_real_literal(12.56);
-        const double ccc = 2.99792458e10; // constants.f90 REAL(8) parameter
+        const double ccc = source_default_real_literal(2.99792458e10);
         r19 = std::sqrt(xlum / four_pi / ccc / std::max(1.0e-49, pressure * xi));
     } else if (lcdd == 2) {
         const double xee = source_default_real_literal(1.2);
@@ -782,19 +780,8 @@ int row_for_local(const Layout& l,int ion,int local) {
 // Purpose: Provide row for idest as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-int row_for_idest(const Layout&,const Block& b,int idest) {
-    // Source calc_hmc_ion keeps idest values relative to the current ion and
-    // calc_hmc_element shifts them by ipmat2.  The resulting matrix endpoint
-    // may lie above the element's active compact dimension; msolvelucy.f90
-    // aliases such endpoints to the final compact row with min(ipmat,indb).
-    // Preserve the raw shifted endpoint here and defer that aliasing to the
-    // matrix-consumption boundary instead of rejecting a source-valid record
-    // during ATDB lowering.
-    if (idest <= 0) throw std::runtime_error("ATDB destination endpoint is non-positive");
-    const long long row = static_cast<long long>(b.compact_start) + static_cast<long long>(idest) - 1LL;
-    if (row < 1LL || row > static_cast<long long>(std::numeric_limits<int>::max()))
-        throw std::runtime_error("ATDB destination endpoint overflows native compact index");
-    return static_cast<int>(row);
+int row_for_idest(const Layout& l,const Block& b,int idest) {
+    int row=b.compact_start+idest-1; if (row<1 || row>l.n_rows) throw std::runtime_error("destination outside compact element basis"); return row;
 }
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide row for source endpoint as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
@@ -863,37 +850,6 @@ std::pair<int,int> local_pair(const Layout& l,int ion,int a,int b) {
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
 double mass_for_z(int z) { return z>0 && z<static_cast<int>(kAtomicMass.size()) ? kAtomicMass[static_cast<std::size_t>(z)] : std::max(1.0,2.0*z); }
-
-double source_atomic_mass_from_element_reals(const std::vector<double>& values,int z) {
-    if (values.size() >= 2 && std::isfinite(values[1]) && values[1] > 0.0)
-        return values[1];
-    return mass_for_z(z);
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Return the nuclear mass through the same line -> ion -> element
-// parent traversal used by literal ucalc.f90 Type-50 and binemislin.f90.
-// Reference context: ucalc.f90 label 50 reads nilin=npar(line),
-// nelin=npar(nilin), then a=rdat1(element_record+1); setptrs.f90 establishes
-// that rate-type-11 element parent.  The ATDB REALS column is REAL(4), so the
-// AtdbReader double value already has the source float-to-double promotion.
-// XSTAR-FUNCTION-COMMENT-END
-double source_atomic_mass_for_ion(AtdbReader& db,const Derived& d,int ion,int z) {
-    if (ion > 0 && ion < static_cast<int>(d.ion_records.size())) {
-        const int ion_record = d.ion_records[static_cast<std::size_t>(ion)];
-        const int element_record =
-            ion_record > 0 && ion_record < static_cast<int>(d.npar.size())
-                ? d.npar[static_cast<std::size_t>(ion_record)] : 0;
-        if (element_record > 0) {
-            const auto values = db.reals(element_record);
-            return source_atomic_mass_from_element_reals(values,z);
-        }
-    }
-    // Compact synthetic fixtures predating the complete rate-type-11 parent
-    // tree may not carry an element record.  Keep a guarded fallback for such
-    // tests only; production ATDB lowering reaches the source value above.
-    return mass_for_z(z);
-}
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide ion label as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
@@ -919,34 +875,6 @@ const LevelValue* find_level(const Layout& l,int ion,int local) {
 // XSTAR-FUNCTION-COMMENT-END
 const LevelValue* find_snapshot(const Layout& l,int ion,int column) {
     auto ti=l.snapshots.find(ion); if (ti==l.snapshots.end()) return nullptr; auto vi=ti->second.find(column); return vi==ti->second.end()?nullptr:&vi->second;
-}
-
-// Resolve the mutable source leveltemp value visible to UCalc for an idest
-// column.  This is intentionally separate from the compact matrix row: source
-// idest values above the active matrix dimension may still refer to a live (or
-// retained) leveltemp column, while msolvelucy later clamps the matrix endpoint.
-const LevelValue* source_endpoint_level(const Layout& l,const Block& b,int idest) {
-    if (idest <= 0) return nullptr;
-    if (const auto* v=find_snapshot(l,b.ion_index,idest)) return v;
-    if (const auto* v=find_level(l,b.ion_index,idest)) return v;
-    return nullptr;
-}
-
-double source_endpoint_energy(const Layout& l,const Block& b,int idest,int raw_row) {
-    // Preserve every previously qualified in-bounds compact-row value exactly.
-    // Only an endpoint that lies beyond ipmat needs the retained source
-    // leveltemp workspace; msolvelucy aliases its matrix row later.
-    if (raw_row >= 1 && raw_row <= l.n_rows) return row_energy(l,raw_row);
-    if (const auto* v=source_endpoint_level(l,b,idest)) return v->energy;
-    const int clamped=std::min(std::max(raw_row,1),l.n_rows);
-    return row_energy(l,clamped);
-}
-
-double source_endpoint_weight(const Layout& l,const Block& b,int idest,int raw_row) {
-    if (raw_row >= 1 && raw_row <= l.n_rows) return row_weight(l,raw_row);
-    if (const auto* v=source_endpoint_level(l,b,idest)) return std::max(v->weight,1.0e-300);
-    const int clamped=std::min(std::max(raw_row,1),l.n_rows);
-    return row_weight(l,clamped);
 }
 
 // v82 patch 5.20.7: literal ucalc/deleafnd Type-50 damping ownership.
@@ -1048,8 +976,8 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     if (dt==1) { need(rr.size()>=2,"short payload"); out.reals.assign(rr.begin(),rr.begin()+2); out.ints.clear(); matrix=false; }
     else if (dt==2) { need(rr.size()>=4,"short payload"); lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==7) { need(rr.size()>=4,"short payload"); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); matrix=false; }
-    else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(source_endpoint_energy(l,b,(ii.size()>1?b.nlev+static_cast<int>(ii[1])-1:b.nlev),upper)-source_endpoint_energy(l,b,(ii.size()>1?static_cast<int>(ii[0]):1),lower)); }
-    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(source_endpoint_energy(l,b,b.nlev,upper)-source_endpoint_energy(l,b,id1,lower)); }
+    else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==30) { need(!ii.empty(),"missing nmax"); out.reals.clear(); out.ints={ii[0]}; matrix=false; }
     else if (dt==38 || dt==39) { need((dt==38&&rr.size()>=4)||(dt==39&&rr.size()>=2),"short payload"); out.ints.clear(); matrix=false; }
     // Types 50 and 91 are bound-bound radiative line records: wavelength and
@@ -1058,10 +986,8 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     // directly to the Type-50 branch, so they share endpoint/radiative handling.
     else if (dt==50 || dt==91) {
         need(ii.size()>=2 && rr.size()>=3,"short payload"); int id1=ii[0],id2=ii[1]; int r1=row_for_local(l,ion,id1),r2=row_for_local(l,ion,id2);
-        const auto* s1=find_snapshot(l,ion,id1); const auto* s2=find_snapshot(l,ion,id2);
-        // 0.6.82.13: Type-50 endpoint ownership is the mutable source leveltemp
-        // workspace for every element.  Do not special-case Mg low ions.
-        double e1=s1?s1->energy:row_energy(l,r1),e2=s2?s2->energy:row_energy(l,r2);
+        const auto* s1=find_snapshot(l,ion,id1); const auto* s2=find_snapshot(l,ion,id2); double e1=s1?s1->energy:row_energy(l,r1),e2=s2?s2->energy:row_energy(l,r2);
+        if (b.element_z==12 && b.ion_stage<=4) { e1=row_energy(l,r1); e2=row_energy(l,r2); }
         if ((e1/(1.0e-24+e2)-1.0)<1.0e-8) { lower=r1; upper=r2; } else { lower=r2; upper=r1; }
         auto scalar=local_pair(l,ion,id1,id2); double wavelength=std::abs(rr[0]),aij=rr[2]; double gup=row_weight(l,scalar.second),glo=row_weight(l,scalar.first);
         double oscillator=wavelength<=0?0.0:1.0e-16*aij*gup*wavelength*wavelength/(0.667274*glo); energy=std::abs(e1-e2);
@@ -1093,7 +1019,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             energy=rr[0];
         }
         const double gglo=row_weight(l,row_for_local(l,ion,1));
-        const double ggup=source_zero?1.0:source_endpoint_weight(l,b,id2,upper);
+        const double ggup=source_zero?1.0:row_weight(l,upper);
         out.reals=rr;
         out.reals.push_back(gglo);
         out.reals.push_back(ggup);
@@ -1146,15 +1072,15 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         auto set_pair = [&](int id1, int id2, bool enabled=true) {
             if (!enabled || id1 <= 0 || id2 <= 0) { lower=upper=0; matrix=false; return; }
             lower=row_for_idest(l,b,id1); upper=row_for_idest(l,b,id2);
-            energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower));
+            energy=std::abs(row_energy(l,upper)-row_energy(l,lower));
         };
         auto energy_order_pair = [&](int a, int c) {
             int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
-            if (source_endpoint_energy(l,b,a,ra) <= source_endpoint_energy(l,b,c,rc)) set_pair(a,c); else set_pair(c,a);
+            if (row_energy(l,ra) <= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
         };
         auto upper_lower_pair = [&](int a, int c) {
             int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
-            if (source_endpoint_energy(l,b,a,ra) >= source_endpoint_energy(l,b,c,rc)) set_pair(a,c); else set_pair(c,a);
+            if (row_energy(l,ra) >= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
         };
         switch (dt) {
             case 3: set_pair(1,1); break;
@@ -1190,37 +1116,14 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             case 67: need(ii.size()>=2&&rr.size()>=3,"short payload"); energy_order_pair(ii[0],ii[1]); break;
             // Type 70 is the older superlevel recombination/photoionization table:
             // density and temperature grids plus recombination coefficients and a PI curve.
-            case 70: {
-                need(ii.size()>=5,"short integer payload");
-                int id1=std::min<int>(ii[ii.size()-2],std::max(b.nlev-1,1));
-                int id2=std::max<int>(b.nlev+ii[ii.size()-3]-1,b.nlev);
-                set_pair(id1,id2);
-                // ucalc.f90's Type-70 high-density clamp is guarded by
-                // jkion.eq.1, where jkion is the global ATDB ion index.  The
-                // compact per-element ion_counter restarts at one for every Z
-                // and must not be used for that source identity test.
-                out.ints.push_back(static_cast<std::int64_t>(ion));
-                out.ints.push_back(kType70SourceIonIdentityMagicV068213);
-                break;
-            }
+            case 70: { need(ii.size()>=5,"short integer payload"); int id1=std::min<int>(ii[ii.size()-2],std::max(b.nlev-1,1)); int id2=std::max<int>(b.nlev+ii[ii.size()-3]-1,b.nlev); set_pair(id1,id2); break; }
             case 75: { need(ii.size()>=3&&rr.size()>=2,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); break; }
             case 79: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 81: need(ii.size()>=2&&!rr.empty(),"short payload"); energy_order_pair(ii[0],ii[1]); break;
             case 82: need(ii.size()>=2&&rr.size()>=4,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
-            // Type 85 is the compact Fe K-edge photoionization parameterization.
-            // ucalc.f90 publishes idest1=the source payload endpoint and idest2=1,
-            // then calc_hmc_ion.f90 applies the universal energy ordering for all
-            // rate types except 7 and 41 before constructing the thermal diagonal.
-            // Preserve that distinction here: Type-85 photoionization heating must
-            // be attached to the lower-energy (normally ground) population rather
-            // than to the sparse excited endpoint.
-            case 85: {
-                need(ii.size()>=3&&rr.size()>=5,"short payload");
-                const int id1=ii[ii.size()-2];
-                if (rt==7 || rt==41) set_pair(id1,1);
-                else energy_order_pair(id1,1);
-                break;
-            }
+            // Type 85 is the compact Fe K-edge photoionization parameterization
+            // (effective charge, threshold, strength/width/scaling parameters).
+            case 85: { need(ii.size()>=3&&rr.size()>=5,"short payload"); set_pair(ii[ii.size()-2],1); break; }
             case 89: need(ii.size()>=2&&rr.size()>=3,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 92: need(ii.size()>=3&&rr.size()>=42,"short payload"); set_pair(ii[0],ii[1]); break;
             case 96: { need(ii.size()>=3&&rr.size()>=3,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); energy=rr[2]; break; }
@@ -1244,7 +1147,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==74) { need(ii.size()>=2,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-2]);upper=row_for_local(l,ion,b.nlev);out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     // Type 86 stores K-vacancy Auger/radiative widths and level identities.
     // These widths contribute to damping/lifetime handling rather than a PI grid.
-    else if (dt==86) { need(ii.size()>=5&&rr.size()>=2,"short payload");int id1=ii[ii.size()-4],id2=b.nlev+ii[ii.size()-5]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);out.reals={rr[1]};out.ints.clear();energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower)); }
+    else if (dt==86) { need(ii.size()>=5&&rr.size()>=2,"short payload");int id1=ii[ii.size()-4],id2=b.nlev+ii[ii.size()-5]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);out.reals={rr[1]};out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     // Type 88 stores the damped excess photoionization cross section to a
     // K-shell superlevel as energy/cross-section pairs; ucalc extrapolates from
     // the source threshold and applies the inner-shell photoabsorption ownership.
@@ -1264,7 +1167,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         out.ints={static_cast<std::int64_t>(rr.size()/2),owner,local,calc_emis_idest2};energy=threshold; }
     // Type 95 is the level collisional-ionization fit: threshold energy,
     // temperature scale, and tabulated effective-collision-strength values.
-    else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);energy=std::abs(source_endpoint_energy(l,b,id2,upper)-source_endpoint_energy(l,b,id1,lower));}else {lower=upper=row_for_local(l,ion,1);energy=0.0;}out.ints.push_back(row_for_local(l,ion,b.nlev)); }
+    else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);}else lower=upper=row_for_local(l,ion,1);out.ints.push_back(row_for_local(l,ion,b.nlev));energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     // Type 99 is the newer superlevel recombination/photoionization table.
     // Like Type 70 it combines density/temperature recombination data with a
     // photoionization grid, but Appendix A records the updated coefficient layout.
@@ -1272,32 +1175,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         need(ii.size()>=4&&rr.size()>=8,"short payload");int setup_idest1=ii[ii.size()-2];int id1=std::min<int>(setup_idest1,std::max(b.nlev-1,1)),id2=b.nlev+ii[ii.size()-4]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);const auto* bound=find_level(l,ion,id1);const auto* setup_bound=find_level(l,ion,setup_idest1);const auto* parentlv=find_level(l,ion,b.nlev);need(bound&&setup_bound&&parentlv,"lacks literal bound/parent levels");const double source_errc_rank_energy=std::max(0.1,setup_bound->ionpot-setup_bound->energy);double dest_e=parentlv->energy,dest_w=parentlv->weight,ex_e=0,ex_w=0,threshold=0;int ex_mode=0;
         if(id2<=b.nlev){const auto* dest=find_level(l,ion,id2);need(dest,"lacks destination level");dest_e=dest->energy;dest_w=dest->weight;threshold=std::abs(bound->energy-parentlv->energy);}else{auto bit=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_index==ion;});need(bit!=l.blocks.end()&&std::next(bit)!=l.blocks.end(),"has no next-ion destination");int local2=id2-b.nlev+1;const auto* ex=find_level(l,std::next(bit)->ion_index,local2);need(ex,"lacks next-ion destination level");ex_mode=1;ex_e=ex->energy;ex_w=ex->weight;dest_w=ex_w;threshold=std::abs(bound->energy+ex_e);dest_e=parentlv->energy+ex_e;}
         out.reals=rr;out.reals.insert(out.reals.end(),{dest_e,threshold,dest_w});
-        {
-            // 0.6.82.13: ucalc Type-99 consumes the persistent leveltemp
-            // energy/statistical-weight workspace independently of target
-            // element.  Serialize the full Z=1..30 candidate context for all
-            // elements; the record/sequence topology still decides whether a
-            // Type-99 record exists.
-            auto incoming=[&](int col){const auto* v=find_snapshot(l,ion,col);return std::pair<double,double>{v?v->energy:0.0,v?v->weight:0.0};};
-            auto ib=incoming(id1),ip=incoming(b.nlev),id=incoming(id2);
-            out.reals.insert(out.reals.end(),{ib.first,ib.second,ip.first,ip.second,id.first,id.second,ex_e,ex_w});
-            std::array<int,3> cols{{id1,b.nlev,id2}};
-            std::array<std::uint32_t,3> masks{{0u,0u,0u}};
-            for(int ci=0;ci<3;++ci){
-                std::vector<double> energies,weights;
-                energies.reserve(30); weights.reserve(30);
-                for(int st=1;st<=30;++st){
-                    auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==st;});
-                    const auto* v=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,cols[ci]);
-                    energies.push_back(v?v->energy:0.0);
-                    weights.push_back(v?v->weight:0.0);
-                    if(v)masks[ci]|=(1u<<static_cast<unsigned>(st-1));
-                }
-                out.reals.insert(out.reals.end(),energies.begin(),energies.end());
-                out.reals.insert(out.reals.end(),weights.begin(),weights.end());
-            }
-            out.ints.insert(out.ints.end(),{id1,b.nlev,id2,static_cast<std::int64_t>(masks[0]),static_cast<std::int64_t>(masks[1]),static_cast<std::int64_t>(masks[2]),ex_mode,kType99LayoutMagicZ1Z30V068213});
-        }
+        if(b.element_z==12){auto incoming=[&](int col){const auto* v=find_snapshot(l,ion,col);return std::pair<double,double>{v?v->energy:0.0,v?v->weight:0.0};};auto ib=incoming(id1),ip=incoming(b.nlev),id=incoming(id2);out.reals.insert(out.reals.end(),{ib.first,ib.second,ip.first,ip.second,id.first,id.second,ex_e,ex_w});std::array<int,3> cols{{id1,b.nlev,id2}};std::array<int,3> masks{{0,0,0}};for(int ci=0;ci<3;++ci){std::vector<double> energies,weights;for(int st=1;st<=12;++st){auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==st;});const auto* v=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,cols[ci]);energies.push_back(v?v->energy:0.0);weights.push_back(v?v->weight:0.0);if(v)masks[ci]|=1<<(st-1);}out.reals.insert(out.reals.end(),energies.begin(),energies.end());out.reals.insert(out.reals.end(),weights.begin(),weights.end());}out.ints.insert(out.ints.end(),{id1,b.nlev,id2,masks[0],masks[1],masks[2],ex_mode,kType99LayoutMagic});}
         // v82 patch 5.20.5: xstarsetup builds errc before calc_emis using
         // leveltemp rlev(4,idest1)-rlev(1,idest1), independent of calt99's
         // later threshold/destination semantics.  Append it as internal payload.
@@ -1307,7 +1185,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     out.record.source_position=0; out.record.record=rec; out.record.next_index=-1; out.record.element_index=element_index;
     out.record.opcode=(dt==91?XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE:(dt==52?XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE:(kLegacyActiveTypes.count(dt)?dt:XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC))); out.record.data_type=dt; out.record.rate_type=rt; out.record.ion_index=b.ion_counter; out.record.ion_stage=stage;
     out.record.lower_row=lower; out.record.upper_row=upper; out.record.density_scale=1.0; out.record.line_energy_ev=energy;
-    out.record.atomic_mass_amu=source_atomic_mass_for_ion(db,d,ion,b.element_z); out.record.natural_width_ev=width;
+    out.record.atomic_mass_amu=mass_for_z(b.element_z); out.record.natural_width_ev=width;
     out.record.line_index_one_based=d.nplini[rec]; out.record.continuum_index_one_based=d.npconi2[rec]; out.record.matrix_enabled=matrix?1u:0u;
     return out;
 }
@@ -1349,123 +1227,40 @@ xstar_fixed_program_bundle_v1 ProgramStorage::bundle() const {
 // Purpose: Load production parameters into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-int source_lcdd_from_lcpres(int lcpres) {
-    return lcpres <= 1 ? 1 - lcpres : lcpres;
-}
-
-double source_runtime_density_cm3(
-    const ProductionParameters& parameters,
-    double temperature_t4,
-    double electron_fraction_xee) {
-    const int lcdd = source_lcdd_from_lcpres(parameters.pressure_mode);
-    if (lcdd == 0) {
-        // calc_hmc_all.f90 / calc_emis*_all.f90 use the unsuffixed
-        // default-REAL 1.38e-12 literal, promoted to REAL(8), and a REAL(8)
-        // 1.d-24 temperature floor.
-        const double coefficient = source_default_real_literal(1.38e-12);
-        return parameters.pressure_dyn_cm2 / coefficient /
-            std::max(temperature_t4, 1.0e-24);
-    }
-    if (lcdd == 2) {
-        return parameters.pressure_dyn_cm2 /
-            (electron_fraction_xee + source_default_real_literal(1.0e-34));
-    }
-    return parameters.input_density_cm3;
-}
-
 ProductionParameters read_production_parameters(const std::filesystem::path& path) {
     ProductionParameters p; p.source_path=path; p.raw_json=read_file(path);
-    auto has_key = [&](const char* key) {
-        const std::regex pattern("\\\"" + std::string(key) + "\\\"\\s*:");
-        return std::regex_search(p.raw_json, pattern);
-    };
-    auto public_number = [&](const char* key, double fallback) {
-        const std::regex pattern("\\\"" + std::string(key) + "\\\"\\s*:\\s*(?:\\\")?([-+0-9.eE]+)(?:\\\")?");
-        std::smatch match;
-        double value=fallback;
-        if (std::regex_search(p.raw_json,match,pattern)) {
-            try { value=std::stod(match[1].str()); }
-            catch (...) { throw std::runtime_error(std::string(key)+" is not numeric"); }
-        } else if (has_key(key)) {
-            throw std::runtime_error(std::string(key)+" is not a valid numeric XSTAR parameter");
-        }
-        if (const auto* rule=xstar_parameter_contract::find(key)) xstar_parameter_contract::validate_numeric(*rule,value);
-        return value;
-    };
-    auto public_string = [&](const char* key, const char* fallback) {
-        const std::regex pattern("\\\"" + std::string(key) + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
-        std::smatch match;
-        if (std::regex_search(p.raw_json,match,pattern)) return match[1].str();
-        if (has_key(key)) throw std::runtime_error(std::string(key)+" is not a valid string XSTAR parameter");
-        return std::string(fallback);
-    };
-
-    p.density_cm3=public_number("density",p.density_cm3);
-    p.input_density_cm3=p.density_cm3;
-    p.pressure_dyn_cm2=public_number("pressure",p.pressure_dyn_cm2);
-    const double input_t4=public_number("temperature",400.0);
-    p.temperature_k=json_number(p.raw_json,"temperature_k",input_t4*1.0e4);
-    // Source uclgsr8 reads REAL input through REAL(4), then promotes it.
-    p.column_cm2=static_cast<double>(static_cast<float>(public_number("column",p.column_cm2)));
-    p.log_xi=public_number("rlogxi",p.log_xi);
-    p.covering_fraction=public_number("cfrac",p.covering_fraction);
-    p.emission_multiplier=public_number("emult",p.emission_multiplier);
-    p.maximum_optical_depth=public_number("taumax",p.maximum_optical_depth);
-    p.turbulent_velocity_km_s=public_number("vturbi",p.turbulent_velocity_km_s);
-    p.minimum_electron_fraction=public_number("xeemin",p.minimum_electron_fraction);
+    p.density_cm3=json_number(p.raw_json,"density",p.density_cm3); p.pressure_dyn_cm2=json_number(p.raw_json,"pressure",p.pressure_dyn_cm2);
+    p.temperature_k=json_number(p.raw_json,"temperature_k",json_number(p.raw_json,"temperature",100.0)*1.0e4);
+    // Source input parameters are read by uclgsr8 through REAL(4) and then
+    // promoted.  Column was already normalized that way by Python, but enforce
+    // it here independently as well.
+    p.column_cm2=source_uclgsr8(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
+    p.initial_radius_cm=source_rread1_initial_radius_cm(p.raw_json); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
+    p.emission_multiplier=json_number(p.raw_json,"emult",p.emission_multiplier);
+    p.maximum_optical_depth=json_number(p.raw_json,"taumax",p.maximum_optical_depth);
+    p.turbulent_velocity_km_s=json_number(p.raw_json,"vturbi",p.turbulent_velocity_km_s);
+    // xeemin is a lower bound used by the source charge controller, not the
+    // initial charge iterate.  Unless parameters explicitly provide xee or
+    // initial_electron_fraction, native XSTAR starts at xee=1.
+    p.minimum_electron_fraction=json_number(p.raw_json,"xeemin",p.minimum_electron_fraction);
     p.initial_electron_fraction=json_number(
         p.raw_json,"initial_electron_fraction",
         json_number(p.raw_json,"xee",p.initial_electron_fraction));
-    p.luminosity_1e38=public_number("rlrad38",p.luminosity_1e38);
-    p.spectral_index=public_number("trad",p.spectral_index);
-    p.radial_density_exponent=public_number("radexp",p.radial_density_exponent);
-    p.pressure_mode=static_cast<int>(public_number("lcpres",p.pressure_mode));
-    if (source_lcdd_from_lcpres(p.pressure_mode) == 0) {
-        // rread1 reads pressure/temperature through uclgsr8 (REAL(4) ->
-        // REAL(8)), then uses the double-precision 1.38d-12 coefficient for
-        // its initial trial density.  The per-evaluation coefficient differs
-        // slightly and is handled by source_runtime_density_cm3().
-        p.pressure_dyn_cm2=source_uclgsr8(p.raw_json,"pressure",p.pressure_dyn_cm2);
-        const double source_t4=source_uclgsr8(p.raw_json,"temperature",input_t4);
-        // Under lcdd=0 this same uclgsr8-promoted T4 is the live controller
-        // input.  Keep the promotion local to constant pressure so frozen
-        // constant-density trajectories are byte-for-byte unaffected.
-        p.temperature_k=source_t4*1.0e4;
-        p.density_cm3=p.pressure_dyn_cm2/1.38e-12/std::max(source_t4,1.0e-49);
-    }
-    p.spectrum_units=static_cast<int>(public_number("spectun",p.spectrum_units));
-    p.spectrum_file=public_string("spectrum_file","spct.dat");
-    p.input_dir=json_string(p.raw_json,"input_dir",".");
-    p.critical_fraction=public_number("critf",p.critical_fraction);
+    p.luminosity_1e38=json_number(p.raw_json,"rlrad38",p.luminosity_1e38); p.spectral_index=json_number(p.raw_json,"trad",p.spectral_index);
+    p.radial_density_exponent=json_number(p.raw_json,"radexp",p.radial_density_exponent); p.pressure_mode=static_cast<int>(json_number(p.raw_json,"lcpres",p.pressure_mode));
+    p.spectrum_units=static_cast<int>(json_number(p.raw_json,"spectun",p.spectrum_units)); p.spectrum_file=json_string(p.raw_json,"spectrum_file",p.spectrum_file);
+    p.critical_fraction=json_number(p.raw_json,"critf",p.critical_fraction);
     p.controller_charge_tolerance=json_number(p.raw_json,"standalone_charge_tolerance",0.0);
     p.controller_thermal_tolerance=json_number(p.raw_json,"standalone_thermal_tolerance",0.0);
-    p.ncn2=static_cast<int>(public_number("ncn2",p.ncn2));
-    p.nsteps=static_cast<int>(public_number("nsteps",p.nsteps));
-    p.npass=static_cast<int>(public_number("npass",p.npass));
-    p.requested_niter=static_cast<int>(public_number("niter",p.niter));
-    // 0.6.82.24: preserve the literal FORTRAN nlimd contract.
-    //   niter == 0 : xstarcalc skips dsec entirely; fixed input T and source xee.
-    //   niter <  0 : dsec solves charge neutrality only (nlimt=0, nlimx=abs(nlim)).
-    //   niter >  0 : dsec solves charge neutrality and thermal equilibrium.
-    p.niter=p.requested_niter;
-    p.lwrite=static_cast<int>(public_number("lwrite",0.0));
-    p.lprint=static_cast<int>(public_number("lprint",0.0));
-    p.lstep=static_cast<int>(public_number("lstep",0.0));
-    p.loopcontrol=static_cast<int>(public_number("loopcontrol",0.0));
-    p.model_name=public_string("modelname","XSTAR Default");
-    p.abundance_table=public_string("abundtbl","xdef");
-    p.mode=public_string("mode","ql");
-    p.spectrum=public_string("spectrum","pow");
-    p.initial_radius_cm=source_rread1_initial_radius_cm(p.raw_json);
-
+    p.ncn2=std::max(4,static_cast<int>(json_number(p.raw_json,"ncn2",p.ncn2)));
+    p.nsteps=std::max(1,static_cast<int>(json_number(p.raw_json,"nsteps",p.nsteps))); p.npass=std::max(1,static_cast<int>(json_number(p.raw_json,"npass",p.npass))); p.niter=std::max(1,static_cast<int>(json_number(p.raw_json,"niter",p.niter))); p.spectrum=json_string(p.raw_json,"spectrum",p.spectrum);
     auto physical=json_number_array(p.raw_json,"physical_abundances");
     for(std::size_t i=0;i<physical.size()&&i<30;++i) if(physical[i]>0) p.abundances_by_z[static_cast<int>(i)+1]=physical[i];
     if(p.abundances_by_z.empty()) {
         static const std::array<const char*,30> keys={{"habund","heabund","liabund","beabund","babund","cabund","nabund","oabund","fabund","neabund","naabund","mgabund","alabund","siabund","pabund","sabund","clabund","arabund","kabund","caabund","scabund","tiabund","vabund","crabund","mnabund","feabund","coabund","niabund","cuabund","znabund"}};
-        const auto& base = source_abundance_base(p.abundance_table);
+        const auto& base = source_abundance_base(json_string(p.raw_json,"abundtbl","xdef"));
         for(int z=1;z<=30;++z){
-            const double source_default_multiplier = (z==3 || z==4 || z==5) ? 0.0 : 1.0;
-            const double multiplier=public_number(keys[static_cast<std::size_t>(z-1)],source_default_multiplier);
+            const double multiplier=json_number(p.raw_json,keys[static_cast<std::size_t>(z-1)],0.0);
             const double a=multiplier*base[static_cast<std::size_t>(z-1)];
             if(a>0)p.abundances_by_z[z]=a;
         }
@@ -1683,7 +1478,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
             const auto& h=db.header(rec);const int parent=d.npar[rec];const int ion=ion_record_to_index[parent];const auto& b=block_for(l,ion);auto iv=db.ints(rec);auto rv=db.reals(rec);
-            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=source_atomic_mass_for_ion(db,d,ion,z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
+            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=mass_for_z(z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
             if(d.npconi2[rec]>0){
                 // Literal pprint.f90/writespectra4.f90 identity metadata is
                 // distinct from the UCalc physical threshold used by the

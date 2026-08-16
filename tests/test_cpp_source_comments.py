@@ -84,13 +84,7 @@ def test_all_active_cpp_h_hpp_files_have_source_correspondence_blocks():
             assert path.is_file()
             assert _sha(path.read_bytes()) == current_hashes[rel] or current_path_is_approved(path)
 
-    expected_files = sorted(historical_files + [frontend] + xspec_files)
-    # Later exact source-scope manifests may add active C++ support headers
-    # without rewriting the immutable 0.6.54 overlay inventory.  Admit only
-    # extras whose current bytes are pinned by an approved compatibility manifest.
-    extras = sorted(set(files) - set(expected_files))
-    assert all(current_path_is_approved(ROOT / rel) for rel in extras)
-    assert sorted(set(files) - set(extras)) == expected_files
+    assert files == sorted(historical_files + [frontend] + xspec_files)
     for rel in historical_files:
         text = (ROOT / rel).read_text(errors="replace")[:3000]
         assert text.startswith("// XSTAR-SOURCE-CORRESPONDENCE-BEGIN\n")

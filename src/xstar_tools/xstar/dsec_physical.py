@@ -635,7 +635,7 @@ def build_physical_dsec_runtime_state(
         global_rnisg_by_index=global_rnisg_by_index,
         leveltemp_workspace=leveltemp_workspace,
         source_global_alias_writeback=True,
-        reset_leveltemp_each_calc_hmc_all=False,
+        reset_leveltemp_each_calc_hmc_all=True,
         provenance={
             "physical_dsec_runner": True,
             "initial_runtime_source": initial.source,
@@ -653,7 +653,7 @@ def build_physical_dsec_runtime_state(
             ),
             "dense_native_global_state": True,
             "source_global_alias_writeback": True,
-            "leveltemp_lifecycle": "persistent_source_workspace_across_calc_hmc_all",
+            "leveltemp_lifecycle": "reset_to_call_entry_state_each_calc_hmc_all",
         },
     )
 

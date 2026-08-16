@@ -14,10 +14,9 @@ names and execute the translated Python call graph.  They never invoke the
 Fortran ``xstar`` executable and never read XSTAR-produced spectra, populations,
 or rates as calculation inputs.
 
-The production controller preserves the public XSTAR parameter contract,
-including the source-faithful incident-spectrum modes implemented by the
-current campaign.  Unsupported source branches fail explicitly instead of
-being approximated.
+The first production scope is the constant-density, analytic-radius, built-in
+power-law benchmark represented by ``helike_type69/c5_ne1``.  Unsupported
+source branches fail explicitly instead of being approximated.
 """
 
 from __future__ import annotations
@@ -39,18 +38,7 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 
 from .abundance_tables import resolve_abundance_table
-from .parameter_contract import (
-    ABUNDANCE_PARAMETER_NAMES as CONTRACT_ABUNDANCE_PARAMETER_NAMES,
-    XSTAR_PAR_DEFAULTS,
-    coerce_and_validate_parameter,
-)
 from .source_real_energy_grid import source_ener_grid
-from .spectrum_contract import (
-    SpectrumContractError,
-    canonical_spectrum_mode,
-    initial_source_spectrum,
-    apply_source_spectrum_pass,
-)
 
 from .. import __version__ as XSTAR_ATOMIC_VERSION
 from ..data import resolve_atdb_path
@@ -82,11 +70,7 @@ from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
 from .emissivity import CalcEmisabContext
 from .free_free import FreeFreeContext, freef_continuum_result
-from .local_zone import (
-    FixedStateCalcHMCAllResult,
-    FixedStateElementRequest,
-    resolve_calc_hmc_all_density,
-)
+from .local_zone import FixedStateCalcHMCAllResult, FixedStateElementRequest
 from .output_writers import (
     LevelOutputMetadata,
     LineOutputMetadata,
@@ -305,9 +289,6 @@ def _normalize_diagnostics_mode(value: str | None) -> str:
 
 
 ERGSEV = 1.602197e-12
-# constants.f90: REAL(8) parameter initialized by an unsuffixed default-REAL
-# literal.  Canonical ispec4 therefore sees binary32 rounding before promotion.
-ISPEC4_ERGSEV = float(np.float32(1.602176634e-12))
 HC_EV_ANGSTROM = float(np.float32(12398.4016))
 ELEMENT_SYMBOLS = (
     "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -315,8 +296,6 @@ ELEMENT_SYMBOLS = (
     "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
 )
 ABUNDANCE_PARAMETER_NAMES = tuple(symbol.lower() + "abund" for symbol in ELEMENT_SYMBOLS)
-if ABUNDANCE_PARAMETER_NAMES != CONTRACT_ABUNDANCE_PARAMETER_NAMES:
-    raise RuntimeError("0.6.82.23 parameter contract abundance order mismatch")
 ATOMIC_MASS = (
     1.008, 4.003, 6.94, 9.012, 10.81, 12.011, 14.007, 15.999, 18.998, 20.180,
     22.990, 24.305, 26.982, 28.085, 30.974, 32.06, 35.45, 39.948, 39.098, 40.078,
@@ -345,7 +324,7 @@ _XSTAR_OUTPUT_PARAMETER_ROWS: tuple[tuple[str, str, str], ...] = (
     ("density", "real", "cm**(-3)"),
     ("spectrum", "string", " "),
     ("spectrum_file", "string", " "),
-    ("spectun", "integer", "0=energy, 1=photons, 2=log10 energy"),
+    ("spectun", "integer", "0=energy, 1=photons"),
     ("trad", "real", "or alpha"),
     ("rlrad38", "real", "/10**38 erg/sec"),
     ("column", "real", "cm**(-2)"),
@@ -365,16 +344,42 @@ _XSTAR_OUTPUT_PARAMETER_ROWS: tuple[tuple[str, str, str], ...] = (
     ("npass", "integer", " "),
     ("modelname", "string", " "),
     ("loopcontrol", "integer", " "),
-    # 0.6.82.23 provenance extension: public xstar.par inputs omitted from the
-    # historical 56-row fparmlist array are appended without disturbing the
-    # canonical first-56 ordering.
-    ("radexp", "real", "density distribution power law index"),
-    ("ncn2", "integer", "number of continuum bins"),
-    ("mode", "string", "XPI interface mode"),
 )
 
-XSTAR_PARAMETER_DEFAULTS: Mapping[str, Any] = dict(XSTAR_PAR_DEFAULTS)
-
+XSTAR_PARAMETER_DEFAULTS: Mapping[str, Any] = {
+    "spectrum": "pow",
+    "spectrum_file": "spct.dat",
+    "spectun": 0,
+    "nsteps": 3,
+    "niter": 0,
+    "lwrite": 0,
+    "lprint": 0,
+    "lstep": 0,
+    "npass": 1,
+    "lcpres": 0,
+    "emult": 0.5,
+    "taumax": 5.0,
+    "xeemin": 0.1,
+    "critf": 1.0e-7,
+    "radexp": 0.0,
+    "ncn2": 9999,
+    "modelname": "xstar-python",
+    "abundtbl": "xdef",
+    "trad": -1.0,
+    "cfrac": 0.0,
+    "temperature": 400.0,
+    "pressure": 0.03,
+    "density": 1.0e4,
+    "rlrad38": 1.0e-6,
+    "column": 1.0e17,
+    "rlogxi": 5.0,
+    "vturbi": 1.0,
+    "loopcontrol": 0,
+    **{
+        name: (0.0 if name in {"liabund", "beabund", "babund"} else 1.0)
+        for name in ABUNDANCE_PARAMETER_NAMES
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -581,27 +586,14 @@ def _sha256_file(path: str | Path) -> str:
 # Reference context: XSTAR Manual ss. 4.3.16 and Chapter 5 output descriptions;
 # xstar.f90 opens/saves/closes detail files only for lwrite>0 or npass>1.
 # XSTAR-FUNCTION-COMMENT-END
-def _required_products_for_controls(*, lwrite: int, lprint: int, npass: int) -> tuple[str, ...]:
-    """Return the literal source-required product inventory for output controls.
-
-    Current XSTAR source writes ``xout_spect1.fits`` even for ``lwrite=-1``;
-    the other final spectral tables require ``lwrite>=0``.  ``pprint(11)``
-    owns ``xout_abund1.fits`` and is dispatched only for ``lprint>=0``.
-    Detail tables follow the source ``lwrite>0 or npass>1`` condition.
-    """
-    lwri = int(lwrite)
-    lpri = int(lprint)
-    passes = int(npass)
-    required: list[str] = ["xout_step.log"]
-    if lwri >= -1:
-        required.append("xout_spect1.fits")
-    if lwri >= 0:
-        required.extend(("xout_lines1.fits", "xout_cont1.fits", "xout_rrc1.fits"))
-    if lpri >= 0:
-        required.append("xout_abund1.fits")
-    if lwri > 0 or passes > 1:
-        required.extend(("xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits"))
-    return tuple(name for name in REQUIRED_XSTAR_PRODUCTS if name in required)
+def _required_products_for_controls(*, lwrite: int, npass: int) -> tuple[str, ...]:
+    detail_names = {
+        "xo01_detail.fits", "xo01_detal2.fits",
+        "xo01_detal3.fits", "xo01_detal4.fits",
+    }
+    if int(lwrite) > 0 or int(npass) > 1:
+        return REQUIRED_XSTAR_PRODUCTS
+    return tuple(name for name in REQUIRED_XSTAR_PRODUCTS if name not in detail_names)
 
 
 def _value_map(parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any]) -> tuple[dict[str, Any], str | None]:
@@ -630,60 +622,66 @@ def normalize_xstar_parameters(
         for name in ABUNDANCE_PARAMETER_NAMES:
             values[name] = 0.0
     values.update(supplied)
-    # 0.6.82.23: apply the stock xstar.par type/range envelope before any
-    # implementation-specific science dispatch.  Unknown internal keys are
-    # retained for lower-level orchestration but public keys are source-validated.
-    for _name in tuple(values):
-        if _name in XSTAR_PAR_DEFAULTS:
-            try:
-                values[_name] = coerce_and_validate_parameter(_name, values[_name])
-            except (TypeError, ValueError) as exc:
-                raise XSTARPythonRunnerError(str(exc)) from exc
     if abundances:
         by_symbol = {str(k).strip().lower(): float(v) for k, v in abundances.items()}
         for symbol, name in zip(ELEMENT_SYMBOLS, ABUNDANCE_PARAMETER_NAMES):
             if symbol.lower() in by_symbol:
-                try:
-                    values[name] = coerce_and_validate_parameter(name, by_symbol[symbol.lower()])
-                except (TypeError, ValueError) as exc:
-                    raise XSTARPythonRunnerError(str(exc)) from exc
+                values[name] = by_symbol[symbol.lower()]
 
-    try:
-        values["spectrum"] = canonical_spectrum_mode(str(values["spectrum"]))
-    except SpectrumContractError as exc:
-        raise UnsupportedXSTARParameterError(str(exc)) from exc
+    spectrum = str(values["spectrum"]).strip().lower()
+    if spectrum not in {"pow", "powerlaw", "power-law"}:
+        raise UnsupportedXSTARParameterError(
+            "the first public physical runner supports spectrum='pow' only; "
+            f"observed {values['spectrum']!r}"
+        )
+    values["spectrum"] = "pow"
     abundance_table, baseline_abundances = resolve_abundance_table(values["abundtbl"])
     values["abundtbl"] = abundance_table
 
-    # 0.6.82.23 public values above already passed the literal xstar.par/XPI
-    # envelope.  Physics branches that are not yet complete remain explicit
-    # successor milestones rather than being silently clamped here.
+    # XPI constrains these three public control parameters before rread1 sees
+    # them.  Mirror the canonical xstar.par ranges here so every public mode
+    # has the same contract even when it is invoked without HEASoft/XPI.
     lwrite = int(values["lwrite"])
+    if lwrite not in (0, 1):
+        raise XSTARPythonRunnerError("lwrite must be 0 or 1")
+    values["lwrite"] = lwrite
     lprint = int(values["lprint"])
+    if not -1 <= lprint <= 6:
+        raise XSTARPythonRunnerError("lprint must be in the XSTAR range -1..6")
+    values["lprint"] = lprint
     loopcontrol = int(values["loopcontrol"])
+    if not 0 <= loopcontrol <= 30000:
+        raise XSTARPythonRunnerError("loopcontrol must be in the XSTAR range 0..30000")
+    values["loopcontrol"] = loopcontrol
     radexp = float(values["radexp"])
-    ncn2 = int(values["ncn2"])
+    if radexp < -99.0:
+        raise UnsupportedXSTARParameterError(
+            "run_xstar_python currently requires the analytic radial-density branch; "
+            "tabulated density execution remains available through the lower-level radial API"
+        )
+    ncn2 = max(999, min(999_999, int(values["ncn2"])))
+    values["ncn2"] = ncn2
     nsteps = int(values["nsteps"])
+    if nsteps < 1:
+        raise XSTARPythonRunnerError("nsteps must be positive")
     npass = int(values["npass"])
+    if npass <= 0:
+        npass = 1
+    values["npass"] = npass
     niter = int(values["niter"])
+    values["niter"] = niter
     lcpres = int(values["lcpres"])
-    lcdd = 1 - lcpres
+    lcdd = 1 - lcpres if lcpres <= 1 else lcpres
+    if lcdd not in (0, 1, 2):
+        raise UnsupportedXSTARParameterError(f"unsupported lcpres/lcdd branch: {lcpres}/{lcdd}")
 
     t4 = float(values["temperature"])
-    if not math.isfinite(t4):
-        raise XSTARPythonRunnerError("temperature must be finite in units of 1e4 K")
+    if not math.isfinite(t4) or t4 <= 0.0:
+        raise XSTARPythonRunnerError("temperature must be positive in units of 1e4 K")
     pressure = float(values["pressure"])
     density = float(values["density"])
     xee_trial = 1.2
     if lcdd == 0:
-        # rread1 reads pressure and temperature through uclgsr8
-        # (REAL(4) -> REAL(8)) and uses a REAL(8) 1.38d-12 coefficient for
-        # the initial trial density.  Apply the promotion only in the
-        # pressure-controlled branch so the frozen lcdd=1 path is unchanged.
-        pressure = float(np.float32(pressure))
-        t4 = float(np.float32(t4))
-        values["pressure"] = pressure
-        values["temperature"] = t4
         density = pressure / 1.38e-12 / max(t4, 1.0e-49)
     elif lcdd == 2:
         density = pressure / (xee_trial + 1.0e-34)
@@ -692,11 +690,8 @@ def normalize_xstar_parameters(
     xlum = float(values["rlrad38"])
     xi = 10.0 ** float(values["rlogxi"])
     if lcdd == 0:
-        # rread1.f90: 12.56 is default REAL, while constants.f90 ccc is
-        # double precision.  Preserve that mixed-kind expression literally.
-        four_pi = float(np.float32(12.56))
-        ccc = 2.99792458e10
-        r19 = math.sqrt(xlum / four_pi / ccc / max(1.0e-49, pressure * xi))
+        ccc = 2.998e10
+        r19 = math.sqrt(xlum / 12.56 / ccc / max(1.0e-49, pressure * xi))
     elif lcdd == 2:
         r19 = math.sqrt(xlum / max(1.0e-49, pressure * xi))
     else:
@@ -763,13 +758,28 @@ def ener_grid(ncn2: int) -> np.ndarray:
 def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[float]) -> np.ndarray:
     """Translate ``ispec4 -> ispecgg`` for a built-in power law."""
     epi = np.asarray(epi_eV, dtype=float).reshape(-1)
-    return apply_source_spectrum_pass(
-        np.zeros(epi.size, dtype=float),
-        mode="pow",
-        trad=float(index),
-        luminosity_1e38=float(luminosity_1e38),
-        epi_eV=epi,
-    )
+    n = epi.size
+    z = np.zeros(n, dtype=float)
+    raw = np.where(epi > 0.01, np.power(epi, float(index)), 1.0e-24)
+    nb1 = int(nbinc(13.6, epi, n))
+    nb2 = int(nbinc(1.36e4, epi, n))
+    total = 0.0
+    for one in range(max(2, nb1), min(n, nb2) + 1):
+        i = one - 1
+        total += (raw[i] + raw[i - 1]) * (epi[i] - epi[i - 1]) / 2.0
+    if total <= 0.0:
+        raise XSTARPythonRunnerError("power-law 1-1000 Ry normalization is nonpositive")
+    z += raw * (float(luminosity_1e38) / total / ERGSEV)
+
+    # XSTAR immediately applies ispecgg, using a slightly different bin gate.
+    total2 = 0.0
+    for i in range(1, n):
+        if 13.6 <= epi[i] <= 1.36e4:
+            total2 += (z[i] + z[i - 1]) * (epi[i] - epi[i - 1]) / 2.0
+    if total2 <= 0.0:
+        raise XSTARPythonRunnerError("renormalized power-law luminosity is nonpositive")
+    z *= float(luminosity_1e38) / total2 / ERGSEV
+    return z
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -991,11 +1001,11 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 z["rrc_rate_type"], z["rrc_atomic_number"],
             )
         )
-        # 0.6.82.27.16: fstepr3.f90 publishes only the literal source
-        # npfi(7,ion) chain.  Derive that identity surface from the cached
-        # broad RRC inventory so old metadata caches cannot reintroduce the
-        # rate-1 continuum-660 row.
-        detail_rrcs = tuple(row for row in rrcs if int(row.rate_type) == 7)
+        # v0.6.48.12.3.45.3.3.4: frozen-44 generic xo01_detal3 ownership
+        # uses the complete canonical npcon/npconi2 continuum identity surface,
+        # including rate types 7 and 1.  Keep the dedicated STEP/public-RRC
+        # Type-7 ownership separate; detailed FITS publication is broader.
+        detail_rrcs = rrcs
     return SourceOutputMetadata(
         levels=levels,
         lines=lines,
@@ -1224,17 +1234,6 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         if ion <= 0:
             continue
         z = int(derived.ion_element_z[ion])
-        source_atomic_mass = float(ATOMIC_MASS[z - 1])
-        try:
-            ion_record = int(derived.ion_records[ion])
-            element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
-            element_reals = master.record_reals(element_record) if element_record > 0 else ()
-            if len(element_reals) >= 2:
-                candidate_mass = float(element_reals[1])
-                if np.isfinite(candidate_mass) and candidate_mass > 0.0:
-                    source_atomic_mass = candidate_mass
-        except Exception:
-            pass
         low = int(lower[pos])
         up = int(upper[pos])
         low_row = levels_by_key.get((ion, low))
@@ -1253,7 +1252,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 upper_level=(up_row.level_label if up_row else f"level_{up}"),
                 rate_type=int(line_rows[pos, 2]),
                 data_type=int(line_rows[pos, 1]),
-                atomic_mass=source_atomic_mass,
+                atomic_mass=float(ATOMIC_MASS[z - 1]),
                 natural_rate_s=binemis_natural_rate,
                 auger_rate_s=binemis_auger_rate,
                 source_record=int(line_records[pos]),
@@ -1368,10 +1367,12 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 atomic_number=z,
             )
         )
-    # 0.6.82.27.16: literal fstepr3.f90 walks npfi(7,ion), so detailed
-    # RRC FITS identities are the source rate-type-7 chain.  metadata.rrcs
-    # remains the broader continuum/public identity surface used elsewhere.
-    detail_rrcs = [row for row in rrcs if int(row.rate_type) == 7]
+    # v0.6.48.12.3.45.3.3.4: frozen-44 generic xo01_detal3 uses the broad
+    # canonical setptrs npcon/npconi2 identity universe, not source_rrc's
+    # rate-type-7-only view.  This intentionally includes canonical rate-type-1
+    # continua when their local detailed workspace activity passes fstepr3's
+    # 1.e-36 publication test.  STEP Options 19/24 remain Type-7-owned.
+    detail_rrcs = list(rrcs)
 
     return SourceOutputMetadata(
         levels=tuple(levels),
@@ -1381,8 +1382,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v14_source_type7_detail_inventory",
-            "detail_rrc_owner": "literal fstepr3 npfi(7,ion) source chain",
+            "metadata_builder": "vectorized_numpy_v13_frozen44_broad_npcon_detail_inventory",
+            "detail_rrc_owner": "canonical npcon/npconi2 broad continuum identity surface",
             "metadata_cache_status": "built",
         },
     )
@@ -1519,15 +1520,6 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
     capture_hydrogen_history = bool(
         state.control.get("zone1_dsec_capture_hydrogen_history", False)
     )
-    _trace_spec = state.control.get("zone1_dsec_capture_lucy_trace_element_z", ())
-    if _trace_spec in (None, ""):
-        trace_element_z: set[int] = set()
-    elif isinstance(_trace_spec, (list, tuple, set)):
-        trace_element_z = {int(value) for value in _trace_spec}
-    else:
-        trace_element_z = {int(_trace_spec)}
-    if capture_hydrogen_history:
-        trace_element_z.add(1)
     requests: list[FixedStateElementRequest] = []
     for z, abundance in enumerate(parameters.physical_abundances, start=1):
         if float(abundance) <= 1.0e-24:
@@ -1551,7 +1543,7 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
                 strict_context=True,
                 allow_lstsq_fallback=False,
                 allow_dense_matrix_rescue=False,
-                capture_lucy_trace=bool(int(z) in trace_element_z),
+                capture_lucy_trace=bool(capture_hydrogen_history and int(z) == 1),
             )
         )
     if not requests:
@@ -1574,18 +1566,6 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         n = int(state.control["ncn2m"])
         opakc = runtime.work_arrays.get("opakc")
         brcems = runtime.work_arrays.get("brcems")
-        # calc_hmc_all mutates xpx at entry before comp2/freef/bremem.
-        # Build the immutable continuum contexts from that same source-resolved
-        # density; otherwise lcdd=0 precomputes freef with the rread1 trial
-        # density while calc_hmc_all executes freef with p/(REAL4(1.38e-12)*T4),
-        # and bremem's incoming opakc no longer matches the preceding freef.
-        continuum_xpx = resolve_calc_hmc_all_density(
-            temperature_k=runtime.temperature_k,
-            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
-            electron_fraction_xee=runtime.electron_fraction_xee,
-            pressure=runtime.pressure,
-            lcdd=runtime.lcdd,
-        )
         if opakc is None:
             opakc = np.zeros(n, dtype=float)
         if brcems is None:
@@ -1609,7 +1589,7 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         comp_result, _ = comp2_continuum_result(
             comp,
             temperature_k=runtime.temperature_k,
-            hydrogen_density_cm3=continuum_xpx,
+            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
             electron_fraction_xee=runtime.electron_fraction_xee,
         )
 
@@ -1623,7 +1603,7 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         free_result, _ = freef_continuum_result(
             free,
             temperature_k=runtime.temperature_k,
-            hydrogen_density_cm3=continuum_xpx,
+            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
             electron_fraction_xee=runtime.electron_fraction_xee,
         )
 
@@ -1637,7 +1617,7 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         bremem_result, _ = bremem_continuum_result(
             bremem,
             temperature_k=runtime.temperature_k,
-            hydrogen_density_cm3=continuum_xpx,
+            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
             electron_fraction_xee=runtime.electron_fraction_xee,
         )
 
@@ -1742,11 +1722,6 @@ def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeStat
                 result.global_rnisg_by_index, state.atomic.derived
             ),
             "xii": _ion_fraction_array(state.atomic.derived, result),
-            # pprint(10) consumes the full-stage preliminary calc_ion_rates
-            # totals, including stages outside the selected compact matrix
-            # window.  Retain those source arrays alongside xii.
-            "pirt": _ion_rate_array(state.atomic.derived, result, result.preliminary_pirt),
-            "rrrt": _ion_rate_array(state.atomic.derived, result, result.preliminary_rrrt),
             "htt": _element_array(result.htt),
             "cll": _element_array(result.cll),
             "htt2": _element_array(result.htt2),
@@ -1760,8 +1735,6 @@ def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeStat
             "htt2": state.local_zone.source_arrays["htt2"],
             "cll2": state.local_zone.source_arrays["cll2"],
             "xii": state.local_zone.source_arrays["xii"],
-            "pirt": state.local_zone.source_arrays["pirt"],
-            "rrrt": state.local_zone.source_arrays["rrrt"],
             "httot": float(result.httot),
             "cltot": float(result.cltot),
             "httot2": float(result.httot2),
@@ -1787,20 +1760,6 @@ def _ion_fraction_array(derived: Any, result: FixedStateCalcHMCAllResult) -> np.
         if 1 <= int(index) <= values.size:
             values[int(index) - 1] = float(fraction)
     return values
-
-
-# XSTAR-FUNCTION-COMMENT-BEGIN
-# Purpose: Publish full-stage preliminary calc_ion_rates totals in global Type-12 ion order for pprint(10).
-# Reference context: XSTAR pprint.f90 option 10 consumes pirt/rrrt from calc_ion_rates before compact active-stage truncation.
-# XSTAR-FUNCTION-COMMENT-END
-def _ion_rate_array(derived: Any, result: FixedStateCalcHMCAllResult, values: Mapping[tuple[int, int], float]) -> np.ndarray:
-    """Return source Type-12 global-ion-order rate array for pprint(10)."""
-    out = np.zeros(int(derived.n_ions), dtype=float)
-    for key, value in values.items():
-        index = int(result.global_ion_index_by_key.get((int(key[0]), int(key[1])), 0))
-        if 1 <= index <= out.size:
-            out[index - 1] = float(value)
-    return out
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -2097,13 +2056,10 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             global_bilevg_by_index=None if prior is None else prior.global_bilevg_by_index,
             global_rnisg_by_index=None if prior is None else prior.global_rnisg_by_index,
             global_level_index_by_key={} if prior is None else prior.global_level_index_by_key,
-            # 0.6.82.25.3: source leveltemp is one mutable caller-owned
-            # workspace carried through repeated calc_hmc_all evaluations and
-            # radial zones.  Do not discard it at DSEC trial boundaries.
-            leveltemp_workspace=None if prior is None else prior.leveltemp_workspace,
-            leveltemp_owner_by_column={} if prior is None else prior.leveltemp_owner_by_column,
+            leveltemp_workspace=None,
+            leveltemp_owner_by_column={},
             source_global_alias_writeback=True,
-            reset_leveltemp_each_calc_hmc_all=False,
+            reset_leveltemp_each_calc_hmc_all=True,
             retain_source_arrays=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
         )
 
@@ -2290,12 +2246,7 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         # issue to hide.  Keep the printed count identical to the translated raw
         # ntotit until the extra iteration is removed at the source.
         runtime_state.control["legacy_pprint_ntotit"] = int(result.ntotit)
-        # 0.6.82.24.3: do not publish the DSEC-return hmctot as pprint(9)'s
-        # first h-c(%) column.  FORTRAN xstarcalc.f90 always executes one
-        # final calc_hmc_all after DSEC, and xstar.f90 calls pprint(9) only
-        # after that final fixed-state evaluation (and after heatt).  The
-        # final calc_hmc_all handler below owns the source-display residual.
-        runtime_state.control.pop("legacy_pprint_hc1_percent", None)
+        runtime_state.control["legacy_pprint_hc1_percent"] = float(result.final_hmctot) * 100.0
         runtime_state.control["lnerrd"] = int(result.lnerr)
         try:
             terminal_rows = runtime_state.control.setdefault("dsec_terminal_summary", [])
@@ -2375,11 +2326,6 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         result = evaluation.fixed_state_result
         runtime_state.control["physical_dsec_runtime"] = runtime
         _commit_fixed_state(runtime_state, runtime, result)
-        # 0.6.82.24.3: pprint(9) first h-c(%) is source hmctot from the
-        # unconditional final calc_hmc_all in xstarcalc.f90, not the earlier
-        # DSEC-return residual.  Preserve that exact stage for terminal and
-        # xout_step.log publication.
-        runtime_state.control["legacy_pprint_hc1_percent"] = float(result.hmctot) * 100.0
         _bind_emissivity_contexts(runtime_state, parameters, result)
         return result
 
@@ -2442,19 +2388,11 @@ def _build_initial_state(
     ncn2m = 999
     epi = ener_grid(ncn2)
     epim = ener_grid(ncn2m)
-    try:
-        zremsz, source_file_data = initial_source_spectrum(
-            mode=str(parameters.get("spectrum")),
-            trad=float(parameters.get("trad")),
-            luminosity_1e38=float(parameters.luminosity_1e38),
-            epi_eV=epi,
-            spectrum_file=str(parameters.get("spectrum_file")),
-            spectun=int(parameters.get("spectun")),
-        )
-    except SpectrumContractError as exc:
-        raise XSTARPythonRunnerError(str(exc)) from exc
-    state.control["source_spectrum_mode_068228"] = str(parameters.get("spectrum"))
-    state.control["source_spectrum_file_068228"] = source_file_data
+    zremsz = powerlaw_spectrum(
+        index=float(parameters.get("trad")),
+        luminosity_1e38=float(parameters.luminosity_1e38),
+        epi_eV=epi,
+    )
     shared = CalcEmisWorkspace.allocate(
         n_lines=int(derived.nlsvn),
         n_continua=int(derived.ncsvn),
@@ -2485,12 +2423,8 @@ def _build_initial_state(
     # full high-resolution 1:ncn2 range, while bremsmap also reads the
     # reduced-grid boundary row ncn2m+1.  Preserve that shared full-capacity
     # source array and let ucalc expose only the active 1:ncn2m views.
-    state.radiation.bremsam = np.zeros(max(ncn2, ncn2m), dtype=float)
-    # FORTRAN allocates bremsint(ncn), where ncn is global capacity rather
-    # than the active ncn2 grid.  bremsmap reads the caller-owned boundary
-    # row ncn2m+1, so the minimum public ncn2=999 still needs slot 1000.
-    bremsint_capacity = max(ncn2, ncn2m + 1)
-    state.radiation.bremsint = np.zeros(bremsint_capacity, dtype=float)
+    state.radiation.bremsam = np.zeros(ncn2, dtype=float)
+    state.radiation.bremsint = np.zeros(ncn2, dtype=float)
     state.radiation.zrems = workspace.zrems
     state.radiation.zremso = workspace.zremso
     state.plasma.temperature = parameters.temperature_k
@@ -2546,7 +2480,7 @@ def _build_initial_state(
             "zeta": float(parameters.get("rlogxi")),
             "xi": float(parameters.ionization_parameter),
             "rmax": float(parameters.rmax_cm),
-            "spectype": str(parameters.get("spectrum")),
+            "spectype": "pow",
             "specfile": str(parameters.get("spectrum_file")),
             "specunit": int(parameters.get("spectun")),
             "kmodelname": str(parameters.get("modelname")),
@@ -2669,7 +2603,7 @@ def prepare_xstar_python_cache(
 # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
 # XSTAR-FUNCTION-COMMENT-END
 def _output_parameters(parameters: NormalizedXSTARParameters) -> tuple[OutputParameter, ...]:
-    """Build the canonical 56-row fparmlist table plus 3 public provenance rows."""
+    """Build the literal 56-row xstar.f90/fparmlist parameter table."""
     rows: list[OutputParameter] = []
     for name, parameter_type, comment in _XSTAR_OUTPUT_PARAMETER_ROWS:
         value = parameters.get(name)
@@ -2677,8 +2611,8 @@ def _output_parameters(parameters: NormalizedXSTARParameters) -> tuple[OutputPar
             rows.append(OutputParameter(name, 0.0, parameter_type, str(value)))
         else:
             rows.append(OutputParameter(name, float(value), parameter_type, comment))
-    if len(rows) != 59:
-        raise XSTARPythonRunnerError(f"0.6.82.23 public parameter provenance requires 59 rows; built {len(rows)}")
+    if len(rows) != 56:
+        raise XSTARPythonRunnerError(f"source fparmlist requires 56 rows; built {len(rows)}")
     return tuple(rows)
 
 
@@ -2728,7 +2662,7 @@ def run_xstar_from_parameters(
         emissivity_backend=emissivity_backend,
     )
     install_backend_environment(backend_selection)
-    source_input_dir = Path(input_dir).resolve() if input_dir is not None else Path.cwd().resolve()
+    del input_dir  # Reserved for spectrum/density-file source branches.
     resolved_atdb = _resolve_runner_atdb_path(atdb_path)
     normalized = normalize_xstar_parameters(
         parameters,
@@ -2737,7 +2671,6 @@ def run_xstar_from_parameters(
     )
     required_products = _required_products_for_controls(
         lwrite=int(normalized.get("lwrite")),
-        lprint=int(normalized.get("lprint")),
         npass=int(normalized.get("npass")),
     )
     pointer_cache_path, metadata_cache_path = _cache_paths(resolved_atdb, cache_dir)
@@ -2775,24 +2708,6 @@ def run_xstar_from_parameters(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
     )
-    if float(normalized.get("radexp")) < -99.0:
-        # Literal xstar.f90 source branch: open density.dat and consume row 1
-        # before entering pass 1. The lower-level radial controller already
-        # owns sequential reads, radius monotonicity, retained EOF values, and
-        # the ierr-controlled shell predicate; the public runner now binds the
-        # canonical file name from the caller's source/input directory.
-        from .radial_control import (
-            TabulatedRadialDensityState,
-            initialize_tabulated_radial_density,
-        )
-        density_path = source_input_dir / "density.dat"
-        table = TabulatedRadialDensityState.from_file(density_path)
-        initialize_tabulated_radial_density(state, table)
-        state.provenance["density_dat"] = {
-            "path": str(density_path),
-            "source_threshold": "radexp < -99",
-            "row_count": int(table.row_count),
-        }
     runtime_phase_wall_timing["initialization_atomic_data_loading_seconds"] = float(time.perf_counter() - _initial_state_t0)
     state.control["runtime_phase_wall_timing"] = runtime_phase_wall_timing
     state.control["backend_selection"] = backend_selection.as_dict()
@@ -2959,21 +2874,29 @@ def run_xstar_from_parameters(
             completed_passes=len(radial.pass_results),
             completed_zones=completed_zones,
             source_order=source_order,
-            warnings=(),
+            warnings=(
+                (
+                    "lprint=-1 minimal-log formatting is characterized but not reproduced exactly; "
+                    "structured FITS products and comparator-visible step-log rows are retained"
+                    if int(normalized.get("lprint")) < 0
+                    else "lprint>0 verbose terminal/log diagnostic branches are characterized but not emitted completely; "
+                         "structured FITS products and comparator-visible step-log rows are retained"
+                ),
+            ) if int(normalized.get("lprint")) != 0 else (),
             provenance={
                 "runner": "run_xstar_from_parameters",
                 "package_version": "0.6.48.3",
                 "release_source_version": "0.6.48.3",
                 "reference_trace_schema_version": "0.6.48.3",
                 "source_faithful_calculation_path": True,
-                "verbose_pprint_complete": True,
+                "verbose_pprint_complete": int(normalized.get("lprint")) == 0,
                 "lprint_contract": {
                     "requested": int(normalized.get("lprint")),
                     "accepted_range": [-1, 6],
-                    "physical_solution_unaffected": True,
-                    "optional_ascii_verbosity_fully_reproduced": True,
+                    "standard_fits_unaffected": True,
+                    "optional_ascii_verbosity_fully_reproduced": int(normalized.get("lprint")) == 0,
                 },
-                "control_required_product_contract": True,
+                "strict_ten_product_contract": len(required_products) == len(REQUIRED_XSTAR_PRODUCTS),
                 "source_required_product_count": len(required_products),
                 "detail_products_required": bool(int(normalized.get("lwrite")) > 0 or int(normalized.get("npass")) > 1),
                 "xstar_outputs_used_as_python_inputs": False,
@@ -3239,7 +3162,6 @@ def run_xstar_python_script(
     *,
     atdb_path: str | Path | None = None,
     output_dir: str | Path = ".",
-    input_dir: str | Path | None = None,
     coheat_path: str | Path | None = None,
     overwrite: bool = True,
     cache_dir: str | Path | None = None,
@@ -3269,7 +3191,7 @@ def run_xstar_python_script(
         parsed,
         atdb_path=atdb_path,
         output_dir=output_dir,
-        input_dir=path.parent if input_dir is None else input_dir,
+        input_dir=path.parent,
         coheat_path=coheat_path,
         overwrite=overwrite,
         cache_dir=cache_dir,

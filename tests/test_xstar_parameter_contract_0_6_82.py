@@ -98,14 +98,9 @@ def test_native_standalone_acceptance_uses_control_required_product_count():
 
 def test_python_public_contract_validates_lwrite_lprint_loopcontrol_ranges():
     text = (ROOT / "src/xstar_tools/xstar/physical_runner.py").read_text(encoding="utf-8")
-    contract = (ROOT / "src/xstar_tools/xstar/parameter_contract.py").read_text(encoding="utf-8")
-    # Since 0.6.82.23, public range validation is centralized in the
-    # machine-readable Table-1 contract rather than duplicated as runner-local
-    # error strings.  Keep this historical gate aligned with that ownership.
-    assert "coerce_and_validate_parameter(_name, values[_name])" in text
-    assert "('lwrite', 'integer', 0, 0, 1" in contract
-    assert "('lprint', 'integer', 0, -1, 6" in contract
-    assert "('loopcontrol', 'integer', 0, 0, 30000" in contract
+    assert "lwrite must be 0 or 1" in text
+    assert "lprint must be in the XSTAR range -1..6" in text
+    assert "loopcontrol must be in the XSTAR range 0..30000" in text
     assert "detail_products_required" in text
     assert "lprint_contract" in text
 

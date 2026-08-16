@@ -337,10 +337,8 @@ def _high_resolution_radiation(radiation: Any) -> tuple[np.ndarray, np.ndarray, 
     epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=float).reshape(-1)
     bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=float).reshape(-1)
     bremsint = np.asarray(getattr(radiation, "bremsint", ()), dtype=float).reshape(-1)
-    if epi.size < 4 or bremsa.size < epi.size or bremsint.size < epi.size:
-        raise CalcEmisPortError("calc_emis_all requires epi-sized bremsa/bremsint active capacity")
-    bremsa = bremsa[: epi.size]
-    bremsint = bremsint[: epi.size]
+    if epi.size < 4 or bremsa.size != epi.size or bremsint.size != epi.size:
+        raise CalcEmisPortError("calc_emis_all requires matching epi/bremsa/bremsint arrays")
     if np.any(epi <= 0.0) or np.any(np.diff(epi) <= 0.0):
         raise CalcEmisPortError("calc_emis_all photon grid must be positive and increasing")
     if not all(np.all(np.isfinite(arr)) for arr in (epi, bremsa, bremsint)):
@@ -1126,25 +1124,38 @@ def _compact_mg_line_emissivity_table(
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
 # XSTAR-FUNCTION-COMMENT-END
 def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
-    """Retired Mg-only product accelerator; generic emissivity stays authoritative.
+    requested = None
+    control = getattr(context, "profile_control", None)
+    if isinstance(control, MutableMapping):
+        backend_selection = control.get("backend_selection")
+        if isinstance(backend_selection, Mapping):
+            requested = str(backend_selection.get("emissivity_backend", "python"))
+    requested = requested or os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BACKEND") or "python"
+    status = rates_backend_status(requested=requested)
+    return bool(status.active == "cpp" and (int(status.cpp_feature_flags or 0) & 4))
 
-    0.6.82.13 removes target-element-specific accelerator ownership from the
-    science path.  Native/generic spectral backends remain available separately.
-    """
-    return False
+
+
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the emissivity upstream type4 product enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
 # XSTAR-FUNCTION-COMMENT-END
 def _emissivity_upstream_type4_product_enabled() -> bool:
-    """Return false: 0.6.82.13 retires the Mg-only emissivity product path.
+    """Opt-in product gate for the accepted/promoted Mg type-4/type-50 upstream C++ path.
 
-    The historical environment names remain accepted only by shadow/forensic
-    tooling; source-generic Python/native spectral construction owns products.
+    This gate is intentionally independent of EMISSIVITY_BACKEND=cpp so a
+    wrapper can keep the broader emissivity backend on Python while enabling
+    exactly this one upstream promoted product path.
     """
+    for name in (
+        "XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_PRODUCT_CPP",
+        "XSTAR_ATOMIC_EMISSIVITY_MG_TYPE4_PRODUCT_CPP",
+    ):
+        value = os.environ.get(name)
+        if value is not None and str(value).strip().lower() not in {"", "0", "false", "no", "off"}:
+            return True
     return False
-
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the emissivity upstream type4 shadow enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
@@ -3167,12 +3178,6 @@ def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
     setattr(context, "ucalc_continuum_side_effect_diagnostics", [])
 
     result = calc_emis_all(context)
-    # 0.6.82.25.3: retain the source-wide mutable leveltemp state produced
-    # by calc_emis_all for HEATT and for the next radial xstarcalc call.
-    runtime = state.control.get("physical_dsec_runtime")
-    if runtime is not None:
-        runtime.leveltemp_workspace = result.leveltemp_workspace
-        runtime.last_leveltemp_workspace = result.leveltemp_workspace
     rows = list(getattr(context, "ucalc_continuum_side_effect_diagnostics", ()))
     if rows:
         state.outputs.setdefault(UCALC_SIDE_EFFECT_KEY, []).extend(rows)

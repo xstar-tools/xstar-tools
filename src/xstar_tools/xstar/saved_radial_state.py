@@ -15,8 +15,8 @@ writers remain outside the bounded Python port.  This module therefore models
 the same caller-visible persistence contract in memory:
 
 * values written by the ``fstepr*`` helpers are rounded through REAL(4);
-* each shell snapshot honors the one-based HDU requested by ``savd(jkp+1, ...)``
-  while CFITSIO creates the new radial extension at the physical file tail;
+* each shell snapshot is inserted after the one-based HDU requested by
+  ``savd(jkp+1, ...)``, preserving CFITSIO insertion/shift semantics;
 * ``unsavd`` restores scalar, population, line, RRC, opacity, and emissivity
   state, but only the direction-owned optical-depth row;
 * the saved ``zrems`` table is deliberately read into a local temporary and is
@@ -50,22 +50,6 @@ class SavedRadialStatePortError(RuntimeError):
 # XSTAR-FUNCTION-COMMENT-END
 def _real4_scalar(value: float) -> float:
     return float(np.float32(float(value)))
-
-
-def _savd_keyword_e3_real4_scalar(value: float) -> float:
-    """Reproduce SAVD scalar FITS-keyword persistence exactly.
-
-    XSTAR assigns each scalar header value to REAL(4), writes it with
-    ``ftpkye(..., 3)``, then UNSAVD reads it back through REAL(4).  The
-    intermediate three-decimal scientific-notation text is therefore part of
-    the repeated-pass state contract and must not be replaced by a plain
-    float32 round-trip.
-    """
-    source_r4 = np.float32(float(value))
-    if not np.isfinite(source_r4):
-        return float(source_r4)
-    persisted = float(f"{float(source_r4):.3E}")
-    return float(np.float32(persisted))
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -211,11 +195,9 @@ class SavedRadialPassState:
     """One pass's in-memory equivalent of the four XSTAR detail FITS files.
 
     Indices 1 and 2 are reserved for the primary/parameter HDUs.  ``savd``
-    calls ``ftmahd(hdunum)`` followed by ``ftcrhd``.  Actual FORTRAN XSTAR
-    detail products show that each new radial extension is placed at the
-    physical tail, including the post-loop terminal save whose ``hdunum`` can
-    point before an already-written shell.  Preserve that observed source
-    behavior; do not shift existing shell records.
+    calls ``ftmahd(hdunum)`` followed by ``ftcrhd``; insertion after an earlier
+    HDU shifts later shell records.  The list representation below preserves
+    that behavior exactly.
     """
 
     pass_index: int
@@ -257,12 +239,8 @@ class SavedRadialPassState:
                 f"cannot insert after HDU {hdu}; current HDU count is {self.hdu_count}"
             )
         snapshot.validate()
-        # 0.6.82.27.1: host FORTRAN detail products establish append-at-tail
-        # semantics for fstepr*/ftcrhd in this caller path.  The source HDU
-        # argument is still validated because SAVD must point at an existing
-        # extension, but it does not define an in-memory insertion position.
-        self.hdu_snapshots.append(snapshot)
-        inserted = self.hdu_count
+        inserted = hdu + 1
+        self.hdu_snapshots.insert(inserted, snapshot)
         self.insertion_log.append(
             {
                 "after_hdu": hdu,
@@ -456,15 +434,15 @@ def make_saved_shell_snapshot(
         pass_index=int(pass_index),
         zone_index=int(zone_index),
         terminal_record=bool(terminal_record),
-        temperature=_savd_keyword_e3_real4_scalar(temperature),
-        pressure=_savd_keyword_e3_real4_scalar(pressure),
-        radius=_savd_keyword_e3_real4_scalar(radius),
-        radial_depth=_savd_keyword_e3_real4_scalar(radial_depth),
-        step_size=_savd_keyword_e3_real4_scalar(step_size),
-        column=_savd_keyword_e3_real4_scalar(column),
-        electron_fraction=_savd_keyword_e3_real4_scalar(electron_fraction),
-        hydrogen_density=_savd_keyword_e3_real4_scalar(hydrogen_density),
-        zeta=_savd_keyword_e3_real4_scalar(zeta),
+        temperature=_real4_scalar(temperature),
+        pressure=_real4_scalar(pressure),
+        radius=_real4_scalar(radius),
+        radial_depth=_real4_scalar(radial_depth),
+        step_size=_real4_scalar(step_size),
+        column=_real4_scalar(column),
+        electron_fraction=_real4_scalar(electron_fraction),
+        hydrogen_density=_real4_scalar(hydrogen_density),
+        zeta=_real4_scalar(zeta),
         level_indices_one_based=li.copy(),
         xilev=_real4_array(x[li - 1]),
         rnist=_real4_array(rn[li - 1]),

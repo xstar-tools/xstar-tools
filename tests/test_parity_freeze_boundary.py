@@ -53,7 +53,7 @@ def test_productization_entry_version_is_0651():
 
 def test_benchmark_reference_cleanup_is_enforced():
     benchmark_root = ROOT / "src" / "xstar_tools" / "benchmarks"
-    assert sorted(p.name for p in benchmark_root.iterdir() if p.is_dir() and p.name != "__pycache__") == [
+    assert sorted(p.name for p in benchmark_root.iterdir() if p.is_dir()) == [
         "v06486_qualification_reference_v0472",
         "v0648724_call1_thermal_leaf_reference",
     ]

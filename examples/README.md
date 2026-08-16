@@ -64,26 +64,3 @@ The default benchmark plan runs all 62 cases in `zone-cpp`, `zone-all`, and `xst
 ## Validation reference outputs
 
 `examples/reference_outputs/` is retained because current characterization tests and documentation still consume those CSV/JSON fixtures. It is not part of the archived legacy script collection.
-
-## 5. Realistic multi-element `xstar.par`
-
-`examples/xstar_example.par` is a normal seven-column XSTAR parameter file for
-`xstar-cpp`.  It deliberately enables the broad composition used by the
-canonical XSTAR2XSPEC/MPI_XSTAR characterization rather than only one metal at
-a time: H, He, C, N, O, Ne, Mg, Al, Si, S, Ar, Ca, Cr, Fe, and Ni.
-
-```bash
-CPP="$PACKAGE/src/xstar_tools/xstar/cpp/xstar-cpp"
-DATA=/path/to/xstar/data
-rm -rf run_example
-"$CPP" \
-  --input "$PACKAGE/examples/xstar_example.par" \
-  --data-dir "$DATA" \
-  --output run_example \
-  --progress text
-```
-
-The example uses `abundtbl=xdef`, `lwrite=0`, and `npass=1`.  Therefore the
-normal successful publication surface is the five standard FITS products plus
-`xout_step.log`; the four `xo01_*` detail FITS products are intentionally not
-created.  Change `lwrite=1` when detailed per-zone products are wanted.

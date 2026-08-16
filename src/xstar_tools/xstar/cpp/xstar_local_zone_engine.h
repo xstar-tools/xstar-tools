@@ -117,12 +117,7 @@ typedef enum xstar_fixed_runtime_state_flags_v1 {
     XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION = 1u << 6,
     /* Calls 3-4 consume the live line optical-depth workspace; calls 1-2
      * remain optically thin under source calc_hmc_ion semantics. */
-    XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE = 1u << 7,
-    /* v0.6.82.4: source dsec.f90 invokes calc_hmc_all only.  Native
-     * production DSEC evaluations therefore skip calc_emisab/calc_emis
-     * spectral projection entirely; accepted/final xstarcalc boundaries
-     * continue to execute the full source publication path. */
-    XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY = 1u << 8
+    XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE = 1u << 7
 } xstar_fixed_runtime_state_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {

@@ -1098,9 +1098,7 @@ int run_element_impl(
                 }
                 w.iteration_fixed_trace.push_back(std::move(iteration_fixed_record));
             }
-            // Canonical msolvelucy.f90 uses diff2 >= 1.e3 only to stop
-            // the per-row difference accumulation for the current fixed-point
-            // iteration.  It does not terminate the fixed-point loop itself.
+            if (fixed_diff >= 1.0e3) break;
         }
         if (dense_rescue_used) {
             if (capture_iteration_resolved_trace) {

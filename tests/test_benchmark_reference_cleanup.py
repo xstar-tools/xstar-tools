@@ -11,7 +11,7 @@ FIXTURES = ROOT / "tests/fixtures/historical"
 
 
 def test_active_benchmark_package_is_minimal() -> None:
-    assert sorted(p.name for p in BENCH.iterdir() if p.is_dir() and p.name != "__pycache__") == [
+    assert sorted(p.name for p in BENCH.iterdir() if p.is_dir()) == [
         "v06486_qualification_reference_v0472",
         "v0648724_call1_thermal_leaf_reference",
     ]

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.82 — XSTAR public parameter-contract closure - 2026-08-16
+
+- Add source-concordant `abundtbl` support for the ten XSTAR abundance bases documented by the manual: `xdef`, `angr`, `aspl`, `feld`, `aneb`, `grsa`, `wilm`, `lodd`, `lpgp`, and `lpgs`; also accept the supplied 2.59g source spellings `lgpp`/`lgps` as aliases.
+- Apply element parameters as multipliers of the selected abundance base in both Python normalization and the raw native production-parameter reader; unknown tables fall back to `xdef` as in `xstarsetup.f90`.
+- Make native detail-product publication obey the literal `xstar.f90` condition `(lwrite > 0) || (npass > 1)`, so `lwrite=0,npass=1` no longer publishes `xo01_detail.fits` through `xo01_detal4.fits`; update the active standalone acceptance path to require 5 FITS products in that case and 9 when detail publication is enabled, instead of hard-coding nine FITS for every run.
+- Validate the public XSTAR parameter-file ranges `lwrite=0..1`, `lprint=-1..6`, and `loopcontrol=0..30000`; characterize `lprint` as an ASCII/log-only control whose optional historical verbosity remains outside the frozen scientific FITS surface.
+- Verify `loopcontrol=0` standalone semantics and positive 1-based XSTAR2XSPEC ordering against the canonical six-run MPI_XSTAR fixture and retain the historical `LASTSPEC` sequential compatibility rule in the current table converter.
+- Add explicit Chapter-6 / `xstar2table.c` / `xstartablelib.c` source-concordance comments at file and function level in `xstar_xspec_table.cpp` and `xstar_xspec_table_writer.cpp`.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ science baseline `0.6.48.12.3.44`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60488`, and XSPEC-table ABI `1`.
+
 ## 0.6.82.29.2 - 2026-08-15
 
 - Successor to the rejected `0.6.82.29.1` verbose-output host candidate; package version advanced rather than reusing the rejected artifact.
