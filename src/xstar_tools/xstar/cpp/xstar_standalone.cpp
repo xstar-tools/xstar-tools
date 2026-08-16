@@ -2843,7 +2843,10 @@ void print_xstar_style_live_zone(
     }
     double radiation_balance = 0.0;
     (void)live_radiation_balance_percent(snapshot, radiation_balance);
-    const std::size_t numrec = dsec_evaluations > 0u ? dsec_evaluations - 1u : 0u;
+    // XSTAR pprint option 9 writes ntotit directly.  dsec.f90 increments
+    // ntotit once per calc_hmc_all thermal evaluation, which is exactly the
+    // retained dsec_evaluations count.  Do not subtract the historical proxy 1.
+    const std::size_t numrec = dsec_evaluations;
 
     std::cerr << std::fixed << std::setprecision(2)
               << std::setw(8) << safe_log(radius, -10.0)
@@ -4028,6 +4031,12 @@ int fixed_dsec_evaluator(
     // projecting the 9999-bin surfaces only at real source product events.
     if (snapshot.kind != "final") {
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
+        // XSTAR dsec.f90 evaluates calc_hmc_all only.  Do not spend the
+        // production thermal-iteration hot path in calc_emisab/linopac; the
+        // accepted xstarcalc boundary below still performs those source stages.
+        if (data->true_production_v65) {
+            input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY;
+        }
     }
 
     snapshot.radiation_energy_ev.assign(input.radiation_energy_ev, input.radiation_energy_ev + input.radiation_bin_count);
@@ -18461,7 +18470,7 @@ void print_xstar_style_progress(const xstar_run_state::ProductWritingState& stat
         (void)source_option17_radiation_balance_percent(eval, radiation_balance);
         const std::size_t call = std::min<std::size_t>(i + 1u, 4u);
         const std::size_t max_eval = call_max_eval.count(call) ? call_max_eval[call] : 0u;
-        const std::size_t numrec = max_eval > 0u ? max_eval - 1u : 0u;
+        const std::size_t numrec = max_eval;
         const double radius = zone.radius_cm;
         const double depth = std::max(0.0, radius - (state.radial_zones.empty() ? radius : state.radial_zones.front().radius_cm));
         const double column = zone.density_cm3 * depth;

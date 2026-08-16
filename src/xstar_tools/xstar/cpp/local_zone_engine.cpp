@@ -11462,6 +11462,8 @@ int run_impl(
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     const bool defer_product_projection =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
+    const bool dsec_hmc_only_v06824 =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY) != 0u;
     // v0.6.48.9.7: the ordinary DSEC hot path never exposes record-product
     // provenance to the standalone writer; exact product diagnostics are
     // consumed only from the non-deferred accepted-boundary/final evaluations.
@@ -13398,7 +13400,12 @@ int run_impl(
     stats.continuum_seconds += elapsed(continuum_start);
 
     const auto spectral_start = clock_type::now();
-    if (!spectral.empty() && input.radiation_bin_count > 0) {
+    // Source dsec.f90 stops after calc_hmc_all.  Only xstarcalc product
+    // boundaries proceed through calc_emisab_all/calc_emis_all and linopac.
+    // This production-only flag removes a previously duplicated spectral
+    // projection from every DSEC trial while leaving all rate/matrix/thermal
+    // work and every accepted-boundary product calculation unchanged.
+    if (!dsec_hmc_only_v06824 && !spectral.empty() && input.radiation_bin_count > 0) {
         // Line records and continuum bins are different index spaces.  The
         // contribution engine owns per-line luminosity/opacity records; the
         // exact native Gaussian/Voigt path then projects those luminosities to

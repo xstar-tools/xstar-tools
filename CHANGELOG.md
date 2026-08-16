@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.82.4 — broad multi-element FORTRAN-oracle thermal/STEP/performance closure - 2026-08-16
+
+- Preserve `0.6.82.3` as the host-rejected broad-science milestone.  Its live progress and radius/log-xi correction worked, but first-zone Fe heating remained effectively zero (`1.50024e-13` versus FORTRAN `8.1714`), thermal convergence diagnostics differed, and runtime was about 3145 s versus 870 s for XSTAR 2.59g.
+- Correct Type-85 endpoint ownership against `ucalc.f90` plus `calc_hmc_ion.f90`: retain the source endpoint with `idest2=1`, then apply the source universal energy ordering for rate types other than 7/41 before thermal diagonal construction.  This makes Type-85 photoionization heating multiply the source lower-energy population rather than the sparse excited endpoint.
+- Keep the `0.6.82.3` post-`phintfo` Type-85 answer-channel correction unchanged (`ans4=-piht`, `ans6=-piht2`; reverse channels zero).
+- Publish the literal retained DSEC evaluation count as the XSTAR `ntotit` column in live progress and STEP Option 17, removing the previous display-only `-1` adjustment.  The two `h-c(%)` values remain physical retained residuals and are never cosmetically forced toward FORTRAN.
+- Match source `dsec.f90` hot-path ownership: DSEC trial evaluations execute HMC/rate/matrix/thermal work but skip `calc_emisab`/`calc_emis`-equivalent spectral projection.  Accepted/final `xstarcalc` boundaries continue to run the full emission/opacity path.  This removes a duplicated Type-50/profile workload measured at about 616 s in the rejected 0.6.82.3 broad run.
+- Add a permanent 14-row FORTRAN 2.59g STEP oracle and a version-locked host runner that separately gates material science (`<1%`) and performance (default runtime ratio <=1.25 relative to the supplied 869.676651 s FORTRAN run).
+- Preserve accepted historical science revision and all public ABIs.  Broad-host science/performance remain external gates until the canonical `atdb.fits` run is returned.
+
 # 0.6.82.3 — broad multi-element radius/Fe thermal closure + live zone progress - 2026-08-16
 
 - Preserve `0.6.82.2` as the rejected broad-science host milestone.  Its 15-element ATDB lowering and Type-51 fallback complete, but the canonical broad fixture exposed an incorrect retained radius/log-xi, effectively missing Fe Type-85 heating, and a roughly 3.7x native runtime penalty relative to FORTRAN.

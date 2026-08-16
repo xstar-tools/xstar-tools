@@ -655,7 +655,7 @@ void append_native_radial_summary(std::ofstream& out,
            <<std::setw(7)<<std::clamp(100.0*r.heat_error,-99.99,99.99)
            <<std::setw(7)<<std::clamp((i<heat_balance_percent.size()?heat_balance_percent[i]:0.0),-99.99,99.99)
            <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
-           <<std::setw(3)<<(cm.second>0?cm.second-1:0)<<"\n";
+           <<std::setw(3)<<cm.second<<"\n";
     }
     out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
     if (state.legacy_pprint.final_zero_thickness_evaluation_present) {

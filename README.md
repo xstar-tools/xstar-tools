@@ -2,7 +2,7 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.3`  
+**Distribution:** `0.6.82.4`  
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -313,3 +313,23 @@ Long native runs are also observable: with `xstar-cpp --progress text`, the XSTA
 ### 0.6.82.2 broad-element Type-51 closure
 
 `0.6.82.2` keeps the accepted `0.6.82.1` multi-element lowering and file-silent frontend repairs, and closes the downstream Type-51 production abort exposed by the real 15-element host run. Finite legacy Type-51 results remain the compatibility result; source-faithful Type-51 is used only when that legacy evaluator cannot represent an otherwise valid canonical record. The physical broad-mixture gate is version-locked through `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py`.
+
+### 0.6.82.4 broad multi-element FORTRAN-oracle closure
+
+`0.6.82.4` is the next host-qualification candidate after the completed
+15-element `0.6.82.3` run exposed remaining Fe thermal, STEP convergence, and
+performance differences.  Type-85 endpoints now follow XSTAR's universal
+energy ordering before thermal accumulation; live/STEP iteration counts use the
+literal DSEC count; and production DSEC trials no longer execute the
+`calc_emisab`/`calc_emis` spectral projection that source `dsec.f90` does not
+call.  Use the version-locked runner:
+
+```bash
+python3 tools/qualification/run_multi_element_host_smoke_0_6_82_4.py \
+    --data-dir ../xstar/data \
+    --replace
+```
+
+The runner compares the broad fixture to the preserved FORTRAN 2.59g STEP and
+thermal oracles, requires material discrepancies below 1%, and reports the
+runtime ratio separately.

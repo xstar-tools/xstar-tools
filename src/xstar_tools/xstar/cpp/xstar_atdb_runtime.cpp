@@ -1160,9 +1160,20 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             case 79: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 81: need(ii.size()>=2&&!rr.empty(),"short payload"); energy_order_pair(ii[0],ii[1]); break;
             case 82: need(ii.size()>=2&&rr.size()>=4,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
-            // Type 85 is the compact Fe K-edge photoionization parameterization
-            // (effective charge, threshold, strength/width/scaling parameters).
-            case 85: { need(ii.size()>=3&&rr.size()>=5,"short payload"); set_pair(ii[ii.size()-2],1); break; }
+            // Type 85 is the compact Fe K-edge photoionization parameterization.
+            // ucalc.f90 publishes idest1=the source payload endpoint and idest2=1,
+            // then calc_hmc_ion.f90 applies the universal energy ordering for all
+            // rate types except 7 and 41 before constructing the thermal diagonal.
+            // Preserve that distinction here: Type-85 photoionization heating must
+            // be attached to the lower-energy (normally ground) population rather
+            // than to the sparse excited endpoint.
+            case 85: {
+                need(ii.size()>=3&&rr.size()>=5,"short payload");
+                const int id1=ii[ii.size()-2];
+                if (rt==7 || rt==41) set_pair(id1,1);
+                else energy_order_pair(id1,1);
+                break;
+            }
             case 89: need(ii.size()>=2&&rr.size()>=3,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 92: need(ii.size()>=3&&rr.size()>=42,"short payload"); set_pair(ii[0],ii[1]); break;
             case 96: { need(ii.size()>=3&&rr.size()>=3,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); energy=rr[2]; break; }

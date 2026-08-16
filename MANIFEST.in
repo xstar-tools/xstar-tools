@@ -170,3 +170,11 @@ include docs/developer/live_zone_progress_0_6_82_3.md
 include docs/developer/broad_multi_element_science_0_6_82_3.md
 include tests/test_live_zone_progress_0_6_82_3.py
 include tests/test_broad_multi_element_science_0_6_82_3.py
+
+# 0.6.82.4 broad multi-element FORTRAN-oracle closure.
+include qualification/broad_multi_element_oracle_0_6_82_4.json
+include qualification/broad_multi_element_step_fortran_2_59g_0_6_82_4.csv
+include tools/qualification/check_broad_multi_element_oracle_0_6_82_4.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_4.py
+include docs/developer/broad_multi_element_oracle_0_6_82_4.md
+include tests/test_broad_multi_element_oracle_0_6_82_4.py
