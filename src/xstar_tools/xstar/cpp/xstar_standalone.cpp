@@ -17882,6 +17882,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     "qualification_free_native_terminal_posttransport",
                     data.cumulative_depth_cm,
                     actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
+        // Canonical xstar.f90 executes `pprint(9,...)` once more after the
+        // radial loop.  Mirror that live-console row as well as retaining it
+        // for xout_step.log.  No new HMC/DSEC evaluation is performed here,
+        // so the final DSEC ntotit is repeated exactly as in FORTRAN.
+        if (live_text_zone_progress_enabled()) {
+            print_xstar_style_live_zone(
+                *terminal_transport_boundary_v82_patch520144, params,
+                data.cumulative_depth_cm,
+                actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
+        }
         retain_controller_owned_product_workspaces(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
@@ -17921,8 +17931,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         write_radial_zone_rccemis_edge(whole);
         whole.exact_legacy_pprint_state_retained = false;
         whole.diagnostic_preview_partial = false;
-        whole.physical_radial_boundaries_expected = finals.size();
-        whole.physical_radial_boundaries_retained = finals.size();
+        // XSTAR 2.59g xstar.f90 prints one additional pprint(9) row after
+        // the radial loop, after the final STPCUT/TRNFRN commit.  That
+        // post-transport endpoint is a physical Option-17 row; it is distinct
+        // from the later zero-thickness xstarcalc/pprint(22) evaluation.
+        // radial_event_count is therefore finals.size()+1 and all of those
+        // retained radial_zones belong to the canonical STEP trajectory.
+        whole.physical_radial_boundaries_expected = radial_event_count;
+        whole.physical_radial_boundaries_retained = whole.radial_zones.size();
         whole.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
         std::cout << std::setprecision(17)
                   << "V048746255172582_PATCH52011_TERMINAL_TRANSPORT_INTERVALS="

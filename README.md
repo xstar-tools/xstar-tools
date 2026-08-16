@@ -2,7 +2,7 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.5`  
+**Distribution:** `0.6.82.6`  
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -313,6 +313,17 @@ Long native runs are also observable: with `xstar-cpp --progress text`, the XSTA
 ### 0.6.82.2 broad-element Type-51 closure
 
 `0.6.82.2` keeps the accepted `0.6.82.1` multi-element lowering and file-silent frontend repairs, and closes the downstream Type-51 production abort exposed by the real 15-element host run. Finite legacy Type-51 results remain the compatibility result; source-faithful Type-51 is used only when that legacy evaluator cannot represent an otherwise valid canonical record. The physical broad-mixture gate is version-locked through `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py`.
+
+### 0.6.82.6 canonical terminal STEP endpoint restoration
+
+`0.6.82.6` restores the canonical post-loop `pprint(9)` endpoint to native
+STEP Option 17 and to live `--progress text` output.  XSTAR 2.59g prints this
+physical post-transport boundary after the radial loop; it is distinct from the
+later zero-thickness `xstarcalc`/`pprint(22)` final evaluation.  The correction
+restores the final `log(N)=20.00` row in the historical C5 H+He+C cases without
+changing their already-matching common-row thermal science.  The newly exposed
+H+He+C `rlogxi=1.0` thermal discrepancy remains an open, separate science
+investigation and is not altered by this release.
 
 ### 0.6.82.5 Type-85/DSEC/STEP physical-trajectory closure
 

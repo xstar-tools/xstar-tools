@@ -186,3 +186,11 @@ include tools/qualification/check_broad_multi_element_closure_0_6_82_5.py
 include tools/qualification/run_multi_element_host_smoke_0_6_82_5.py
 include docs/developer/broad_multi_element_closure_0_6_82_5.md
 include tests/test_broad_multi_element_closure_0_6_82_5.py
+
+# 0.6.82.6 canonical terminal STEP endpoint restoration.
+include qualification/canonical_terminal_step_endpoint_0_6_82_6.json
+recursive-include qualification/c5_terminal_step_0_6_82_6 *.json *.par
+include tools/qualification/check_canonical_terminal_step_endpoint_0_6_82_6.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
+include docs/developer/canonical_terminal_step_endpoint_0_6_82_6.md
+include tests/test_canonical_terminal_step_endpoint_0_6_82_6.py

@@ -639,9 +639,10 @@ void append_native_radial_summary(std::ofstream& out,
     out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
     out << "                                                                  fwd    rev\n";
     auto safe_log=[](double v,double floor){return v>0.0?std::log10(v):floor;};
-    // Option 17 owns the physical controller trajectory only. The terminal
-    // synthetic/reset publication row is not a radial source zone and must not
-    // expand xout_step beyond physical_radial_boundaries_retained.
+    // Option 17 owns the complete physical pprint(9) trajectory: ordinary
+    // radial boundaries plus the canonical post-loop/post-transport endpoint.
+    // The later zero-thickness xstarcalc/pprint(22) evaluation is not stored in
+    // radial_zones and must never expand xout_step.
     const std::size_t output_rows = rows.size();
     for(std::size_t i=0;i<output_rows && !rows.empty();++i){
         const Row& r=rows[i];

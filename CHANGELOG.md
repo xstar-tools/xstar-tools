@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.82.6 — canonical terminal STEP endpoint restoration - 2026-08-16
+
+- Restore the XSTAR 2.59g post-loop `pprint(9)` endpoint to STEP Option 17.  The endpoint after the final STPCUT/TRNFRN commit is a physical radial publication row, not the later zero-thickness `pprint(22)` reset/final-evaluation state.
+- Count the retained post-transport endpoint in `physical_radial_boundaries_expected/retained`, so native STEP emits the complete controller trajectory instead of dropping the final row.
+- Emit the same canonical endpoint in live `xstar-cpp --progress text`, repeating the final DSEC `ntotit` exactly as FORTRAN does because no new DSEC evaluation occurs at the post-loop print.
+- Preserve the historical C5 H+He+C common-row science unchanged; the five `rlogxi=1.5` reruns showed exact common-row STEP/`ntotit` agreement with frozen C++44 and only the final endpoint was missing.
+- Keep the newly exposed H+He+C `rlogxi=1.0` thermal discrepancy open as a separate science investigation.  This release deliberately does not change HMC/rate/matrix/thermal calculations.
+
 # 0.6.82.5 — Type-85/DSEC/STEP physical-trajectory closure - 2026-08-16
 
 - Preserve `0.6.82.4` as the host-rejected broad-mixture milestone: geometry and lowering were correct, but Fe heating/cooling remained effectively zero, STEP emitted 15 rows for a 14-zone physical trajectory, `ntotit` was still reconstructed inconsistently, and runtime was 3.83x FORTRAN.
