@@ -14952,6 +14952,17 @@ int standalone_iteration_evaluator(
         if (!v0648941_terminal_reference_dsec && !v0648123350_target_projection) {
             input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
         }
+        // 0.6.82.5: this is the actual production DSEC evaluator used by
+        // build_general_standalone_product(). Source dsec.f90 calls
+        // calc_hmc_all only; calc_emisab_all/calc_emis_all belong to the
+        // accepted xstarcalc boundary. Suppress those profile/product stages
+        // on ordinary production DSEC trials while retaining explicit
+        // qualification target projections.
+        const bool native_production_v06825 = std::getenv("XSTAR_NATIVE_PRODUCTION") != nullptr;
+        if (snapshot.kind == "dsec" && native_production_v06825 &&
+            !v0648123350_target_projection) {
+            input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY;
+        }
         write_postsolve_fixed_input_capture(*data, input, snapshot);
         if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
             write_fixed_input_capture(*data, input, snapshot.sequence, "fixed_call1_eval1");
@@ -17134,6 +17145,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
 
         static constexpr std::array<std::size_t,4> expected_dsec_counts{{20u,1u,17u,16u}};
         std::vector<std::size_t> actual_dsec_counts;
+        std::vector<std::size_t> actual_dsec_ntotit;
         std::vector<FixedDsecSnapshot> finals;
         finals.reserve(static_cast<std::size_t>(std::max(params.nsteps, 4)));
         std::optional<FixedDsecSnapshot> terminal_transport_boundary_v82_patch520144;
@@ -17234,6 +17246,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             const std::size_t dsec_count = data.evaluations - before;
             actual_dsec_counts.push_back(dsec_count);
+            actual_dsec_ntotit.push_back(static_cast<std::size_t>(std::max(stats.ntotit, 0)));
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->controller_call_evaluations[call - 1u] += static_cast<std::uint64_t>(dsec_count);
             }
@@ -17546,7 +17559,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 call, finals.back(), dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
             if (live_text_zone_progress_enabled()) {
                 print_xstar_style_live_zone(
-                    finals.back(), params, source_boundary_depth_cm.back(), dsec_count);
+                    finals.back(), params, source_boundary_depth_cm.back(),
+                    static_cast<std::size_t>(std::max(stats.ntotit, 0)));
             }
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
@@ -17802,7 +17816,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         const std::size_t radial_event_count = finals.size() + 1u;
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
-                               double source_depth) {
+                               double source_depth, std::size_t dsec_ntotit) {
             xstar_run_state::AcceptedControllerState accepted;
             accepted.call_index = snapshot.call_index;
             accepted.accepted_sequence = snapshot.sequence;
@@ -17831,6 +17845,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             zone.column_density_cm2 = params.density_cm3 * std::max(source_depth, 0.0);
             zone.temperature_t4 = accepted.evaluation.temperature_t4;
             zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
+            zone.dsec_ntotit = dsec_ntotit;
             zone.provisional_from_controller = false;
             zone.accepted_boundary_exact = true;
             zone.boundary_provenance = "standalone C++ naturally terminated controller boundary";
@@ -17853,8 +17868,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             whole.abundance_radial_rows.push_back(abundance);
         };
         for (std::size_t i = 0; i < finals.size(); ++i) {
+            const std::size_t ntotit = i < actual_dsec_ntotit.size() ? actual_dsec_ntotit[i] : 0u;
             append_zone(finals[i], "qualification_free_native_call_final_pretransport",
-                        source_boundary_depth_cm[i]);
+                        source_boundary_depth_cm[i], ntotit);
         }
         // Source saves a distinct terminal row after the last radial transfer.
         // Keep the actual transported call-4 workspace rather than duplicating
@@ -17864,7 +17880,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         append_zone(*terminal_transport_boundary_v82_patch520144,
                     "qualification_free_native_terminal_posttransport",
-                    data.cumulative_depth_cm);
+                    data.cumulative_depth_cm,
+                    actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
         retain_controller_owned_product_workspaces(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
@@ -18449,10 +18466,9 @@ void print_xstar_style_progress(const xstar_run_state::ProductWritingState& stat
               << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
               << "                                                                  fwd    rev\n";
     auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
-    std::map<std::size_t,std::size_t> call_max_eval;
-    for (const auto& e : state.fixed_evaluations) {
-        call_max_eval[e.call_index] = std::max(call_max_eval[e.call_index], e.evaluation_index);
-    }
+    // 0.6.82.5: ntotit is retained explicitly on each physical radial zone.
+    // Do not reconstruct it from evaluation_index, which also counts accepted-
+    // boundary/final evaluations and caused a +1 publication mismatch.
     for (std::size_t i = 0; i < state.radial_zones.size(); ++i) {
         const auto& zone = state.radial_zones[i];
         const auto& eval = zone.accepted_controller.evaluation;
@@ -18468,9 +18484,7 @@ void print_xstar_style_progress(const xstar_run_state::ProductWritingState& stat
         }
         double radiation_balance = 0.0;
         (void)source_option17_radiation_balance_percent(eval, radiation_balance);
-        const std::size_t call = std::min<std::size_t>(i + 1u, 4u);
-        const std::size_t max_eval = call_max_eval.count(call) ? call_max_eval[call] : 0u;
-        const std::size_t numrec = max_eval;
+        const std::size_t numrec = zone.dsec_ntotit;
         const double radius = zone.radius_cm;
         const double depth = std::max(0.0, radius - (state.radial_zones.empty() ? radius : state.radial_zones.front().radius_cm));
         const double column = zone.density_cm3 * depth;

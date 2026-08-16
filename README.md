@@ -2,7 +2,7 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.4`  
+**Distribution:** `0.6.82.5`  
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -313,6 +313,16 @@ Long native runs are also observable: with `xstar-cpp --progress text`, the XSTA
 ### 0.6.82.2 broad-element Type-51 closure
 
 `0.6.82.2` keeps the accepted `0.6.82.1` multi-element lowering and file-silent frontend repairs, and closes the downstream Type-51 production abort exposed by the real 15-element host run. Finite legacy Type-51 results remain the compatibility result; source-faithful Type-51 is used only when that legacy evaluator cannot represent an otherwise valid canonical record. The physical broad-mixture gate is version-locked through `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py`.
+
+### 0.6.82.5 Type-85/DSEC/STEP physical-trajectory closure
+
+`0.6.82.5` is the next broad-mixture host candidate after the rejected
+`0.6.82.4` run.  It restores the source Type-85 post-`phintfo` channel
+rearrangement while retaining energy-ordered endpoint ownership, moves DSEC
+HMC-only execution into the actual production evaluator, retains the thermal
+engine's literal `stats.ntotit`, and limits STEP Option 17 to physical radial
+boundaries.  The canonical FORTRAN 2.59g broad fixture remains an external
+science (`<1%`) and performance gate.
 
 ### 0.6.82.4 broad multi-element FORTRAN-oracle closure
 

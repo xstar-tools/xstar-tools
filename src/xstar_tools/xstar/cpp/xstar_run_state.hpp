@@ -341,6 +341,9 @@ struct RadialZoneState {
     double column_density_cm2 = 0.0;
     double temperature_t4 = 0.0;
     double electron_fraction = 0.0;
+    // Literal thermal-engine DSEC ntotit retained at the accepted physical
+    // boundary for both live pprint-style output and xout_step.log.
+    std::size_t dsec_ntotit = 0;
     bool provisional_from_controller = false;
     bool accepted_boundary_exact = false;
     std::string boundary_provenance;

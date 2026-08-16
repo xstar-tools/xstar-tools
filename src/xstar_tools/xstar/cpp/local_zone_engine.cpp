@@ -8617,15 +8617,14 @@ EvaluatedRecord evaluate_record(
                     else if(dt==15){int na=ints&&record.int_count>=5?std::max<int>(1,ints[record.int_count-5]):1;std::vector<double>bs;std::vector<std::array<double,11>>co;double d=0;threshold=0;for(int sh=0;sh<na;++sh){std::size_t off=15u*sh;if(off+13>=record.real_count)break;threshold=r[off];d=r[off+1];bs.push_back(r[off+2]);std::array<double,11>a{};for(int q=0;q<11;++q)a[q]=r[off+3+q];co.push_back(a);}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&!bs.empty()){double xx=epi[k]*1e-3-d;if(xx>0){std::size_t j=0;while(j+1<bs.size()&&xx>=bs[j])++j;double yy=std::log10(std::max(xx,1e-300)),tmp=0;for(int q=10;q>=0;--q)tmp=co[j][q]+yy*tmp;tmp=std::clamp(tmp,-50.0,24.0);sigma[k]=std::pow(10.0,tmp-24.0);}}}
                     else if(dt==64){threshold=std::abs(upper.energy_ev-lower.energy_ev);int nq=ints&&record.int_count?std::max<int>(ints[0],1):1,l=ints&&record.int_count>1?std::max<int>(ints[1],0):0,charge=ints&&record.int_count>2?std::max<int>(ints[2],1):1;std::vector<double>er(n),smb(n);for(std::size_t k=0;k<n;++k){er[k]=std::max((epi[k]-threshold)/13.605692,0.0);smb[k]=source_hphotx_mb_generic(er[k],charge,nq,l);sigma[k]=smb[k]*1e-18;}sw=lower.statistical_weight;commit_phint(sigma,threshold,sw,false);c.ans2=type99_milne_alpha(er,smb,threshold/13.6,input.temperature_k)*sw;break;}
                     else if(dt==85){int nmin=ints&&record.int_count?static_cast<int>(ints[0]):1,id3=ints&&record.int_count?static_cast<int>(ints[record.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);
-                        // 0.6.82.3 Fe Type-85 thermal closure.
-                        // source_phintfo_sigma_generic returns the ordinary post-ucalc
-                        // channel ordering [pirt,rrrt,-rrcl,-piht,-rrcl2,-piht2].
-                        // ucalc.f90 label 85 instead zeroes the reverse channels and
-                        // retains the photoionization heating channels: ans4=-piht and
-                        // ans6=-piht2.  The previous mapping used -ph.ans[2]/[4],
-                        // accidentally selecting recombination cooling and collapsing
-                        // Fe heating in broad mixtures.
-                        c.ans1=ph.ans[0];c.ans2=0.0;c.ans3=0.0;c.ans4=ph.ans[3];c.ans5=0.0;c.ans6=ph.ans[5];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
+                        // 0.6.82.5 Fe Type-85 source-faithful post-phintfo rearrangement.
+                        // source_phintfo_sigma_generic already returns the ordinary ucalc
+                        // channel ordering used by the generic bound-free path.  The Type-85
+                        // branch then applies the additional source label-85 rearrangement:
+                        // reverse channels are zeroed and photoionization heating is taken
+                        // from the negated ordinary ans3/ans5 slots.  Keep the 0.6.82.4
+                        // energy-ordered endpoint ownership from xstar_atdb_runtime.cpp.
+                        c.ans1=ph.ans[0];c.ans2=0.0;c.ans3=0.0;c.ans4=-ph.ans[2];c.ans5=0.0;c.ans6=-ph.ans[4];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
                     if (dt != 64 && dt != 85) {
                         commit_phint(sigma, threshold, sw, zero_reverse);
                     }

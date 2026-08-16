@@ -178,3 +178,11 @@ include tools/qualification/check_broad_multi_element_oracle_0_6_82_4.py
 include tools/qualification/run_multi_element_host_smoke_0_6_82_4.py
 include docs/developer/broad_multi_element_oracle_0_6_82_4.md
 include tests/test_broad_multi_element_oracle_0_6_82_4.py
+
+
+# 0.6.82.5 broad multi-element Type-85/DSEC/STEP closure.
+include qualification/broad_multi_element_closure_0_6_82_5.json
+include tools/qualification/check_broad_multi_element_closure_0_6_82_5.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_5.py
+include docs/developer/broad_multi_element_closure_0_6_82_5.md
+include tests/test_broad_multi_element_closure_0_6_82_5.py

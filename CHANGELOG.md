@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.82.5 — Type-85/DSEC/STEP physical-trajectory closure - 2026-08-16
+
+- Preserve `0.6.82.4` as the host-rejected broad-mixture milestone: geometry and lowering were correct, but Fe heating/cooling remained effectively zero, STEP emitted 15 rows for a 14-zone physical trajectory, `ntotit` was still reconstructed inconsistently, and runtime was 3.83x FORTRAN.
+- Restore the source-faithful Type-85 post-`phintfo` rearrangement (`ans4=-ph.ans[2]`, `ans6=-ph.ans[4]`, reverse channels zero) while retaining the `0.6.82.4` energy-ordered endpoint ownership from `calc_hmc_ion.f90`.
+- Apply `XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY` in the actual `standalone_iteration_evaluator()` production DSEC path, matching source `dsec.f90` ownership of `calc_hmc_all`; accepted/final `xstarcalc` boundaries retain full emission/profile projection.
+- Retain the thermal engine's literal `stats.ntotit` per accepted radial zone and use that one value for both live XSTAR-style progress and `xout_step.log`; stop inferring the column from fixed-state evaluation indices.
+- Make STEP Option 17 own the physical controller trajectory only.  The terminal synthetic/reset publication row no longer expands STEP through `max(radial_zones, publication_rows)`.
+- Preserve the canonical 14-row FORTRAN 2.59g STEP/material oracle and the `<1%` material criterion.  Broad-host science/performance remain external gates until canonical `atdb.fits` qualification is returned.
+
 # 0.6.82.4 — broad multi-element FORTRAN-oracle thermal/STEP/performance closure - 2026-08-16
 
 - Preserve `0.6.82.3` as the host-rejected broad-science milestone.  Its live progress and radius/log-xi correction worked, but first-zone Fe heating remained effectively zero (`1.50024e-13` versus FORTRAN `8.1714`), thermal convergence diagnostics differed, and runtime was about 3145 s versus 870 s for XSTAR 2.59g.
