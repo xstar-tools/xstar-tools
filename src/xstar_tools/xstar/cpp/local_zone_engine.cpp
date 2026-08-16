@@ -53,6 +53,12 @@ using clock_type = std::chrono::steady_clock;
 constexpr double kBoltzmannEvK = xstar_constants::kModernBoltzmannEvPerK;
 constexpr double kErgPerEv = xstar_constants::kModernErgPerEv;
 constexpr std::size_t kSourceLeveltempNdlV06481231 = 5000u;
+// XSTAR 2.59g globaldata/PARAM declares nd=20000.  levwkelement.f90's
+// local real(8) rnisi(nd) is a large fixed-size workspace.  In the canonical
+// gfortran build it has static storage lifetime, is zero-filled initially, and
+// retains entries outside the 1:nlev slice overwritten by each levwk call.
+// Preserve that source lifetime explicitly on the reusable C++ context.
+constexpr std::size_t kSourceLevWkRnisiNdV06828 = 20000u;
 constexpr double kRydEv = 13.60569253;
 // The v0.6.47.2 type-53 evaluator uses the historical rounded Rydberg
 // constant.  Keep it separate from the newer global constant: changing this
@@ -3600,6 +3606,12 @@ struct xstar_fixed_state_context_impl {
     // per-ion static ATDB snapshot when no active ion writes a destination
     // column.  Preserve the source workspace explicitly.
     std::vector<double> source_leveltemp_energy_workspace_v06481231;
+    // 0.6.82.8: source-faithful levwkelement.f90 rnisi(nd) lifetime.  This
+    // workspace is shared by every element and retained across fixed-state
+    // evaluations, exactly like the canonical large fixed local array.  Index
+    // zero is intentionally unused so source 1-based rnisi(1:nd) maps directly.
+    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>
+        source_levwk_rnisi_workspace_v06828{};
     // v0.6.48.11.4: model runtime calc_hmc_element critf.  Keep this on
     // the context so the historical xstar_fixed_state_input_v1 ABI remains
     // byte-for-byte unchanged.
@@ -9919,6 +9931,7 @@ std::vector<double> compute_element_lte_populations(
     const xstar_fixed_state_input_v1& input,
     int active_min_stage,
     int active_max_stage,
+    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>& rnisi,
     bool* used_exact_source_topology = nullptr
 ) {
     if (element.rows.empty() || element.n_rows <= 0) {
@@ -9971,11 +9984,13 @@ std::vector<double> compute_element_lte_populations(
     const double source_cap66 = 1.0e66;
 
     std::vector<double> rnise(static_cast<std::size_t>(element.n_rows) + 1u, 0.0);
-    std::vector<double> rnisi;
     int last_nlev = 0;
     int ipmatsv = 0;
     for (const auto& topo : topology) {
         const int nlev = topo.nlev;
+        if (nlev > static_cast<int>(kSourceLevWkRnisiNdV06828)) {
+            throw std::runtime_error("LTE source ion nlev exceeds levwkelement rnisi(nd=20000)");
+        }
         const bool active = topo.ion_stage >= active_min_stage && topo.ion_stage <= active_max_stage;
         if (active) {
             const LteLevelData* terminal_level = exact_leveltemp
@@ -9987,7 +10002,9 @@ std::vector<double> compute_element_lte_populations(
             const double terminal_energy = terminal_level ? terminal_level->energy_ev : topo.terminal_energy_ev;
             const double terminal_weight = terminal_level ? terminal_level->statistical_weight : topo.terminal_statistical_weight;
             const double rs = q2 / terminal_weight;
-            rnisi.assign(static_cast<std::size_t>(nlev) + 1u, 0.0);
+            // Literal levwk.f90 lifetime: overwrite rnisi(1:nlev) only.
+            // Entries above nlev deliberately retain values from earlier
+            // element/evaluation calls in the same model context.
             rnisi[static_cast<std::size_t>(nlev)] = 1.0;
             double bb = 1.0;
             for (int local = 1; local < nlev; ++local) {
@@ -10062,9 +10079,16 @@ std::vector<double> compute_element_lte_populations(
         last_nlev = nlev;
     }
 
-    if (last_nlev < 2 || ipmatsv + 1 != element.n_rows || rnisi.size() <= static_cast<std::size_t>(last_nlev)) {
+    if (last_nlev < 2 ||
+        last_nlev > static_cast<int>(kSourceLevWkRnisiNdV06828) ||
+        ipmatsv + 1 != element.n_rows) {
         throw std::runtime_error("LTE fully stripped source topology is invalid");
     }
+    // levwkelement.f90 intentionally uses rnisi(nlev:nlev-1) after the source
+    // ion loop even when the final source ion is outside mml:mmu.  Because the
+    // canonical rnisi(nd) has persistent static storage, these values may be
+    // retained from a prior levwk call.  Do not require the current active ion
+    // window to have written them.
     rnise[static_cast<std::size_t>(ipmatsv + 1)] =
         rnise[static_cast<std::size_t>(ipmatsv)] *
         rnisi[static_cast<std::size_t>(last_nlev)] /
@@ -10126,7 +10150,8 @@ std::vector<double> compute_element_lte_populations(
 std::vector<double> compute_exact_lte_populations(
     const Program& program,
     const xstar_fixed_state_input_v1& input,
-    const std::map<int, std::pair<int,int>>& active_stage_windows
+    const std::map<int, std::pair<int,int>>& active_stage_windows,
+    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>& rnisi_workspace
 ) {
     if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) {
         throw std::runtime_error("LTE population inputs are invalid");
@@ -10149,7 +10174,8 @@ std::vector<double> compute_exact_lte_populations(
         }
         bool exact_topology = false;
         auto full_lte = compute_element_lte_populations(
-            program, element, input, active_min_stage, active_max_stage, &exact_topology);
+            program, element, input, active_min_stage, active_max_stage,
+            rnisi_workspace, &exact_topology);
 
         if (source_sequence == 58 && element.element_z == 12) {
             const auto topology = lte_topology_for_element(program, element);
@@ -13287,7 +13313,8 @@ int run_impl(
             throw std::runtime_error("fixed-state source-workspace ABI mismatch");
         }
         const auto lte_populations = compute_exact_lte_populations(
-            ctx.program, input, ctx.retained_active_stage_windows);
+            ctx.program, input, ctx.retained_active_stage_windows,
+            ctx.source_levwk_rnisi_workspace_v06828);
         // Small (~population-row sized) state; retain it on every controller
         // evaluation so the final accepted DSEC snapshot can be promoted
         // without recomputing LTE solely for product publication.
@@ -16087,6 +16114,7 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
         context->source_leveltemp_energy_workspace_v06481231.begin(),
         context->source_leveltemp_energy_workspace_v06481231.end(),
         0.0);
+    context->source_levwk_rnisi_workspace_v06828.fill(0.0);
     context->last_record_diagnostics.clear();
     context->last_element_diagnostics.clear();
     context->last_source_workspaces_valid_v064894 = false;

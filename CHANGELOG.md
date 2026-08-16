@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.82.8 — source-faithful fixed-size `rnisi` LTE workspace lifetime - 2026-08-16
+
+- Reproduce canonical `levwkelement.f90` storage semantics for `real(8) rnisi(nd)` with source `nd=20000`: one zero-initialized workspace is retained on the reusable fixed-state context across elements and DSEC/fixed-state evaluations.
+- Match `levwk.f90` write ownership exactly: active ions overwrite and normalize only `rnisi(1:nlev)`; inactive ions zero the corresponding `rnise` projection but do not clear or resize `rnisi`.
+- Preserve the canonical post-loop fully-stripped recurrence even when the final source ion lies outside `mml:mmu`; its `rnisi(nlev)` / `rnisi(nlev-1)` values may therefore come from the retained source workspace, as they do in the FORTRAN executable.
+- Remove the C++-only guard that rejected valid low-ionization Carbon topology when `active=1:4`, `last_active_nlev=26`, and the final source ion has `nlev=33`.  Keep the genuine source bounds (`nlev <= nd`) and compact-topology row-count checks.
+- Reset the retained workspace only when the fixed-state context itself is reset, restoring process-start zero state for a new model context without perturbing repeated DSEC evaluations.
+- Keep the 0.6.82.7 Type-63 `delt > 50` repair, 0.6.82.6 canonical terminal STEP endpoint, all public ABIs, and unrelated rate/matrix/thermal algorithms unchanged.
+- Host qualification starts with the previously failing H+He+C `density=1e12`, `cfrac=1`, `column=1e20`, `xdef`, `rlogxi=-5` case, then resumes the preserved `-5..+5` canonical FORTRAN grid if that point succeeds.
+
 # 0.6.82.7 — canonical Type-63 low-temperature source cutoff - 2026-08-16
 
 - Restore the literal `ucalc.f90` Type-63 pre-branch gate: compute `elin`,

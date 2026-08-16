@@ -2,11 +2,13 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.7`  
+**Distribution:** `0.6.82.8`  
 
-**0.6.82.7 low-xi Type-63 repair:** native and Python Type-63 evaluation now
-restores the canonical `ucalc.f90` `delt > 50` pre-branch cutoff.  The
-0.6.82.6 terminal STEP endpoint behavior is unchanged.
+**0.6.82.8 low-xi LTE workspace repair:** native `levwkelement` LTE construction now
+retains the canonical fixed-size `rnisi(nd=20000)` workspace across elements and
+fixed-state evaluations, overwriting only the active `1:nlev` slice exactly as
+`levwk.f90` does.  The 0.6.82.7 Type-63 cutoff and 0.6.82.6 terminal STEP
+endpoint remain unchanged.
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  

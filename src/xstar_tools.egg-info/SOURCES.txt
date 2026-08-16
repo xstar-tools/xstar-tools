@@ -46,6 +46,7 @@ docs/developer/host_compatibility_0_6_74.md
 docs/developer/index.md
 docs/developer/legacy_source_port_cli_cleanup.md
 docs/developer/live_zone_progress_0_6_82_3.md
+docs/developer/lte_rnisi_workspace_0_6_82_8.md
 docs/developer/multi_element_atdb_lowering_0_6_82_1.md
 docs/developer/option24_fortran_stale_local_policy.md
 docs/developer/packaging.md
@@ -181,6 +182,7 @@ qualification/host_compat_benchmark_semantics_0_6_74.json
 qualification/legacy_source_port_cli_cleanup_0_6_65.json
 qualification/live_zone_progress_0_6_82_3.json
 qualification/local_zone_naming_cleanup_0_6_59.json
+qualification/lte_rnisi_workspace_0_6_82_8.json
 qualification/multi_element_atdb_lowering_0_6_82_1.json
 qualification/option24_comparator_policy_0_6_67.json
 qualification/packaging_milestone_0_6_71.json
@@ -478,6 +480,7 @@ tests/test_host_compat_benchmark_semantics_0_6_74.py
 tests/test_legacy_source_port_cli_cleanup.py
 tests/test_live_zone_progress_0_6_82_3.py
 tests/test_local_zone_naming_cleanup.py
+tests/test_lte_rnisi_workspace_0_6_82_8.py
 tests/test_multi_element_atdb_lowering_0_6_82_1.py
 tests/test_o7_density_grid_type69_mode_compare_reference.py
 tests/test_option15_material_surface.py
@@ -574,6 +577,7 @@ tools/qualification/check_host_compat_benchmark_semantics_0_6_74.py
 tools/qualification/check_legacy_source_port_cli_cleanup.py
 tools/qualification/check_live_zone_progress_0_6_82_3.py
 tools/qualification/check_local_zone_naming_cleanup.py
+tools/qualification/check_lte_rnisi_workspace_0_6_82_8.py
 tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
 tools/qualification/check_packaging_milestone.py
 tools/qualification/check_parity_freeze.py
@@ -604,6 +608,8 @@ tools/qualification/local_zone_naming_compat.py
 tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_2.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_3.py

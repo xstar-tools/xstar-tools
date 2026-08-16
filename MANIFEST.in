@@ -204,3 +204,11 @@ include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 include docs/developer/type63_source_cutoff_0_6_82_7.md
 include tests/test_type63_source_cutoff_0_6_82_7.py
 include tests/test_type63_source_cutoff_manifest_0_6_82_7.py
+
+# 0.6.82.8 source-faithful levwkelement rnisi(nd) workspace lifetime.
+include qualification/lte_rnisi_workspace_0_6_82_8.json
+include tools/qualification/check_lte_rnisi_workspace_0_6_82_8.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
+include docs/developer/lte_rnisi_workspace_0_6_82_8.md
+include tests/test_lte_rnisi_workspace_0_6_82_8.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
