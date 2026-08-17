@@ -36,7 +36,7 @@ def test_06826_zero_thickness_final_evaluation_stays_outside_radial_zones():
     post = standalone.index("qualification_free_native_terminal_posttransport")
     zero = standalone.index("final_zero_thickness_started_v064890", post)
     assert post < zero
-    zero_block = standalone[zero: zero + 12000]
+    zero_block = standalone[zero: zero + 14000]
     assert "legacy_pprint.final_zero_thickness_evaluation_present" in zero_block
     assert "append_zone(" not in zero_block
 

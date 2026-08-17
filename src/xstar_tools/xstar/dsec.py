@@ -708,10 +708,21 @@ class DsecResult:
     # XSTAR-FUNCTION-COMMENT-END
     @property
     def converged(self) -> bool:
+        """Strict diagnostic convergence, not FORTRAN production acceptance."""
         if self.prefix_terminated:
             return False
         thermal_ok = self.thermal_converged if self.requested_thermal_iteration else True
         return bool(self.lnerr == 0 and self.charge_converged and thermal_ok)
+
+    @property
+    def source_accepted(self) -> bool:
+        """Whether canonical dsec returned normally for production use.
+
+        FORTRAN xstarcalc continues after dsec returns; charge/thermal flags and
+        lnerr are diagnostics rather than a second post-return acceptance gate.
+        Prefix-terminated qualification traces are not complete source returns.
+        """
+        return bool(self.source_returned and not self.prefix_terminated)
 
     # XSTAR-FUNCTION-COMMENT-BEGIN
     # Purpose: Implement the final hmctot operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
@@ -1643,6 +1654,7 @@ def write_dsec_trajectory_products(
         "thermal_converged": result.thermal_converged,
         "requested_thermal_iteration": result.requested_thermal_iteration,
         "dsec_converged": result.converged,
+        "dsec_source_accepted": result.source_accepted,
         "prefix_terminated": result.prefix_terminated,
         "maximum_evaluations": result.maximum_evaluations,
         "mutable_population_state_present": bool(result.state.element_populations),

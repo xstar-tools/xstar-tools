@@ -58,6 +58,7 @@ from .gsmooth import (
     run_direct_fortran_gsmooth_validation,
 )
 from .radiation import nbinc
+from .spectrum_contract import SpectrumContractError, apply_source_spectrum_pass
 from .radial_control import (
     RadialPassConvergenceContract,
     TabulatedRadialDensityState,
@@ -1069,6 +1070,13 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
         leveltemp.levels.clear()
         leveltemp.levels.update(result.leveltemp_workspace.levels)
         leveltemp.nlev = int(result.leveltemp_workspace.nlev)
+    # 0.6.82.25.3: HEATT is the last source routine in the live shell that
+    # mutates leveltemp.  Carry that exact workspace into the next zone's
+    # DSEC/calc_hmc_all sequence.
+    runtime = state.control.get("physical_dsec_runtime")
+    if runtime is not None:
+        runtime.leveltemp_workspace = result.leveltemp_workspace
+        runtime.last_leveltemp_workspace = result.leveltemp_workspace
     state.transfer.source_arrays["heatt"] = result
     state.transfer.provenance["heatt"] = {
         "source_file": result.source_file,
@@ -1127,6 +1135,43 @@ def _saved_store_from_state(
 # Purpose: Implement the level arrays from state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
 # XSTAR-FUNCTION-COMMENT-END
+def _source_global_level_capacity_v06822715(state: XSTARPythonState) -> int:
+    """Return the FORTRAN ``nnml``-style global level capacity.
+
+    The public/radial state keeps source arrays in a one-based guarded layout
+    (slot zero is a sentinel), while :class:`DsecMutableRuntimeState` owns
+    dense zero-based arrays.  Keep that distinction explicit at SAVD/UNSAVD
+    boundaries instead of inferring one layout from the other.
+    """
+    derived = getattr(getattr(state, "atomic", None), "derived", None)
+    capacity = int(getattr(derived, "n_level_records", 0) or 0)
+    npilev = np.asarray(getattr(derived, "npilev", ()), dtype=np.int64).reshape(-1)
+    if npilev.size:
+        capacity = max(capacity, int(np.max(npilev)))
+    return max(0, capacity)
+
+
+def _dense_level_array_v06822715(state: XSTARPythonState, values: np.ndarray) -> np.ndarray:
+    """Convert a guarded source global-level array to dense runtime layout."""
+    array = np.asarray(values, dtype=float).reshape(-1)
+    capacity = _source_global_level_capacity_v06822715(state)
+    if capacity > 0 and array.size == capacity + 1:
+        # `_guard_full_global_level_array()` stores physical source level N at
+        # Python index N and reserves index zero.  fstepr/rstepr and the DSEC
+        # runtime instead address dense global index N at Python index N-1.
+        return array[1:].copy()
+    return array.copy()
+
+
+def _guard_level_array_v06822715(state: XSTARPythonState, values: np.ndarray) -> np.ndarray:
+    """Return the one-based caller-owned global-level representation."""
+    dense = np.asarray(values, dtype=float).reshape(-1)
+    capacity = max(_source_global_level_capacity_v06822715(state), int(dense.size))
+    guarded = np.zeros(capacity + 1, dtype=float)
+    guarded[1 : dense.size + 1] = dense
+    return guarded
+
+
 def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.ndarray]:
     xilev = state.local_zone.source_arrays.get("xilevg")
     if xilev is None:
@@ -1136,8 +1181,12 @@ def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.nd
         raise RadialTransferPortError(
             "saved radial state requires current xilevg and rnisg arrays"
         )
-    x = np.asarray(xilev, dtype=float).reshape(-1)
-    rn = np.asarray(rnist, dtype=float).reshape(-1)
+    x = _dense_level_array_v06822715(
+        state, np.asarray(xilev, dtype=float).reshape(-1)
+    )
+    rn = _dense_level_array_v06822715(
+        state, np.asarray(rnist, dtype=float).reshape(-1)
+    )
     if x.shape != rn.shape:
         raise RadialTransferPortError("xilevg and rnisg lengths differ")
     return x, rn
@@ -1147,6 +1196,86 @@ def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.nd
 # Purpose: Capture saved shell snapshot from state for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
 # XSTAR-FUNCTION-COMMENT-END
+def _source_sparse_saved_indices_v0682273(
+    state: XSTARPythonState,
+    *,
+    xilev: np.ndarray,
+    workspace: RadialTransferWorkspace,
+    n_lines: int,
+    n_continua: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return the exact sparse row inventories written by fstepr*.
+
+    FORTRAN does not persist dense radial workspaces.  fstepr saves populated
+    level rows, fstepr2 saves active physical line rows after the source
+    rate/wavelength exclusions, and fstepr3 saves active rate-type-7 RRC rows.
+    The row tests occur before the TFLOAT write/round-trip.
+    """
+    meta = state.control.get("output_atomic_metadata")
+    levels = tuple(getattr(meta, "levels", ()) or ())
+    lines = tuple(getattr(meta, "lines", ()) or ())
+    rrcs = tuple(getattr(meta, "rrcs", ()) or ())
+
+    level_indices: list[int] = []
+    seen_levels: set[int] = set()
+    for row in levels:
+        one = int(getattr(row, "global_index", 0))
+        zero = one - 1
+        if one <= 0 or zero >= xilev.size or one in seen_levels:
+            continue
+        if float(xilev[zero]) > 1.0e-34:
+            level_indices.append(one)
+            seen_levels.add(one)
+
+    rcem = np.asarray(workspace.rcem_physical[:, :n_lines], dtype=float)
+    oplin = np.asarray(workspace.oplin_physical[:n_lines], dtype=float)
+    line_indices: list[int] = []
+    seen_lines: set[int] = set()
+    for row in lines:
+        one = int(getattr(row, "line_index", 0))
+        zero = one - 1
+        if one <= 0 or zero >= n_lines or one in seen_lines:
+            continue
+        rate_type = int(getattr(row, "rate_type", 0))
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        if rate_type in (9, 14) or not (wave > 0.1 and wave < 9.0e9):
+            continue
+        if (
+            float(rcem[0, zero]) > 1.0e-64
+            or float(rcem[1, zero]) > 1.0e-64
+            or float(oplin[zero]) > 1.0e-64
+        ):
+            line_indices.append(one)
+            seen_lines.add(one)
+
+    cemab = np.asarray(workspace.cemab_physical[:, :n_continua], dtype=float)
+    cabab = np.asarray(workspace.emissivity.base.cabab[1 : n_continua + 1], dtype=float)
+    opakab = np.asarray(workspace.opakab_physical[:n_continua], dtype=float)
+    rrc_indices: list[int] = []
+    seen_rrcs: set[int] = set()
+    for row in rrcs:
+        if int(getattr(row, "rate_type", 0)) != 7:
+            continue
+        one = int(getattr(row, "continuum_index", 0))
+        zero = one - 1
+        if one <= 0 or zero >= n_continua or one in seen_rrcs:
+            continue
+        if (
+            float(cemab[0, zero]) > 1.0e-36
+            or float(cemab[1, zero]) > 1.0e-36
+            or float(cabab[zero]) > 1.0e-36
+            or float(opakab[zero]) > 1.0e-36
+        ):
+            rrc_indices.append(one)
+            seen_rrcs.add(one)
+
+    return (
+        np.asarray(level_indices, dtype=np.int64),
+        np.asarray(line_indices, dtype=np.int64),
+        np.asarray(rrc_indices, dtype=np.int64),
+    )
+
+
 def capture_saved_shell_snapshot_from_state(
     state: XSTARPythonState, *, terminal_record: bool = False
 ) -> SavedShellSnapshot:
@@ -1161,9 +1290,28 @@ def capture_saved_shell_snapshot_from_state(
     ncn2 = int(state.control["ncn2"])
     n_lines = int(state.control.get("nlsvn", workspace.elum.shape[1]))
     n_continua = int(state.control.get("ncsvn", workspace.elumab.shape[1]))
-    level_indices = state.control.get("saved_level_indices_one_based")
-    line_indices = state.control.get("saved_line_indices_one_based")
-    rrc_indices = state.control.get("saved_rrc_indices_one_based")
+    explicit_level_indices = state.control.get("saved_level_indices_one_based")
+    explicit_line_indices = state.control.get("saved_line_indices_one_based")
+    explicit_rrc_indices = state.control.get("saved_rrc_indices_one_based")
+    if (
+        explicit_level_indices is None
+        and explicit_line_indices is None
+        and explicit_rrc_indices is None
+        and state.control.get("output_atomic_metadata") is not None
+    ):
+        level_indices, line_indices, rrc_indices = _source_sparse_saved_indices_v0682273(
+            state,
+            xilev=xilev,
+            workspace=workspace,
+            n_lines=n_lines,
+            n_continua=n_continua,
+        )
+    else:
+        # Preserve explicit synthetic-fixture ownership used by direct unit
+        # tests; production runs derive the source sparse inventories above.
+        level_indices = explicit_level_indices
+        line_indices = explicit_line_indices
+        rrc_indices = explicit_rrc_indices
     return make_saved_shell_snapshot(
         pass_index=int(state.transfer.pass_index),
         zone_index=int(state.transfer.zone_index),
@@ -1210,7 +1358,7 @@ def save_radial_shell_state(
     hdunum: int,
     terminal_record: bool = False,
 ) -> int:
-    """Insert one shell record after the source-requested one-based HDU."""
+    """Persist one shell record using source fstepr* append-at-tail semantics."""
     store = _saved_store_from_state(state, create=True)
     pass_state = store.begin_pass(int(state.transfer.pass_index))
     snapshot = capture_saved_shell_snapshot_from_state(
@@ -1319,14 +1467,44 @@ def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
             "nry_unsavd": result.nry,
         }
     )
-    state.plasma.populations = result.xilev_after
-    state.local_zone.source_arrays["xilevg"] = result.xilev_after
-    state.local_zone.source_arrays["rnisg"] = result.rnist_after
+    # 0.6.82.27.15: UNSAVD works on dense source global indices, but the
+    # Python radial/output state deliberately exposes one-based guarded arrays.
+    # Re-guard only the public caller-owned state; keep the DSEC runtime dense.
+    guarded_xilev = _guard_level_array_v06822715(state, result.xilev_after)
+    guarded_rnist = _guard_level_array_v06822715(state, result.rnist_after)
+    state.plasma.populations = guarded_xilev
+    state.local_zone.source_arrays["xilevg"] = guarded_xilev
+    state.local_zone.source_arrays["rnisg"] = guarded_rnist
+
+    # 0.6.82.27.3: UNSAVD restores xilevg/rnisg into the caller-owned global
+    # workspaces, but it does not restore bilevg.  The physical runner builds
+    # the next DSEC state from this carried runtime, so update exactly the two
+    # restored dense arrays here and leave global_bilevg_by_index untouched.
+    # Without this handoff Python could silently reuse stale previous-pass
+    # xilevg/rnisg even though the visible radial state had been restored.
+    physical_runtime = state.control.get("physical_dsec_runtime")
+    if physical_runtime is not None:
+        if hasattr(physical_runtime, "global_xilevg_by_index"):
+            physical_runtime.global_xilevg_by_index = np.asarray(
+                result.xilev_after, dtype=float
+            ).copy()
+        if hasattr(physical_runtime, "global_rnisg_by_index"):
+            physical_runtime.global_rnisg_by_index = np.asarray(
+                result.rnist_after, dtype=float
+            ).copy()
+        # source invariant: do NOT assign global_bilevg_by_index here.
+        if hasattr(physical_runtime, "temperature_t4"):
+            physical_runtime.temperature_t4 = float(result.temperature) / 1.0e4
+        if hasattr(physical_runtime, "electron_fraction_xee"):
+            physical_runtime.electron_fraction_xee = float(result.electron_fraction)
+        if hasattr(physical_runtime, "hydrogen_density_cm3"):
+            physical_runtime.hydrogen_density_cm3 = float(result.hydrogen_density)
+
     for key in ("calc_emisab_context", "calc_emis_context"):
         context = state.control.get(key)
         if context is not None:
-            context.xilevg = result.xilev_after
-            context.rnisg = result.rnist_after
+            context.xilevg = guarded_xilev
+            context.rnisg = guarded_rnist
             context.temperature_1e4K = result.temperature / 1.0e4
             context.electron_fraction_xee = result.electron_fraction
             context.hydrogen_density_cm3 = result.hydrogen_density
@@ -1355,6 +1533,62 @@ def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
     }
     state.control.setdefault("restored_hdus", []).append(jkstep)
     return result
+
+
+def _repeat_source_powerlaw_pass_v0682274(state: XSTARPythonState) -> None:
+    """Repeat the source spectrum before a later whole-shell pass.
+
+    The historical function name is retained for qualification compatibility,
+    but 0.6.82.28 extends it to the complete source spectrum contract.
+
+    Historical 0.6.82.27.4 scalar-order marker retained for its static gate:
+    next_source[i] = float(next_source[i]) + float(raw[i]) * scale1
+    """
+    workspace = _workspace_from_state(state)
+    epi = np.asarray(state.radiation.epi, dtype=float).reshape(-1)
+    current = np.asarray(workspace.zremsz, dtype=float).reshape(-1)
+    if current.size != epi.size:
+        raise RadialTransferPortError("0.6.82.28 repeated source spectrum shape mismatch")
+    mode = str(state.control.get("spectype", state.control.get("source_spectrum_mode_068228", "pow"))).strip().lower()
+    try:
+        next_source = apply_source_spectrum_pass(
+            current,
+            mode=mode,
+            trad=float(state.control.get("trad", -1.0)),
+            luminosity_1e38=float(state.control.get("xlum", 0.0)),
+            epi_eV=epi,
+            file_spectrum=state.control.get("source_spectrum_file_068228"),
+        )
+    except SpectrumContractError as exc:
+        raise RadialTransferPortError(str(exc)) from exc
+    workspace.zremsz[:] = next_source
+
+    # ispcg2 is diagnostic-only. Retain each pass value for pprint ownership.
+    sum2 = 0.0
+    sum3 = 0.0
+    sum4 = 0.0
+    sum5 = 0.0
+    for i in range(1, epi.size):
+        de = epi[i] - epi[i - 1]
+        sum5 += (next_source[i] + next_source[i - 1]) * de / 2.0
+        if epi[i] >= 13.6:
+            term = (next_source[i] / epi[i] + next_source[i - 1] / epi[i - 1]) * de / 2.0
+            sum2 += term
+            if epi[i] <= 24.48:
+                sum3 += term
+        if 24.48 <= epi[i] <= 54.4:
+            sum4 += (next_source[i] / epi[i] + next_source[i - 1] / epi[i - 1]) * de / 2.0
+    diagnostic = {
+        "pass_index": int(state.transfer.pass_index),
+        "u_1_1p8": float(sum3),
+        "u_1p8_4": float(sum4),
+        "lbol": float(sum5 * float(np.float32(1.602197e-12))),
+    }
+    state.control.setdefault("ispcg2_passes_v0682274", []).append(diagnostic)
+    state.control["enlum"] = float(sum2)
+    state.control["ispcg2_u_1_1p8"] = diagnostic["u_1_1p8"]
+    state.control["ispcg2_u_1p8_4"] = diagnostic["u_1p8_4"]
+    state.control["ispcg2_lbol"] = diagnostic["lbol"]
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -1400,9 +1634,26 @@ def initialize_bounded_radial_pass_state(state: XSTARPythonState) -> None:
     workspace.zremso[0, :ncn2] = workspace.zremsz[:ncn2]
     xilev = state.local_zone.source_arrays.get("xilevg")
     if xilev is not None:
+        # 0.6.82.27.4: init.f90 zeros xilev and then executes an
+        # unconditional `go to 9000`; the old 1/Z level-1 seed block below
+        # that branch is unreachable source code.
         zero = np.zeros_like(np.asarray(xilev, dtype=float))
         state.local_zone.source_arrays["xilevg"] = zero
         state.plasma.populations = zero
+        physical_runtime = state.control.get("physical_dsec_runtime")
+        if physical_runtime is not None and hasattr(physical_runtime, "global_xilevg_by_index"):
+            # DSEC owns a dense zero-based native-index array.  Do not copy the
+            # one-based guarded radial vector into it during repeated-pass INIT.
+            prior_dense = getattr(physical_runtime, "global_xilevg_by_index", None)
+            if prior_dense is not None:
+                physical_runtime.global_xilevg_by_index = np.zeros_like(
+                    np.asarray(prior_dense, dtype=float).reshape(-1)
+                )
+            else:
+                physical_runtime.global_xilevg_by_index = _dense_level_array_v06822715(
+                    state, zero
+                )
+        # INIT does not own rnist/bilevg; deliberately leave both unchanged.
     state.transfer.provenance.setdefault("pass_initialization", []).append(
         {
             "pass_index": int(state.transfer.pass_index),
@@ -1672,10 +1923,32 @@ def run_bounded_radial_pass(
     state.control["ldir"] = ldir
     state.control["restored_hdus"] = []
     state.control["save_radial_shell_state_handler"] = save_radial_shell_state
+    # xstar.f90 regenerates/renormalizes the incident source before INIT on
+    # every pass.  The initial physical-runner construction already performs
+    # pass 1; repeat the additive ispec4/ispecgg sequence for kk>1.
+    if kk > 1:
+        _repeat_source_powerlaw_pass_v0682274(state)
+    elif not state.control.get("ispcg2_passes_v0682274"):
+        state.control["ispcg2_passes_v0682274"] = [{
+            "pass_index": 1,
+            "u_1_1p8": float(state.control.get("ispcg2_u_1_1p8", 0.0)),
+            "u_1p8_4": float(state.control.get("ispcg2_u_1p8_4", 0.0)),
+            "lbol": float(state.control.get("ispcg2_lbol", 0.0)),
+        }]
     # xstar.f90 resets ierr=0 at the start of every pass; the sequential
     # density unit itself remains at its current file position.
     state.control["density_iostat"] = 0
     initialize_bounded_radial_pass_state(state)
+    # xstar.f90 first-pass shell entry:
+    #   if ((kk.eq.1).and.(lcdd.eq.1).and.(jkp.eq.0)) then
+    #     xpx0=xpx; r0=r
+    #   endif
+    # Capture these before the first analytic STEP/geometry update.  The
+    # tabulated branch also reaches this source assignment but does not consume
+    # xpx0/r0; retaining it is harmless and keeps ownership literal.
+    if kk == 1 and int(state.control.get("lcdd", 1)) == 1:
+        state.control["xpx0"] = float(state.plasma.xpx)
+        state.control["r0"] = float(state.transfer.radius)
     if bool(state.control.get("pprint_legacy_enabled", False)):
         from .pprint_legacy import legacy_pprint_begin_pass
 
@@ -2436,12 +2709,16 @@ def run_bounded_radial_shell_validation(
     )
     hdu_insertion_ready = bool(
         pass1.saved_hdus == (3, 4, 5)
-        and pass1.terminal_saved_hdu == 4
+        and pass1.terminal_saved_hdu == 5
         and multipass.saved_state.require_pass(1).snapshot_at_hdu(3).zone_index == 1
-        and multipass.saved_state.require_pass(1).snapshot_at_hdu(4).terminal_record
-        and multipass.saved_state.require_pass(1).snapshot_at_hdu(5).zone_index == 2
+        and multipass.saved_state.require_pass(1).snapshot_at_hdu(4).zone_index == 2
+        and not multipass.saved_state.require_pass(1).snapshot_at_hdu(4).terminal_record
+        and multipass.saved_state.require_pass(1).snapshot_at_hdu(5).terminal_record
         and pass2.saved_hdus == (3, 4, 5, 6)
-        and pass2.terminal_saved_hdu == 5
+        and pass2.terminal_saved_hdu == 6
+        and multipass.saved_state.require_pass(2).snapshot_at_hdu(5).zone_index == 3
+        and not multipass.saved_state.require_pass(2).snapshot_at_hdu(5).terminal_record
+        and multipass.saved_state.require_pass(2).snapshot_at_hdu(6).terminal_record
     )
     first_snapshot = multipass.saved_state.require_pass(1).snapshot_at_hdu(3)
     real4_ready = bool(

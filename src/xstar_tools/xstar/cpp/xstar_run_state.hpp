@@ -144,12 +144,45 @@ struct LegacyPprintEventState {
     std::string payload;
 };
 
+// 0.6.82.27: compact source-pprint(9) trajectory retained across whole-shell
+// passes.  The full FixedEvaluationState for old passes is intentionally not
+// kept here: FORTRAN persists SAVD/UNSAVD detail state in per-pass FITS files,
+// while xout_step.log only needs these scalar/reference-bin surfaces.
+struct LegacyPprintRadialRowState {
+    std::size_t pass_index = 0;
+    int direction = 0;
+    std::size_t zone_index = 0;
+    double radius_cm = 0.0;
+    double radial_depth_cm = 0.0;
+    double column_density_cm2 = 0.0;
+    double log_ionization_parameter = 0.0;
+    double electron_fraction = 0.0;
+    double density_cm3 = 0.0;
+    double temperature_t4 = 0.0;
+    double hmctot = 0.0;
+    double radiation_balance_percent = 0.0;
+    double forward_reference_tau = 0.0;
+    double reverse_reference_tau = 0.0;
+    std::size_t dsec_ntotit = 0;
+    bool terminal_row = false;
+};
+
+struct LegacyIspecg2PassState {
+    std::size_t pass_index = 0;
+    double u_1_1p8 = 0.0;
+    double u_1p8_4 = 0.0;
+    double lbol = 0.0;
+};
+
 struct LegacyPprintState {
     std::vector<LegacyPprintEventState> events;
+    std::vector<LegacyIspecg2PassState> ispcg2_passes;
     std::vector<std::string> buffered_lines;
+    std::vector<LegacyPprintRadialRowState> radial_rows;
     bool initialized_from_native_controller = false;
     bool option_sequence_exact = false;
     bool finalized_from_native_controller = false;
+    bool radial_pass_trajectory_exact = false;
     // Literal xstar.f90 post-radial block: one zero-thickness xstarcalc with
     // nlimd=0, followed by heatt/stpcut and a 4(1pe16.8) scalar write before
     // pprint(22).  These are computed native values, never oracle inputs.
@@ -236,6 +269,7 @@ struct FixedEvaluationState {
     std::size_t call_index = 0;
     std::size_t evaluation_index = 0;
     double temperature_t4 = 0.0;
+    double hydrogen_density_cm3 = 0.0;
     double electron_fraction_input = 0.0;
     double computed_electron_fraction = 0.0;
     double charge_residual = 0.0;
@@ -370,6 +404,9 @@ struct WholeRunAccumulatedState {
     std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<AcceptedControllerState> accepted_controller_states;
     std::vector<RadialZoneState> radial_zones;
+    // 0.6.82.27.3: source SAVD detail surfaces retained per whole-shell pass.
+    // Each inner vector is physical FITS-HDU order for pass index outer+1.
+    std::vector<std::vector<RadialZoneState>> multipass_detail_radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<ElementMetadataState> element_metadata;
     std::vector<CompactRowMetadataState> row_metadata;
@@ -422,6 +459,9 @@ struct ProductWritingState {
     std::vector<FixedEvaluationState> fixed_evaluations;
     std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<RadialZoneState> radial_zones;
+    // 0.6.82.27.3: source SAVD detail surfaces retained per whole-shell pass.
+    // Each inner vector is physical FITS-HDU order for pass index outer+1.
+    std::vector<std::vector<RadialZoneState>> multipass_detail_radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<ElementMetadataState> element_metadata;
     std::vector<CompactRowMetadataState> row_metadata;
@@ -478,6 +518,7 @@ void prepare_native_product_state(
     WholeRunAccumulatedState& state,
     const std::filesystem::path& diagnostics_path);
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state);
+ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state);
 void write_run_state_manifest(
     const std::filesystem::path& path,
     const WholeRunAccumulatedState& whole,

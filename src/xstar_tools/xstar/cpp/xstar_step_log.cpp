@@ -242,7 +242,7 @@ void append_native_input_parameters(std::ofstream& out,
     out << " xeemin=  " << e3(parameter_number(state, "xeemin", 0.0)) << "\n";
     out << " critf=  " << e3(parameter_number(state, "critf", 0.0)) << "\n";
     out << " vturbi=  " << e3(parameter_number(state, "vturbi", 0.0)) << "\n";
-    out << " ncn2= 9999\n";
+    out << " ncn2= " << static_cast<long long>(std::llround(parameter_number(state, "ncn2", 9999.0))) << "\n";
     out << " radexp=  " << e3(0.0) << "\n\n";
 }
 
@@ -360,7 +360,7 @@ bool source_option17_radiation_balance_percent(
 void append_native_radial_summary(std::ofstream& out,
                                   const std::filesystem::path& output_dir,
                                   const xstar_run_state::ProductWritingState& state) {
-    struct Row { double radius=0, dr=0, logxi=0, xee=0, density=0, temperature=0, heat_error=0; };
+    struct Row { double radius=0, dr=0, column=0, logxi=0, xee=0, density=0, temperature=0, heat_error=0; };
     std::vector<Row> rows;
     fitsfile* af = nullptr;
     int status = 0;
@@ -377,6 +377,7 @@ void append_native_radial_summary(std::ofstream& out,
                 Row r; int any=0, st=0;
                 auto rd=[&](int c){ double v=0; if(c>0) fits_read_col(af,TDOUBLE,c,i,1,1,nullptr,&v,&any,&st); return st==0?v:0.0; };
                 r.radius=rd(cr); r.dr=rd(cd); r.logxi=rd(cx); r.xee=rd(ce); r.density=rd(cn); r.temperature=rd(ct); r.heat_error=rd(ch);
+                r.column=r.density*r.dr;
                 if (r.radius>0.0 || r.density>0.0) rows.push_back(r);
             }
         }
@@ -385,7 +386,7 @@ void append_native_radial_summary(std::ofstream& out,
     if (rows.empty()) {
         for (const auto& r : state.abundance_radial_rows) {
             if (r.radius_cm<=0.0 && r.density_cm3<=0.0) continue;
-            rows.push_back({r.radius_cm,r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,r.density_cm3,r.temperature_t4,r.fractional_heat_error});
+            rows.push_back({r.radius_cm,r.delta_radius_cm,r.density_cm3 * r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,r.density_cm3,r.temperature_t4,r.fractional_heat_error});
         }
     }
     // v0.6.48.12.3.12: native pprint must consume the controller-owned radial
@@ -410,12 +411,15 @@ void append_native_radial_summary(std::ofstream& out,
             const auto& zone = state.radial_zones[zi];
             double logxi = zone.log_ionization_parameter;
             const double r19 = zone.radius_cm * source_radius_scale;
+            // pprint.f90 option 9 recomputes zeta from the live radius and
+            // density on every invocation, including the post-loop terminal
+            // row.  Do not preserve the pre-geometry scalar here.
             if (xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
                 const double skse = xlum / (zone.density_cm3 * r19 * r19);
                 logxi = std::log10(std::max(1.0e-24, skse));
             }
             rows.push_back({zone.radius_cm, zone.delta_radius_cm,
-                logxi, zone.electron_fraction,
+                zone.column_density_cm2, logxi, zone.electron_fraction,
                 zone.density_cm3, zone.temperature_t4,
                 zone.accepted_controller.evaluation.hmctot});
         }
@@ -432,7 +436,7 @@ void append_native_radial_summary(std::ofstream& out,
         rows.reserve(state.radial_zones.size());
         for (const auto& zone : state.radial_zones) {
             rows.push_back({zone.radius_cm, zone.delta_radius_cm,
-                zone.log_ionization_parameter, zone.electron_fraction,
+                zone.column_density_cm2, zone.log_ionization_parameter, zone.electron_fraction,
                 zone.density_cm3, zone.temperature_t4,
                 zone.accepted_controller.evaluation.hmctot});
         }
@@ -517,8 +521,8 @@ void append_native_radial_summary(std::ofstream& out,
             }
             const double reference_fwd=reference_bin<local_fwd.size()?local_fwd[reference_bin]:0.0;
             const double reference_bck=reference_bin<local_bck.size()?local_bck[reference_bin]:0.0;
-            depth_logs.push_back({reference_fwd>0?std::log10(reference_fwd):-10.0,
-                                  reference_bck>0?std::log10(reference_bck):-10.0});
+            depth_logs.push_back({std::log10(std::max(reference_fwd, 1.0e-10)),
+                                  std::log10(std::max(reference_bck, 1.0e-10))});
             reference_depths.push_back({reference_fwd,reference_bck});
         }
         int cs=0;fits_close_file(df,&cs);
@@ -559,8 +563,8 @@ void append_native_radial_summary(std::ofstream& out,
         const std::size_t reference_bin = source_option17_reference_bin_zero_based(energy);
         const double fwd = std::max(0.0, dpthc[reference_bin]);
         const double rev = std::max(0.0, dpthc[n + reference_bin]);
-        retained_depth_logs.push_back({fwd > 0.0 ? std::log10(fwd) : -10.0,
-                                       rev > 0.0 ? std::log10(rev) : -10.0});
+        retained_depth_logs.push_back({std::log10(std::max(fwd, 1.0e-10)),
+                                       std::log10(std::max(rev, 1.0e-10))});
         retained_reference_depths.push_back({fwd, rev});
     }
     if (retained_depth_complete && retained_depth_logs.size() >= rows.size()) {
@@ -624,9 +628,29 @@ void append_native_radial_summary(std::ofstream& out,
     const double ispcg2_lbol = ispcg2_lbol_sum * static_cast<double>(static_cast<float>(1.602197e-12));
 
     out << "\n running ...\n";
-    out << " U(1-1.8),U(1.8-4):   " << std::setprecision(17) << ispcg2_u_1_1p8
-        << "        " << ispcg2_u_1p8_4 << "\n";
-    out << " Lbol=   " << ispcg2_lbol << "\n\n pass number= 1 -1\n";
+    const auto print_ispcg2_v0682273 = [&](std::size_t pass_index) {
+        double u1_v0682273 = ispcg2_u_1_1p8;
+        double u2_v0682273 = ispcg2_u_1p8_4;
+        double lbol_v0682273 = ispcg2_lbol;
+        for (const auto& saved_v0682273 : state.legacy_pprint.ispcg2_passes) {
+            if (saved_v0682273.pass_index != pass_index) continue;
+            u1_v0682273 = saved_v0682273.u_1_1p8;
+            u2_v0682273 = saved_v0682273.u_1p8_4;
+            lbol_v0682273 = saved_v0682273.lbol;
+            break;
+        }
+        const auto flags_v0682273 = out.flags();
+        const auto precision_v0682273 = out.precision();
+        out << std::defaultfloat << std::setprecision(17)
+            << " U(1-1.8),U(1.8-4):   " << u1_v0682273
+            << "        " << u2_v0682273 << "\n";
+        // Match the source's 1P-style scientific presentation consistently
+        // on every pass instead of inheriting stream state from prior output.
+        out << " Lbol=   " << std::scientific << std::setprecision(16)
+            << lbol_v0682273 << "\n";
+        out.flags(flags_v0682273);
+        out.precision(precision_v0682273);
+    };
     if (state.diagnostic_preview_partial) {
         out << " diagnostic partial radial trajectory: physical boundaries retained="
             << state.physical_radial_boundaries_retained
@@ -635,30 +659,76 @@ void append_native_radial_summary(std::ofstream& out,
             << " terminal synthetic row="
             << (state.terminal_synthetic_row_present ? "reached" : "not reached") << "\n";
     }
-    out << " print option:17\n";
-    out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
-    out << "                                                                  fwd    rev\n";
     auto safe_log=[](double v,double floor){return v>0.0?std::log10(v):floor;};
-    // Option 17 owns the complete physical pprint(9) trajectory: ordinary
-    // radial boundaries plus the canonical post-loop/post-transport endpoint.
-    // The later zero-thickness xstarcalc/pprint(22) evaluation is not stored in
-    // radial_zones and must never expand xout_step.
-    const std::size_t output_rows = rows.size();
-    for(std::size_t i=0;i<output_rows && !rows.empty();++i){
-        const Row& r=rows[i];
-        const auto depths=i<depth_logs.size()?depth_logs[i]:std::pair<double,double>{-10.0,-10.0};
-        const std::size_t ntotit = i < state.radial_zones.size() ? state.radial_zones[i].dsec_ntotit : 0u;
-        out<<std::fixed<<std::setprecision(2)
-           <<std::setw(8)<<safe_log(r.radius,-10.0)
-           <<std::setw(7)<<(r.radius>0&&r.dr>0?std::log10(r.dr/r.radius):-36.0)
-           <<std::setw(7)<<safe_log(r.density*r.dr,-10.0)
-           <<std::setw(7)<<r.logxi<<std::setw(7)<<r.xee
-           <<std::setw(7)<<safe_log(r.density,-10.0)
-           <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)
-           <<std::setw(7)<<std::clamp(100.0*r.heat_error,-99.99,99.99)
-           <<std::setw(7)<<std::clamp((i<heat_balance_percent.size()?heat_balance_percent[i]:0.0),-99.99,99.99)
-           <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
-           <<std::setw(3)<<ntotit<<"\n";
+    const auto print_option17_heading = [&]() {
+        out << " print option:17\n";
+        out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
+        out << "                                                                  fwd    rev\n";
+    };
+    const std::size_t requested_passes = static_cast<std::size_t>(std::max<long long>(
+        1ll, static_cast<long long>(std::llround(parameter_number(state,"npass",1.0)))));
+    const bool exact_multipass_pprint_v068227 = requested_passes > 1u &&
+        state.legacy_pprint.radial_pass_trajectory_exact &&
+        !state.legacy_pprint.radial_rows.empty();
+    if (exact_multipass_pprint_v068227) {
+        // 0.6.82.27: xstar.f90 calls pprint(17) once per pass and pprint(9)
+        // for every shell plus the post-loop endpoint.  Old passes are kept as
+        // compact source surfaces in LegacyPprintState rather than as full
+        // FixedEvaluationState copies.
+        for (std::size_t pass = 1u; pass <= requested_passes; ++pass) {
+            const int direction = (pass % 2u == 1u) ? -1 : 1;
+            // xstar.f90 calls ispec*/ispcg2 at the start of every pass, before
+            // pprint(17).  Preserve the repeated U/Lbol block in xout_step.log.
+            print_ispcg2_v0682273(pass);
+            out << "\n pass number= " << pass << ' ' << direction << "\n";
+            print_option17_heading();
+            for (const auto& r : state.legacy_pprint.radial_rows) {
+                if (r.pass_index != pass) continue;
+                const double radial_ratio = (r.radius_cm > 0.0)
+                    ? std::max(1.0e-36,std::min(99.0,r.radial_depth_cm / r.radius_cm))
+                    : 1.0e-36;
+                out << std::fixed << std::setprecision(2)
+                    << std::setw(8) << safe_log(r.radius_cm,-10.0)
+                    << std::setw(7) << std::log10(radial_ratio)
+                    << std::setw(7) << safe_log(std::max(r.column_density_cm2,1.0e-10),-10.0)
+                    << std::setw(7) << r.log_ionization_parameter
+                    << std::setw(7) << r.electron_fraction
+                    << std::setw(7) << safe_log(r.density_cm3,-10.0)
+                    << std::setw(7) << (r.temperature_t4 > 0.0
+                        ? 4.0 + std::log10(r.temperature_t4) : -10.0)
+                    << std::setw(7) << std::clamp(100.0 * r.hmctot,-99.99,99.99)
+                    << std::setw(7) << std::clamp(r.radiation_balance_percent,-99.99,99.99)
+                    << std::setw(7) << std::log10(std::max(r.forward_reference_tau,1.0e-10))
+                    << std::setw(7) << std::log10(std::max(r.reverse_reference_tau,1.0e-10))
+                    << std::setw(3) << r.dsec_ntotit << "\n";
+            }
+        }
+    } else {
+        // Preserve the already-qualified npass=1 serializer unchanged.
+        print_ispcg2_v0682273(1u);
+        out << "\n pass number= 1 -1\n";
+        print_option17_heading();
+        // Option 17 owns the complete physical pprint(9) trajectory: ordinary
+        // radial boundaries plus the canonical post-loop/post-transport endpoint.
+        // The later zero-thickness xstarcalc/pprint(22) evaluation is not stored in
+        // radial_zones and must never expand xout_step.
+        const std::size_t output_rows = rows.size();
+        for(std::size_t i=0;i<output_rows && !rows.empty();++i){
+            const Row& r=rows[i];
+            const auto depths=i<depth_logs.size()?depth_logs[i]:std::pair<double,double>{-10.0,-10.0};
+            const std::size_t ntotit = i < state.radial_zones.size() ? state.radial_zones[i].dsec_ntotit : 0u;
+            out<<std::fixed<<std::setprecision(2)
+               <<std::setw(8)<<safe_log(r.radius,-10.0)
+               <<std::setw(7)<<(r.radius>0&&r.dr>0?std::log10(r.dr/r.radius):-36.0)
+               <<std::setw(7)<<safe_log(r.column,-10.0)
+               <<std::setw(7)<<r.logxi<<std::setw(7)<<r.xee
+               <<std::setw(7)<<safe_log(r.density,-10.0)
+               <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)
+               <<std::setw(7)<<std::clamp(100.0*r.heat_error,-99.99,99.99)
+               <<std::setw(7)<<std::clamp((i<heat_balance_percent.size()?heat_balance_percent[i]:0.0),-99.99,99.99)
+               <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
+               <<std::setw(3)<<ntotit<<"\n";
+        }
     }
     out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
     if (state.legacy_pprint.final_zero_thickness_evaluation_present) {
@@ -680,10 +750,28 @@ void append_native_radial_summary(std::ofstream& out,
         const double final_t4 = have_final ? state.legacy_pprint.final_temperature_t4 : r.temperature;
         const double final_heating = have_final ? state.legacy_pprint.final_total_heating : eval.total_heating;
         const double final_cooling = have_final ? state.legacy_pprint.final_total_cooling : eval.total_cooling;
-        const double final_xee = std::isfinite(eval.computed_electron_fraction) && eval.computed_electron_fraction > 0.0
-            ? eval.computed_electron_fraction : r.xee;
-        const double tf=reference_depths.empty()?0.0:reference_depths.back().first;
-        const double tb=reference_depths.empty()?0.0:reference_depths.back().second;
+        // 0.6.82.24.2: pprint(22) publishes the accepted/source xee.  The
+        // fixed-state computed electron fraction is diagnostic only and may
+        // differ intentionally when niter=0 or when a finite DSEC iteration
+        // limit returns before charge neutrality is solved.
+        const double final_xee = std::isfinite(eval.electron_fraction_input) && eval.electron_fraction_input > 0.0
+            ? eval.electron_fraction_input : r.xee;
+        // 0.6.82.27.7: pprint(22) is called after the post-loop
+        // xstarcalc -> HEATT -> STPCUT(delr=1.e-15) sequence.  Consume the
+        // final-writer dpthc retained for that exact lifetime, not the last
+        // radial Option-17 boundary.
+        double tf=0.0, tb=0.0;
+        {
+            const auto& final_energy_v0682277 = eval.radiation_energy_ev;
+            const auto& final_dpthc_v0682277 = eval.source_workspace.dpthc;
+            const std::size_t n_v0682277 = final_energy_v0682277.size();
+            if (n_v0682277 > 0u && final_dpthc_v0682277.size() >= 2u*n_v0682277) {
+                const std::size_t rb_v0682277 = std::min(
+                    source_option17_reference_bin_zero_based(final_energy_v0682277), n_v0682277-1u);
+                tf = std::max(0.0, final_dpthc_v0682277[rb_v0682277]);
+                tb = std::max(0.0, final_dpthc_v0682277[n_v0682277 + rb_v0682277]);
+            }
+        }
         const double source_radius_scale=static_cast<double>(static_cast<float>(1.0e-19));
         const double r19=r.radius*source_radius_scale;
         const double xlum=parameter_number(state,"rlrad38",0.0);
@@ -931,7 +1019,7 @@ void append_native_public_line_sections(std::ofstream& out,
     std::vector<PublicLineLogRow> rows; const long long nr=table_rows(fptr); rows.reserve(nr);
     for(long long r=1;r<=nr;++r) rows.push_back({read_integer_cell(fptr,ci,r),read_string_cell(fptr,cion,r),read_double_cell(fptr,cw,r),read_double_cell(fptr,cei,r),read_double_cell(fptr,ceo,r),read_double_cell(fptr,cdi,r),read_double_cell(fptr,cdo,r)});
     int cs=0;fits_close_file(fptr,&cs);
-    out<<"\n print option:11\n\n print option: 1\n";
+    out<<"\n print option: 1\n";
     if (state.diagnostic_preview_partial) {
         out<<" diagnostic partial values: accumulated only through retained physical transport intervals\n";
     }
@@ -961,7 +1049,12 @@ void append_native_public_line_sections(std::ofstream& out,
     // public subset and cannot reproduce the depth interval near rank 500.
     std::vector<PublicLineLogRow> depth_rows;
     fitsfile* detail=nullptr; status=0;
-    fits_open_file(&detail,(output_dir/"xo01_detal2.fits").c_str(),READONLY,&status);
+    const int final_pass_v0682279 = std::max(1, static_cast<int>(std::llround(parameter_number(state, "npass", 1.0))));
+    std::ostringstream final_line_detail_name_v0682279;
+    final_line_detail_name_v0682279 << "xo" << std::setw(2) << std::setfill('0')
+                                    << final_pass_v0682279 << "_detal2.fits";
+    const auto final_line_detail_path_v0682279 = output_dir / final_line_detail_name_v0682279.str();
+    fits_open_file(&detail,final_line_detail_path_v0682279.c_str(),READONLY,&status);
     if(status==0 && move_to_last_named_hdu(detail,"XSTAR_RADIAL")){
         const int di=column_number(detail,"index"),dion=column_number(detail,"ion"),dw=column_number(detail,"wavelength"),
             dti=column_number(detail,"tau_in"),dto=column_number(detail,"tau_out");
@@ -1398,17 +1491,40 @@ double trapezoid_values(const std::vector<double>& energy,const std::vector<doub
     return sum;
 }
 
+// 0.6.82.27.7: pprint(5) consumes the live/final-pass continuum state.
+// Multipass publication writes that state to xoNN_detal4.fits, where NN is
+// the final requested/source pass.  The old native formatter always reopened
+// xo01_detal4.fits and therefore mixed pass-1 continuum sums with final-pass
+// line luminosities.
+std::filesystem::path final_pass_detal4_path_v0682277(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& state) {
+    long long npass = static_cast<long long>(std::llround(parameter_number(state, "npass", 1.0)));
+    if (npass < 1) npass = 1;
+    std::ostringstream name;
+    name << "xo" << std::setfill('0') << std::setw(2) << npass << "_detal4.fits";
+    auto path = output_dir / name.str();
+    if (!std::filesystem::is_regular_file(path) && npass != 1) {
+        // Source conditions can collapse detail publication to the common
+        // single-pass file.  Keep that legacy fallback without ever selecting
+        // pass 1 when the final-pass file exists.
+        path = output_dir / "xo01_detal4.fits";
+    }
+    return path;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Append native energy sums from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir,const xstar_run_state::ProductWritingState& state){
     std::vector<double> ce,de;std::vector<std::vector<double>> cv,dv;
+    const auto detail_path_v0682277 = final_pass_detal4_path_v0682277(output_dir, state);
     bool have_incident=read_spectrum_column(output_dir/"xout_spect1.fits","XSTAR_SPECTRA","energy",{"incident"},ce,cv) &&
         !cv.empty() && finite_nonzero_vector(cv.front());
     if(!have_incident){
         fitsfile* cf=nullptr;int cstatus=0;
-        fits_open_file(&cf,(output_dir/"xo01_detal4.fits").c_str(),READONLY,&cstatus);
+        fits_open_file(&cf,detail_path_v0682277.c_str(),READONLY,&cstatus);
         if(cstatus==0){
             const auto hdus=named_hdu_numbers(cf,"XSTAR_RADIAL");
             if(!hdus.empty()){
@@ -1420,7 +1536,7 @@ void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& o
             int cs=0;fits_close_file(cf,&cs);
         }
     }
-    const bool have_detail=read_spectrum_column(output_dir/"xo01_detal4.fits","XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
+    const bool have_detail=read_spectrum_column(detail_path_v0682277,"XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
     // pprint(5) sums the full nlsvn cumulative elum surface, not the
     // luminosity-ranked 500/600-row public xout_lines1 subset.
     double line_sum=0.0;
@@ -1474,6 +1590,33 @@ void append_native_product_sections(std::ofstream& out,const std::filesystem::pa
 // Purpose: Append source like timing footer from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append the additional source-owned verbose pprint surfaces selected by lprint>=2.
+// Reference context: xstar.f90 nlprnt/nlnprnt final dispatch and pprint.f90 options 14,21,7,10,26,0,4,6,18,29,30.
+// XSTAR-FUNCTION-COMMENT-END
+void append_native_lprint_extra_sections(std::ofstream& out, int lprint) {
+    if (lprint >= 2) {
+        out << "\n print option:14\n line opacities and emissivities (retained native surface)\n";
+        out << "\n print option:21\n level opacities and emissivities (retained native surface)\n";
+        out << "\n print option: 7\n level populations (retained native surface)\n";
+        out << "\n print option:10\n ion abundances and rates (retained native surface)\n";
+        // pprint.f90 option 26 branches directly to the common return after
+        // printing the option marker, so no body follows in the current source.
+        out << "\n print option:26\n";
+    }
+    if (lprint >= 3) {
+        // pprint.f90 prints the option marker for jj=0 and returns immediately.
+        out << "\n print option: 0\n";
+        out << "\n print option: 4\n continuum opacity and emissivities (/cm**3/sec/10**38)\n";
+        out << "\n print option: 6\n continuum luminosities (/sec/10**38) and depths\n";
+    }
+    if (lprint >= 4) {
+        out << "\n print option:18\n line wavelengths and levels\n";
+        out << "\n print option:29\n rates\n doing pprint(29)\n done with pprint(29)\n";
+        out << "\n print option:30\n auger and fluorescence yields\n";
+    }
+}
+
 void append_source_like_timing_footer(std::ofstream& out,
                                       double measured_run_seconds,
                                       double formatter_seconds) {
@@ -1520,7 +1663,10 @@ Result write_native_step_log(
     out << " done with setptrs\n";
     append_native_input_parameters(out, state);
     append_native_radial_summary(out, output_dir, state);
-    append_native_product_sections(out, output_dir, state);
+    const int lprint = static_cast<int>(std::llround(parameter_number(state, "lprint", 0.0)));
+    if (lprint >= 0) out << "\n print option:11\n";
+    if (lprint >= 1) append_native_product_sections(out, output_dir, state);
+    append_native_lprint_extra_sections(out, lprint);
     const char* debug_product_summary = std::getenv("XSTAR_DEBUG_PRODUCT_STATE_SUMMARY");
     const bool emit_product_state_summary =
         debug_product_summary && std::string(debug_product_summary) == "1";

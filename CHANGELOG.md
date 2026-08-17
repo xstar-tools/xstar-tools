@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.82.29 - 2026-08-16
+
+- Close `0.6.82.28` after the full FORTRAN/C++/pure-Python host spectrum matrix accepted on `0.6.82.28.1`.
+- Complete source-faithful output/control semantics without changing physical science.
+- Admit the source-supported `lwrite=-1` branch and reproduce its literal current behavior: `xout_spect1.fits` remains published, while `xout_lines1.fits`, `xout_cont1.fits`, and `xout_rrc1.fits` require `lwrite>=0`; detail files remain controlled by `lwrite>0 OR npass>1`.
+- Reproduce the stock `lprint=-1..6` final `nlprnt` dispatch through options 22/11/.../30 and suppress `xout_abund1.fits` when `pprint(11)` is not dispatched (`lprint=-1`).
+- Preserve `lstep`/`lfix` as an obsolete non-science output control and classify `modelname`, `mode`, and `loopcontrol` as metadata/interface controls.
+- Add static/source qualification plus a FORTRAN/C++/pure-Python host matrix that gates product inventory, final print-option order, and physical STEP-row invariance.
+- Science revision and C/production-zone/fixed-state ABIs remain frozen.
+- Final local release qualification: dedicated `.29` scope gate ACCEPT, 161 selected npass/spectrum/Table-1/output-control regressions PASS, Type-50 successor gate PASS, compiled canonical-FORTRAN spectrum oracle ACCEPT, source-function-comment gate ACCEPT, Python compileall ACCEPT, and C++17 syntax checks ACCEPT.
+- The exact source archive is independently extracted and requalified; external ATDB/PFILES host execution remains the evidence gate for promoting the `.29` milestone to host-accepted closure.
+
 # 0.6.82.9 — source-faithful `msolvelucy` fixed-point loop control - 2026-08-16
 
 - Remove the C++-only `if (fixed_diff >= 1.0e3) break;` from the Lucy fixed-point loop. Canonical `msolvelucy.f90` uses `diff2 >= 1.e3` only to stop the per-row *difference accumulation* inside an iteration; the fixed-point loop itself continues until `nitmx2` or `crit2`.

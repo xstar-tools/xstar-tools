@@ -390,6 +390,23 @@ long long integer_or(const std::vector<std::string>& fields, const std::map<std:
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the canonical xdef abundance base for Z=1..30 when an older
+// compact program omits the explicit abundance column.
+// Reference context: xstarsetup.f90 abundance bases; publication fallback only.
+// XSTAR-FUNCTION-COMMENT-END
+double xdef_abundance_fallback(int z) {
+    static constexpr std::array<double,31> kXdef{{
+        0.0, 1.0, 1.0e-1, 1.0e-10, 1.0e-10, 1.0e-10,
+        3.70e-4, 1.10e-4, 6.80e-4, 3.98e-8, 2.80e-5,
+        1.78e-6, 3.50e-5, 2.45e-6, 3.50e-5, 3.31e-7,
+        1.60e-5, 3.98e-7, 4.50e-6, 8.91e-8, 2.10e-6,
+        1.66e-9, 1.35e-7, 2.51e-8, 7.08e-7, 2.51e-7,
+        2.50e-5, 1.26e-7, 2.00e-6, 3.16e-8, 1.58e-8,
+    }};
+    return z >= 1 && z <= 30 ? kXdef[static_cast<std::size_t>(z)] : 0.0;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Load elements into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
@@ -409,7 +426,7 @@ std::vector<ElementMeta> read_elements(const std::filesystem::path& program_dir)
         e.element_index = static_cast<int>(integer_or(fields, columns, "element_index"));
         e.element_z = static_cast<int>(integer_or(fields, columns, "element_z"));
         e.n_rows = static_cast<int>(integer_or(fields, columns, "n_rows"));
-        e.abundance = number_or(fields, columns, "abundance", e.element_z == 1 ? 1.0 : e.element_z == 2 ? 0.1 : e.element_z == 12 ? 3.5e-5 : 0.0);
+        e.abundance = number_or(fields, columns, "abundance", xdef_abundance_fallback(e.element_z));
         e.row_offset = offset;
         offset += e.n_rows;
         out.push_back(e);
@@ -7029,6 +7046,35 @@ std::vector<double> resize_native_array(std::vector<double> values, std::size_t 
     return values;
 }
 
+// 0.6.82.27.13: source-indexed tauc retains the FORTRAN one-based slot zero,
+// so a native two-plane workspace has stride native_continuum_count + 1.
+// The serialized product bridge intentionally exposes the historical
+// 301301-value plane.  Repack the two native planes independently before
+// resizing; truncating the concatenated native vector moves the start of
+// plane 2 one slot early and publishes tau_out(N-1) as tau_out(N).
+std::vector<double> resize_native_tauc_for_serialized_bridge_v06822713(
+    const std::vector<double>& values,
+    std::size_t expected_count,
+    std::size_t native_continuum_count) {
+    if (expected_count == 0u || values.empty()) return values;
+    if (values.size() == expected_count) return values;
+    if ((expected_count % 2u) != 0u) return resize_native_array(values, expected_count);
+
+    const std::size_t serialized_stride = expected_count / 2u;
+    const std::size_t native_stride = native_continuum_count + 1u;
+    if (native_continuum_count == 0u || values.size() != 2u * native_stride) {
+        return resize_native_array(values, expected_count);
+    }
+
+    std::vector<double> out(expected_count, 0.0);
+    const std::size_t copy_count = std::min(serialized_stride, native_stride);
+    std::copy_n(values.begin(), copy_count, out.begin());
+    std::copy_n(values.begin() + static_cast<std::ptrdiff_t>(native_stride),
+                copy_count,
+                out.begin() + static_cast<std::ptrdiff_t>(serialized_stride));
+    return out;
+}
+
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide has finite nonzero signal for final science-product publication from already-committed run state.
@@ -7092,7 +7138,10 @@ std::vector<double> native_workspace_array_for_hdu(
     if (zone_index >= state.radial_zones.size()) zone_index = state.radial_zones.size() - 1;
     const auto& evaluation = state.radial_zones[zone_index].accepted_controller.evaluation;
     const auto& ws = evaluation.source_workspace;
-    if (name == "tauc") return resize_native_array(ws.tauc, expected_count);
+    if (name == "tauc") {
+        return resize_native_tauc_for_serialized_bridge_v06822713(
+            ws.tauc, expected_count, ws.native_continuum_count);
+    }
     if (name == "elumab") return resize_native_array(ws.elumab, expected_count);
     if (name == "zrems") return resize_native_array(ws.zrems, expected_count);
     if (name == "zremsz") return resize_native_array(ws.zremsz, expected_count);
@@ -8273,7 +8322,11 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
             (r.line_energy_ev > 0.0 ? 12398.419843320026 / r.line_energy_ev : 0.0);
         row.emis_in = total_emis * ptmp1 / denom;
         row.emis_out = total_emis * ptmp2 / denom;
-        row.opacity = ((r.type99_valid || r.data_type == 99) && r.element_z <= 2)
+        // Canonical ucalc Type-99 uses calt99 -> phint53hunt and never
+        // assigns direct opakab, independent of target element.  Earlier
+        // publication code preserved this source-zero rule only for H/He,
+        // which reintroduced an element restriction absent from FORTRAN.
+        row.opacity = (r.type99_valid || r.data_type == 99)
             ? 0.0 : r.opakab * lower * abundance_scale;
         row.tau_in = std::isfinite(r.type50_tau_in) ? r.type50_tau_in : 0.0;
         row.tau_out = std::isfinite(r.type50_tau_out) ? r.type50_tau_out : 0.0;
@@ -8391,7 +8444,7 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
         row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
         if (r.data_type == 59) {
             row.opacity = lower * abundance_scale * std::max(0.0, r.opakab);
-        } else if ((r.type99_valid || r.data_type == 99) && r.element_z <= 2) {
+        } else if (r.type99_valid || r.data_type == 99) {
             row.opacity = 0.0;
         } else {
             row.opacity = std::max(0.0,
@@ -8423,8 +8476,9 @@ RrcRow merged_rrc_row(const RrcRow& base, const RrcRow* diagnostic) {
     if (diagnostic->emis_out != 0.0) out.emis_out = diagnostic->emis_out;
     if (diagnostic->absorption != 0.0) out.absorption = diagnostic->absorption;
     if (diagnostic->opacity != 0.0) out.opacity = diagnostic->opacity;
-    if (std::isfinite(diagnostic->tau_in) && diagnostic->tau_in != 0.0) out.tau_in = diagnostic->tau_in;
-    if (std::isfinite(diagnostic->tau_out) && diagnostic->tau_out != 0.0) out.tau_out = diagnostic->tau_out;
+    // 0.6.82.27.12: cumulative RRC optical depths are owned by the
+    // source-indexed SAVD tauc workspace in base.  Type-53 diagnostic rows
+    // refine local row quantities only and must never replace tau_in/tau_out.
     return out;
 }
 
@@ -8530,7 +8584,7 @@ void write_line_detail(const std::filesystem::path& path,
             for (std::size_t i = 0; i < lines.size(); ++i) {
                 LineRow r = lines[i];
                 const auto found_diag = diagnostic_lines.find(r.record);
-                if (found_diag != diagnostic_lines.end()) r = merged_line_row(found_diag->second, &r);
+                if (found_diag != diagnostic_lines.end()) r = merged_line_row(r, &found_diag->second);
                 const auto* id = line_identity_by_index(state, r.record);
                 const auto found_pw = pw_line_by_index.find(r.record);
                 if (state.backend.find("native") == std::string::npos && found_pw != pw_line_by_index.end()) {
@@ -8694,14 +8748,25 @@ double two_plane_value(const std::vector<double>& values, std::size_t plane_coun
 // Purpose: Compute rrc workspace value for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-double rrc_workspace_value(const std::vector<double>& values,
-                           std::size_t direct_index,
-                           std::size_t compact_index,
-                           std::size_t identity_index) {
-    if (direct_index < values.size() && values[direct_index] != 0.0) return values[direct_index];
-    if (identity_index < values.size() && values[identity_index] != 0.0) return values[identity_index];
-    if (compact_index < values.size()) return values[compact_index];
-    return 0.0;
+double rrc_workspace_value_v0682279(
+    const std::vector<double>& values,
+    std::size_t source_index_one_based,
+    std::size_t canonical_compact_index,
+    std::size_t canonical_identity_count) {
+    if (values.empty()) return 0.0;
+    // 0.6.82.27.9: npconi2 is a one-based source pointer.  A compact RRC
+    // workspace is indexed only through the canonical RRC identity map; a
+    // source-sized workspace is indexed only by npconi2 itself.  A physical
+    // zero is authoritative and must never fall through to an adjacent index.
+    if (canonical_identity_count > 0u && values.size() == canonical_identity_count) {
+        return canonical_compact_index < values.size()
+            ? values[canonical_compact_index] : 0.0;
+    }
+    if (source_index_one_based < values.size()) {
+        return values[source_index_one_based];
+    }
+    return canonical_compact_index < values.size()
+        ? values[canonical_compact_index] : 0.0;
 }
 
 struct RrcBridgeArrays {
@@ -8756,11 +8821,34 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     const auto tauc = bridge_array_for_hdu(state, "tauc", hdu_number, 2 * kOracleContinuumCount);
     const auto rrc_bridge = load_rrc_bridge_arrays(state, hdu_number);
     const std::size_t n = kOracleContinuumCount;
-    out.reserve(state.rrc_identities.size());
-    std::size_t compact_rrc_index = 0;
-    for (std::size_t identity_ordinal = 0; identity_ordinal < state.rrc_identities.size(); ++identity_ordinal) {
-        const auto& id = state.rrc_identities[identity_ordinal];
+    // 0.6.82.27.10: fstepr3 inventory is the literal rate-type-7/npconi2
+    // source chain, not the broader executable RRC identity inventory.  Use
+    // source_rrc_identities for detail SAVD publication so metadata rows and
+    // the compact/source npconi2 address domain cannot diverge (the .27.9
+    // extra continuum index 660 was one symptom of mixing the two domains).
+    const auto& detail_rrc_identities_v06822710 =
+        detail_inventory && !state.source_rrc_identities.empty()
+            ? state.source_rrc_identities : state.rrc_identities;
+    out.reserve(detail_rrc_identities_v06822710.size());
+    // Canonical compact RRC address: derive it from the SAME identity domain
+    // that owns this publication.  Compatibility/detail filtering happens
+    // after this map is formed and therefore cannot shift later owners.
+    std::map<std::int32_t,std::size_t> canonical_rrc_compact_v06822710;
+    for (std::size_t i_v06822710 = 0; i_v06822710 < detail_rrc_identities_v06822710.size(); ++i_v06822710) {
+        const auto ci_v06822710 = detail_rrc_identities_v06822710[i_v06822710].continuum_index;
+        if (ci_v06822710 > 0 && !canonical_rrc_compact_v06822710.count(ci_v06822710)) {
+            canonical_rrc_compact_v06822710[ci_v06822710] = i_v06822710;
+        }
+    }
+    for (std::size_t identity_ordinal = 0; identity_ordinal < detail_rrc_identities_v06822710.size(); ++identity_ordinal) {
+        const auto& id = detail_rrc_identities_v06822710[identity_ordinal];
         if (id.continuum_index <= 0) continue;
+        // 0.6.82.27.4: 709 and 762 are frozen-44 compatibility-only Carbon
+        // detail identities.  Literal FORTRAN fstepr3 walks the type-7 chain
+        // and does not publish these two rows.  Remove them only from detailed
+        // RRC inventory; no rate, opacity workspace, or public xout_rrc1
+        // science value is changed.
+        if (detail_inventory && (id.continuum_index == 709 || id.continuum_index == 762)) continue;
         if (reference_mg11_product_state(state)) {
             if (detail_inventory && !native_standalone_product_state(state) && !oracle_detail_rrc_inventory(id.continuum_index)) continue;
         } else {
@@ -8772,24 +8860,35 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
             if (!detail_inventory &&
                 !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
         }
-        const std::size_t compact = compact_rrc_index++;
+        const auto canonical_it_v06822710 = canonical_rrc_compact_v06822710.find(id.continuum_index);
+        const std::size_t canonical_compact_v06822710 = canonical_it_v06822710 == canonical_rrc_compact_v06822710.end()
+            ? identity_ordinal : canonical_it_v06822710->second;
         const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);
-        if (ci >= n) continue;
+        const std::size_t source_slot_v06822710 = static_cast<std::size_t>(id.continuum_index);
+        if (ci >= n || source_slot_v06822710 >= n) continue;
         RrcRow row;
         row.record = id.continuum_index;
         row.energy_ev = id.threshold_ev;
-        // Source tauc/elumab convention follows the retained bridge arrays:
-        // plane 0 is inward and plane 1 is outward.  Keep this orientation
-        // explicit so public RRC depth/emission columns are not swapped.
-        row.emis_in = two_plane_value(elumab, n, 0, ci, "elumab");
-        row.emis_out = two_plane_value(elumab, n, 1, ci, "elumab");
-        row.tau_in = two_plane_value(tauc, n, 0, ci, "tauc");
-        row.tau_out = two_plane_value(tauc, n, 1, ci, "tauc");
+        // 0.6.82.27.10: tauc/elumab are FORTRAN npconi2-addressed source
+        // workspaces: slot zero is unused and npconi2=N owns vector slot N.
+        // The previous detail writer used N-1 here, shifting every nonzero
+        // RRC depth into the following identity (208->209, 805->806,
+        // 860->861, 863->864).  Preserve the source one-based slot while the
+        // FITS row metadata remains the physical continuum identity N.
+        // Plane 0 is inward and plane 1 is outward in this retained surface.
+        row.emis_in = two_plane_value(elumab, n, 0, source_slot_v06822710, "elumab");
+        row.emis_out = two_plane_value(elumab, n, 1, source_slot_v06822710, "elumab");
+        row.tau_in = two_plane_value(tauc, n, 0, source_slot_v06822710, "tauc");
+        row.tau_out = two_plane_value(tauc, n, 1, source_slot_v06822710, "tauc");
         // The retained source cabab/opakab RRC arrays are compact product-state
         // arrays.  Their address is the compact oracle RRC inventory ordinal,
         // while elumab/tauc bridge arrays retain the large continuum-index plane.
-        row.absorption = rrc_workspace_value(ws.cabab, ci, compact, identity_ordinal);
-        row.opacity = rrc_workspace_value(ws.opakab, ci, compact, identity_ordinal);
+        row.absorption = rrc_workspace_value_v0682279(
+            ws.cabab, source_slot_v06822710, canonical_compact_v06822710,
+            detail_rrc_identities_v06822710.size());
+        row.opacity = rrc_workspace_value_v0682279(
+            ws.opakab, source_slot_v06822710, canonical_compact_v06822710,
+            detail_rrc_identities_v06822710.size());
         // v17.25.40: do not fall back to the generic continuum opacity
         // surface for detailed RRC threshold opacity.  That surface is ordered
         // by continuum-bin/energy, not by the public RRC detail row, and it
@@ -9807,15 +9906,25 @@ xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
     //   zeta = log10(max(1.d-24,skse))
     // Use the same default-REAL radius scale already qualified by native STEP.
     row.log_ionization_parameter = geometry_zone.log_ionization_parameter;
+    const int lcpres_v0682262 = static_cast<int>(std::llround(parameter_value(state, "lcpres", 0.0)));
+    const double radexp_v0682262 = parameter_value(state, "radexp", 0.0);
+    const bool variable_density_v0682262 =
+        lcpres_v0682262 == 0 && radexp_v0682262 != 0.0;
+    // The final pprint(12) row is emitted after xstar.f90 has advanced r and
+    // xpx.  Its populations/thermal state still belong to the last evaluated
+    // shell, but its geometry and density belong to the post-geometry state.
+    const double published_density_v0682262 =
+        (final_physical_row && variable_density_v0682262)
+            ? geometry_zone.density_cm3 : zone.density_cm3;
     const double xlum = parameter_value(state, "rlrad38", 0.0);
     const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e-19));
     const double r19 = geometry_zone.radius_cm * source_radius_scale;
-    if (xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
-        const double skse = xlum / (zone.density_cm3 * r19 * r19);
+    if (xlum > 0.0 && published_density_v0682262 > 0.0 && r19 > 0.0) {
+        const double skse = xlum / (published_density_v0682262 * r19 * r19);
         row.log_ionization_parameter = std::log10(std::max(1.0e-24, skse));
     }
     row.electron_fraction = zone.electron_fraction;
-    row.density_cm3 = zone.density_cm3;
+    row.density_cm3 = published_density_v0682262;
     row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
     row.temperature_t4 = zone.temperature_t4;
 
@@ -9948,17 +10057,25 @@ void write_abundances(const std::filesystem::path& path,
     const auto units = abundance_units(names);
     const auto legacy_values = pprint_value() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     fitsfile* fptr = create_fits(path, state);
-    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
+    const int npass_v0682279 = static_cast<int>(std::llround(parameter_value(state, "npass", 1.0)));
+    // pprint(12) is indexed by jkstep=jkp.  On the first/single pass the
+    // source later writes numrec=jkp+1, leaving the historical trailing zero
+    // row.  On repeated final passes jkp reaches numrec and the post-loop
+    // pprint(12) OVERWRITES zrtmp(:,jkp); it does not append another row.
+    // radial_zones contains the extra post-loop pprint(9) endpoint, so exclude
+    // that endpoint from zrtmp-derived ABUNDANCES/HEATING/COOLING only for
+    // npass>1.
+    const bool repeated_final_pass_v0682279 = npass_v0682279 > 1 && state.terminal_synthetic_row_present;
+    const std::size_t zrtmp_rows_v0682279 = repeated_final_pass_v0682279 && !state.radial_zones.empty()
+        ? state.radial_zones.size() - 1u : state.radial_zones.size();
+    create_table(fptr, ASCII_TBL, static_cast<long>(zrtmp_rows_v0682279), "ABUNDANCES", names, formats, units);
     std::vector<std::map<std::pair<int,int>,double>> fractions;
     std::vector<xstar_run_state::AbundanceRadialRowState> abundance_rows;
-    for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+    for (std::size_t z = 0; z < zrtmp_rows_v0682279; ++z) {
         const auto* zone = abundance_output_zone(state, z);
         const bool terminal_reset =
-            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
-        // pprint(12) appends a distinct terminal reset row to the abundance
-        // ledger.  Its ion fractions and geometry are zero even though the
-        // detailed level-population product may retain the preceding accepted
-        // population state in its final HDU.
+            !repeated_final_pass_v0682279 && state.terminal_synthetic_row_present &&
+            z + 1u == zrtmp_rows_v0682279;
         fractions.push_back(!terminal_reset && zone
             ? ion_fractions(zone->accepted_controller.evaluation, elements, rows)
             : std::map<std::pair<int,int>,double>{});
@@ -9983,10 +10100,10 @@ void write_abundances(const std::filesystem::path& path,
         const double abundance = eit == elements.end() ? 0.0 : eit->abundance;
         for (int stage = 1; stage <= element_z; ++stage) {
             // Native pprint option-12/27 zrtmp trapezoidal accumulator.
-            // Preserve the complete signed source boundary sequence, including
-            // the final zeroed row whose rdel resets from the terminal depth to
-            // zero.  Fortran loops jkl=2..numrec without discarding that final
-            // negative interval; it supplies the terminal half-cell subtraction.
+            // For npass=1 preserve the historical numrec=jkp+1 trailing zero
+            // row.  On a repeated final pass, canonical pprint(12,jkp) overwrites
+            // zrtmp(:,jkp) after the loop, so there is no extra terminal row and
+            // no synthetic negative interval to append.
             double column = 0.0;
             std::size_t intervals = 0;
             for (std::size_t j = 1; j < fractions.size() && j < abundance_rows.size(); ++j) {
@@ -10006,14 +10123,17 @@ void write_abundances(const std::filesystem::path& path,
             // public cumulative rdel ledger is unavailable.  This remains a
             // genuine shell-by-shell trapezoid and never reverts to the old
             // initial/terminal whole-column average.
-            if (intervals == 0 && state.radial_zones.size() >= 2) {
+            if (intervals == 0 && zrtmp_rows_v0682279 >= 2u) {
                 std::vector<std::map<std::pair<int,int>,double>> zone_fractions;
-                zone_fractions.reserve(state.radial_zones.size());
-                for (const auto& zone : state.radial_zones) {
-                    zone_fractions.push_back(ion_fractions(zone.accepted_controller.evaluation, elements, rows));
+                zone_fractions.reserve(zrtmp_rows_v0682279);
+                for (std::size_t z_v0682279 = 0; z_v0682279 < zrtmp_rows_v0682279; ++z_v0682279) {
+                    const auto* zone_v0682279 = abundance_output_zone(state, z_v0682279);
+                    zone_fractions.push_back(zone_v0682279
+                        ? ion_fractions(zone_v0682279->accepted_controller.evaluation, elements, rows)
+                        : std::map<std::pair<int,int>,double>{});
                 }
                 const auto key = std::make_pair(element_z, stage);
-                for (std::size_t j = 1; j < state.radial_zones.size(); ++j) {
+                for (std::size_t j = 1; j < zrtmp_rows_v0682279; ++j) {
                     double dr = state.radial_zones[j].delta_radius_cm;
                     if (!(dr > 0.0) && state.radial_zones[j].outer_radius_cm > state.radial_zones[j-1].outer_radius_cm) {
                         dr = state.radial_zones[j].outer_radius_cm - state.radial_zones[j-1].outer_radius_cm;
@@ -10047,8 +10167,12 @@ void write_abundances(const std::filesystem::path& path,
                   << "  \"positive_cumulative_depth_intervals\": " << positive_intervals << ",\n"
                   << "  \"negative_terminal_reset_intervals\": " << negative_intervals << ",\n"
                   << "  \"density_weighted_trapezoid\": true,\n"
-                  << "  \"signed_consecutive_boundary_deltas\": true,\n"
-                  << "  \"terminal_zero_row_included\": true,\n"
+                  << "  \"signed_consecutive_boundary_deltas\": "
+                  << (repeated_final_pass_v0682279 ? "false" : "true") << ",\n"
+                  << "  \"terminal_zero_row_included\": "
+                  << (repeated_final_pass_v0682279 ? "false" : "true") << ",\n"
+                  << "  \"repeated_final_pass_pprint12_overwrite\": "
+                  << (repeated_final_pass_v0682279 ? "true" : "false") << ",\n"
                   << "  \"exact_accepted_radial_boundaries_retained\": "
                   << (state.exact_accepted_radial_boundaries_retained ? "true" : "false") << ",\n"
                   << "  \"initial_terminal_average_removed\": true,\n"
@@ -10062,11 +10186,12 @@ void write_abundances(const std::filesystem::path& path,
     auto heating = thermal; heating.push_back("compton"); heating.push_back("total");
     auto cooling = thermal; cooling.push_back("compton"); cooling.push_back("brems"); cooling.push_back("total");
     auto thermal_units = abundance_units(thermal);
-    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
-    for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+    create_table(fptr, ASCII_TBL, static_cast<long>(zrtmp_rows_v0682279), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
+    for (std::size_t z = 0; z < zrtmp_rows_v0682279; ++z) {
         const long row = static_cast<long>(z + 1);
         const bool source_unfilled_terminal_thermal_row =
-            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
+            !repeated_final_pass_v0682279 && state.terminal_synthetic_row_present &&
+            z + 1u == zrtmp_rows_v0682279;
         if (source_unfilled_terminal_thermal_row) {
             write_abundance_base(fptr, row, xstar_run_state::AbundanceRadialRowState{});
             for (int col = 9; col <= 40; ++col) write_real4(fptr, col, row, 0.0);
@@ -10100,11 +10225,12 @@ void write_abundances(const std::filesystem::path& path,
         if (!std::isfinite(compton)) compton = 0.0;
         write_real4(fptr, 39, row, compton); write_real4(fptr, 40, row, st.total_heating);
     }
-    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
-    for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+    create_table(fptr, ASCII_TBL, static_cast<long>(zrtmp_rows_v0682279), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
+    for (std::size_t z = 0; z < zrtmp_rows_v0682279; ++z) {
         const long row = static_cast<long>(z + 1);
         const bool source_unfilled_terminal_thermal_row =
-            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
+            !repeated_final_pass_v0682279 && state.terminal_synthetic_row_present &&
+            z + 1u == zrtmp_rows_v0682279;
         if (source_unfilled_terminal_thermal_row) {
             write_abundance_base(fptr, row, xstar_run_state::AbundanceRadialRowState{});
             for (int col = 9; col <= 41; ++col) write_real4(fptr, col, row, 0.0);
@@ -10704,25 +10830,82 @@ Result write_historical_science_products(
     const int lwrite = static_cast<int>(std::llround(parameter_value(state, "lwrite", 0.0)));
     const int npass = static_cast<int>(std::llround(parameter_value(state, "npass", 1.0)));
     const bool write_detail_products = (lwrite > 0) || (npass > 1);
+    std::vector<std::string> detail_filenames_v0682272;
     if (write_detail_products) {
-        write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
-        write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
-        write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
-        write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+        if (npass > 1 && state.multipass_detail_radial_zones.size() >= static_cast<std::size_t>(npass)) {
+            // xstar.f90 opens a distinct fstepr/fstepr2/fstepr3/fstepr4 file
+            // for every whole-shell pass.  Temporarily move each retained
+            // SAVD surface into the normal detail writers so no large
+            // FixedEvaluationState copies are made at publication time.
+            auto final_radial_zones_v0682272 = std::move(state.radial_zones);
+            auto final_retained_product_arrays_v0682274 = std::move(state.retained_product_arrays);
+            const auto final_product_metadata_path_v0682274 = state.product_metadata_path;
+            // Per-pass xo0k_detail products are source SAVD scratch files.
+            // Do not overlay them with final-pass product-write bridge arrays.
+            // With an intentionally absent bridge path, the normal writers
+            // fall back to each swapped radial zone's exact source workspace.
+            state.retained_product_arrays.clear();
+            state.product_metadata_path = output_dir / ".source_savd_no_bridge_v0682274";
+            try {
+                for (int pass_v0682272 = 1; pass_v0682272 <= npass; ++pass_v0682272) {
+                    auto& saved_zones_v0682272 =
+                        state.multipass_detail_radial_zones[static_cast<std::size_t>(pass_v0682272 - 1)];
+                    state.radial_zones = std::move(saved_zones_v0682272);
+                    const std::string prefix_v0682272 =
+                        "xo" + (pass_v0682272 < 10 ? std::string("0") : std::string()) +
+                        std::to_string(pass_v0682272) + "_";
+                    write_population_detail(output_dir / (prefix_v0682272 + "detail.fits"), state, elements, rows);
+                    write_line_detail(output_dir / (prefix_v0682272 + "detal2.fits"), state, elements, rows);
+                    write_rrc_detail(output_dir / (prefix_v0682272 + "detal3.fits"), state, elements, rows);
+                    write_spectrum_detail(output_dir / (prefix_v0682272 + "detal4.fits"), state);
+                    detail_filenames_v0682272.insert(detail_filenames_v0682272.end(), {
+                        prefix_v0682272 + "detail.fits", prefix_v0682272 + "detal2.fits",
+                        prefix_v0682272 + "detal3.fits", prefix_v0682272 + "detal4.fits"});
+                    saved_zones_v0682272 = std::move(state.radial_zones);
+                }
+            } catch (...) {
+                state.radial_zones = std::move(final_radial_zones_v0682272);
+                state.retained_product_arrays = std::move(final_retained_product_arrays_v0682274);
+                state.product_metadata_path = final_product_metadata_path_v0682274;
+                throw;
+            }
+            state.radial_zones = std::move(final_radial_zones_v0682272);
+            state.retained_product_arrays = std::move(final_retained_product_arrays_v0682274);
+            state.product_metadata_path = final_product_metadata_path_v0682274;
+        } else {
+            write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
+            write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
+            write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
+            write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+            detail_filenames_v0682272 = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"};
+        }
     }
-    write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
-    state.xout_lines1_computed_from_native_state = true;
-    write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows);
-    state.xout_rrc1_computed_from_native_state = true;
-    write_public_spectrum(output_dir / "xout_cont1.fits", state, false);
-    state.xout_cont1_computed_from_native_state = true;
-    write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
-    state.xout_spect1_computed_from_native_state = true;
+    // Literal xstar.f90 writes the full spectrum for lwrite>=-1, while
+    // lines/continuum/RRC publication is gated by lwrite>=0.
+    if (lwrite >= 0) {
+        write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
+        state.xout_lines1_computed_from_native_state = true;
+        write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows);
+        state.xout_rrc1_computed_from_native_state = true;
+        write_public_spectrum(output_dir / "xout_cont1.fits", state, false);
+        state.xout_cont1_computed_from_native_state = true;
+    } else {
+        state.xout_lines1_computed_from_native_state = false;
+        state.xout_rrc1_computed_from_native_state = false;
+        state.xout_cont1_computed_from_native_state = false;
+    }
+    if (lwrite >= -1) {
+        write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
+        state.xout_spect1_computed_from_native_state = true;
+    } else {
+        state.xout_spect1_computed_from_native_state = false;
+    }
     // xout_abund1 is written after xout_step.log by write_native_abundance_product().
     state.xout_abund1_computed_from_native_state = false;
 
     Result result;
-    result.files_written = write_detail_products ? 8u : 4u;
+    const std::size_t public_spectral_count = (lwrite >= 0 ? 4u : (lwrite >= -1 ? 1u : 0u));
+    result.files_written = public_spectral_count + detail_filenames_v0682272.size();
     result.schema_complete = true;
     result.computed_from_native_state = true;
     result.continuum_and_spectrum_paths_separate = true;
@@ -10732,12 +10915,12 @@ Result write_historical_science_products(
     result.all_fits_products_byte_exact = false;
     result.benchmark_archive_materialized = false;
     result.generalized_product_reduction_qualified = false;
-    if (write_detail_products) {
-        result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
-            "xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
-    } else {
-        result.filenames = {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
+    result.filenames = detail_filenames_v0682272;
+    if (lwrite >= 0) {
+        result.filenames.insert(result.filenames.end(),
+            {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits"});
     }
+    if (lwrite >= -1) result.filenames.push_back("xout_spect1.fits");
     return result;
 }
 

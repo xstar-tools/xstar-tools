@@ -13,11 +13,10 @@
 
 """Type-50 profile scalar provenance shared by the Python runtime.
 
-v82 patch 5.20.17.3.5 aligns the live Python Type-50 profile inputs with the
-already-qualified C++ path while preserving the literal XSTAR damping lookup:
+The live Python Type-50 profile inputs follow literal XSTAR source ownership:
 
-* atomic mass comes from the fixed C++ parity table used by
-  ``xstar_atdb_runtime.cpp``;
+* atomic mass comes from the rate-type-11 parent element record reached by
+  ``line -> ion -> element``, exactly as ``ucalc.f90`` and ``binemislin.f90``;
 * natural width follows ``deleafnd.f90``: walk rate-type 41 for the parent ion,
   match the source upper local level against the second INTEGER, and use the
   third REAL times the historical 4.136e-15 eV s conversion;
@@ -32,7 +31,9 @@ from __future__ import annotations
 import math
 from typing import Any
 
-# Exact table currently used by the accepted C++ ATDB lowerer.
+# Guarded fallback for compact/synthetic fixtures that do not contain the
+# canonical rate-type-11 element parent.  Production ATDB paths must use the
+# source record value instead.
 CPP_ATOMIC_MASS_AMU: tuple[float, ...] = (
     0.0, 1.00794, 4.002602, 6.941, 9.012182, 10.811, 12.0107, 14.0067,
     15.9994, 18.9984032, 20.1797, 22.98976928, 24.3050, 26.9815386,
@@ -74,17 +75,15 @@ def cpp_parity_atomic_mass_amu(
     *,
     ion_index: int | None = None,
 ) -> float:
-    """Return the accepted C++ atomic mass, with ATDB-parent fallback."""
+    """Return the canonical ATDB parent-element nuclear mass.
+
+    The historical helper name is retained for API compatibility.  Canonical
+    FORTRAN does not choose a periodic-table constant here: Type-50 walks
+    ``npar(line) -> npar(ion)`` and reads the second REAL of the element
+    record.  Use the same parent value first and keep the old table only as a
+    fallback for deliberately incomplete test fixtures.
+    """
     idx = _ion_index_for_record(derived, int(record), ion_index)
-    try:
-        z = int(derived.ion_element_z[idx]) if idx > 0 else 0
-    except Exception:
-        z = 0
-    if 0 < z < len(CPP_ATOMIC_MASS_AMU):
-        value = float(CPP_ATOMIC_MASS_AMU[z])
-        if math.isfinite(value) and value > 0.0:
-            return value
-    # Non-qualified elements retain the previous source-parent behavior.
     try:
         ion_record = int(derived.npar[int(record)])
         element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
@@ -95,6 +94,14 @@ def cpp_parity_atomic_mass_amu(
                 return value
     except Exception:
         pass
+    try:
+        z = int(derived.ion_element_z[idx]) if idx > 0 else 0
+    except Exception:
+        z = 0
+    if 0 < z < len(CPP_ATOMIC_MASS_AMU):
+        value = float(CPP_ATOMIC_MASS_AMU[z])
+        if math.isfinite(value) and value > 0.0:
+            return value
     return 1.0
 
 

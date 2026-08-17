@@ -253,6 +253,8 @@ class FixedStateCalcHMCAllResult:
     )
 
 
+XSTAR_CALC_HMC_PRESSURE_COEFFICIENT = float(np.float32(1.38e-12))
+
 ContinuumKernel = Callable[..., FixedStateContinuumResult]
 ElementSolver = Callable[..., ElementEquilibriumResult]
 PreMatrixSolver = Callable[..., Tuple[Dict[int, CalcIonRatesResult], IstrucResult, IonStageLimitResult]]
@@ -278,7 +280,7 @@ def resolve_calc_hmc_all_density(
     t4 = float(temperature_k) / 1.0e4
     xpx = float(hydrogen_density_cm3)
     if int(lcdd) == 0:
-        xpx = float(pressure) / (1.38e-12 * max(t4, 1.0e-24))
+        xpx = float(pressure) / (XSTAR_CALC_HMC_PRESSURE_COEFFICIENT * max(t4, 1.0e-24))
     if int(lcdd) == 2:
         xpx = float(pressure) / (float(electron_fraction_xee) + 1.0e-34)
     return xpx

@@ -357,8 +357,11 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
     inp.neutral_h_density_cm3 = float(getattr(fixed, "neutral_h_density_cm3", 0.0))
     inp.ionized_h_density_cm3 = float(getattr(fixed, "ionized_h_density_cm3", max(0.0, state.plasma.xpx - inp.neutral_h_density_cm3)))
     inp.electron_fraction_xee = float(state.plasma.xee)
-    inp.emission_covering_fraction = float(state.control.get("emult", 0.5))
-    inp.dsec_covering_fraction = float(state.control.get("cfrac", 1.0))
+    # ABI field name is historical.  Canonical FORTRAN uses cfrac for all
+    # fixed-state emission/escape/thermal physics; emult belongs only to step().
+    cfrac = float(state.control.get("cfrac", 1.0))
+    inp.emission_covering_fraction = cfrac
+    inp.dsec_covering_fraction = cfrac
     inp.turbulent_velocity_km_s = float(state.control.get("vturbi", 0.0))
     inp.abundances_by_z = _p(abund); inp.abundance_count = abund.size
     inp.radiation_energy_ev = _p(energy); inp.incident_flux = _p(incident); inp.dsec_bremsa = _p(bremsa); inp.radiation_bin_count = n

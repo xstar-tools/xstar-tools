@@ -1661,6 +1661,17 @@ def apply_calc_emisab_all_to_state(state: XSTARPythonState) -> CalcEmisabResult:
     if not isinstance(context, CalcEmisabContext):
         raise CalcEmisabPortError("state.control['calc_emisab_context'] must be CalcEmisabContext")
     result = calc_emisab_all(context)
+    # 0.6.82.25.3: xstarcalc.f90 passes one mutable leveltemp workspace
+    # directly from calc_emisab_all into calc_emis_all.  Preserve that
+    # source ordering instead of letting both routines start from the same
+    # pre-emission calc_hmc_all snapshot.
+    next_context = state.control.get("calc_emis_context")
+    if next_context is not None and hasattr(next_context, "initial_leveltemp_workspace"):
+        next_context.initial_leveltemp_workspace = result.leveltemp_workspace
+    runtime = state.control.get("physical_dsec_runtime")
+    if runtime is not None:
+        runtime.leveltemp_workspace = result.leveltemp_workspace
+        runtime.last_leveltemp_workspace = result.leveltemp_workspace
     state.plasma.xpx = result.hydrogen_density_cm3
     state.plasma.electron_density = result.electron_density_cm3
     state.local_zone.source_arrays["calc_emisab_all"] = result
