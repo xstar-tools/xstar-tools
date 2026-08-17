@@ -11711,6 +11711,12 @@ struct StandaloneControllerDataV67 {
     std::vector<double> accumulated_zremso;
     std::vector<double> accumulated_zremsz;
     std::vector<double> source_incident;
+    // 0.6.82.29.3.3.3: source pprint(4) flinel is caller-owned across every
+    // xstarcalc in one radial pass. INIT zeros it once at pass start and
+    // calc_emis_ion only adds the selected-line contribution from each full
+    // boundary solve. Keep that lifetime in the standalone controller rather
+    // than reconstructing it from a single fixed-state spectral workspace.
+    std::vector<double> pprint4_flinel_accumulator_v068229333;
     // 0.6.82.27.4: literal UNSAVD/RSTEPR2/3/4 caller-owned workspaces.
     // INIT zeros these before a repeated pass; UNSAVD sparsely restores the
     // saved shell values before TRNFRC/XSTARCALC.  XSTARCALC subsequently
@@ -16380,6 +16386,29 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot(
         std::cout << "V048746255172582_SEQUENCE58_FINAL_POPULATION_NATIVE_BOUNDARY_CAPTURE=ACCEPT\n";
     }
     audit_sequence58_lte(data, snapshot);
+
+    // 0.6.82.29.3.3.3: canonical flinel lifetime for pprint(4).
+    //
+    // init.f90 zeros flinel once at the start of a radial pass. xstarcalc then
+    // calls calc_emis_all repeatedly for accepted radial boundaries, and
+    // calc_emis_ion.f90 updates only by
+    //
+    //   flinel(nb1) = flinel(nb1) + selected_line_contribution
+    //
+    // with no intervening reset. The extra post-loop zero-thickness xstarcalc
+    // adds one more contribution before pprint(4). The fixed-state engine
+    // intentionally returns the current evaluation's selected-line flinel, so
+    // accumulate that source contribution here at the controller/pass owner.
+    // This is publication-only state; transport/science workspaces are not
+    // changed.
+    if (data.pprint4_flinel_accumulator_v068229333.size() != snapshot.flinel.size()) {
+        data.pprint4_flinel_accumulator_v068229333.assign(snapshot.flinel.size(), 0.0);
+    }
+    for (std::size_t i_v068229333 = 0; i_v068229333 < snapshot.flinel.size(); ++i_v068229333) {
+        data.pprint4_flinel_accumulator_v068229333[i_v068229333] += snapshot.flinel[i_v068229333];
+    }
+    snapshot.pprint4_flinel = data.pprint4_flinel_accumulator_v068229333;
+
     std::string native_gate_reason_v82_patch52017;
     if (!native_snapshot_scientific_valid(snapshot, native_gate_reason_v82_patch52017)) {
         throw std::runtime_error(std::string("5.20.17 final-boundary native scientific gate rejected: ") +
@@ -17816,6 +17845,11 @@ void initialize_native_radial_pass_v068227(
     data.accumulated_zrems.assign(5u * n, 0.0);
     data.accumulated_zremso.assign(5u * n, 0.0);
     data.accumulated_zremsz = data.source_incident;
+    // Literal init.f90 ownership: flinel is zeroed once per radial pass, not
+    // once per xstarcalc/fixed-state evaluation. The post-loop final pprint
+    // xstarcalc therefore sees the sum from all full boundary evaluations in
+    // the final pass plus its own selected-line additions.
+    data.pprint4_flinel_accumulator_v068229333.assign(n, 0.0);
     for (std::size_t i = 0; i < n; ++i) {
         data.accumulated_zrems[i] = data.source_incident[i];
         data.accumulated_zremso[i] = data.source_incident[i];

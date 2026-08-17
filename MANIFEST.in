@@ -734,3 +734,12 @@ include output_control_option4_0_6_82_29_3_3_2.md
 include qualification_report_0_6_82_29_3_3_2.md
 include xstar_tools-0.6.82.29.3.3.2_host_validation.md
 include xstar_tools_conversation_summary_through_0.6.82.29.3.3.2.md
+
+# 0.6.82.29.3.3.3 Option-4 source-pass flinel lifetime hotfix.
+recursive-include qualification/output_control_option4_0_6_82_29_3_3_3 *.json *.md
+include tools/qualification/check_output_control_option4_0_6_82_29_3_3_3.py
+include tools/qualification/run_output_control_option4_host_smoke_0_6_82_29_3_3_3.py
+include tests/test_output_control_option4_0_6_82_29_3_3_3.py
+include output_control_option4_0_6_82_29_3_3_3.md
+include qualification_report_0_6_82_29_3_3_3.md
+include xstar_tools-0.6.82.29.3.3.3_host_validation.md

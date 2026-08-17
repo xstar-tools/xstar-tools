@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.3 - Option 4 source-pass `flinel` lifetime hotfix - 2026-08-17
+
+- Correct the remaining `0.6.82.29.3.3.2` host rejection. All Option-4 columns except `flinel` were already within about `1e-5` relative, `opsum cont` agreed to `1.08e-7`, the Rosseland mean was effectively exact, and both tail records were present; the reject was isolated to `flinel`.
+- Fix the ownership assumption introduced in `.29.3.3.1`: canonical `calc_emisab_all` does not own or modify `flinel`. `init.f90` zeros `flinel` once at the start of each radial pass, while `calc_emis_ion.f90` only adds selected-line contributions on every full `xstarcalc` boundary. The final post-loop zero-thickness `xstarcalc` adds once more before `pprint(4)`.
+- Add a publication-only pass/controller accumulator for the selected-line `snapshot.flinel` contributions. Reset it exactly at the native radial-pass INIT boundary, accumulate once for each accepted full boundary, copy it with the standalone controller state, and therefore include the extra post-loop final-print contribution without changing operational transport/science arrays.
+- Keep the `.29.3.3.2` final snapshot bridge and the already-correct pre-GSSMOOTH `opakc/rccemis`, dense `brcems`, source-function, `opsum cont`, and Rosseland ownership unchanged.
+- Scope remains Option 4 only. Options 10/18/29/30 remain unchanged. Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen.
+
 ## 0.6.82.29.3.3.2 - Option 4 publication-snapshot bridge hotfix - 2026-08-17
 
 - Correct the repeated `0.6.82.29.3.3.1` host failure (`998/998` rows but `payload_rel=1`, `tails_rel=1`, `tails=0`). The `.29.3.3.1` publication-only `pprint4_opakc`, `pprint4_rccemis`, `pprint4_brcems`, and `pprint4_flinel` surfaces were computed correctly on `FixedDsecSnapshot`, but the production final-writer conversion `copy_real_native_snapshot()` omitted all four fields.
