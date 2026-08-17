@@ -13887,6 +13887,78 @@ int run_impl(
         // replay keeps the pre-existing table above so this output-control
         // revision cannot change HEATT/transport science.
         SourceRlbinAuditResultV82Patch5171 source_pprint4_nlbin_v068229336;
+
+        // 0.6.82.29.3.3.8: calc_emisab_ion and calc_emis_ion both define
+        // abund1/abund2 by endpoint ENERGY order, not by the serialized
+        // idest1/idest2 order.  Keep operational spectral contributions frozen
+        // during the narrow verbose-output campaign, but make the private
+        // pprint(4) rank/revisit surface use the literal source ownership.
+        std::map<std::pair<std::uint64_t,std::int64_t>,const ProgramRecord*>
+            pprint4_record_by_identity_v068229338;
+        for (const auto& source_record_v068229338 : ctx.program.records) {
+            pprint4_record_by_identity_v068229338[{
+                static_cast<std::uint64_t>(source_record_v068229338.source_position),
+                static_cast<std::int64_t>(source_record_v068229338.record)}] =
+                &source_record_v068229338;
+        }
+        std::map<std::pair<std::uint64_t,std::int64_t>,const xstar_spectral_contribution_v1*>
+            pprint4_spectral_by_identity_v068229338;
+        for (const auto& source_spectral_v068229338 : spectral) {
+            pprint4_spectral_by_identity_v068229338[{
+                static_cast<std::uint64_t>(source_spectral_v068229338.source_position),
+                static_cast<std::int64_t>(source_spectral_v068229338.record)}] =
+                &source_spectral_v068229338;
+        }
+        const auto pprint4_element_diagnostic_v068229338 =
+            [&](const ProgramRecord& source_record_v068229338) -> const NativeElementDiagnostic* {
+                for (const auto& diagnostic_v068229338 : ctx.last_element_diagnostics) {
+                    if (diagnostic_v068229338.element_index == source_record_v068229338.element_index)
+                        return &diagnostic_v068229338;
+                }
+                return nullptr;
+            };
+        const auto pprint4_full_element_v068229338 =
+            [&](const ProgramRecord& source_record_v068229338) -> const ElementProgram* {
+                for (const auto& element_v068229338 : ctx.program.elements) {
+                    if (element_v068229338.element_index == source_record_v068229338.element_index)
+                        return &element_v068229338;
+                }
+                return nullptr;
+            };
+        const auto pprint4_energy_ordered_abundances_v068229338 =
+            [&](const ProgramRecord& source_record_v068229338) -> std::pair<double,double> {
+                const NativeElementDiagnostic* diagnostic_v068229338 =
+                    pprint4_element_diagnostic_v068229338(source_record_v068229338);
+                const ElementProgram* source_element_v068229338 =
+                    pprint4_full_element_v068229338(source_record_v068229338);
+                if (!diagnostic_v068229338 || !source_element_v068229338) return {0.0, 0.0};
+                if (source_record_v068229338.lower_row <= 0 ||
+                    source_record_v068229338.upper_row <= 0 ||
+                    static_cast<std::size_t>(source_record_v068229338.lower_row) > source_element_v068229338->rows.size() ||
+                    static_cast<std::size_t>(source_record_v068229338.upper_row) > source_element_v068229338->rows.size()) {
+                    return {0.0, 0.0};
+                }
+                const double endpoint1_energy_v068229338 =
+                    source_element_v068229338->rows[
+                        static_cast<std::size_t>(source_record_v068229338.lower_row - 1)].energy_ev;
+                const double endpoint2_energy_v068229338 =
+                    source_element_v068229338->rows[
+                        static_cast<std::size_t>(source_record_v068229338.upper_row - 1)].energy_ev;
+                const double endpoint1_population_v068229338 =
+                    source_post_mapback_population_for_full_row(
+                        diagnostic_v068229338->active,
+                        diagnostic_v068229338->active_final_populations,
+                        source_record_v068229338.lower_row) * diagnostic_v068229338->abundance;
+                const double endpoint2_population_v068229338 =
+                    source_post_mapback_population_for_full_row(
+                        diagnostic_v068229338->active,
+                        diagnostic_v068229338->active_final_populations,
+                        source_record_v068229338.upper_row) * diagnostic_v068229338->abundance;
+                if (endpoint1_energy_v068229338 < endpoint2_energy_v068229338) {
+                    return {endpoint1_population_v068229338, endpoint2_population_v068229338};
+                }
+                return {endpoint2_population_v068229338, endpoint1_population_v068229338};
+            };
         bool source_calc_emis_selection_ready_v82_patch5206 = false;
         if (!defer_product_projection) {
             std::map<std::pair<std::string,int>,SourceFeatureAuditCandidateV82Patch5171>
@@ -13987,12 +14059,58 @@ int run_impl(
             // later uses that elmn(slot) for BOTH ranking/revisit nbinc and the
             // emitted photon energy.  Build a private rank table with that exact
             // coordinate while leaving the operational broad-line table frozen.
+            //
+            // 0.6.82.29.3.3.8 also reconstructs the calc_emisab rank WEIGHT
+            // from source energy-ordered endpoint populations.  The operational
+            // rcem/oplin arrays still carry the historical raw-record population
+            // order and therefore cannot be used as the pprint(4) ranking oracle.
             auto pprint4_line_candidates_v068229336 = line_candidates_v82_patch5206;
             for (auto& c_v068229336 : pprint4_line_candidates_v068229336) {
-                if (c_v068229336.rate_type == 9 || c_v068229336.rate_type == 14) {
+                const auto source_record_it_v068229338 =
+                    pprint4_record_by_identity_v068229338.find({
+                        static_cast<std::uint64_t>(c_v068229336.source_position),
+                        static_cast<std::int64_t>(c_v068229336.record)});
+                const auto source_spectral_it_v068229338 =
+                    pprint4_spectral_by_identity_v068229338.find({
+                        static_cast<std::uint64_t>(c_v068229336.source_position),
+                        static_cast<std::int64_t>(c_v068229336.record)});
+                if (source_record_it_v068229338 == pprint4_record_by_identity_v068229338.end() ||
+                    !source_record_it_v068229338->second ||
+                    source_spectral_it_v068229338 == pprint4_spectral_by_identity_v068229338.end() ||
+                    !source_spectral_it_v068229338->second) {
+                    c_v068229336.opacity = 0.0;
+                    c_v068229336.emission_sum = 0.0;
+                    continue;
+                }
+                const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
+                const auto& source_spectral_v068229338 = *source_spectral_it_v068229338->second;
+                if (source_record_v068229338.rate_type == 9 || source_record_v068229338.rate_type == 14) {
                     c_v068229336.wavelength_a = 0.0;
                     c_v068229336.energy_ev = 0.0;
+                    c_v068229336.opacity = 0.0;
+                    c_v068229336.emission_sum = 0.0;
+                    continue;
                 }
+                if (source_record_v068229338.rate_type != 4) {
+                    c_v068229336.opacity = 0.0;
+                    c_v068229336.emission_sum = 0.0;
+                    continue;
+                }
+                const auto source_abundances_v068229338 =
+                    pprint4_energy_ordered_abundances_v068229338(source_record_v068229338);
+                const double source_abund1_cm3_v068229338 =
+                    source_abundances_v068229338.first * input.hydrogen_density_cm3;
+                const double source_abund2_cm3_v068229338 =
+                    source_abundances_v068229338.second * input.hydrogen_density_cm3;
+                const double source_escape_denominator_v068229338 =
+                    source_spectral_v068229338.ptmp1 + source_spectral_v068229338.ptmp2;
+                c_v068229336.opacity = std::isfinite(source_spectral_v068229338.opakab)
+                    ? source_spectral_v068229338.opakab * source_abund1_cm3_v068229338 : 0.0;
+                c_v068229336.emission_sum =
+                    (source_escape_denominator_v068229338 != 0.0 &&
+                     std::isfinite(source_spectral_v068229338.ans3))
+                    ? -source_abund2_cm3_v068229338 * source_spectral_v068229338.ans3
+                    : 0.0;
             }
             source_pprint4_nlbin_v068229336 = source_rlbin_exact_audit(
                 pprint4_line_candidates_v068229336, input.radiation_energy_ev,
@@ -14538,6 +14656,25 @@ int run_impl(
         // source-faithful per-evaluation delta solely for pprint(4); the
         // standalone controller accumulates that delta across the pass.
         std::vector<double> pprint4_flinel_v068229334(continuum_capacity, 0.0);
+        const char* pprint4_provenance_path_v068229338 =
+            std::getenv("XSTAR_V068229338_PPRINT4_FLINEL_PROVENANCE_PATH");
+        std::ofstream pprint4_provenance_v068229338;
+        if (pprint4_provenance_path_v068229338 && *pprint4_provenance_path_v068229338) {
+            const std::filesystem::path provenance_path_v068229338(pprint4_provenance_path_v068229338);
+            if (!provenance_path_v068229338.parent_path().empty())
+                std::filesystem::create_directories(provenance_path_v068229338.parent_path());
+            pprint4_provenance_v068229338.open(provenance_path_v068229338, std::ios::app);
+            if (!pprint4_provenance_v068229338)
+                throw std::runtime_error("cannot create 0.6.82.29.3.3.8 pprint4 flinel provenance");
+            if (pprint4_provenance_v068229338.tellp() == 0) {
+                pprint4_provenance_v068229338
+                    << "source_sequence,source_position,record,data_type,rate_type,element_z,ion_stage,line_slot,"
+                    << "raw_lower_row,raw_upper_row,raw_lower_energy_ev,raw_upper_energy_ev,"
+                    << "abund1_cm3,abund2_cm3,ans1,ans2,ans3,ptmp1,ptmp2,wavelength_a,nb1,rank,"
+                    << "net_cm3_s,fline1,fline2,flinel_delta\n";
+            }
+            pprint4_provenance_v068229338 << std::setprecision(17);
+        }
 
         // v82 patch 5.20.6: calc_emis_all resets opakc before its line
         // revisit.  Preserve broad rcem/oplin as calc_emisab rank inputs, but
@@ -14601,16 +14738,63 @@ int run_impl(
                                 const double source_hc_v068229336 = local_zone_source_real_literal(12398.4016);
                                 const double line_energy_v068229336 =
                                     source_hc_v068229336 / (pprint4_elmn_wavelength_v068229336 + 1.0e-36);
+                                const auto source_record_it_v068229338 =
+                                    pprint4_record_by_identity_v068229338.find({
+                                        static_cast<std::uint64_t>(original_c.source_position),
+                                        static_cast<std::int64_t>(original_c.record)});
+                                if (source_record_it_v068229338 == pprint4_record_by_identity_v068229338.end() ||
+                                    !source_record_it_v068229338->second) {
+                                    continue;
+                                }
+                                const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
+                                const auto source_abundances_v068229338 =
+                                    pprint4_energy_ordered_abundances_v068229338(source_record_v068229338);
+                                const double source_abund1_cm3_v068229338 =
+                                    source_abundances_v068229338.first * c.hydrogen_density;
+                                const double source_abund2_cm3_v068229338 =
+                                    source_abundances_v068229338.second * c.hydrogen_density;
                                 const double net_v068229336 =
-                                    (c.ans2 * c.abundance_upper - c.ans1 * c.abundance_lower) *
-                                    c.hydrogen_density;
+                                    c.ans2 * source_abund2_cm3_v068229338 -
+                                    c.ans1 * source_abund1_cm3_v068229338;
                                 const double fline1_v068229336 = std::max(
                                     net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * c.ptmp1, 0.0);
                                 const double fline2_v068229336 = std::max(
                                     net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * c.ptmp2, 0.0);
-                                pprint4_flinel_v068229334[static_cast<std::size_t>(nb1_v068229336 - 1)] +=
+                                const double flinel_delta_v068229338 =
                                     (fline1_v068229336 + fline2_v068229336) * 2.0 /
                                     width_v068229336 / ergsev_v068229336;
+                                pprint4_flinel_v068229334[static_cast<std::size_t>(nb1_v068229336 - 1)] +=
+                                    flinel_delta_v068229338;
+                                if (pprint4_provenance_v068229338) {
+                                    const NativeElementDiagnostic* diagnostic_v068229338 =
+                                        pprint4_element_diagnostic_v068229338(source_record_v068229338);
+                                    const ElementProgram* source_element_v068229338 =
+                                        pprint4_full_element_v068229338(source_record_v068229338);
+                                    double raw_lower_energy_v068229338 = 0.0;
+                                    double raw_upper_energy_v068229338 = 0.0;
+                                    if (source_element_v068229338 && source_record_v068229338.lower_row > 0 &&
+                                        static_cast<std::size_t>(source_record_v068229338.lower_row) <= source_element_v068229338->rows.size())
+                                        raw_lower_energy_v068229338 = source_element_v068229338->rows[
+                                            static_cast<std::size_t>(source_record_v068229338.lower_row - 1)].energy_ev;
+                                    if (source_element_v068229338 && source_record_v068229338.upper_row > 0 &&
+                                        static_cast<std::size_t>(source_record_v068229338.upper_row) <= source_element_v068229338->rows.size())
+                                        raw_upper_energy_v068229338 = source_element_v068229338->rows[
+                                            static_cast<std::size_t>(source_record_v068229338.upper_row - 1)].energy_ev;
+                                    pprint4_provenance_v068229338
+                                        << source_sequence_v82_patch511 << ','
+                                        << original_c.source_position << ',' << original_c.record << ','
+                                        << original_c.data_type << ',' << original_c.rate_type << ','
+                                        << (diagnostic_v068229338 ? diagnostic_v068229338->element_z : 0) << ','
+                                        << source_record_v068229338.ion_stage << ','
+                                        << original_c.output_index << ',' << source_record_v068229338.lower_row << ','
+                                        << source_record_v068229338.upper_row << ',' << raw_lower_energy_v068229338 << ','
+                                        << raw_upper_energy_v068229338 << ',' << source_abund1_cm3_v068229338 << ','
+                                        << source_abund2_cm3_v068229338 << ',' << c.ans1 << ',' << c.ans2 << ',' << c.ans3 << ','
+                                        << c.ptmp1 << ',' << c.ptmp2 << ',' << pprint4_elmn_wavelength_v068229336 << ','
+                                        << nb1_v068229336 << ',' << pprint4_consumer_v068229336.rank_in_bin << ','
+                                        << net_v068229336 << ',' << fline1_v068229336 << ',' << fline2_v068229336 << ','
+                                        << flinel_delta_v068229338 << '\n';
+                                }
                             }
                         }
                     }

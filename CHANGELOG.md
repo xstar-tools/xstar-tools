@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.8 - Option 4 source endpoint-energy population ownership - 2026-08-17
+
+- Correct the byte-identical `.29.3.3.7` Option-4 host rejection: all non-`flinel` columns/tails remain closed, while `flinel` still has 171 nonzero bins versus FORTRAN 161, the same ten C++-only channels (`250,251,252,255,263,298,300,305,325,326`), and total `74027.2989422` versus `74015.5799368`.
+- Canonical `calc_emisab_ion.f90` and `calc_emis_ion.f90` both compare the two `leveltemp` endpoint energies before defining `llo/lup`, so `abund1` is always the lower-energy level population and `abund2` the upper-energy population. The native C++ spectral contribution retained populations in serialized record endpoint order.
+- Reconstruct a private Option-4 line-rank surface from the source energy-ordered populations and the source broad-line `rcem/oplin` formulas, then use the same energy-ordered populations for the private selected-line `fline/flinel` delta. The established operational line/transport surface remains frozen during this narrow verbose-output revision.
+- Add optional per-record Option-4 `flinel` provenance controlled by `XSTAR_V068229338_PPRINT4_FLINEL_PROVENANCE_PATH`; the host runner enables it so any remaining reject can be diagnosed by exact source record/bin/delta rather than another output-level inference.
+- Keep Python on the same source contract now: factor the existing `calc_emis_ion` endpoint-energy ordering into an explicit helper and retain the strict source-local endpoint eligibility from `.29.3.3.7`. Python host qualification remains deferred to `0.6.82.29.3.9`.
+- Preserve the prior source `elmn`, `nbinc`, local two-sided width, publication bridge, and pass-lifetime repairs. Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen.
+
 ## 0.6.82.29.3.3.7 - Option 4 source-local line endpoint eligibility hotfix - 2026-08-17
 
 - Correct the unchanged `.29.3.3.6` Option-4 host rejection: all non-`flinel` columns and tails remain closed, while `flinel` still contains exactly ten small C++-only bins (`250,251,252,255,263,298,300,305,325,326`).

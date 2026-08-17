@@ -518,6 +518,27 @@ def _feature_is_ranked(table: np.ndarray, feature_index: int, bin_one_based: int
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Reproduce calc_emis_ion's source endpoint-energy ordering before abund1/abund2 are formed.
+# Reference context: calc_emis_ion.f90 line branch; XSTAR Manual ss. 11.5-11.6.
+# XSTAR-FUNCTION-COMMENT-END
+def _source_energy_ordered_line_endpoints(levels: Any, idest1: int, idest2: int) -> tuple[int, int, float, float]:
+    """Return ``(lower_local, upper_local, e1, e2)`` with FORTRAN energy ownership.
+
+    ``idest1``/``idest2`` are serialized atomic-data destinations, not an
+    intrinsic lower/upper ordering.  Both ``calc_emisab_ion`` and
+    ``calc_emis_ion`` compare ``leveltemp(1,idest*)`` before constructing
+    ``abund1`` and ``abund2``.  Keep that rule explicit here so the Python
+    verbose/output path cannot silently drift back to record-order ownership.
+    """
+
+    e1 = float(levels.require(int(idest1)).energy_ev)
+    e2 = float(levels.require(int(idest2)).energy_ev)
+    if e1 < e2:
+        return int(idest1), int(idest2), e1, e2
+    return int(idest2), int(idest1), e1, e2
+
+
+# XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the parent element atomic mass operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
 # XSTAR-FUNCTION-COMMENT-END
@@ -2367,12 +2388,10 @@ def calc_emis_ion(
                             raise CalcEmisPortError(
                                 f"line endpoints {idest1},{idest2} outside source calc_emisab range 1..{ion.nlev - 1}"
                             )
-                        e1 = levels.require(idest1).energy_ev
-                        e2 = levels.require(idest2).energy_ev
-                        if e1 < e2:
-                            lower, upper = idest1 + compact_offset, idest2 + compact_offset
-                        else:
-                            lower, upper = idest2 + compact_offset, idest1 + compact_offset
+                        lower_local_v068229338, upper_local_v068229338, e1, e2 = \
+                            _source_energy_ordered_line_endpoints(levels, idest1, idest2)
+                        lower = lower_local_v068229338 + compact_offset
+                        upper = upper_local_v068229338 + compact_offset
             source_line_endpoints_valid_v068229337 = (
                 0 < idest1 < int(ion.nlev) and 0 < idest2 < int(ion.nlev)
             )
