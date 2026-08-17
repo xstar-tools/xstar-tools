@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.2 - Option 6 full continuum payload - 2026-08-17
+
+- Freeze the host-accepted `0.6.82.29.3.1.1` Option-7 closure (`250/250`, full payload ACCEPT, worst relative difference `3.37e-4`).
+- Reproduce canonical FORTRAN `pprint(6)` with all eleven source quantities after the channel index: photon energy, incident `zremsz`, five `zrems` planes, inward/outward continuum depths, Planck function, and the internal-radiation/Planck occupation ratio.
+- Restore the complete explanatory Option-6 header text from `pprint.f90`.
+- Compute the two derived Planck diagnostics only at publication time from the retained final radius/temperature and source-default-REAL constants; no solver/rate/thermal/transport arithmetic is changed.
+- Mirror the same Option-6 publication contract in pure Python, but keep host qualification C++-first.
+- Add a dedicated Option-6 host gate that requires 999 full-width rows, exact channel identities, all eleven numerical columns, the four source norms, and the full explanatory header.
+- Scope is Option 6 only. Options 4/10/18/29/30 remain unchanged for later subversions. Science revision and all public ABIs remain frozen.
+
 ## 0.6.82.29.3.1.1 - Option 7 shared continuum/next-ground gamma-alpha alias - 2026-08-16
 
 - Correct the sole remaining Option-7 host mismatch from `0.6.82.29.3.1`: the inactive C II terminal continuum role now retains the gamma/alpha values of the shared compact row subsequently written by the first active C III ground role, matching canonical `calc_hmc_element.f90`/`calc_hmc_all.f90` `ipmat += nlev-1` ownership.

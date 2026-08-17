@@ -1920,12 +1920,56 @@ void append_native_lprint_extra_sections(
         }
         out << "\n print option: 6\n continuum luminosities (/sec/10**38) and depths\n";
         out << " real quantities are as follows:\n";
+        out << " 1 ) photon energy in eV\n";
+        out << " 2) Incident radiation field\n";
+        out << " 3) Radiation field used by xstar for internal calculations of rates, etc.\n";
+        out << "    The quantity defined in equation (12) in the xstar manual, chapter 8, the Physics of xstar.\n";
+        out << " 4) and 5) the quantities in equations (15) and (16), with lines added\n";
+        out << " 6) and 7) the quantities in equations (15) and (16), without lines\n";
+        out << " 8) inward depth\n";
+        out << " 9) outward depth\n";
+        out << " 10) Planck function at local gas temperature\n";
+        out << " 11) ratio of the xstar internal radiation field (in flux units) to Planck function at local gas temperature.\n";
+
+        // 0.6.82.29.3.2: literal pprint(6) owns eleven continuum quantities
+        // after the channel index.  The first seven radiation/depth surfaces
+        // are already retained by the final-writer workspace.  Reconstruct
+        // only the two derived Planck diagnostics from the same final radius
+        // and temperature used by source pprint; this is publication-only and
+        // does not feed any solver, rate, thermal, or transport calculation.
+        double option6_radius_cm = 0.0;
+        if (!state.legacy_pprint.radial_rows.empty()) {
+            option6_radius_cm = state.legacy_pprint.radial_rows.back().radius_cm;
+        } else if (!state.radial_zones.empty()) {
+            option6_radius_cm = state.radial_zones.back().outer_radius_cm > 0.0
+                ? state.radial_zones.back().outer_radius_cm
+                : state.radial_zones.back().radius_cm;
+        }
+        const double option6_t4 = eval->temperature_t4;
+        const double source_two = static_cast<double>(static_cast<float>(2.0));
+        const double source_planck_coeff = static_cast<double>(static_cast<float>(1.5642e22));
+        const double source_kt_coeff = static_cast<double>(static_cast<float>(0.861707));
+        const double source_four_pi = static_cast<double>(static_cast<float>(12.56));
+        const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e-19));
+        const double option6_r19 = option6_radius_cm * source_radius_scale;
+        const double option6_fpr2 = source_four_pi * option6_r19 * option6_r19;
+        auto source_expo = [](double x) { return std::exp(std::min(60.0, std::max(-60.0, x))); };
         for (std::size_t i = 0u; i < n; ++i) {
+            const double energy = eval->radiation_energy_ev[i];
+            const double incident = vector_value(ws.zremsz, i);
+            const double z1 = flat_plane(ws.zrems, 5u, 0u, i);
+            const double planck_energy = std::min(2.0e4, energy);
+            const double bbe = source_two * planck_energy * planck_energy * planck_energy * source_planck_coeff /
+                (source_expo(energy / (source_kt_coeff * option6_t4)) - 1.0 + 1.0e-36);
+            const double rocc = option6_fpr2 > 0.0
+                ? z1 / (bbe + 1.0e-36) / option6_fpr2 / source_four_pi
+                : 0.0;
             out << std::setw(7) << (i+1u) << std::setw(13) << std::uppercase << std::scientific
-                << std::setprecision(5) << eval->radiation_energy_ev[i];
+                << std::setprecision(5) << energy << std::setw(13) << incident;
             for (std::size_t plane = 0u; plane < 5u; ++plane) out << std::setw(13) << flat_plane(ws.zrems, 5u, plane, i);
             out << std::setw(13) << flat_plane(ws.dpthc, 2u, 0u, i)
-                << std::setw(13) << flat_plane(ws.dpthc, 2u, 1u, i) << "\n";
+                << std::setw(13) << flat_plane(ws.dpthc, 2u, 1u, i)
+                << std::setw(13) << bbe << std::setw(13) << rocc << "\n";
         }
         // pprint(6) integrates zremsz and zrems(1:3,:) with a literal
         // trapezoid in eV and converts with the source erg/eV constant.

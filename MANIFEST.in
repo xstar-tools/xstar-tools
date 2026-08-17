@@ -683,3 +683,26 @@ include tests/test_output_control_verbose_inventory_0_6_82_29_1.py
 include qualification_report_0_6_82_29_1.md
 include xstar_tools-0.6.82.29.1_host_validation.md
 include xstar_tools_conversation_summary_through_0.6.82.29.1.md
+
+# 0.6.82.29.3.2 Option-6 full continuum payload.
+recursive-include qualification/output_control_option6_0_6_82_29_3_2 *.json *.md
+include tools/qualification/check_output_control_option6_0_6_82_29_3_2.py
+include tools/qualification/run_output_control_host_smoke_0_6_82_29_3_2.py
+include tools/qualification/run_output_control_option6_host_smoke_0_6_82_29_3_2.py
+include tests/test_output_control_option6_0_6_82_29_3_2.py
+include output_control_option6_0_6_82_29_3_2.md
+include qualification_report_0_6_82_29_3_2.md
+include xstar_tools-0.6.82.29.3.2_host_validation.md
+
+# Preserve output-control successor qualification tools required by retained tests.
+include tools/qualification/run_output_control_host_smoke_0_6_82_29_2.py
+include tools/qualification/check_output_control_verbose_0_6_82_29_2.py
+include tools/qualification/run_output_control_host_smoke_0_6_82_29_3_1.py
+include tools/qualification/run_output_control_option7_host_smoke_0_6_82_29_3_1.py
+include tools/qualification/check_output_control_option7_0_6_82_29_3_1.py
+include tools/qualification/run_output_control_host_smoke_0_6_82_29_3_1_1.py
+include tools/qualification/run_output_control_option7_host_smoke_0_6_82_29_3_1_1.py
+include tools/qualification/check_output_control_option7_0_6_82_29_3_1_1.py
+recursive-include qualification/output_control_verbose_0_6_82_29_2 *.json *.md
+recursive-include qualification/output_control_option7_0_6_82_29_3_1 *.json *.md
+recursive-include qualification/output_control_option7_0_6_82_29_3_1_1 *.json *.md

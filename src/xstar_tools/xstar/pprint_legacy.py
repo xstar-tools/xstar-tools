@@ -1487,17 +1487,51 @@ def _option4_continuum_opacity(state: XSTARPythonState, buf: LegacyPprintBuffers
 
 def _option6_continuum_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 6)
-    buf.log_lines.extend(["continuum luminosities (/sec/10**38) and depths", "real quantities are as follows:"])
+    buf.log_lines.extend([
+        "continuum luminosities (/sec/10**38) and depths",
+        "real quantities are as follows:",
+        "1 ) photon energy in eV",
+        "2) Incident radiation field",
+        "3) Radiation field used by xstar for internal calculations of rates, etc.",
+        "   The quantity defined in equation (12) in the xstar manual, chapter 8, the Physics of xstar.",
+        "4) and 5) the quantities in equations (15) and (16), with lines added",
+        "6) and 7) the quantities in equations (15) and (16), without lines",
+        "8) inward depth",
+        "9) outward depth",
+        "10) Planck function at local gas temperature",
+        "11) ratio of the xstar internal radiation field (in flux units) to Planck function at local gas temperature.",
+    ])
     ws = _workspace(state)
     epi = _active_epi(state)
     zrems = np.asarray(getattr(ws, "zrems", np.zeros((0,0))), dtype=float)
+    zremsz = np.asarray(getattr(ws, "zremsz", np.zeros(0)), dtype=float).reshape(-1)
     dpth = np.asarray(getattr(ws, "dpthc", np.zeros((2,0))), dtype=float)
+    # Literal pprint.f90 source-default-REAL constants promoted into the
+    # DOUBLE PRECISION expression.  This publication path consumes final
+    # retained state only and does not feed the physical calculation.
+    source_two = float(np.float32(2.0))
+    source_planck_coeff = float(np.float32(1.5642e22))
+    source_kt_coeff = float(np.float32(0.861707))
+    source_four_pi = float(np.float32(12.56))
+    source_radius_scale = float(np.float32(1.0e-19))
+    radius_cm = float(state.transfer.radius)
+    t4 = _temperature_t4(state)
+    r19 = radius_cm * source_radius_scale
+    fpr2 = source_four_pi * r19 * r19
     for i, e in enumerate(epi):
         vals = [zrems[k,i] if zrems.ndim == 2 and k < zrems.shape[0] and i < zrems.shape[1] else 0.0 for k in range(5)]
+        incident = zremsz[i] if i < zremsz.size else 0.0
         tin = dpth[0,i] if dpth.ndim == 2 and dpth.shape[0] > 1 and i < dpth.shape[1] else 0.0
         tout = dpth[1,i] if dpth.ndim == 2 and dpth.shape[0] > 1 and i < dpth.shape[1] else 0.0
-        buf.log_lines.append(f"{i+1:7d}{e:13.5E}"+"".join(f"{v:13.5E}" for v in vals)+f"{tin:13.5E}{tout:13.5E}")
-    zremsz = np.asarray(getattr(ws, "zremsz", np.zeros(0)), dtype=float).reshape(-1)
+        planck_energy = min(2.0e4, float(e))
+        expo_value = float(np.exp(np.clip(float(e) / (source_kt_coeff * t4), -60.0, 60.0)))
+        bbe = source_two * planck_energy**3 * source_planck_coeff / (expo_value - 1.0 + 1.0e-36)
+        rocc = vals[0] / (bbe + 1.0e-36) / fpr2 / source_four_pi if fpr2 > 0.0 else 0.0
+        buf.log_lines.append(
+            f"{i+1:7d}{e:13.5E}{incident:13.5E}"
+            + "".join(f"{v:13.5E}" for v in vals)
+            + f"{tin:13.5E}{tout:13.5E}{bbe:13.5E}{rocc:13.5E}"
+        )
     sums = [0.0, 0.0, 0.0, 0.0]
     ergsev = 1.602197e-12
     for i in range(1, int(epi.size)):
