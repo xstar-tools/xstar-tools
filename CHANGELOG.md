@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.2 - Option 4 publication-snapshot bridge hotfix - 2026-08-17
+
+- Correct the repeated `0.6.82.29.3.3.1` host failure (`998/998` rows but `payload_rel=1`, `tails_rel=1`, `tails=0`). The `.29.3.3.1` publication-only `pprint4_opakc`, `pprint4_rccemis`, `pprint4_brcems`, and `pprint4_flinel` surfaces were computed correctly on `FixedDsecSnapshot`, but the production final-writer conversion `copy_real_native_snapshot()` omitted all four fields.
+- Copy those four already-computed publication surfaces into `FixedEvaluationState::source_workspace` before `xstar_step_log.cpp` serializes Option 4. Without this bridge, the writer sees empty `pprint4_*` arrays and deliberately falls back to the old sparse/post-GSSMOOTH operational arrays, explaining why `.29.3.3.1` produced the same bad payload as `.29.3.3`.
+- Add a regression assertion that the final `FixedDsecSnapshot -> FixedEvaluationState` bridge carries every `pprint4_*` owner. This is a publication-state plumbing correction only; no opacity, emissivity, thermal, rate, transport, or solver arithmetic changes.
+- Keep Option 4 as the only open surface in this subrevision. Options 10/18/29/30 remain unchanged. Science revision and public ABI identifiers remain frozen.
+
 ## 0.6.82.29.3.3.1 - Option 4 final-writer source-workspace ownership hotfix - 2026-08-17
 
 - Correct the real host failure from `0.6.82.29.3.3`: the final post-loop verbose writer was consuming `opakc`/`rccemis` after the generic radial helper had applied GSSMOOTH, even though canonical XSTAR does not execute GSSMOOTH in the post-loop `xstarcalc -> HEATT -> STPCUT -> pprint` sequence. Retain the pre-GSSMOOTH post-`xstarcalc` arrays for Option 4 only.

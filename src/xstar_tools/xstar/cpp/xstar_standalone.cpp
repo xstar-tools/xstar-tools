@@ -6236,6 +6236,15 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     ws.opakc = source.opakc;
     ws.opakcont = source.opakcont;
     ws.flinel = source.flinel;
+    // 0.6.82.29.3.3.2: preserve the publication-only pprint(4) owners
+    // across the final FixedDsecSnapshot -> FixedEvaluationState boundary.
+    // 0.6.82.29.3.3.1 populated these arrays correctly, but this conversion
+    // omitted them, causing xstar_step_log.cpp to fall back to the old sparse
+    // / post-GSSMOOTH operational workspaces.
+    ws.pprint4_opakc = source.pprint4_opakc;
+    ws.pprint4_rccemis = source.pprint4_rccemis;
+    ws.pprint4_brcems = source.pprint4_brcems;
+    ws.pprint4_flinel = source.pprint4_flinel;
     ws.zrems = source.zrems;
     ws.dpthc = source.dpthc;
     ws.dpthcont = source.dpthcont;
