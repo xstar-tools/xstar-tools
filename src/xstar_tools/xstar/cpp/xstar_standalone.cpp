@@ -11716,7 +11716,7 @@ struct StandaloneControllerDataV67 {
     // calc_emis_ion only adds the selected-line contribution from each full
     // boundary solve. Keep that lifetime in the standalone controller rather
     // than reconstructing it from a single fixed-state spectral workspace.
-    std::vector<double> pprint4_flinel_accumulator_v068229333;
+    std::vector<double> pprint4_flinel_accumulator_v068229334;
     // 0.6.82.27.4: literal UNSAVD/RSTEPR2/3/4 caller-owned workspaces.
     // INIT zeros these before a repeated pass; UNSAVD sparsely restores the
     // saved shell values before TRNFRC/XSTARCALC.  XSTARCALC subsequently
@@ -16387,27 +16387,23 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot(
     }
     audit_sequence58_lte(data, snapshot);
 
-    // 0.6.82.29.3.3.3: canonical flinel lifetime for pprint(4).
+    // 0.6.82.29.3.3.4: canonical caller-owned flinel lifetime for pprint(4).
     //
-    // init.f90 zeros flinel once at the start of a radial pass. xstarcalc then
-    // calls calc_emis_all repeatedly for accepted radial boundaries, and
-    // calc_emis_ion.f90 updates only by
-    //
-    //   flinel(nb1) = flinel(nb1) + selected_line_contribution
-    //
-    // with no intervening reset. The extra post-loop zero-thickness xstarcalc
-    // adds one more contribution before pprint(4). The fixed-state engine
-    // intentionally returns the current evaluation's selected-line flinel, so
-    // accumulate that source contribution here at the controller/pass owner.
-    // This is publication-only state; transport/science workspaces are not
-    // changed.
-    if (data.pprint4_flinel_accumulator_v068229333.size() != snapshot.flinel.size()) {
-        data.pprint4_flinel_accumulator_v068229333.assign(snapshot.flinel.size(), 0.0);
+    // local_zone_engine now publishes a private per-evaluation delta built
+    // from the literal calc_emis_ion nbinc/huntf bin and local two-sided bin
+    // width.  Accumulate that private delta across the radial pass, matching
+    // INIT's single flinel reset and the final post-loop xstarcalc addition.
+    // Do not accumulate snapshot.flinel: that is the frozen operational C++
+    // HEATT/transport surface and intentionally retains the legacy broad-path
+    // bin/width convention until a separate science revision reopens it.
+    const auto& pprint4_delta_v068229334 = snapshot.pprint4_flinel;
+    if (data.pprint4_flinel_accumulator_v068229334.size() != pprint4_delta_v068229334.size()) {
+        data.pprint4_flinel_accumulator_v068229334.assign(pprint4_delta_v068229334.size(), 0.0);
     }
-    for (std::size_t i_v068229333 = 0; i_v068229333 < snapshot.flinel.size(); ++i_v068229333) {
-        data.pprint4_flinel_accumulator_v068229333[i_v068229333] += snapshot.flinel[i_v068229333];
+    for (std::size_t i_v068229334 = 0; i_v068229334 < pprint4_delta_v068229334.size(); ++i_v068229334) {
+        data.pprint4_flinel_accumulator_v068229334[i_v068229334] += pprint4_delta_v068229334[i_v068229334];
     }
-    snapshot.pprint4_flinel = data.pprint4_flinel_accumulator_v068229333;
+    snapshot.pprint4_flinel = data.pprint4_flinel_accumulator_v068229334;
 
     std::string native_gate_reason_v82_patch52017;
     if (!native_snapshot_scientific_valid(snapshot, native_gate_reason_v82_patch52017)) {
@@ -17849,7 +17845,7 @@ void initialize_native_radial_pass_v068227(
     // once per xstarcalc/fixed-state evaluation. The post-loop final pprint
     // xstarcalc therefore sees the sum from all full boundary evaluations in
     // the final pass plus its own selected-line additions.
-    data.pprint4_flinel_accumulator_v068229333.assign(n, 0.0);
+    data.pprint4_flinel_accumulator_v068229334.assign(n, 0.0);
     for (std::size_t i = 0; i < n; ++i) {
         data.accumulated_zrems[i] = data.source_incident[i];
         data.accumulated_zremso[i] = data.source_incident[i];

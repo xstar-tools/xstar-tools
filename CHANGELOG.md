@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.4 - Option 4 source `flinel` bin/width hotfix - 2026-08-17
+
+- Corrects the remaining C++ `pprint(4)` `flinel` publication mismatch exposed by the `.29.3.3.3` host run.
+- The canonical FORTRAN `calc_emis_ion` surface uses `nb1=nbinc(ener,epi,ncn2)`/`huntf` (nearest logarithmic-grid point), then divides by the local two-sided width `epi(nb1+1)-epi(max(1,nb1-1))`.
+- The C++ operational selected-line replay instead used a `lower_bound` bin and a constant `epi[1]-epi[0]` width.  At the returned worst case this placed the dominant line in channel 389 instead of 388 and amplified it by about the local/first-bin width ratio (~808).
+- Builds a private publication-only per-evaluation `flinel` delta from the already source-selected line records using the canonical `nbinc` owner and local width, then accumulates only that private delta across the pass.
+- Leaves the operational `flinel`/HEATT/transport surface unchanged; no solver, opacity, rate, thermal, or transport arithmetic is altered.
+- Frozen science revision and ABI identifiers are unchanged.
+
 ## 0.6.82.29.3.3.3 - Option 4 source-pass `flinel` lifetime hotfix - 2026-08-17
 
 - Correct the remaining `0.6.82.29.3.3.2` host rejection. All Option-4 columns except `flinel` were already within about `1e-5` relative, `opsum cont` agreed to `1.08e-7`, the Rosseland mean was effectively exact, and both tail records were present; the reject was isolated to `flinel`.

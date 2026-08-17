@@ -14477,12 +14477,20 @@ int run_impl(
             }
         }
 
-        // 0.6.82.29.3.3.1: FORTRAN calc_emis_all does not reset caller-owned
-        // fline/flinel.  Preserve the incoming calc_emisab flinel for the
-        // publication surface, then add the selected calc_emis line replay.
-        // Do not alter the operational C++ flinel in this narrow output-only
-        // revision; that remains frozen for transport/science qualification.
-        std::vector<double> pprint4_flinel_v068229331 = flinel;
+        // 0.6.82.29.3.3.4: publication-only literal calc_emis_ion flinel delta.
+        //
+        // FORTRAN calc_emisab_all does not touch flinel.  calc_emis_ion adds
+        // only the rank-selected line contribution at nb1=nbinc(ener,epi),
+        // and normalizes it by the local two-sided continuum width
+        //
+        //   epi(nb1+1)-epi(max(1,nb1-1)).
+        //
+        // The operational broad spectral path historically used lower_bound
+        // bin ownership and a constant epi(2)-epi(1) width.  Those arrays are
+        // frozen here because HEATT/transport consume them.  Build a separate
+        // source-faithful per-evaluation delta solely for pprint(4); the
+        // standalone controller accumulates that delta across the pass.
+        std::vector<double> pprint4_flinel_v068229334(continuum_capacity, 0.0);
 
         // v82 patch 5.20.6: calc_emis_all resets opakc before its line
         // revisit.  Preserve broad rcem/oplin as calc_emisab rank inputs, but
@@ -14511,10 +14519,38 @@ int run_impl(
                 if (!line_consumer_v82_patch5208.actual_consumer) continue;
                 auto c = original_c;
                 // Literal ordinary Type-50 ucalc calls linopac only above the
-                // opakb1 > 1e-34 guard, while fline is still published.
+                // opakb1 > 1e-34 guard, while fline/flinel are still published.
                 if (c.data_type == 50 && c.rate_type == 4) {
                     const double optpp = c.opakab * c.abundance_lower * c.hydrogen_density;
                     if (!(std::isfinite(optpp) && optpp > 1.0e-34)) c.opakab = 0.0;
+                }
+
+                // 0.6.82.29.3.3.4: calc_emis_ion.f90 uses the nbinc/huntf
+                // result above, not the broad path's lower_bound bin.  It also
+                // uses a local two-sided width, not the low-energy first-bin
+                // spacing stored in c.bin_width_eV.  Reproduce that expression
+                // exactly on the private Option-4 surface without changing the
+                // operational selected-line replay.
+                const int nb1_v068229334 = line_consumer_v82_patch5208.nb1_one_based;
+                if (nb1_v068229334 >= 1 &&
+                    static_cast<std::size_t>(nb1_v068229334) < continuum_capacity) {
+                    const int lower_one_based_v068229334 = std::max(1, nb1_v068229334 - 1);
+                    const double width_v068229334 =
+                        input.radiation_energy_ev[static_cast<std::size_t>(nb1_v068229334)] -
+                        input.radiation_energy_ev[static_cast<std::size_t>(lower_one_based_v068229334 - 1)];
+                    if (std::isfinite(width_v068229334) && width_v068229334 > 0.0) {
+                        const double ergsev_v068229334 = 1.602176634e-12;
+                        const double net_v068229334 =
+                            (c.ans2 * c.abundance_upper - c.ans1 * c.abundance_lower) *
+                            c.hydrogen_density;
+                        const double fline1_v068229334 = std::max(
+                            net_v068229334 * c.line_energy_eV * ergsev_v068229334 * c.ptmp1, 0.0);
+                        const double fline2_v068229334 = std::max(
+                            net_v068229334 * c.line_energy_eV * ergsev_v068229334 * c.ptmp2, 0.0);
+                        pprint4_flinel_v068229334[static_cast<std::size_t>(nb1_v068229334 - 1)] +=
+                            (fline1_v068229334 + fline2_v068229334) * 2.0 /
+                            width_v068229334 / ergsev_v068229334;
+                    }
                 }
                 selected_lines_v82_patch5206.push_back(c);
             }
@@ -14566,10 +14602,6 @@ int run_impl(
                 throw std::runtime_error(std::string("v82 patch 5.20.6 selected line replay failed: ") + selected_error.data());
             line_profile_opacity.swap(selected_line_profile);
             fline.swap(selected_fline);
-            if (pprint4_flinel_v068229331.size() == selected_flinel.size()) {
-                for (std::size_t k_v068229331 = 0; k_v068229331 < selected_flinel.size(); ++k_v068229331)
-                    pprint4_flinel_v068229331[k_v068229331] += selected_flinel[k_v068229331];
-            }
             flinel.swap(selected_flinel);
 
             // v82 patch 5.20.17.3.4: diagnostic-only selected-line producer
@@ -15713,7 +15745,7 @@ int run_impl(
         ctx.last_source_opakcont_v064894 = std::move(opakcont);
         ctx.last_source_fline_v064894 = std::move(fline);
         ctx.last_source_flinel_v064894 = std::move(flinel);
-        ctx.last_source_pprint4_flinel_v068229331 = std::move(pprint4_flinel_v068229331);
+        ctx.last_source_pprint4_flinel_v068229331 = std::move(pprint4_flinel_v068229334);
         ctx.last_source_elum_v064894 = std::move(elum);
         ctx.last_source_line_profile_workspace_v064894 = std::move(profiled);
         ctx.last_source_native_line_count_v064894 = ctx.program.native_line_count;
