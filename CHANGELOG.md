@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.6 - Option 4 source `elmn` slot-ownership hotfix - 2026-08-17
+
+- Correct the private C++ `pprint(4)` `flinel` reconstruction to use the literal `xstarsetup.f90` line-slot coordinate: `elmn(slot)=0` for rate types 9 and 14, otherwise the source line wavelength.
+- Keep the operational C++ selected-line replay unchanged; the `elmn` correction is confined to the Option-4 publication surface in this narrow output-control revision.
+- Use the same slot-owned `elmn` coordinate for the private Option-4 rank table, revisit `nbinc`, and line-energy multiplier.
+- Mirror the source `xstarsetup` coordinate ownership in the Python `calc_emis` context now; Python host qualification remains deferred to `0.6.82.29.3.9`.
+- Keep public line metadata wavelengths unchanged for FITS/detail publication.
+- Science revision and all ABI identifiers remain frozen.
+
 ## 0.6.82.29.3.3.5 - Option 4 source rate-family `flinel` gate hotfix - 2026-08-17
 
 - Corrects the remaining `.29.3.3.4` Option-4 rejection after the source `nbinc` bin owner and local two-sided width repair.

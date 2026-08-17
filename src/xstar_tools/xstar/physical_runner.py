@@ -1816,6 +1816,29 @@ def _element_array(values: Mapping[int, float]) -> np.ndarray:
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Reproduce xstarsetup.f90's internal elmn line-coordinate ownership for calc_emis.
+# Reference context: xstarsetup.f90 initializes elmn(slot)=0 and fills the source wavelength only when lrtyp is neither 9 nor 14.
+# XSTAR-FUNCTION-COMMENT-END
+def _source_calc_emis_line_wavelengths(metadata: SourceOutputMetadata, nlsvn: int) -> np.ndarray:
+    """Return the private xstarsetup ``elmn`` workspace, not public line metadata.
+
+    Public output metadata keeps the physical wavelength for rate-9/rate-14
+    records.  The calc_emis ranking/revisit coordinate is different: stock
+    XSTAR zeros those line slots in xstarsetup and only fills elmn for line
+    owners whose rate type is neither 9 nor 14.
+    """
+    out = np.zeros(int(nlsvn) + 1, dtype=float)
+    for row in metadata.lines:
+        index = int(row.line_index)
+        if not (1 <= index < out.size):
+            continue
+        if int(row.rate_type) in (9, 14):
+            continue
+        out[index] = float(row.wavelength_angstrom)
+    return out
+
+
+# XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the bind emissivity contexts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
 # XSTAR-FUNCTION-COMMENT-END
@@ -1824,10 +1847,12 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
     radiation = _radiation_namespace(state)
     escape = _escape_context(workspace)
     output_metadata: SourceOutputMetadata = state.control["output_atomic_metadata"]
-    line_wavelength = np.zeros(int(state.control["nlsvn"]) + 1, dtype=float)
-    for row in output_metadata.lines:
-        if 1 <= row.line_index < line_wavelength.size:
-            line_wavelength[row.line_index] = row.wavelength_angstrom
+    # 0.6.82.29.3.3.6: calc_emis consumes xstarsetup's private elmn
+    # coordinate, not the public line-table wavelength.  In stock FORTRAN,
+    # rate-9 and rate-14 line slots remain zero in elmn.
+    line_wavelength = _source_calc_emis_line_wavelengths(
+        output_metadata, int(state.control["nlsvn"])
+    )
     rrc_wavelength = np.zeros(int(state.control["ncsvn"]) + 1, dtype=float)
     for row in output_metadata.rrcs:
         rank_threshold = float(getattr(row, "rank_threshold_eV", 0.0))

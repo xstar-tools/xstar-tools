@@ -11081,6 +11081,7 @@ struct SourceFeatureAuditCandidateV82Patch5171 {
     std::uint64_t source_position = 0u;
     std::int64_t record = 0;
     int data_type = 0;
+    int rate_type = 0;
     int duplicate_identities = 0;
 };
 
@@ -13859,6 +13860,11 @@ int run_impl(
         SourceRlbinAuditResultV82Patch5171
             source_calc_emis_ncbin_patch52082_audit_v82_patch5209;
         SourceRlbinAuditResultV82Patch5171 source_calc_emis_nlbin_v82_patch5208;
+        // 0.6.82.29.3.3.6: private pprint(4) line-rank table built from
+        // xstarsetup's slot-owned elmn coordinate.  Operational selected-line
+        // replay keeps the pre-existing table above so this output-control
+        // revision cannot change HEATT/transport science.
+        SourceRlbinAuditResultV82Patch5171 source_pprint4_nlbin_v068229336;
         bool source_calc_emis_selection_ready_v82_patch5206 = false;
         if (!defer_product_projection) {
             std::map<std::pair<std::string,int>,SourceFeatureAuditCandidateV82Patch5171>
@@ -13885,6 +13891,7 @@ int run_impl(
                 m.source_position = c.source_position;
                 m.record = c.record;
                 m.data_type = c.data_type;
+                m.rate_type = c.rate_type;
                 identity_by_slot_v82_patch5206[{m.family, m.slot_one_based}] = m;
                 if (is_rrc) {
                     auto legacy = m;
@@ -13951,6 +13958,24 @@ int run_impl(
                     continuum_capacity, true);
             source_calc_emis_nlbin_v82_patch5208 = source_rlbin_exact_audit(
                 line_candidates_v82_patch5206, input.radiation_energy_ev, continuum_capacity, false);
+
+            // Literal xstarsetup.f90 owns elmn by the global line slot.  It
+            // initializes every slot to zero and writes rdat1(np1r) only when
+            // the owning line record has lrtyp neither 9 nor 14.  calc_emis_ion
+            // later uses that elmn(slot) for BOTH ranking/revisit nbinc and the
+            // emitted photon energy.  Build a private rank table with that exact
+            // coordinate while leaving the operational broad-line table frozen.
+            auto pprint4_line_candidates_v068229336 = line_candidates_v82_patch5206;
+            for (auto& c_v068229336 : pprint4_line_candidates_v068229336) {
+                if (c_v068229336.rate_type == 9 || c_v068229336.rate_type == 14) {
+                    c_v068229336.wavelength_a = 0.0;
+                    c_v068229336.energy_ev = 0.0;
+                }
+            }
+            source_pprint4_nlbin_v068229336 = source_rlbin_exact_audit(
+                pprint4_line_candidates_v068229336, input.radiation_energy_ev,
+                continuum_capacity, false);
+
             source_calc_emis_selected_rrc_slots_v82_patch5206 = source_calc_emis_ncbin_v82_patch5208.selected_slots;
             source_calc_emis_selected_line_slots_v82_patch5206 = source_calc_emis_nlbin_v82_patch5208.selected_slots;
             source_calc_emis_selection_ready_v82_patch5206 = true;
@@ -14503,26 +14528,21 @@ int run_impl(
                 if (original_c.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE ||
                     original_c.output_index <= 0)
                     continue;
-                // 0.6.82.29.3.3.5: literal calc_emis_ion flinel ownership is
-                // confined to ml_data_type 4 and 9.  The broad C++ spectral
-                // stream also contains rate-14 line-like records for other
-                // publication/thermal roles; those records never execute the
-                // FORTRAN flinel(nb1)+= branch and must not leak into the
-                // private pprint(4) surface.
-                if (original_c.rate_type != 4 && original_c.rate_type != 9)
-                    continue;
+                // Keep the operational selected-line replay on its established
+                // pre-.29.3.3.6 coordinate/table.  The source elmn correction
+                // below is publication-only for pprint(4).
                 const auto wavelength_it_v82_patch5208 =
                     source_line_wavelength_by_identity_v82_patch5208.find(
                         {static_cast<std::uint64_t>(original_c.source_position),
                          static_cast<std::int64_t>(original_c.record)});
-                const double source_line_wavelength_v82_patch5208 =
+                const double operational_line_wavelength_v82_patch5208 =
                     wavelength_it_v82_patch5208 != source_line_wavelength_by_identity_v82_patch5208.end()
                         ? wavelength_it_v82_patch5208->second
                         : (original_c.line_energy_eV > 0.0
                             ? local_zone_source_real_literal(12398.4016) / original_c.line_energy_eV
                             : 0.0);
                 const auto line_consumer_v82_patch5208 = source_calc_emis_consumer(
-                    original_c.output_index, source_line_wavelength_v82_patch5208, false, true,
+                    original_c.output_index, operational_line_wavelength_v82_patch5208, false, true,
                     source_calc_emis_nlbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                 if (!line_consumer_v82_patch5208.actual_consumer) continue;
                 auto c = original_c;
@@ -14533,31 +14553,44 @@ int run_impl(
                     if (!(std::isfinite(optpp) && optpp > 1.0e-34)) c.opakab = 0.0;
                 }
 
-                // 0.6.82.29.3.3.4: calc_emis_ion.f90 uses the nbinc/huntf
-                // result above, not the broad path's lower_bound bin.  It also
-                // uses a local two-sided width, not the low-energy first-bin
-                // spacing stored in c.bin_width_eV.  Reproduce that expression
-                // exactly on the private Option-4 surface without changing the
-                // operational selected-line replay.
-                const int nb1_v068229334 = line_consumer_v82_patch5208.nb1_one_based;
-                if (nb1_v068229334 >= 1 &&
-                    static_cast<std::size_t>(nb1_v068229334) < continuum_capacity) {
-                    const int lower_one_based_v068229334 = std::max(1, nb1_v068229334 - 1);
-                    const double width_v068229334 =
-                        input.radiation_energy_ev[static_cast<std::size_t>(nb1_v068229334)] -
-                        input.radiation_energy_ev[static_cast<std::size_t>(lower_one_based_v068229334 - 1)];
-                    if (std::isfinite(width_v068229334) && width_v068229334 > 0.0) {
-                        const double ergsev_v068229334 = 1.602176634e-12;
-                        const double net_v068229334 =
-                            (c.ans2 * c.abundance_upper - c.ans1 * c.abundance_lower) *
-                            c.hydrogen_density;
-                        const double fline1_v068229334 = std::max(
-                            net_v068229334 * c.line_energy_eV * ergsev_v068229334 * c.ptmp1, 0.0);
-                        const double fline2_v068229334 = std::max(
-                            net_v068229334 * c.line_energy_eV * ergsev_v068229334 * c.ptmp2, 0.0);
-                        pprint4_flinel_v068229334[static_cast<std::size_t>(nb1_v068229334 - 1)] +=
-                            (fline1_v068229334 + fline2_v068229334) * 2.0 /
-                            width_v068229334 / ergsev_v068229334;
+                // 0.6.82.29.3.3.6: reproduce the literal xstarsetup ->
+                // calc_emis_ion elmn ownership on the private Option-4 surface.
+                // xstarsetup zeros every line slot, then fills elmn only for
+                // owning records whose lrtyp is neither 9 nor 14.  Consequently
+                // a rate-9/14 slot has elmn=0 even though the record may carry a
+                // physical wavelength elsewhere for public metadata.
+                if (original_c.rate_type == 4 || original_c.rate_type == 9) {
+                    const double pprint4_elmn_wavelength_v068229336 =
+                        (original_c.rate_type == 9 || original_c.rate_type == 14)
+                            ? 0.0 : operational_line_wavelength_v82_patch5208;
+                    const auto pprint4_consumer_v068229336 = source_calc_emis_consumer(
+                        original_c.output_index, pprint4_elmn_wavelength_v068229336, false, true,
+                        source_pprint4_nlbin_v068229336, input.radiation_energy_ev, continuum_capacity);
+                    if (pprint4_consumer_v068229336.actual_consumer) {
+                        const int nb1_v068229336 = pprint4_consumer_v068229336.nb1_one_based;
+                        if (nb1_v068229336 >= 1 &&
+                            static_cast<std::size_t>(nb1_v068229336) < continuum_capacity) {
+                            const int lower_one_based_v068229336 = std::max(1, nb1_v068229336 - 1);
+                            const double width_v068229336 =
+                                input.radiation_energy_ev[static_cast<std::size_t>(nb1_v068229336)] -
+                                input.radiation_energy_ev[static_cast<std::size_t>(lower_one_based_v068229336 - 1)];
+                            if (std::isfinite(width_v068229336) && width_v068229336 > 0.0) {
+                                const double ergsev_v068229336 = 1.602176634e-12;
+                                const double source_hc_v068229336 = local_zone_source_real_literal(12398.4016);
+                                const double line_energy_v068229336 =
+                                    source_hc_v068229336 / (pprint4_elmn_wavelength_v068229336 + 1.0e-36);
+                                const double net_v068229336 =
+                                    (c.ans2 * c.abundance_upper - c.ans1 * c.abundance_lower) *
+                                    c.hydrogen_density;
+                                const double fline1_v068229336 = std::max(
+                                    net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * c.ptmp1, 0.0);
+                                const double fline2_v068229336 = std::max(
+                                    net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * c.ptmp2, 0.0);
+                                pprint4_flinel_v068229334[static_cast<std::size_t>(nb1_v068229336 - 1)] +=
+                                    (fline1_v068229336 + fline2_v068229336) * 2.0 /
+                                    width_v068229336 / ergsev_v068229336;
+                            }
+                        }
                     }
                 }
                 selected_lines_v82_patch5206.push_back(c);
