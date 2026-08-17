@@ -2749,6 +2749,11 @@ struct FixedDsecSnapshot {
     std::vector<double> opakc_thomson_post_gsmooth_v0648115;
     std::vector<double> fline;
     std::vector<double> flinel;
+    // 0.6.82.29.3.3.1 publication-only pre-GSSMOOTH pprint(4) surfaces.
+    std::vector<double> pprint4_opakc;
+    std::vector<double> pprint4_rccemis;
+    std::vector<double> pprint4_brcems;
+    std::vector<double> pprint4_flinel;
     std::vector<double> zrems;
     std::vector<double> dpthc;
     std::vector<double> dpthcont;
@@ -5140,6 +5145,10 @@ int command_run_fixed_dsec(const Options& options) {
         target.source_workspace.opakc = source.opakc;
         target.source_workspace.opakcont = source.opakcont;
         target.source_workspace.flinel = source.flinel;
+        target.source_workspace.pprint4_opakc = source.pprint4_opakc;
+        target.source_workspace.pprint4_rccemis = source.pprint4_rccemis;
+        target.source_workspace.pprint4_brcems = source.pprint4_brcems;
+        target.source_workspace.pprint4_flinel = source.pprint4_flinel;
         target.source_workspace.line_profile_workspace = source.line_profile_workspace;
         target.source_workspace.native_line_count = source.native_line_count;
         target.source_workspace.native_continuum_count = source.native_continuum_count;
@@ -10499,6 +10508,10 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state(const FixedDse
     target.source_workspace.opakc = source.opakc;
     target.source_workspace.opakcont = source.opakcont;
     target.source_workspace.flinel = source.flinel;
+    target.source_workspace.pprint4_opakc = source.pprint4_opakc;
+    target.source_workspace.pprint4_rccemis = source.pprint4_rccemis;
+    target.source_workspace.pprint4_brcems = source.pprint4_brcems;
+    target.source_workspace.pprint4_flinel = source.pprint4_flinel;
     target.source_workspace.line_profile_workspace = source.line_profile_workspace;
     target.source_workspace.native_line_count = source.native_line_count;
     target.source_workspace.native_continuum_count = source.native_continuum_count;
@@ -15175,6 +15188,7 @@ void attach_native_product_diagnostics(
     snapshot.source_global_alphag = std::move(publication.level_alpha);
     snapshot.source_global_igammamaxg = std::move(publication.level_igammamax);
     snapshot.source_global_ialphamaxg = std::move(publication.level_ialphamax);
+    snapshot.pprint4_flinel = std::move(publication.option4_flinel);
     for (auto& item : snapshot.element_thermal_products) {
         const auto found = publication.element_thermal.find(item.element_z);
         if (found == publication.element_thermal.end()) continue;
@@ -19845,6 +19859,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // helper mutates the local publication copy.  The subsequent
             // source STPCUT(delr=1.e-15) must consume this preserved opacity.
             const auto final_writer_unsmoothed_opakc_v0682278 = final_pprint.opakc;
+            // 0.6.82.29.3.3.1: canonical post-loop XSTAR goes directly from
+            // xstarcalc/bremem to HEATT/STPCUT/pprint and does not execute
+            // GSSMOOTH here.  The generic transport helper below still smooths
+            // its operational copy, so freeze the literal pprint(4) owners
+            // before that mutation.  This is publication-only state.
+            final_pprint.pprint4_opakc = final_pprint.opakc;
+            final_pprint.pprint4_rccemis = final_pprint.rccemis;
+            final_pprint.pprint4_brcems = dense_bremem_source(
+                final_pprint, final_pprint.radiation_energy_ev, final_pprint.hydrogen_density_cm3);
+            if (final_pprint.pprint4_flinel.empty()) final_pprint.pprint4_flinel = final_pprint.flinel;
             advance_source_continuum_radiation(
                 final_pprint_data, final_pprint, final_writer_delr,
                 current_radius_cm_v068227);

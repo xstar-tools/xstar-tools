@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.1 - Option 4 final-writer source-workspace ownership hotfix - 2026-08-17
+
+- Correct the real host failure from `0.6.82.29.3.3`: the final post-loop verbose writer was consuming `opakc`/`rccemis` after the generic radial helper had applied GSSMOOTH, even though canonical XSTAR does not execute GSSMOOTH in the post-loop `xstarcalc -> HEATT -> STPCUT -> pprint` sequence. Retain the pre-GSSMOOTH post-`xstarcalc` arrays for Option 4 only.
+- Replace the sparse per-bin diagnostic fallback used for Option-4 bremsstrahlung with the literal dense `bremem.f90` publication vector already computed from the final source temperature, density, electron fraction, and continuum grid.
+- Preserve a publication-only source-equivalent `flinel` surface with canonical caller ownership: incoming `calc_emisab` `flinel` plus the selected `calc_emis` line additions. The operational C++ `flinel` used by transport remains unchanged in this narrow subrevision.
+- Keep `opakcont`, the Planck/source-function formulas, and the Rosseland integration unchanged; the returned host evidence already showed `opakcont` and the Rosseland mean were correct.
+- Strengthen the Option-4 hotfix tests/scope gate around the four publication owners (`opakc`, `rccemis`, dense `brcems`, `flinel`) and retain complete payload/tail comparison.
+- Scope is still Option 4 only. Options 10/18/29/30 remain unchanged. Science revision and public ABI identifiers remain frozen.
+
 ## 0.6.82.29.3.3 - Option 4 full continuum opacity/emissivity payload - 2026-08-17
 
 - Freeze the host-accepted Option-6 science/output result from `0.6.82.29.3.2`; the returned `header=0` was a qualification-parser false negative because numbered explanatory header lines were misclassified as data, while all 12 canonical header lines matched and `payload_rel=1.28e-05` was within the established `1e-3` tolerance.

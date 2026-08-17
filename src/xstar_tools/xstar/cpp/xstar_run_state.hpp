@@ -107,9 +107,16 @@ struct ExactSourceWorkspaceState {
     std::vector<double> zrems;
     std::vector<double> opakc;
     std::vector<double> opakcont;
-    // 0.6.82.29.3.3: final source flinel continuum array retained for pprint(4) only.
+    // 0.6.82.29.3.3: operational final source flinel continuum array.
     std::vector<double> flinel;
     std::vector<double> rccemis;
+    // 0.6.82.29.3.3.1: publication-only pre-GSSMOOTH pprint(4) surfaces.
+    // These mirror the post-loop xstarcalc/bremem state consumed by FORTRAN
+    // pprint(4) without changing the operational transport workspaces.
+    std::vector<double> pprint4_opakc;
+    std::vector<double> pprint4_rccemis;
+    std::vector<double> pprint4_brcems;
+    std::vector<double> pprint4_flinel;
     std::vector<double> dpthc;
     std::vector<double> dpthcont;
     std::vector<double> zremsz;

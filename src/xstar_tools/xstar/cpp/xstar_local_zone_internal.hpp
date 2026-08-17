@@ -21,6 +21,10 @@ struct PublicationStateV0682292 {
     std::map<std::tuple<int,int,int>, double> level_alpha;
     std::map<std::tuple<int,int,int>, std::int64_t> level_igammamax;
     std::map<std::tuple<int,int,int>, std::int64_t> level_ialphamax;
+    // 0.6.82.29.3.3.1: publication-only literal pprint(4) flinel owner.
+    // calc_emis_all retains caller-owned calc_emisab flinel and adds selected
+    // calc_emis line contributions; production transport state remains unchanged.
+    std::vector<double> option4_flinel;
     double free_free_heating = 0.0;
     double brems_cooling = 0.0;
 };

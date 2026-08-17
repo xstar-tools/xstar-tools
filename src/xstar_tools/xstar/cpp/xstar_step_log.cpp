@@ -1914,11 +1914,19 @@ void append_native_lprint_extra_sections(
         // source continuum workspace.  Retain/consume the already-computed
         // opakc/opakcont/rccemis/flinel arrays and per-bin brcems diagnostic;
         // reconstruct only the literal source derived quantities here.
-        std::vector<double> option4_brcems(n, 0.0);
-        for (const auto& row : eval->continuum_product_diagnostics) {
-            if (row.full_bin_one_based <= 0) continue;
-            const std::size_t at = static_cast<std::size_t>(row.full_bin_one_based - 1);
-            if (at < option4_brcems.size() && std::isfinite(row.brcems)) option4_brcems[at] = row.brcems;
+        const auto& option4_opakc = ws.pprint4_opakc.empty() ? ws.opakc : ws.pprint4_opakc;
+        const auto& option4_rccemis = ws.pprint4_rccemis.empty() ? ws.rccemis : ws.pprint4_rccemis;
+        const auto& option4_flinel = ws.pprint4_flinel.empty() ? ws.flinel : ws.pprint4_flinel;
+        std::vector<double> option4_brcems;
+        if (!ws.pprint4_brcems.empty()) {
+            option4_brcems = ws.pprint4_brcems;
+        } else {
+            option4_brcems.assign(n, 0.0);
+            for (const auto& row : eval->continuum_product_diagnostics) {
+                if (row.full_bin_one_based <= 0) continue;
+                const std::size_t at = static_cast<std::size_t>(row.full_bin_one_based - 1);
+                if (at < option4_brcems.size() && std::isfinite(row.brcems)) option4_brcems[at] = row.brcems;
+            }
         }
         const double option4_xpx = eval->hydrogen_density_cm3;
         const double option4_xnx = option4_xpx * eval->computed_electron_fraction;
@@ -1936,13 +1944,13 @@ void append_native_lprint_extra_sections(
         double option4_rsum1 = 0.0;
         double option4_rsum2 = 0.0;
         const double option4_ekkr = std::max(1.0e-20, option4_xnx * option4_source_665e25);
-        double option4_optpp = std::max(vector_value(ws.opakc, 0u), option4_ekkr);
+        double option4_optpp = std::max(vector_value(option4_opakc, 0u), option4_ekkr);
         for (std::size_t i = 1u; i < n; ++i) {
             const double energy = eval->radiation_energy_ev[i];
-            const double op = vector_value(ws.opakc, i);
+            const double op = vector_value(option4_opakc, i);
             const double sigma_e3 = op * std::pow(energy / 1000.0, 3.0) / std::max(1.0e-24, option4_xpx);
             if (energy > 100.0) {
-                option4_opsum += (op + vector_value(ws.opakc, i-1u)) *
+                option4_opsum += (op + vector_value(option4_opakc, i-1u)) *
                     (energy - eval->radiation_energy_ev[i-1u]) / 2.0;
             }
             double tmp = energy * option4_source_116 / option4_tstar;
@@ -1961,8 +1969,8 @@ void append_native_lprint_extra_sections(
             option4_rsum2 = std::min(1.0e20, option4_rsum2 +
                 (option4_fstr + fstro) * delte / 2.0);
 
-            const double rin = flat_plane(ws.rccemis, 2u, 0u, i);
-            const double rout = flat_plane(ws.rccemis, 2u, 1u, i);
+            const double rin = flat_plane(option4_rccemis, 2u, 0u, i);
+            const double rout = flat_plane(option4_rccemis, 2u, 1u, i);
             const double brcems = vector_value(option4_brcems, i);
             const double rss = (rin + rout + brcems / option4_source_four_pi) / (1.0e-36 + op);
             const double planck_energy = std::min(2.0e4, energy);
@@ -1973,7 +1981,7 @@ void append_native_lprint_extra_sections(
                 << std::setprecision(5) << energy << std::setw(13) << op << std::setw(13) << sigma_e3
                 << std::setw(13) << vector_value(ws.opakcont, i) << std::setw(13) << rin << std::setw(13) << rout
                 << std::setw(13) << brcems << std::setw(13) << rss << std::setw(13) << bbe
-                << std::setw(13) << rocc << std::setw(13) << vector_value(ws.flinel, i) << "\n";
+                << std::setw(13) << rocc << std::setw(13) << vector_value(option4_flinel, i) << "\n";
         }
         const double option4_rssmn = option4_rsum1 > 0.0 ? option4_rsum2 / option4_rsum1 : 0.0;
         out << " opsum cont=   " << std::uppercase << std::scientific << std::setprecision(16) << option4_opsum << "\n";

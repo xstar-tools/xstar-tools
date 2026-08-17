@@ -3754,6 +3754,8 @@ struct xstar_fixed_state_context_impl {
     std::vector<double> last_source_opakcont_v064894;
     std::vector<double> last_source_fline_v064894;
     std::vector<double> last_source_flinel_v064894;
+    // 0.6.82.29.3.3.1: source-equivalent caller-owned flinel for pprint(4).
+    std::vector<double> last_source_pprint4_flinel_v068229331;
     std::vector<double> last_source_elum_v064894;
     std::vector<double> last_source_line_profile_workspace_v064894;
 };
@@ -14475,6 +14477,13 @@ int run_impl(
             }
         }
 
+        // 0.6.82.29.3.3.1: FORTRAN calc_emis_all does not reset caller-owned
+        // fline/flinel.  Preserve the incoming calc_emisab flinel for the
+        // publication surface, then add the selected calc_emis line replay.
+        // Do not alter the operational C++ flinel in this narrow output-only
+        // revision; that remains frozen for transport/science qualification.
+        std::vector<double> pprint4_flinel_v068229331 = flinel;
+
         // v82 patch 5.20.6: calc_emis_all resets opakc before its line
         // revisit.  Preserve broad rcem/oplin as calc_emisab rank inputs, but
         // replace public fline/flinel and line-profile opacity with an nlbin-
@@ -14557,6 +14566,10 @@ int run_impl(
                 throw std::runtime_error(std::string("v82 patch 5.20.6 selected line replay failed: ") + selected_error.data());
             line_profile_opacity.swap(selected_line_profile);
             fline.swap(selected_fline);
+            if (pprint4_flinel_v068229331.size() == selected_flinel.size()) {
+                for (std::size_t k_v068229331 = 0; k_v068229331 < selected_flinel.size(); ++k_v068229331)
+                    pprint4_flinel_v068229331[k_v068229331] += selected_flinel[k_v068229331];
+            }
             flinel.swap(selected_flinel);
 
             // v82 patch 5.20.17.3.4: diagnostic-only selected-line producer
@@ -15700,6 +15713,7 @@ int run_impl(
         ctx.last_source_opakcont_v064894 = std::move(opakcont);
         ctx.last_source_fline_v064894 = std::move(fline);
         ctx.last_source_flinel_v064894 = std::move(flinel);
+        ctx.last_source_pprint4_flinel_v068229331 = std::move(pprint4_flinel_v068229331);
         ctx.last_source_elum_v064894 = std::move(elum);
         ctx.last_source_line_profile_workspace_v064894 = std::move(profiled);
         ctx.last_source_native_line_count_v064894 = ctx.program.native_line_count;
@@ -15888,6 +15902,7 @@ void capture_publication_state_v0682292(
         }
     }
     out.free_free_heating = context->last_htfreef;
+    out.option4_flinel = context->last_source_pprint4_flinel_v068229331;
     out.brems_cooling = context->last_clbrems;
 }
 
@@ -16359,6 +16374,7 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
     context->last_source_opakcont_v064894.clear();
     context->last_source_fline_v064894.clear();
     context->last_source_flinel_v064894.clear();
+    context->last_source_pprint4_flinel_v068229331.clear();
     context->last_source_elum_v064894.clear();
     context->last_source_line_profile_workspace_v064894.clear();
     copy_text(message, message_size, "native fixed-state context reset");
