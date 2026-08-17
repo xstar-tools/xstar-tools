@@ -1469,21 +1469,72 @@ def _option10_ion_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> No
 
 def _option4_continuum_opacity(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 4)
-    buf.log_lines.extend(["continuum opacity and emissivities (/cm**3/sec/10**38)", "channel, energy, opacity, scattered, rec. in, rec. out, brem. em., source"])
+    buf.log_lines.extend([
+        "continuum opacity and emissivities (/cm**3/sec/10**38)",
+        "channel, energy,      opacity,    sigma*e**3,scattered,  rec. in,   rec. out,  brem. em., source, bbe,photon occ",
+    ])
     ws = _workspace(state)
     epi = _active_epi(state)
     opakc = np.asarray(getattr(ws, "opakc", np.zeros(0)), dtype=float).reshape(-1)
+    opakcont = np.asarray(getattr(ws, "opakcont", np.zeros(0)), dtype=float).reshape(-1)
     rcc = np.asarray(getattr(ws, "rccemis", np.zeros((2,0))), dtype=float)
     base = getattr(getattr(ws, "emissivity", None), "base", None)
     br = np.asarray(getattr(base, "brcems", np.zeros(0)), dtype=float).reshape(-1)
+    flinel = np.asarray(getattr(getattr(ws, "emissivity", None), "flinel", np.zeros(0)), dtype=float).reshape(-1)
     n = min(epi.size, opakc.size)
+    xpx = float(state.plasma.xpx)
+    xee = float(state.plasma.xee)
+    xnx = float(state.plasma.electron_density) if float(state.plasma.electron_density) > 0.0 else xpx * xee
+    tstar = _temperature_t4(state)
+    source_665e25 = float(np.float32(6.65e-25))
+    source_116 = float(np.float32(1.16))
+    source_1e4 = float(np.float32(1.0e-4))
+    source_two = float(np.float32(2.0))
+    source_planck_coeff = float(np.float32(1.5642e22))
+    source_kt_coeff = float(np.float32(0.861707))
+    source_four_pi = float(np.float32(12.56))
+    ekkr = max(1.0e-20, xnx * source_665e25)
+    optpp = max(float(opakc[0]) if n else 0.0, ekkr)
+    fstr = 0.0
+    rsum1 = 0.0
+    rsum2 = 0.0
+    opsum = 0.0
     for i in range(1, n):
+        e = float(epi[i])
+        op = float(opakc[i])
+        sgtmp = op * (e / 1000.0) ** 3 / max(1.0e-24, xpx)
+        if e > 100.0:
+            opsum += (op + float(opakc[i-1])) * (e - float(epi[i-1])) / 2.0
+        tmp = e * source_116 / tstar
+        crayj = 1.0 / tmp
+        fstro = fstr
+        if tmp <= 50.0:
+            if tmp > source_1e4:
+                crayj = 1.0 / (float(np.exp(np.clip(tmp, -60.0, 60.0))) - 1.0)
+            crayj *= crayj
+            fstr = tmp * crayj * e**3 / tstar
+        optppo = optpp
+        optpp = max(op, ekkr)
+        delte = e - float(epi[i-1])
+        rsum1 = min(1.0e20, rsum1 + (fstr / optpp + fstro / optppo) * delte / 2.0)
+        rsum2 = min(1.0e20, rsum2 + (fstr + fstro) * delte / 2.0)
         rin = rcc[0,i] if rcc.ndim == 2 and rcc.shape[0] > 1 and i < rcc.shape[1] else 0.0
         rout = rcc[1,i] if rcc.ndim == 2 and rcc.shape[0] > 1 and i < rcc.shape[1] else 0.0
         b = br[i] if i < br.size else 0.0
-        source = (rin+rout+b/12.56)/(1.0e-36+opakc[i])
-        buf.log_lines.append(f"{i+1:7d}{epi[i]:13.5E}{opakc[i]:13.5E}{0.0:13.5E}{rin:13.5E}{rout:13.5E}{b:13.5E}{source:13.5E}")
-
+        scattered = opakcont[i] if i < opakcont.size else 0.0
+        source = (rin + rout + b / source_four_pi) / (1.0e-36 + op)
+        planck_energy = min(2.0e4, e)
+        expo_value = float(np.exp(np.clip(e / (source_kt_coeff * tstar), -60.0, 60.0)))
+        bbe = source_two * planck_energy**3 * source_planck_coeff / (expo_value - 1.0 + 1.0e-36)
+        rocc = source / (bbe + 1.0e-36)
+        fl = flinel[i] if i < flinel.size else 0.0
+        buf.log_lines.append(
+            f"{i+1:7d}{e:13.5E}{op:13.5E}{sgtmp:13.5E}{scattered:13.5E}"
+            f"{rin:13.5E}{rout:13.5E}{b:13.5E}{source:13.5E}{bbe:13.5E}{rocc:13.5E}{fl:13.5E}"
+        )
+    rssmn = rsum2 / rsum1 if rsum1 > 0.0 else 0.0
+    buf.log_lines.append(f" opsum cont=   {opsum:.16E}")
+    buf.log_lines.append(f" rosseland mean opacity=   {tstar:.16E}        {rssmn:.16E}")
 
 def _option6_continuum_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 6)

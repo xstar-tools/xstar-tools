@@ -1909,15 +1909,76 @@ void append_native_lprint_extra_sections(
             static_cast<std::size_t>(std::max<long long>(0LL, std::llround(parameter_number(state, "ncn2", static_cast<double>(eval->radiation_energy_ev.size()))))),
             eval->radiation_energy_ev.size());
         out << "\n print option: 4\n continuum opacity and emissivities (/cm**3/sec/10**38)\n";
-        out << "channel, energy, opacity, scattered, rec. in, rec. out, source\n";
+        out << " channel, energy,      opacity,    sigma*e**3,scattered,  rec. in,   rec. out,  brem. em., source, bbe,photon occ\n";
+        // 0.6.82.29.3.3: pprint(4) is a publication-only view of the final
+        // source continuum workspace.  Retain/consume the already-computed
+        // opakc/opakcont/rccemis/flinel arrays and per-bin brcems diagnostic;
+        // reconstruct only the literal source derived quantities here.
+        std::vector<double> option4_brcems(n, 0.0);
+        for (const auto& row : eval->continuum_product_diagnostics) {
+            if (row.full_bin_one_based <= 0) continue;
+            const std::size_t at = static_cast<std::size_t>(row.full_bin_one_based - 1);
+            if (at < option4_brcems.size() && std::isfinite(row.brcems)) option4_brcems[at] = row.brcems;
+        }
+        const double option4_xpx = eval->hydrogen_density_cm3;
+        const double option4_xnx = option4_xpx * eval->computed_electron_fraction;
+        const double option4_tstar = eval->temperature_t4;
+        const double option4_source_665e25 = static_cast<double>(static_cast<float>(6.65e-25));
+        const double option4_source_116 = static_cast<double>(static_cast<float>(1.16));
+        const double option4_source_1e4 = static_cast<double>(static_cast<float>(1.0e-4));
+        const double option4_source_two = static_cast<double>(static_cast<float>(2.0));
+        const double option4_source_planck_coeff = static_cast<double>(static_cast<float>(1.5642e22));
+        const double option4_source_kt_coeff = static_cast<double>(static_cast<float>(0.861707));
+        const double option4_source_four_pi = static_cast<double>(static_cast<float>(12.56));
+        auto option4_source_expo = [](double x) { return std::exp(std::min(60.0, std::max(-60.0, x))); };
+        double option4_opsum = 0.0;
+        double option4_fstr = 0.0;
+        double option4_rsum1 = 0.0;
+        double option4_rsum2 = 0.0;
+        const double option4_ekkr = std::max(1.0e-20, option4_xnx * option4_source_665e25);
+        double option4_optpp = std::max(vector_value(ws.opakc, 0u), option4_ekkr);
         for (std::size_t i = 1u; i < n; ++i) {
+            const double energy = eval->radiation_energy_ev[i];
             const double op = vector_value(ws.opakc, i);
+            const double sigma_e3 = op * std::pow(energy / 1000.0, 3.0) / std::max(1.0e-24, option4_xpx);
+            if (energy > 100.0) {
+                option4_opsum += (op + vector_value(ws.opakc, i-1u)) *
+                    (energy - eval->radiation_energy_ev[i-1u]) / 2.0;
+            }
+            double tmp = energy * option4_source_116 / option4_tstar;
+            double crayj = 1.0 / tmp;
+            const double fstro = option4_fstr;
+            if (tmp <= 50.0) {
+                if (tmp > option4_source_1e4) crayj = 1.0 / (option4_source_expo(tmp) - 1.0);
+                crayj *= crayj;
+                option4_fstr = tmp * crayj * energy * energy * energy / option4_tstar;
+            }
+            const double option4_optppo = option4_optpp;
+            option4_optpp = std::max(op, option4_ekkr);
+            const double delte = energy - eval->radiation_energy_ev[i-1u];
+            option4_rsum1 = std::min(1.0e20, option4_rsum1 +
+                (option4_fstr / option4_optpp + fstro / option4_optppo) * delte / 2.0);
+            option4_rsum2 = std::min(1.0e20, option4_rsum2 +
+                (option4_fstr + fstro) * delte / 2.0);
+
             const double rin = flat_plane(ws.rccemis, 2u, 0u, i);
             const double rout = flat_plane(ws.rccemis, 2u, 1u, i);
+            const double brcems = vector_value(option4_brcems, i);
+            const double rss = (rin + rout + brcems / option4_source_four_pi) / (1.0e-36 + op);
+            const double planck_energy = std::min(2.0e4, energy);
+            const double bbe = option4_source_two * planck_energy * planck_energy * planck_energy * option4_source_planck_coeff /
+                (option4_source_expo(energy / (option4_source_kt_coeff * option4_tstar)) - 1.0 + 1.0e-36);
+            const double rocc = rss / (bbe + 1.0e-36);
             out << std::setw(7) << (i+1u) << std::setw(13) << std::uppercase << std::scientific
-                << std::setprecision(5) << eval->radiation_energy_ev[i] << std::setw(13) << op
-                << std::setw(13) << 0.0 << std::setw(13) << rin << std::setw(13) << rout << "\n";
+                << std::setprecision(5) << energy << std::setw(13) << op << std::setw(13) << sigma_e3
+                << std::setw(13) << vector_value(ws.opakcont, i) << std::setw(13) << rin << std::setw(13) << rout
+                << std::setw(13) << brcems << std::setw(13) << rss << std::setw(13) << bbe
+                << std::setw(13) << rocc << std::setw(13) << vector_value(ws.flinel, i) << "\n";
         }
+        const double option4_rssmn = option4_rsum1 > 0.0 ? option4_rsum2 / option4_rsum1 : 0.0;
+        out << " opsum cont=   " << std::uppercase << std::scientific << std::setprecision(16) << option4_opsum << "\n";
+        out << " rosseland mean opacity=   " << std::setprecision(16) << option4_tstar
+            << "        " << option4_rssmn << "\n";
         out << "\n print option: 6\n continuum luminosities (/sec/10**38) and depths\n";
         out << " real quantities are as follows:\n";
         out << " 1 ) photon energy in eV\n";

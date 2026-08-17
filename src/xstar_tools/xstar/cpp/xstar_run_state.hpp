@@ -107,6 +107,8 @@ struct ExactSourceWorkspaceState {
     std::vector<double> zrems;
     std::vector<double> opakc;
     std::vector<double> opakcont;
+    // 0.6.82.29.3.3: final source flinel continuum array retained for pprint(4) only.
+    std::vector<double> flinel;
     std::vector<double> rccemis;
     std::vector<double> dpthc;
     std::vector<double> dpthcont;

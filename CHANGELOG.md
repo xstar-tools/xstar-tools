@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3 - Option 4 full continuum opacity/emissivity payload - 2026-08-17
+
+- Freeze the host-accepted Option-6 science/output result from `0.6.82.29.3.2`; the returned `header=0` was a qualification-parser false negative because numbered explanatory header lines were misclassified as data, while all 12 canonical header lines matched and `payload_rel=1.28e-05` was within the established `1e-3` tolerance.
+- Reproduce canonical FORTRAN `pprint(4)` full rows: energy, opacity, `sigma*e**3`, `opakcont`, inward/outward recombination emissivity, bremsstrahlung emissivity, source function, Planck function, photon occupation ratio, and `flinel`.
+- Retain the already-computed final `flinel` continuum array through the private publication state; use the retained per-bin `brcems` diagnostics for bremsstrahlung emissivity.
+- Reproduce the canonical `opsum cont=` and `rosseland mean opacity=` tail quantities with the literal source accumulation/floor semantics.
+- Mirror the same Option-4 publication contract in pure Python, but keep host qualification C++-first.
+- Add a dedicated Option-4 comparator that requires all 998 full-width rows plus both tail quantities; row count alone cannot pass.
+- Scope is Option 4 only. Options 10/18/29/30 remain unchanged. Science revision and all public ABIs remain frozen.
+
 ## 0.6.82.29.3.2 - Option 6 full continuum payload - 2026-08-17
 
 - Freeze the host-accepted `0.6.82.29.3.1.1` Option-7 closure (`250/250`, full payload ACCEPT, worst relative difference `3.37e-4`).

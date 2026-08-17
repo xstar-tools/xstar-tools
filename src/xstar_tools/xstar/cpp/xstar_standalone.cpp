@@ -5075,6 +5075,8 @@ int command_run_fixed_dsec(const Options& options) {
         target.call_index = source.call_index;
         target.evaluation_index = source.evaluation_index;
         target.temperature_t4 = source.temperature_t4;
+        // 0.6.82.29.3.3: pprint(4) sigma*e**3/Rosseland publication owns live source xpx.
+        target.hydrogen_density_cm3 = source.hydrogen_density_cm3;
         target.electron_fraction_input = source.electron_fraction_input;
         target.computed_electron_fraction = source.computed_electron_fraction;
         target.charge_residual = source.charge_residual;
@@ -5137,6 +5139,7 @@ int command_run_fixed_dsec(const Options& options) {
         target.source_workspace.rccemis = source.rccemis;
         target.source_workspace.opakc = source.opakc;
         target.source_workspace.opakcont = source.opakcont;
+        target.source_workspace.flinel = source.flinel;
         target.source_workspace.line_profile_workspace = source.line_profile_workspace;
         target.source_workspace.native_line_count = source.native_line_count;
         target.source_workspace.native_continuum_count = source.native_continuum_count;
@@ -6223,6 +6226,7 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     ws.rccemis = source.rccemis;
     ws.opakc = source.opakc;
     ws.opakcont = source.opakcont;
+    ws.flinel = source.flinel;
     ws.zrems = source.zrems;
     ws.dpthc = source.dpthc;
     ws.dpthcont = source.dpthcont;
@@ -10494,6 +10498,7 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state(const FixedDse
     target.source_workspace.rccemis = source.rccemis;
     target.source_workspace.opakc = source.opakc;
     target.source_workspace.opakcont = source.opakcont;
+    target.source_workspace.flinel = source.flinel;
     target.source_workspace.line_profile_workspace = source.line_profile_workspace;
     target.source_workspace.native_line_count = source.native_line_count;
     target.source_workspace.native_continuum_count = source.native_continuum_count;
