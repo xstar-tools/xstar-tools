@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.29.3.1.1 - Option 7 shared continuum/next-ground gamma-alpha alias - 2026-08-16
+
+- Correct the sole remaining Option-7 host mismatch from `0.6.82.29.3.1`: the inactive C II terminal continuum role now retains the gamma/alpha values of the shared compact row subsequently written by the first active C III ground role, matching canonical `calc_hmc_element.f90`/`calc_hmc_all.f90` `ipmat += nlev-1` ownership.
+- Keep the terminal continuum dominant-record pointers at zero, as canonical `calc_hmc_all.f90` does not copy `igammamaxe`/`ialphamaxe` for `mm=nlev`.
+- No solver, rate, thermal, transport, opacity, or spectrum arithmetic changes. Science revision and all public ABIs remain frozen.
+- Python Option-7 publication already maps all roles of the shared compact basis row; no additional Python numerical change is required for this corrective subrevision.
+
 ## 0.6.82.29.3.1 - Option 7 full verbose payload - 2026-08-16
 
 - Reproduce canonical FORTRAN `pprint(7)` full level-population rows: excitation energy, population, LTE population (`rnist`), `xilev/(rnist+1d-36)`, departure coefficient (`bilev`), total outward rate and dominant record, and total inward population-weighted rate and dominant record.

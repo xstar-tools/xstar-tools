@@ -15854,8 +15854,13 @@ void capture_publication_state_v0682292(
         const auto topology = lte_topology_for_element(context->program,
             context->program.elements.at(static_cast<std::size_t>(diagnostic.element_index)));
         for (const auto& topo : topology) {
-            if (topo.ion_stage < diagnostic.active.min_stage ||
-                topo.ion_stage > diagnostic.active.max_stage) continue;
+            // Source calc_hmc_element uses an overlapping element workspace:
+            // ipmat advances by nlev-1, so an inactive lower ion's terminal
+            // continuum row aliases the first active ion's ground row.  The
+            // inactive branch zeroes xileve/bileve only; gammae/alphae retain
+            // the values subsequently written through that shared slot.
+            // Therefore publication roles are selected by shared compact-row
+            // ownership, not by the ion-stage active window itself.
             for (int local_level = 1; local_level <= topo.nlev; ++local_level) {
                 const int full_row = topo.start_row + local_level - 1;
                 if (full_row < diagnostic.active.full_row_start ||
