@@ -13227,6 +13227,28 @@ int run_impl(
                     input.radiation_bin_count,
                     static_cast<std::size_t>(it - input.radiation_energy_ev) + 1));
             }
+            // 0.6.82.29.3.3.7: literal calc_emisab_ion line eligibility is
+            // owned by the raw source-local destinations, before any broad
+            // rcem/oplin publication can enter rlbin/nlbin.  The native
+            // lowered rows are energy ordered, but the predicate is symmetric:
+            // both source idest values must be strictly inside 1..nlev-1.
+            // Do not let a terminal/continuum alias (idest == nlev or beyond)
+            // seed a line slot that canonical FORTRAN never ranks.
+            if (!evaluated[k].bound_free_spectral &&
+                (rec.rate_type == 4 || rec.rate_type == 9 || rec.rate_type == 14)) {
+                const int source_nlev_v068229337 =
+                    source_nlev_for_stage(ctx.program, element, rec.ion_stage);
+                const int source_idest1_v068229337 = source_idest_for_full_row(
+                    ctx.program, element, rec.ion_stage, rec.lower_row);
+                const int source_idest2_v068229337 = source_idest_for_full_row(
+                    ctx.program, element, rec.ion_stage, rec.upper_row);
+                if (!(source_nlev_v068229337 > 0 &&
+                      source_idest1_v068229337 > 0 && source_idest1_v068229337 < source_nlev_v068229337 &&
+                      source_idest2_v068229337 > 0 && source_idest2_v068229337 < source_nlev_v068229337)) {
+                    continue;
+                }
+            }
+
             sc.abundance_lower =
                 source_post_mapback_population_for_full_row(active, buffers.populations, rec.lower_row) *
                 element.abundance;

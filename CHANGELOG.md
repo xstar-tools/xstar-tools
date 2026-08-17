@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.7 - Option 4 source-local line endpoint eligibility hotfix - 2026-08-17
+
+- Correct the unchanged `.29.3.3.6` Option-4 host rejection: all non-`flinel` columns and tails remain closed, while `flinel` still contains exactly ten small C++-only bins (`250,251,252,255,263,298,300,305,325,326`).
+- Canonical `calc_emisab_ion.f90` allows a rate-4/9/14 line record to populate the broad line workspace only when both raw destinations satisfy `0 < idest1 < nlev` and `0 < idest2 < nlev`. That broad `rcem/oplin` workspace is what `calc_emis_all.f90` ranks into `nlbin`; terminal/continuum aliases therefore cannot become strong-line consumers.
+- Apply the same strict source-local endpoint predicate before the native C++ broad line contribution is admitted to `rcem/oplin` ranking. The predicate is reconstructed from the lowered full-row coordinates with the existing source `nlev`/`idest` mapping and is symmetric under endpoint energy ordering.
+- Mirror the invariant in Python's compact/final `calc_emis` line-consumer paths now. Python `calc_emisab_ion` already enforces the canonical strict predicate; Python host qualification remains deferred to `0.6.82.29.3.9`.
+- Preserve the `.29.3.3.6` private `xstarsetup` `elmn` ownership correction, source `nbinc`/two-sided-width correction, and standalone pass-level `flinel` lifetime. No solver, transport, thermal, opacity, or rate arithmetic is intentionally changed.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen.
+
 ## 0.6.82.29.3.3.6 - Option 4 source `elmn` slot-ownership hotfix - 2026-08-17
 
 - Correct the private C++ `pprint(4)` `flinel` reconstruction to use the literal `xstarsetup.f90` line-slot coordinate: `elmn(slot)=0` for rate types 9 and 14, otherwise the source line wavelength.

@@ -1065,7 +1065,16 @@ def _compact_mg_line_emissivity_table(
             continue
         idest1, idest2 = int(ints[0]), int(ints[1])
         line_index = int(context.derived.nplini[int(rec)])
-        if not (line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0):
+        # 0.6.82.29.3.3.7: calc_emisab_ion can seed nlbin only when
+        # both source-local destinations are strictly below nlev.  Carry that
+        # invariant into the compact final calc_emis lookup as well; terminal
+        # continuum aliases must never become selected line consumers.
+        if not (
+            line_index
+            and line_index <= int(context.derived.nlsvn)
+            and 0 < idest1 < int(ion.nlev)
+            and 0 < idest2 < int(ion.nlev)
+        ):
             continue
         records.append(int(rec))
         rate_types.append(int(rate_type))
@@ -2345,21 +2354,29 @@ def calc_emis_ion(
                 idest1, idest2 = int(ints[0]), int(ints[1])
                 line_index = int(context.derived.nplini[rec])
                 ranked = False
-                if line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0:
+                source_line_endpoints_valid_v068229337 = (
+                    0 < idest1 < int(ion.nlev) and 0 < idest2 < int(ion.nlev)
+                )
+                if line_index and line_index <= int(context.derived.nlsvn) and source_line_endpoints_valid_v068229337:
                     wave = float(context.line_wavelength_angstrom[line_index])
                     energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / (wave + XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR)
                     nb1 = nbinc(energy, epi, len(epi))
                     ranked = bool(_feature_is_ranked(line_rank_table, line_index, nb1))
                     if ranked:
-                        if not (1 <= idest2 <= ion.nlev):
-                            raise CalcEmisPortError(f"line endpoint {idest2} outside ion nlev={ion.nlev}")
+                        if not (0 < idest1 < ion.nlev and 0 < idest2 < ion.nlev):
+                            raise CalcEmisPortError(
+                                f"line endpoints {idest1},{idest2} outside source calc_emisab range 1..{ion.nlev - 1}"
+                            )
                         e1 = levels.require(idest1).energy_ev
                         e2 = levels.require(idest2).energy_ev
                         if e1 < e2:
                             lower, upper = idest1 + compact_offset, idest2 + compact_offset
                         else:
                             lower, upper = idest2 + compact_offset, idest1 + compact_offset
-            if line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0:
+            source_line_endpoints_valid_v068229337 = (
+                0 < idest1 < int(ion.nlev) and 0 < idest2 < int(ion.nlev)
+            )
+            if line_index and line_index <= int(context.derived.nlsvn) and source_line_endpoints_valid_v068229337:
                 if ranked:
                     tau1, tau2 = context.escape.line_taus(line_index)
                     tau1 = 0.0 if tau1 is None else float(tau1)
