@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.82.29"
+version = "0.6.82.29.3.1"
 # Historical qualification compatibility marker: version = "0.6.82.27.16.5"
 # Historical qualification compatibility marker: version = "0.6.82.27.16.4.1"
 # Historical qualification compatibility marker: version = "0.6.82.27.16.4"

@@ -1594,27 +1594,496 @@ void append_native_product_sections(std::ofstream& out,const std::filesystem::pa
 // Purpose: Append the additional source-owned verbose pprint surfaces selected by lprint>=2.
 // Reference context: xstar.f90 nlprnt/nlnprnt final dispatch and pprint.f90 options 14,21,7,10,26,0,4,6,18,29,30.
 // XSTAR-FUNCTION-COMMENT-END
-void append_native_lprint_extra_sections(std::ofstream& out, int lprint) {
+void append_native_lprint_extra_sections(
+    std::ofstream& out,
+    const xstar_run_state::ProductWritingState& state,
+    int lprint) {
+    if (lprint < 2) return;
+
+    const xstar_run_state::FixedEvaluationState* eval = nullptr;
+    // The final nlprnt loop runs after xstar.f90's post-radial zero-thickness
+    // xstarcalc.  Use the retained final-writer evaluation when available;
+    // only fall back to the last physical radial boundary for older states.
+    if (state.final_writer_evaluation) {
+        eval = &*state.final_writer_evaluation;
+    } else if (!state.radial_zones.empty()) {
+        std::size_t zi = state.radial_zones.size() - 1u;
+        if (state.terminal_synthetic_row_present && state.radial_zones.size() >= 2u) zi -= 1u;
+        eval = &state.radial_zones[zi].accepted_controller.evaluation;
+    } else if (!state.fixed_evaluations.empty()) {
+        eval = &state.fixed_evaluations.back();
+    }
+    if (!eval) {
+        throw std::runtime_error("verbose pprint publication requires a retained final fixed evaluation");
+    }
+    const auto& ws = eval->source_workspace;
+
+    std::map<int,double> abundance_by_z;
+    std::map<int,int> element_index_to_z;
+    for (const auto& element : state.element_metadata) {
+        abundance_by_z[element.atomic_number] = element.abundance;
+        element_index_to_z[element.element_index] = element.atomic_number;
+    }
+    auto active_z = [&](int z, double floor) {
+        const auto it = abundance_by_z.find(z);
+        return it != abundance_by_z.end() && it->second > floor;
+    };
+
+    std::map<std::pair<int,int>, std::string> ion_labels;
+    std::map<std::string,int> ion_label_to_z;
+    std::map<std::string,int> ion_label_to_stage;
+    for (const auto& row : state.row_metadata) {
+        const auto ez = element_index_to_z.find(row.element_index);
+        if (ez == element_index_to_z.end() || row.ion <= 0 || row.ion_label.empty()) continue;
+        const auto key = std::make_pair(ez->second, row.ion);
+        if (!ion_labels.count(key)) ion_labels[key] = row.ion_label;
+        ion_label_to_z[row.ion_label] = ez->second;
+        ion_label_to_stage[row.ion_label] = row.ion;
+    }
+
+    // pprint(10) numbers ions in the complete global Type-12 source encounter
+    // order, including zero-abundance elements that are skipped by the final
+    // printing predicate.  For atomic number Z the source owns Z Type-12 ion
+    // records before the fully stripped state, so the one-based global index
+    // is triangular(Z-1)+stage.  Do not derive this offset from the retained
+    // active element inventory: doing so incorrectly numbered C I..C VI as
+    // 4..9 instead of the canonical 16..21 when Li/Be/B were absent.
+    auto global_type12_ion_index = [](int z, int stage) {
+        return z > 0 && stage > 0 ? (z * (z - 1)) / 2 + stage : stage;
+    };
+
+    auto element_label_for_z = [](int z) -> std::string {
+        static const std::array<const char*,30> names = {{
+            "hydrogen","helium","lithium","beryllium","boron","carbon",
+            "nitrogen","oxygen","fluorine","neon","sodium","magnesium",
+            "aluminum","silicon","phosphorus","sulfur","chlorine","argon",
+            "potassium","calcium","scandium","titanium","vanadium","chromium",
+            "manganese","iron","cobalt","nickel","copper","zinc"
+        }};
+        return z >= 1 && z <= static_cast<int>(names.size()) ? names[static_cast<std::size_t>(z-1)] : ("z" + std::to_string(z));
+    };
+
+    // pprint(14) and pprint(18) walk nplin in source order.  The apparent
+    // lrtyp exclusion in pprint.f90 occurs after drd() has visited the parent
+    // ion and element and therefore does not act as a line-rate-type filter.
+    // The observable source inventory is the same active-element/wavelength
+    // inventory already qualified for pprint(15).
+    std::vector<const xstar_run_state::LineIdentityState*> source_lines;
+    source_lines.reserve(state.line_identities.size());
+    for (const auto& id : state.line_identities) {
+        const double wave = std::abs(id.wavelength_angstrom);
+        const auto owner = ion_label_to_z.find(id.ion_label);
+        if (id.line_index > 0 && wave > 0.1 && wave < 9.0e9 &&
+            owner != ion_label_to_z.end() && active_z(owner->second, 1.0e-36)) {
+            source_lines.push_back(&id);
+        }
+    }
+    std::stable_sort(source_lines.begin(), source_lines.end(), [](const auto* a, const auto* b) {
+        return a->line_index < b->line_index;
+    });
+
+    auto flat_plane = [](const std::vector<double>& values, std::size_t planes,
+                         std::size_t plane, std::size_t slot) {
+        if (planes == 0u || values.empty() || values.size() % planes != 0u) return 0.0;
+        const std::size_t stride = values.size() / planes;
+        const std::size_t at = plane * stride + slot;
+        return at < values.size() && std::isfinite(values[at]) ? values[at] : 0.0;
+    };
+    auto vector_value = [](const std::vector<double>& values, std::size_t slot) {
+        return slot < values.size() && std::isfinite(values[slot]) ? values[slot] : 0.0;
+    };
+
     if (lprint >= 2) {
-        out << "\n print option:14\n line opacities and emissivities (retained native surface)\n";
-        out << "\n print option:21\n level opacities and emissivities (retained native surface)\n";
-        out << "\n print option: 7\n level populations (retained native surface)\n";
-        out << "\n print option:10\n ion abundances and rates (retained native surface)\n";
+        out << "\n print option:14\nline opacities and emissivities (erg/cm**3/sec/10**38)\n";
+        out << " index,wavelength,energy,ion,opacity,rec. em.,coll. em.,fl. em.,di. em.,cx. em.\n";
+        // nlsvn is the complete source database line capacity; the native
+        // lowered state intentionally retains only active line identities.
+        // Preserve the source row surface without inventing the unavailable
+        // inactive capacity scalar.
+        out << " retained active source line inventory " << source_lines.size() << "\n";
+        const std::size_t rcem_stride = ws.rcem.size() >= 2u ? ws.rcem.size() / 2u : 0u;
+        for (const auto* id : source_lines) {
+            const std::size_t slot = static_cast<std::size_t>(id->line_index);
+            const double op = vector_value(ws.oplin, slot);
+            const double r0 = rcem_stride ? flat_plane(ws.rcem, 2u, 0u, slot) : 0.0;
+            const double r1 = rcem_stride ? flat_plane(ws.rcem, 2u, 1u, slot) : 0.0;
+            const double energy = 12398.4016 / std::max(std::abs(id->wavelength_angstrom), 1.0e-24);
+            out << std::setw(10) << id->line_index << std::setw(13) << std::uppercase
+                << std::scientific << std::setprecision(5) << id->wavelength_angstrom
+                << std::setw(13) << energy << " " << std::left << std::setw(9)
+                << id->ion_label.substr(0,9) << std::right << std::setw(13) << op
+                << std::setw(13) << r0 << std::setw(13) << r1 << "\n";
+        }
+        out << "\n print option:21\n level opacities and emissivities\n";
+        out << "index,energy,ion,level,index,emiss in,emiss out,threshold opacity,absorbed energy,depth in, depth out\n";
+        // Literal pprint(21) source ownership is intentionally peculiar:
+        // the Type-12 terminal pointer used as jkk identifies the element's
+        // first-ion source chain, so each printed stage reuses that chain and
+        // only the ion label changes.  Preserve that observable source
+        // behavior rather than substituting each physical ion's independent
+        // RRC/FITS identity list.
+        const auto& source_rrcs = state.rrc_identities.empty()
+            ? state.source_rrc_identities : state.rrc_identities;
+        std::map<int, std::vector<const xstar_run_state::RrcIdentityState*>> first_ion_rrcs_by_z;
+        for (const auto& id : source_rrcs) {
+            const auto owner_z = ion_label_to_z.find(id.ion_label);
+            const auto owner_stage = ion_label_to_stage.find(id.ion_label);
+            const bool source_rate7 = id.rate_type == 0 || id.rate_type == 7;
+            if (!source_rate7 || id.continuum_index <= 0 || owner_z == ion_label_to_z.end() ||
+                owner_stage == ion_label_to_stage.end() || owner_stage->second != 1) continue;
+            first_ion_rrcs_by_z[owner_z->second].push_back(&id);
+        }
+        for (auto& [z, rows] : first_ion_rrcs_by_z) {
+            std::stable_sort(rows.begin(), rows.end(), [](const auto* a, const auto* b) {
+                if (a->continuum_index != b->continuum_index) return a->continuum_index < b->continuum_index;
+                return a->source_record < b->source_record;
+            });
+        }
+        for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
+            if (!active_z(z, 1.0e-10)) continue;
+            const auto base = first_ion_rrcs_by_z.find(z);
+            if (base == first_ion_rrcs_by_z.end()) continue;
+            const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
+            for (int stage = 1; stage <= nstage; ++stage) {
+                const auto label_it = ion_labels.find(std::make_pair(z, stage));
+                const std::string printed_label = label_it != ion_labels.end()
+                    ? label_it->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                for (const auto* id : base->second) {
+                    const std::size_t slot = static_cast<std::size_t>(id->continuum_index);
+                    const double cin = flat_plane(ws.cemab, 2u, 0u, slot);
+                    const double cout = flat_plane(ws.cemab, 2u, 1u, slot);
+                    const double opa = vector_value(ws.opakab, slot);
+                    const double absorbed = vector_value(ws.cabab, slot);
+                    if (!(opa > 1.0e-49 || absorbed > 1.0e-49 || cin > 1.0e-49 || cout > 1.0e-49)) continue;
+                    const double tin = flat_plane(ws.tauc, 2u, 0u, slot);
+                    const double tout = flat_plane(ws.tauc, 2u, 1u, slot);
+                    out << std::setw(7) << id->continuum_index << std::setw(6) << id->level_global_index
+                        << " " << std::left << std::setw(9) << printed_label.substr(0,9) << std::right
+                        << std::setw(6) << id->lower_local_index << std::setw(6) << id->upper_local_index
+                        << " " << std::left << std::setw(20) << id->lower_level.substr(0,20)
+                        << " " << std::setw(20) << id->upper_level.substr(0,20) << std::right
+                        << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
+                        << id->threshold_ev << std::setw(13) << cin << std::setw(13) << cout
+                        << std::setw(13) << opa << std::setw(13) << absorbed
+                        << std::setw(13) << tin << std::setw(13) << tout << "\n";
+                }
+            }
+        }
+
+        out << "\n print option: 7\n  level populations \n";
+        out << " ion                      level               e_exc population\n";
+        // pprint(7), like fstepr, walks every source ion/local-level npilev
+        // role.  Adjacent ions can share a compact continuum/next-ground row,
+        // so the compact level_identities surface loses legitimate continuum
+        // publication roles.  detail_level_identities retains exactly those
+        // source roles and was introduced for this same npilev ownership.
+        const auto& source_levels = !state.detail_level_identities.empty()
+            ? state.detail_level_identities : state.level_identities;
+        std::vector<const xstar_run_state::LevelIdentityState*> levels;
+        for (const auto& level : source_levels) {
+            if (level.global_index <= 0 || !active_z(level.atomic_number, 1.0e-10)) continue;
+            const std::size_t slot = static_cast<std::size_t>(level.global_index - 1);
+            const double pop = vector_value(eval->source_global_xilevg, slot);
+            if (!(pop > 1.0e-64)) continue;
+            levels.push_back(&level);
+        }
+        std::stable_sort(levels.begin(), levels.end(), [&](const auto* a, const auto* b) {
+            if (a->atomic_number != b->atomic_number) return a->atomic_number < b->atomic_number;
+            const int sa = ion_label_to_stage.count(a->ion_label) ? ion_label_to_stage.at(a->ion_label) : 0;
+            const int sb = ion_label_to_stage.count(b->ion_label) ? ion_label_to_stage.at(b->ion_label) : 0;
+            if (sa != sb) return sa < sb;
+            if (a->upper_index != b->upper_index) return a->upper_index < b->upper_index;
+            return a->global_index < b->global_index;
+        });
+        for (const auto* level : levels) {
+            const std::size_t slot = static_cast<std::size_t>(level->global_index - 1);
+            const double pop = vector_value(eval->source_global_xilevg, slot);
+            const double rn = vector_value(eval->source_global_rnisg, slot);
+            const double dep = pop / (rn + 1.0e-36);
+            const double bilev = vector_value(eval->source_global_bilevg, slot);
+            const int stage = ion_label_to_stage.count(level->ion_label)
+                ? ion_label_to_stage.at(level->ion_label) : 0;
+            const auto role = std::make_tuple(
+                static_cast<int>(level->atomic_number), stage, static_cast<int>(level->upper_index));
+            const auto gamma_it = eval->source_global_gammag.find(role);
+            const auto alpha_it = eval->source_global_alphag.find(role);
+            const auto igamma_it = eval->source_global_igammamaxg.find(role);
+            const auto ialpha_it = eval->source_global_ialphamaxg.find(role);
+            const double gamma = gamma_it != eval->source_global_gammag.end() ? gamma_it->second : 0.0;
+            const double alpha = alpha_it != eval->source_global_alphag.end() ? alpha_it->second : 0.0;
+            const std::int64_t igamma = igamma_it != eval->source_global_igammamaxg.end() ? igamma_it->second : 0;
+            const std::int64_t ialpha = ialpha_it != eval->source_global_ialphamaxg.end() ? ialpha_it->second : 0;
+            out << std::setw(7) << level->global_index << " " << std::left << std::setw(8)
+                << level->ion_label.substr(0,8) << " " << std::setw(20)
+                << level->level_label.substr(0,20) << std::right << std::setw(13)
+                << std::uppercase << std::scientific << std::setprecision(5)
+                << level->excitation_ev << std::setw(13) << pop << std::setw(13) << rn
+                << std::setw(13) << dep << std::setw(13) << bilev
+                << std::setw(13) << gamma << std::setw(8) << igamma
+                << std::setw(13) << alpha << std::setw(8) << ialpha << "\n";
+        }
+        out << " done with 7\n";
+
+        out << "\n print option:10\n ion abundances and  rates (/sec)\n";
+        out << " index, ion, abundance, recombination, ionization,\n";
+        // pprint(10) uses the complete global Type-12 xii sequence when it
+        // forms xii(lk)/xii(lk+1), so retain a global-index surface even for
+        // zero-abundance elements that are absent from the printed inventory.
+        std::map<int,double> fraction_by_global_ion;
+        for (const auto& [z_all, fractions_all] : eval->source_ion_stage_fractions) {
+            const int nstage_all = std::min<int>(z_all, static_cast<int>(fractions_all.size()));
+            for (int stage_all = 1; stage_all <= nstage_all; ++stage_all) {
+                fraction_by_global_ion[global_type12_ion_index(z_all, stage_all)] =
+                    fractions_all[static_cast<std::size_t>(stage_all - 1)];
+            }
+        }
+        constexpr int kSourceType12IonCountZn = 30 * 31 / 2;
+        for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
+            if (!active_z(z, 1.0e-15)) continue;
+            const auto pirt_it = eval->source_ionization_rates.find(z);
+            const auto rrrt_it = eval->source_recombination_rates.find(z);
+            const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
+            for (int stage = 1; stage <= nstage; ++stage) {
+                const auto key = std::make_pair(z, stage);
+                const auto found = ion_labels.find(key);
+                const int global_ion = global_type12_ion_index(z, stage);
+                const std::size_t slot = static_cast<std::size_t>(stage - 1);
+                const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                const double abundance = fractions[slot];
+                const double rrrt = (rrrt_it != eval->source_recombination_rates.end() && slot < rrrt_it->second.size())
+                    ? rrrt_it->second[slot] : 0.0;
+                const double pirt = (pirt_it != eval->source_ionization_rates.end() && slot < pirt_it->second.size())
+                    ? pirt_it->second[slot] : 0.0;
+                double rat1 = 0.0;
+                double rat2 = 0.0;
+                if (global_ion > 1 && global_ion < kSourceType12IonCountZn) {
+                    const auto next = fraction_by_global_ion.find(global_ion + 1);
+                    const double next_fraction = next != fraction_by_global_ion.end() ? next->second : 0.0;
+                    rat1 = abundance / (next_fraction + 1.0e-34);
+                    rat2 = rrrt / (pirt + 1.0e-34);
+                }
+                out << std::setw(5) << global_ion << " " << std::left << std::setw(9) << label.substr(0,9)
+                    << std::right << std::setw(16) << std::uppercase << std::scientific << std::setprecision(8)
+                    << abundance << std::setw(16) << rrrt << std::setw(16) << pirt
+                    << std::setw(16) << rat1 << std::setw(16) << rat2 << "\n";
+            }
+        }
+        out << " heating and cooling rates (erg/sec)\n";
+        out << "                 photon pov                                      electron pov\n";
+        out << " index element   heating         cooling        heating-cooling  heating         cooling        heating-cooling\n";
+        double element_heating2_total = 0.0;
+        double element_cooling2_total = 0.0;
+        for (const auto& item : eval->element_thermal_products) {
+            if (!active_z(item.element_z, 1.0e-36)) continue;
+            element_heating2_total += item.heating2;
+            element_cooling2_total += item.cooling2;
+            out << std::setw(5) << item.element_z << " " << std::left << std::setw(10) << element_label_for_z(item.element_z) << std::right
+                << std::setw(16) << std::uppercase << std::scientific << std::setprecision(8) << item.heating
+                << std::setw(16) << item.cooling << std::setw(16) << (item.heating-item.cooling)
+                << std::setw(16) << item.heating2 << std::setw(16) << item.cooling2
+                << std::setw(16) << (item.heating2-item.cooling2) << "\n";
+        }
+        out << "      compton " << std::uppercase << std::scientific << std::setprecision(8)
+            << std::setw(16) << eval->compton_heating << std::setw(16) << eval->compton_cooling
+            << std::setw(16) << (eval->compton_heating-eval->compton_cooling)
+            << std::setw(16) << eval->compton_heating << std::setw(16) << eval->compton_cooling
+            << std::setw(16) << (eval->compton_heating-eval->compton_cooling) << "\n";
+        out << "      free-free " << std::setw(16) << eval->free_free_heating
+            << std::setw(16) << eval->brems_cooling << std::setw(16) << (eval->free_free_heating-eval->brems_cooling)
+            << std::setw(16) << eval->free_free_heating << std::setw(16) << eval->brems_cooling
+            << std::setw(16) << (eval->free_free_heating-eval->brems_cooling) << "\n";
+        const double total_heating2 = element_heating2_total + eval->compton_heating + eval->free_free_heating;
+        const double total_cooling2 = element_cooling2_total + eval->compton_cooling + eval->brems_cooling;
+        out << "      total " << std::setw(16) << eval->total_heating << std::setw(16) << eval->total_cooling
+            << std::setw(16) << (eval->total_heating-eval->total_cooling)
+            << std::setw(16) << total_heating2 << std::setw(16) << total_cooling2
+            << std::setw(16) << (total_heating2-total_cooling2) << "\n";
         // pprint.f90 option 26 branches directly to the common return after
         // printing the option marker, so no body follows in the current source.
         out << "\n print option:26\n";
     }
+
     if (lprint >= 3) {
-        // pprint.f90 prints the option marker for jj=0 and returns immediately.
         out << "\n print option: 0\n";
+        const std::size_t n = std::min<std::size_t>(
+            static_cast<std::size_t>(std::max<long long>(0LL, std::llround(parameter_number(state, "ncn2", static_cast<double>(eval->radiation_energy_ev.size()))))),
+            eval->radiation_energy_ev.size());
         out << "\n print option: 4\n continuum opacity and emissivities (/cm**3/sec/10**38)\n";
+        out << "channel, energy, opacity, scattered, rec. in, rec. out, source\n";
+        for (std::size_t i = 1u; i < n; ++i) {
+            const double op = vector_value(ws.opakc, i);
+            const double rin = flat_plane(ws.rccemis, 2u, 0u, i);
+            const double rout = flat_plane(ws.rccemis, 2u, 1u, i);
+            out << std::setw(7) << (i+1u) << std::setw(13) << std::uppercase << std::scientific
+                << std::setprecision(5) << eval->radiation_energy_ev[i] << std::setw(13) << op
+                << std::setw(13) << 0.0 << std::setw(13) << rin << std::setw(13) << rout << "\n";
+        }
         out << "\n print option: 6\n continuum luminosities (/sec/10**38) and depths\n";
+        out << " real quantities are as follows:\n";
+        for (std::size_t i = 0u; i < n; ++i) {
+            out << std::setw(7) << (i+1u) << std::setw(13) << std::uppercase << std::scientific
+                << std::setprecision(5) << eval->radiation_energy_ev[i];
+            for (std::size_t plane = 0u; plane < 5u; ++plane) out << std::setw(13) << flat_plane(ws.zrems, 5u, plane, i);
+            out << std::setw(13) << flat_plane(ws.dpthc, 2u, 0u, i)
+                << std::setw(13) << flat_plane(ws.dpthc, 2u, 1u, i) << "\n";
+        }
+        // pprint(6) integrates zremsz and zrems(1:3,:) with a literal
+        // trapezoid in eV and converts with the source erg/eV constant.
+        constexpr double kSourceErgPerEv = 1.602197e-12;
+        double sum1 = 0.0, sum2 = 0.0, sum3 = 0.0, sum4 = 0.0;
+        for (std::size_t i = 1u; i < n; ++i) {
+            const double de = eval->radiation_energy_ev[i] - eval->radiation_energy_ev[i-1u];
+            sum1 += (vector_value(ws.zremsz, i) + vector_value(ws.zremsz, i-1u)) * de * kSourceErgPerEv / 2.0;
+            sum2 += (flat_plane(ws.zrems, 5u, 0u, i) + flat_plane(ws.zrems, 5u, 0u, i-1u)) * de * kSourceErgPerEv / 2.0;
+            sum3 += (flat_plane(ws.zrems, 5u, 1u, i) + flat_plane(ws.zrems, 5u, 1u, i-1u)) * de * kSourceErgPerEv / 2.0;
+            sum4 += (flat_plane(ws.zrems, 5u, 2u, i) + flat_plane(ws.zrems, 5u, 2u, i-1u)) * de * kSourceErgPerEv / 2.0;
+        }
+        out << " norms:\n";
+        out << std::setw(20) << "" << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
+            << sum1 << std::setw(13) << sum2 << std::setw(13) << sum3 << std::setw(13) << sum4 << "\n";
     }
+
     if (lprint >= 4) {
         out << "\n print option:18\n line wavelengths and levels\n";
-        out << "\n print option:29\n rates\n doing pprint(29)\n done with pprint(29)\n";
+        out << "       index wavelength  ion            lo                  up\n";
+        for (const auto* id : source_lines) {
+            out << std::setw(10) << id->line_index << std::setw(13) << std::uppercase
+                << std::scientific << std::setprecision(5) << id->wavelength_angstrom << " "
+                << std::left << std::setw(9) << id->ion_label.substr(0,9)
+                << std::setw(25) << id->lower_level.substr(0,25)
+                << std::setw(25) << id->upper_level.substr(0,25) << std::right
+                << std::setw(7) << id->lower_local_index << std::setw(7) << id->upper_local_index << "\n";
+        }
+
+        out << "\n print option:29\n rates\n doing pprint(29)\n";
+        std::vector<const xstar_run_state::RecordProductDiagnosticState*> rates;
+        for (const auto& row : eval->record_product_diagnostics) {
+            // pprint(29) prints the final source rates(1,ml) workspace.  The
+            // detailed calc_hmc_ion pass never calls UCalc for rate 8, rate
+            // 15, or the rate-1/Type-53 ownership case, so those source rates
+            // remain zero.  The retained native diagnostic inventory is wider
+            // than that source pass and also contains records outside the
+            // source active ion-stage window; exclude both classes before
+            // applying the literal abs(rates(1,ml)) > 1.e-34 predicate.
+            if (row.rate_type == 8 || row.rate_type == 15 ||
+                (row.rate_type == 1 && row.data_type == 53)) continue;
+            if (const auto active = eval->source_detail_active_windows.find(row.element_z);
+                active != eval->source_detail_active_windows.end()) {
+                const int min_stage = active->second[0];
+                const int max_stage = active->second[1];
+                if (row.ion_stage < min_stage || row.ion_stage > max_stage) continue;
+            }
+            if (std::abs(row.ans[0]) > 1.0e-34) rates.push_back(&row);
+        }
+        std::stable_sort(rates.begin(), rates.end(), [](const auto* a, const auto* b) {
+            if (a->record != b->record) return a->record < b->record;
+            return a->source_position < b->source_position;
+        });
+        // Build the source local-level role map used by pprint(29).  The
+        // detail identity inventory retains continuum/next-ion roles that the
+        // compact solver identity surface deliberately aliases away.
+        std::map<std::tuple<int,int,int>, const xstar_run_state::LevelIdentityState*> level_role_by_local;
+        const auto& source_level_roles = !state.detail_level_identities.empty()
+            ? state.detail_level_identities : state.level_identities;
+        for (const auto& level : source_level_roles) {
+            const int stage = ion_label_to_stage.count(level.ion_label) ? ion_label_to_stage.at(level.ion_label) : 0;
+            if (level.atomic_number <= 0 || stage <= 0 || level.upper_index <= 0) continue;
+            level_role_by_local[std::make_tuple(static_cast<int>(level.atomic_number), stage, static_cast<int>(level.upper_index))] = &level;
+        }
+        for (const auto* row : rates) {
+            const auto ion_it = ion_labels.find({row->element_z, row->ion_stage});
+            const std::string ion_label = ion_it != ion_labels.end() ? ion_it->second
+                : ("z" + std::to_string(row->element_z) + "_" + std::to_string(row->ion_stage));
+            const auto lower_it = level_role_by_local.find(std::make_tuple(row->element_z, row->ion_stage, row->lower_row));
+            const auto upper_it = level_role_by_local.find(std::make_tuple(row->element_z, row->ion_stage, row->upper_row));
+            const std::string lower_label = lower_it != level_role_by_local.end()
+                ? lower_it->second->level_label : "unknown";
+            const std::string upper_label = upper_it != level_role_by_local.end()
+                ? upper_it->second->level_label : "continuum";
+            const int global_lower = lower_it != level_role_by_local.end()
+                ? lower_it->second->global_index : row->lower_row;
+            const int global_upper = upper_it != level_role_by_local.end()
+                ? upper_it->second->global_index : row->upper_row;
+            out << std::setw(10) << row->record << " " << std::left << std::setw(9) << ion_label.substr(0,9)
+                << std::setw(26) << lower_label.substr(0,25) << std::setw(26) << upper_label.substr(0,25)
+                << std::right << std::setw(8) << row->data_type << std::setw(8) << row->rate_type
+                << std::setw(8) << row->lower_row << std::setw(8) << row->upper_row
+                << std::setw(8) << global_lower << std::setw(8) << global_upper;
+            for (double value : row->ans) out << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5) << value;
+            out << "\n";
+        }
+        out << " done with pprint(29)\n";
+
         out << "\n print option:30\n auger and fluorescence yields\n";
+        out << "ion     K shell pi rate  k fluorescence rate auger rate fluorescence yield\n";
+        // pprint(30) recomputes K-shell aggregates from the evaluated rate
+        // records and retained level populations.  It intentionally prints
+        // the *previous qualifying ion's* K-shell PI total (pirttoto), then
+        // the current ion fluorescence/Auger totals.
+        std::map<std::pair<int,int>, std::vector<const xstar_run_state::RecordProductDiagnosticState*>> records_by_ion;
+        for (const auto& row : eval->record_product_diagnostics) {
+            records_by_ion[{row.element_z, row.ion_stage}].push_back(&row);
+        }
+        auto starts_1s1 = [](const std::string& label) {
+            return label.size() >= 3u && label[0] == '1' && label[1] == 's' && label[2] == '1';
+        };
+        auto level_role = [&](int z, int stage, int local_index) -> const xstar_run_state::LevelIdentityState* {
+            const auto it = level_role_by_local.find(std::make_tuple(z, stage, local_index));
+            return it != level_role_by_local.end() ? it->second : nullptr;
+        };
+        auto retained_population = [&](const xstar_run_state::LevelIdentityState* level) {
+            if (!level || level->global_index <= 0) return 0.0;
+            return vector_value(eval->source_global_xilevg, static_cast<std::size_t>(level->global_index - 1));
+        };
+        double previous_k_pi = 0.0;
+        for (const auto& [z, fractions] : eval->source_ion_stage_fractions) {
+            if (!active_z(z, 1.0e-34)) continue;
+            const int nstage = std::min<int>(z, static_cast<int>(fractions.size()));
+            for (int stage = 1; stage <= nstage; ++stage) {
+                const double fraction = fractions[static_cast<std::size_t>(stage-1)];
+                if (!(fraction > 1.0e-12)) continue;
+                const double pirttoto = previous_k_pi;
+                double current_k_pi = 0.0;
+                double fluorescence = 0.0;
+                double auger = 0.0;
+                if (stage < z) {
+                    const auto rows_it = records_by_ion.find({z, stage});
+                    if (rows_it != records_by_ion.end()) {
+                        for (const auto* row : rows_it->second) {
+                            if (row->lower_row <= 0 || row->upper_row <= 0) continue;
+                            const auto* lower = level_role(z, stage, row->lower_row);
+                            const auto* upper = level_role(z, stage, row->upper_row);
+                            const double lower_population = retained_population(lower);
+                            if (row->rate_type == 7 && upper && starts_1s1(upper->level_label) &&
+                                row->upper_row > row->lower_row) {
+                                // Literal pprint(30): only continuum/next-ion
+                                // endpoints (idest2>nlev) whose next-ion label
+                                // begins 1s1 contribute to the K-shell PI sum.
+                                if (upper->upper_index == row->upper_row &&
+                                    (upper->level_label == "continuum" || upper->global_index > (lower ? lower->global_index : 0))) {
+                                    current_k_pi += row->ans[0] * lower_population;
+                                }
+                            }
+                            if ((row->rate_type == 4 || row->rate_type == 41) &&
+                                ((lower && starts_1s1(lower->level_label)) || (upper && starts_1s1(upper->level_label)))) {
+                                if (row->rate_type == 4) fluorescence += row->ans[1] * lower_population;
+                                else auger += row->ans[0] * lower_population;
+                            }
+                        }
+                    }
+                    const auto found = ion_labels.find({z,stage});
+                    const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
+                    out << " " << std::left << std::setw(8) << label.substr(0,8) << std::right
+                        << std::setw(11) << std::uppercase << std::scientific << std::setprecision(3) << pirttoto
+                        << std::setw(11) << fluorescence << std::setw(11) << auger
+                        << std::setw(11) << (fluorescence / (1.0e-34 + pirttoto)) << "\n";
+                }
+                previous_k_pi = current_k_pi;
+            }
+        }
     }
+    out.unsetf(std::ios::floatfield);
+    out << std::setprecision(17);
 }
 
 void append_source_like_timing_footer(std::ofstream& out,
@@ -1666,7 +2135,7 @@ Result write_native_step_log(
     const int lprint = static_cast<int>(std::llround(parameter_number(state, "lprint", 0.0)));
     if (lprint >= 0) out << "\n print option:11\n";
     if (lprint >= 1) append_native_product_sections(out, output_dir, state);
-    append_native_lprint_extra_sections(out, lprint);
+    append_native_lprint_extra_sections(out, state, lprint);
     const char* debug_product_summary = std::getenv("XSTAR_DEBUG_PRODUCT_STATE_SUMMARY");
     const bool emit_product_state_summary =
         debug_product_summary && std::string(debug_product_summary) == "1";

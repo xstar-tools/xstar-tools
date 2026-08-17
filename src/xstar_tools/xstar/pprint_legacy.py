@@ -811,6 +811,32 @@ def _active_line_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> 
 # Purpose: Implement the active rrc rows by index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
 # XSTAR-FUNCTION-COMMENT-END
+def _source_verbose_line_rows(state: XSTARPythonState) -> list[Any]:
+    """Return the observable pprint(14/18) active nplin inventory.
+
+    In the literal source the apparent lrtyp test occurs after parent-ion and
+    parent-element drd() calls have overwritten lrtyp.  The public inventory
+    therefore reduces to active composition plus the wavelength gate, matching
+    the already-qualified pprint(15) FORTRAN row identity surface.
+    """
+    return [
+        row for row in _active_line_rows_by_index(state, _line_metadata_rows(state))
+        if 0.1 < abs(float(getattr(row, "wavelength_angstrom", 0.0))) < 9.0e9
+    ]
+
+
+def _source_verbose_level_rows(state: XSTARPythonState) -> list[Any]:
+    active = _active_element_symbols(state)
+    meta = state.control.get("output_atomic_metadata")
+    rows = [
+        row for row in tuple(getattr(meta, "levels", ()) or ())
+        if int(getattr(row, "global_index", 0)) > 0
+        and (not active or _row_element_symbol(row) in active)
+    ]
+    rows.sort(key=lambda row: int(getattr(row, "global_index", 0)))
+    return rows
+
+
 def _active_rrc_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> list[Any]:
     active = _active_element_symbols(state)
     out = [
@@ -1226,21 +1252,25 @@ def _option14_line_opacity_emissivity(state: XSTARPythonState, buf: LegacyPprint
         "line opacities and emissivities (erg/cm**3/sec/10**38)",
         " index,wavelength,energy,ion,opacity,rec. em.,coll. em.,fl. em.,di. em.,cx. em.",
     ])
-    rows = _line_metadata_rows(state)
+    rows = _source_verbose_line_rows(state)
+    all_rows = _line_metadata_rows(state)
     ws = _workspace(state)
-    oplin = np.asarray(getattr(ws, "oplin", np.zeros(0)), dtype=float).reshape(-1)
-    rcem = np.asarray(getattr(ws, "rcem", np.zeros((2, 0))), dtype=float)
-    buf.log_lines.append(str(len(rows)))
+    oplin = np.asarray(getattr(ws, "oplin_physical", np.zeros(0)), dtype=float).reshape(-1)
+    rcem = np.asarray(getattr(ws, "rcem_physical", np.zeros((2, 0))), dtype=float)
+    # FORTRAN prints nlsvn before the filtered rows.  Preserve the complete
+    # metadata capacity scalar while iterating only the source-active inventory.
+    buf.log_lines.append(str(len(all_rows)))
     for row in rows:
-        j = int(getattr(row, "line_index", 0)) - 1
-        if j < 0 or j >= oplin.size or rcem.ndim != 2 or rcem.shape[0] < 2 or j >= rcem.shape[1]:
+        idx = int(getattr(row, "line_index", 0)) - 1
+        if idx < 0 or idx >= oplin.size or rcem.ndim != 2 or rcem.shape[0] < 2 or idx >= rcem.shape[1]:
             continue
         wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
-        if not (0.1 < wave < 9.0e9) or int(getattr(row, "rate_type", 50)) in (9, 14):
-            continue
         energy = 12398.4016 / max(wave, 1.0e-24)
         ion = str(getattr(row, "ion_label", ""))[:9]
-        buf.log_lines.append(f"{j+1:10d}{wave:13.5E}{energy:13.5E} {ion:<9s}{oplin[j]:13.5E}{rcem[0,j]:13.5E}{rcem[1,j]:13.5E}")
+        buf.log_lines.append(
+            f"{idx+1:10d}{wave:13.5E}{energy:13.5E} {ion:<9s}"
+            f"{oplin[idx]:13.5E}{rcem[0,idx]:13.5E}{rcem[1,idx]:13.5E}"
+        )
 
 
 def _option21_level_opacity_emissivity(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
@@ -1250,41 +1280,132 @@ def _option21_level_opacity_emissivity(state: XSTARPythonState, buf: LegacyPprin
         "index,energy,ion,level,index,emiss in,emiss out,threshold opacity,absorbed energy,depth in, depth out",
     ])
     ws = _workspace(state)
-    cemab = np.asarray(getattr(ws, "cemab", np.zeros((2, 0))), dtype=float)
-    opakab = np.asarray(getattr(ws, "opakab", np.zeros(0)), dtype=float).reshape(-1)
+    cemab = np.asarray(getattr(ws, "cemab_physical", np.zeros((2, 0))), dtype=float)
+    base = getattr(getattr(ws, "emissivity", None), "base", None)
+    opakab = np.asarray(getattr(base, "opakab", np.zeros(1)), dtype=float).reshape(-1)[1:]
+    cabab = np.asarray(getattr(base, "cabab", np.zeros(1)), dtype=float).reshape(-1)[1:]
     tauc = np.asarray(getattr(ws, "tauc", np.zeros((2, 0))), dtype=float)
-    for row in _rrc_metadata_rows(state):
-        idx = int(getattr(row, "continuum_index", 0)) - 1
-        if idx < 0:
+    output_meta = state.control.get("output_atomic_metadata")
+    all_rows = tuple(getattr(output_meta, "detail_rrcs", ()) or ())
+    # Literal pprint(21) retains the first Type-12 ion's Type-7/npconi2
+    # workspace for an element while the outer Type-12 traversal advances the
+    # printed ion label.  This is why canonical He II repeats the 103 He I
+    # rows and carbon contributes no rows when the C I workspace is zero.
+    first_rows_by_z: dict[int, tuple[Any, ...]] = {}
+    for z in sorted({int(getattr(row, "atomic_number", 0)) for row in all_rows}):
+        if z <= 0:
             continue
-        cin = cemab[0,idx] if cemab.ndim == 2 and cemab.shape[0] > 1 and idx < cemab.shape[1] else 0.0
-        cout = cemab[1,idx] if cemab.ndim == 2 and cemab.shape[0] > 1 and idx < cemab.shape[1] else 0.0
-        opa = opakab[idx] if idx < opakab.size else 0.0
-        tin = tauc[0,idx] if tauc.ndim == 2 and tauc.shape[0] > 1 and idx < tauc.shape[1] else 0.0
-        tout = tauc[1,idx] if tauc.ndim == 2 and tauc.shape[0] > 1 and idx < tauc.shape[1] else 0.0
-        buf.log_lines.append(f"{idx+1:8d} {float(getattr(row,'threshold_eV',0.0)):13.5E} {str(getattr(row,'ion_label',''))[:9]:<9s} {str(getattr(row,'lower_level',''))[:20]:<20s} {int(getattr(row,'level_global_index',0)):8d} {cin:13.5E} {cout:13.5E} {opa:13.5E} {0.0:13.5E} {tin:13.5E} {tout:13.5E}")
+        rows = tuple(
+            row for row in all_rows
+            if int(getattr(row, "atomic_number", 0)) == z
+            and _roman_stage_from_ion_label(str(getattr(row, "ion_label", ""))) == 1
+        )
+        if rows:
+            first_rows_by_z[z] = rows
+    meta = _pprint_metadata(state)
+    for ion in meta.ions:
+        z = int(getattr(ion, "element_index", 0))
+        if float(getattr(ion, "elemental_abundance", 0.0)) <= 1.0e-10:
+            continue
+        rows = first_rows_by_z.get(z, ())
+        printed_label = str(getattr(ion, "ion_label", ""))[:9]
+        for row in rows:
+            idx = int(getattr(row, "continuum_index", 0)) - 1
+            if idx < 0:
+                continue
+            cin = cemab[0,idx] if cemab.ndim == 2 and cemab.shape[0] > 1 and idx < cemab.shape[1] else 0.0
+            cout = cemab[1,idx] if cemab.ndim == 2 and cemab.shape[0] > 1 and idx < cemab.shape[1] else 0.0
+            opa = opakab[idx] if idx < opakab.size else 0.0
+            absorbed = cabab[idx] if idx < cabab.size else 0.0
+            if not (opa > 1.0e-49 or absorbed > 1.0e-49 or cin > 1.0e-49 or cout > 1.0e-49):
+                continue
+            tin = tauc[0,idx] if tauc.ndim == 2 and tauc.shape[0] > 1 and idx < tauc.shape[1] else 0.0
+            tout = tauc[1,idx] if tauc.ndim == 2 and tauc.shape[0] > 1 and idx < tauc.shape[1] else 0.0
+            buf.log_lines.append(
+                f"{idx+1:8d} {int(getattr(row,'level_global_index',0)):5d} "
+                f"{printed_label:<9s} "
+                f"{int(getattr(row,'lower_local_index',0)):5d} {int(getattr(row,'upper_local_index',0)):5d} "
+                f"{str(getattr(row,'lower_level',''))[:20]:<20s} {str(getattr(row,'upper_level',''))[:20]:<20s} "
+                f"{float(getattr(row,'threshold_eV',0.0)):13.5E}{cin:13.5E}{cout:13.5E}{opa:13.5E}{absorbed:13.5E}{tin:13.5E}{tout:13.5E}"
+            )
 
 
 def _option7_level_populations(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 7)
     buf.log_lines.extend(["  level populations ", " ion                      level               e_exc population"])
-    meta = state.control.get("output_atomic_metadata")
-    levels = tuple(getattr(meta, "levels", ()) or ())
+
+    # 0.6.82.29.3.1: pprint(7) consumes the complete final calc_hmc_all
+    # global workspaces, not just population/LTE columns.  Python already
+    # computes and retains gammag/alphag and the dominant-record pointers;
+    # publish those exact source-owned values rather than dropping six fields.
+    fixed = getattr(state.local_zone, "calc_hmc_all", None)
+    dense_x = np.asarray(
+        getattr(fixed, "global_xilevg_by_index", np.zeros(0)), dtype=float
+    ).reshape(-1) if fixed is not None else np.zeros(0, dtype=float)
+    dense_rn = np.asarray(
+        getattr(fixed, "global_rnisg_by_index", np.zeros(0)), dtype=float
+    ).reshape(-1) if fixed is not None else np.zeros(0, dtype=float)
+    dense_b = np.asarray(
+        getattr(fixed, "global_bilevg_by_index", np.zeros(0)), dtype=float
+    ).reshape(-1) if fixed is not None else np.zeros(0, dtype=float)
+
     xilev = state.local_zone.source_arrays.get("xilevg")
-    if xilev is None:
-        xilev = state.control.get("xilevg")
-    arr = np.asarray(xilev if xilev is not None else np.zeros(0), dtype=float).reshape(-1)
-    guarded = arr.size > 1 and abs(arr[0]) == 0.0
-    for row in levels:
+    rnis = state.local_zone.source_arrays.get("rnisg")
+    fallback_x = np.asarray(xilev if xilev is not None else np.zeros(0), dtype=float).reshape(-1)
+    fallback_rn = np.asarray(rnis if rnis is not None else np.zeros(0), dtype=float).reshape(-1)
+    guarded = fallback_x.size > 1 and abs(fallback_x[0]) == 0.0
+
+    gammag = getattr(fixed, "gammag", None) if fixed is not None else None
+    alphag = getattr(fixed, "alphag", None) if fixed is not None else None
+    igammamaxg = getattr(fixed, "igammamaxg", None) if fixed is not None else None
+    ialphamaxg = getattr(fixed, "ialphamaxg", None) if fixed is not None else None
+    if not isinstance(gammag, Mapping):
+        gammag = state.local_zone.source_arrays.get("gammag", {})
+    if not isinstance(alphag, Mapping):
+        alphag = state.local_zone.source_arrays.get("alphag", {})
+    if not isinstance(igammamaxg, Mapping):
+        igammamaxg = state.local_zone.source_arrays.get("igammamaxg", {})
+    if not isinstance(ialphamaxg, Mapping):
+        ialphamaxg = state.local_zone.source_arrays.get("ialphamaxg", {})
+
+    for row in _source_verbose_level_rows(state):
         gi = int(getattr(row, "global_index", 0))
-        at = gi if guarded else gi - 1
-        pop = arr[at] if 0 <= at < arr.size else 0.0
-        buf.log_lines.append(f" {str(getattr(row,'ion_label',''))[:24]:<24s} {str(getattr(row,'level_label',''))[:20]:<20s} {float(getattr(row,'excitation_eV',0.0)):13.5E} {pop:13.5E}")
+        dense_at = gi - 1
+        fallback_at = gi if guarded else gi - 1
+        pop = (
+            float(dense_x[dense_at]) if 0 <= dense_at < dense_x.size
+            else float(fallback_x[fallback_at]) if 0 <= fallback_at < fallback_x.size
+            else 0.0
+        )
+        if not (pop > 1.0e-64):
+            continue
+        rnval = (
+            float(dense_rn[dense_at]) if 0 <= dense_at < dense_rn.size
+            else float(fallback_rn[fallback_at]) if 0 <= fallback_at < fallback_rn.size
+            else 0.0
+        )
+        bilev = float(dense_b[dense_at]) if 0 <= dense_at < dense_b.size else 0.0
+        dep = pop / (rnval + 1.0e-36)
+        z = int(getattr(row, "atomic_number", 0))
+        stage = _roman_stage_from_ion_label(str(getattr(row, "ion_label", "")))
+        local_level = int(getattr(row, "upper_index", 0))
+        key = (z, stage, local_level)
+        gamma = float(gammag.get(key, 0.0))
+        alpha = float(alphag.get(key, 0.0))
+        igamma = int(igammamaxg.get(key, 0))
+        ialpha = int(ialphamaxg.get(key, 0))
+        buf.log_lines.append(
+            f"{gi:7d} {str(getattr(row,'ion_label',''))[:8]:<8s} "
+            f"{str(getattr(row,'level_label',''))[:20]:<20s} "
+            f"{float(getattr(row,'excitation_eV',0.0)):13.5E}{pop:13.5E}{rnval:13.5E}"
+            f"{dep:13.5E}{bilev:13.5E}{gamma:13.5E}{igamma:8d}{alpha:13.5E}{ialpha:8d}"
+        )
+    buf.log_lines.append(" done with 7")
 
 
 def _option10_ion_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 10)
-    buf.log_lines.append(" ion abundances and rates")
+    buf.log_lines.extend([" ion abundances and  rates (/sec)", " index, ion, abundance, recombination, ionization,"])
     meta = _pprint_metadata(state)
     n = max((int(i.ion_index) for i in meta.ions), default=0)
     def _safe(name: str) -> np.ndarray:
@@ -1294,83 +1415,253 @@ def _option10_ion_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> No
             return _array_value(state, name, n)
         except LegacyPprintPortError:
             return np.zeros(n, dtype=float)
-    xii = _safe("xii")
-    rrrt = _safe("rrrt")
-    pirt = _safe("pirt")
+    xii, rrrt, pirt = _safe("xii"), _safe("rrrt"), _safe("pirt")
     for ion in meta.ions:
-        j=int(ion.ion_index)-1
+        if float(getattr(ion, "elemental_abundance", 0.0)) <= 1.0e-15:
+            continue
+        j = int(ion.ion_index) - 1
         if 0 <= j < n:
-            buf.log_lines.append(f"{j+1:6d} {str(ion.ion_label)[:9]:<9s} {xii[j]:13.5E} {rrrt[j]:13.5E} {pirt[j]:13.5E}")
+            rat1 = 0.0
+            rat2 = 0.0
+            # Literal pprint(10): lk.gt.1 and lk.lt.nni, with xii(lk+1)
+            # crossing element boundaries in global Type-12 order.
+            if j + 1 > 1 and j + 1 < n:
+                rat1 = xii[j] / (xii[j+1] + 1.0e-34)
+                rat2 = rrrt[j] / (pirt[j] + 1.0e-34)
+            buf.log_lines.append(
+                f"{j+1:5d} {str(ion.ion_label)[:9]:<9s} {xii[j]:16.8E} {rrrt[j]:16.8E} {pirt[j]:16.8E} {rat1:16.8E} {rat2:16.8E}"
+            )
+    buf.log_lines.extend([
+        " heating and cooling rates (erg/sec)",
+        "                 photon pov                                      electron pov",
+        " index element   heating         cooling        heating-cooling  heating         cooling        heating-cooling",
+    ])
+    ababs = np.asarray(state.control.get("ababs", np.ones(len(meta.thermal_elements))), dtype=float)
+    htt = np.asarray(state.local_zone.source_arrays.get("htt", np.zeros(len(meta.thermal_elements))), dtype=float).reshape(-1)
+    cll = np.asarray(state.local_zone.source_arrays.get("cll", np.zeros(len(meta.thermal_elements))), dtype=float).reshape(-1)
+    htt2 = np.asarray(state.local_zone.source_arrays.get("htt2", np.zeros(len(meta.thermal_elements))), dtype=float).reshape(-1)
+    cll2 = np.asarray(state.local_zone.source_arrays.get("cll2", np.zeros(len(meta.thermal_elements))), dtype=float).reshape(-1)
+    for element in meta.thermal_elements:
+        ei = int(element.element_index)
+        if ei <= 0 or ei > ababs.size or float(ababs[ei-1]) <= 1.0e-36:
+            continue
+        h = htt[ei-1] if ei-1 < htt.size else 0.0
+        c = cll[ei-1] if ei-1 < cll.size else 0.0
+        h2 = htt2[ei-1] if ei-1 < htt2.size else 0.0
+        c2 = cll2[ei-1] if ei-1 < cll2.size else 0.0
+        buf.log_lines.append(
+            f"{ei:5d} {str(element.element_label)[:10]:<10s} {h:16.8E} {c:16.8E} {h-c:16.8E} {h2:16.8E} {c2:16.8E} {h2-c2:16.8E}"
+        )
+    fixed = getattr(state.local_zone, "calc_hmc_all", None)
+    continuum = getattr(fixed, "continuum", None)
+    htcomp = float(getattr(continuum, "htcomp", state.control.get("htcomp", 0.0)))
+    clcomp = float(getattr(continuum, "clcomp", state.control.get("clcomp", 0.0)))
+    htfreef = float(getattr(continuum, "htfreef", state.control.get("htfreef", 0.0)))
+    clbrems = float(getattr(continuum, "clbrems", state.control.get("clbrems", 0.0)))
+    buf.log_lines.append(f"      compton    {htcomp:16.8E} {clcomp:16.8E} {htcomp-clcomp:16.8E} {htcomp:16.8E} {clcomp:16.8E} {htcomp-clcomp:16.8E}")
+    buf.log_lines.append(f"      free-free  {htfreef:16.8E} {clbrems:16.8E} {htfreef-clbrems:16.8E} {htfreef:16.8E} {clbrems:16.8E} {htfreef-clbrems:16.8E}")
+    httot = float(state.control.get("httot", state.thermal.heating))
+    cltot = float(state.control.get("cltot", state.thermal.cooling))
+    httot2 = float(state.control.get("httot2", httot))
+    cltot2 = float(state.control.get("cltot2", cltot))
+    buf.log_lines.append(f"      total      {httot:16.8E} {cltot:16.8E} {httot-cltot:16.8E} {httot2:16.8E} {cltot2:16.8E} {httot2-cltot2:16.8E}")
 
 
 def _option4_continuum_opacity(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 4)
     buf.log_lines.extend(["continuum opacity and emissivities (/cm**3/sec/10**38)", "channel, energy, opacity, scattered, rec. in, rec. out, brem. em., source"])
-    ws=_workspace(state)
-    epi=np.asarray(getattr(ws,"epi",np.zeros(0)),dtype=float).reshape(-1)
-    opakc=np.asarray(getattr(ws,"opakc",np.zeros(0)),dtype=float).reshape(-1)
-    rcc=np.asarray(getattr(ws,"rccemis",np.zeros((2,0))),dtype=float)
-    br=np.asarray(getattr(ws,"brcems",np.zeros(0)),dtype=float).reshape(-1)
-    n=min(epi.size,opakc.size)
-    for i in range(1,n):
-        rin=rcc[0,i] if rcc.ndim==2 and rcc.shape[0]>1 and i<rcc.shape[1] else 0.0
-        rout=rcc[1,i] if rcc.ndim==2 and rcc.shape[0]>1 and i<rcc.shape[1] else 0.0
-        b=br[i] if i<br.size else 0.0
-        source=(rin+rout+b/12.56)/(1.0e-36+opakc[i])
+    ws = _workspace(state)
+    epi = _active_epi(state)
+    opakc = np.asarray(getattr(ws, "opakc", np.zeros(0)), dtype=float).reshape(-1)
+    rcc = np.asarray(getattr(ws, "rccemis", np.zeros((2,0))), dtype=float)
+    base = getattr(getattr(ws, "emissivity", None), "base", None)
+    br = np.asarray(getattr(base, "brcems", np.zeros(0)), dtype=float).reshape(-1)
+    n = min(epi.size, opakc.size)
+    for i in range(1, n):
+        rin = rcc[0,i] if rcc.ndim == 2 and rcc.shape[0] > 1 and i < rcc.shape[1] else 0.0
+        rout = rcc[1,i] if rcc.ndim == 2 and rcc.shape[0] > 1 and i < rcc.shape[1] else 0.0
+        b = br[i] if i < br.size else 0.0
+        source = (rin+rout+b/12.56)/(1.0e-36+opakc[i])
         buf.log_lines.append(f"{i+1:7d}{epi[i]:13.5E}{opakc[i]:13.5E}{0.0:13.5E}{rin:13.5E}{rout:13.5E}{b:13.5E}{source:13.5E}")
 
 
 def _option6_continuum_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 6)
     buf.log_lines.extend(["continuum luminosities (/sec/10**38) and depths", "real quantities are as follows:"])
-    ws=_workspace(state)
-    epi=np.asarray(getattr(ws,"epi",np.zeros(0)),dtype=float).reshape(-1)
-    zrems=np.asarray(getattr(ws,"zrems",np.zeros((0,0))),dtype=float)
-    dpth=np.asarray(getattr(ws,"dpthc",np.zeros((2,0))),dtype=float)
-    for i,e in enumerate(epi):
-        vals=[]
-        if zrems.ndim==2:
-            vals=[zrems[k,i] if k<zrems.shape[0] and i<zrems.shape[1] else 0.0 for k in range(5)]
-        else:
-            vals=[0.0]*5
-        tin=dpth[0,i] if dpth.ndim==2 and dpth.shape[0]>1 and i<dpth.shape[1] else 0.0
-        tout=dpth[1,i] if dpth.ndim==2 and dpth.shape[0]>1 and i<dpth.shape[1] else 0.0
+    ws = _workspace(state)
+    epi = _active_epi(state)
+    zrems = np.asarray(getattr(ws, "zrems", np.zeros((0,0))), dtype=float)
+    dpth = np.asarray(getattr(ws, "dpthc", np.zeros((2,0))), dtype=float)
+    for i, e in enumerate(epi):
+        vals = [zrems[k,i] if zrems.ndim == 2 and k < zrems.shape[0] and i < zrems.shape[1] else 0.0 for k in range(5)]
+        tin = dpth[0,i] if dpth.ndim == 2 and dpth.shape[0] > 1 and i < dpth.shape[1] else 0.0
+        tout = dpth[1,i] if dpth.ndim == 2 and dpth.shape[0] > 1 and i < dpth.shape[1] else 0.0
         buf.log_lines.append(f"{i+1:7d}{e:13.5E}"+"".join(f"{v:13.5E}" for v in vals)+f"{tin:13.5E}{tout:13.5E}")
+    zremsz = np.asarray(getattr(ws, "zremsz", np.zeros(0)), dtype=float).reshape(-1)
+    sums = [0.0, 0.0, 0.0, 0.0]
+    ergsev = 1.602197e-12
+    for i in range(1, int(epi.size)):
+        de = float(epi[i] - epi[i-1])
+        z0 = zremsz[i] if i < zremsz.size else 0.0
+        z1 = zremsz[i-1] if i-1 < zremsz.size else 0.0
+        sums[0] += (z0 + z1) * de * ergsev / 2.0
+        for plane in range(3):
+            a = zrems[plane,i] if zrems.ndim == 2 and plane < zrems.shape[0] and i < zrems.shape[1] else 0.0
+            b = zrems[plane,i-1] if zrems.ndim == 2 and plane < zrems.shape[0] and i-1 < zrems.shape[1] else 0.0
+            sums[plane+1] += (a + b) * de * ergsev / 2.0
+    buf.log_lines.extend([" norms:", " " * 20 + "".join(f"{v:13.5E}" for v in sums)])
 
 
 def _option18_line_levels(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 18)
-    buf.log_lines.extend(["line wavelengths and levels", "      index wavelength  ion       lo                  up"] )
-    for row in _line_metadata_rows(state):
-        if int(getattr(row,"rate_type",50)) in (9,14):
-            continue
-        buf.log_lines.append(f"{int(getattr(row,'line_index',0)):10d}{abs(float(getattr(row,'wavelength_angstrom',0.0))):13.5E} {str(getattr(row,'ion_label',''))[:9]:<9s} {str(getattr(row,'lower_level',''))[:20]:<20s} {str(getattr(row,'upper_level',''))[:20]:<20s} {int(getattr(row,'lower_local_index',0)):7d} {int(getattr(row,'upper_local_index',0)):7d}")
+    buf.log_lines.extend(["line wavelengths and levels", "      index wavelength  ion       lo                  up"])
+    for row in _source_verbose_line_rows(state):
+        buf.log_lines.append(
+            f"{int(getattr(row,'line_index',0)):10d}{abs(float(getattr(row,'wavelength_angstrom',0.0))):13.5E} "
+            f"{str(getattr(row,'ion_label',''))[:9]:<9s} {str(getattr(row,'lower_level',''))[:25]:<25s} "
+            f"{str(getattr(row,'upper_level',''))[:25]:<25s} {int(getattr(row,'lower_local_index',0)):7d} {int(getattr(row,'upper_local_index',0)):7d}"
+        )
 
 
 def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 29)
     buf.log_lines.extend(["rates", "doing pprint(29)"])
-    rates=state.local_zone.source_arrays.get("rates")
-    ids=state.local_zone.source_arrays.get("idrates")
-    if rates is None or ids is None:
-        buf.log_lines.append(" retained rate workspace unavailable")
-    else:
-        rr=np.asarray(rates,dtype=float); ii=np.asarray(ids)
-        if rr.ndim==2:
-            for j in range(rr.shape[1]):
-                if abs(float(rr[0,j])) <= 1.0e-34: continue
-                idvals=ii[:,j] if ii.ndim==2 and j<ii.shape[1] else []
-                buf.log_lines.append(f"{j+1:10d} "+" ".join(str(int(v)) for v in idvals[:6])+" "+" ".join(f"{float(v):13.5E}" for v in rr[:6,j]))
+    fixed = getattr(state.local_zone, "calc_hmc_all", None)
+    output_meta = state.control.get("output_atomic_metadata")
+    levels = tuple(getattr(output_meta, "levels", ()) or ())
+    level_by_ion_local = {(int(row.ion_index), int(row.upper_index)): row for row in levels}
+    rows: list[tuple[int, Mapping[str, Any], Any]] = []
+    if fixed is not None:
+        for element in getattr(fixed, "element_results", ()):
+            eq = getattr(element, "equilibrium", None)
+            assembly = getattr(eq, "assembly", None)
+            if assembly is None:
+                continue
+            z = int(getattr(getattr(element, "request", None), "element_z", 0))
+            min_stage = int(getattr(element, "selected_min_ion_stage", 1))
+            max_stage = int(getattr(element, "selected_max_ion_stage", z))
+            for row in getattr(assembly, "record_results", ()):
+                rate_type = int(row.get("rate_type", 0) or 0)
+                data_type = int(row.get("data_type", 0) or 0)
+                stage = int(row.get("ion_stage", 0) or 0)
+                if rate_type in {8, 15} or (rate_type == 1 and data_type == 53):
+                    continue
+                if stage < min_stage or stage > max_stage:
+                    continue
+                ans1 = float(row.get("ans1_after_calc_hmc_ion_filter", row.get("ans1", 0.0)) or 0.0)
+                if abs(ans1) <= 1.0e-34:
+                    continue
+                rows.append((int(row.get("record", 0) or 0), row, element))
+    rows.sort(key=lambda item: item[0])
+    for record, row, element in rows:
+        ion_index = int(row.get("ion_index", 0) or 0)
+        id1 = int(row.get("idest1", 0) or 0)
+        id2 = int(row.get("idest2", 0) or 0)
+        lower = level_by_ion_local.get((ion_index, id1))
+        upper = level_by_ion_local.get((ion_index, id2))
+        ion_label = str(getattr(lower, "ion_label", "")) or next((str(i.ion_label) for i in _pprint_metadata(state).ions if int(i.ion_index) == ion_index), f"ion_{ion_index}")
+        lower_label = str(getattr(lower, "level_label", "unknown"))
+        upper_label = str(getattr(upper, "level_label", "continuum"))
+        global_lower = int(getattr(lower, "global_index", id1))
+        global_upper = int(getattr(upper, "global_index", id2))
+        ans = [float(row.get(f"ans{k}", 0.0) or 0.0) for k in range(1, 7)]
+        ans[0] = float(row.get("ans1_after_calc_hmc_ion_filter", ans[0]) or 0.0)
+        buf.log_lines.append(
+            f"{record:10d} {ion_label[:9]:<9s} {lower_label[:25]:<25s} {upper_label[:25]:<25s}"
+            f"{int(row.get('data_type',0)):8d}{int(row.get('rate_type',0)):8d}{id1:8d}{id2:8d}{global_lower:8d}{global_upper:8d}"
+            + "".join(f"{v:13.5E}" for v in ans)
+        )
     buf.log_lines.append("done with pprint(29)")
+
+
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Decode the Roman ion-stage suffix used by source-format ion labels for verbose publication.
+# Reference context: XSTAR pprint ion labels use lower-case Roman stages through the complete element inventory.
+# XSTAR-FUNCTION-COMMENT-END
+def _roman_stage_from_ion_label(label: str) -> int:
+    text = str(label).strip().lower()
+    numeral = text.split("_", 1)[1] if "_" in text else ""
+    values = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100}
+    total = 0
+    previous = 0
+    for char in reversed(numeral):
+        value = values.get(char, 0)
+        if value <= 0:
+            return 0
+        if value < previous:
+            total -= value
+        else:
+            total += value
+            previous = value
+    return total
 
 
 def _option30_auger_fluorescence(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 30)
     buf.log_lines.extend(["auger and fluorescence yields", "ion     K shell pi rate  k fluorescence rate auger rate fluorescence yield"])
-    # The literal source derives these rows by a secondary walk over Type 49/85
-    # records.  The production runner does not retain that temporary walk; keep
-    # the source-owned surface explicit without fabricating numerical rows.
-    buf.log_lines.append(" retained Auger/fluorescence temporary walk unavailable")
+    meta = _pprint_metadata(state)
+    n = max((int(i.ion_index) for i in meta.ions), default=0)
+    try:
+        xii = _array_value(state, "xii", n)
+    except LegacyPprintPortError:
+        xii = np.zeros(n, dtype=float)
+    fixed = getattr(state.local_zone, "calc_hmc_all", None)
+    output_meta = state.control.get("output_atomic_metadata")
+    levels = tuple(getattr(output_meta, "levels", ()) or ())
+    level_by_ion_local = {(int(row.ion_index), int(row.upper_index)): row for row in levels}
+    xilev = np.asarray(state.local_zone.source_arrays.get("xilevg", np.zeros(0)), dtype=float).reshape(-1)
+    guarded = xilev.size > 1 and abs(xilev[0]) == 0.0
+    records_by_ion: dict[int, list[Mapping[str, Any]]] = {}
+    if fixed is not None:
+        for element in getattr(fixed, "element_results", ()):
+            assembly = getattr(getattr(element, "equilibrium", None), "assembly", None)
+            if assembly is None:
+                continue
+            for row in getattr(assembly, "record_results", ()):
+                records_by_ion.setdefault(int(row.get("ion_index", 0) or 0), []).append(row)
+    def _pop(level: Any) -> float:
+        gi = int(getattr(level, "global_index", 0))
+        at = gi if guarded else gi - 1
+        return float(xilev[at]) if 0 <= at < xilev.size else 0.0
+    previous_k_pi = 0.0
+    for ion in meta.ions:
+        j = int(ion.ion_index) - 1
+        label = str(ion.ion_label).strip()
+        stage = _roman_stage_from_ion_label(label)
+        z = int(getattr(ion, "element_index", 0))
+        if float(getattr(ion, "elemental_abundance", 0.0)) <= 1.0e-34 or stage <= 0:
+            continue
+        if not (0 <= j < xii.size and xii[j] > 1.0e-12):
+            continue
+        pirttoto = previous_k_pi
+        current_k_pi = 0.0
+        fluorescence = 0.0
+        auger = 0.0
+        if stage < z:
+            for row in records_by_ion.get(int(ion.ion_index), ()):
+                rt = int(row.get("rate_type", 0) or 0)
+                id1 = int(row.get("idest1", 0) or 0)
+                id2 = int(row.get("idest2", 0) or 0)
+                if id1 <= 0 or id2 <= 0:
+                    continue
+                lower = level_by_ion_local.get((int(ion.ion_index), id1))
+                upper = level_by_ion_local.get((int(ion.ion_index), id2))
+                lower_label = str(getattr(lower, "level_label", ""))
+                upper_label = str(getattr(upper, "level_label", ""))
+                pop = _pop(lower)
+                ans1 = float(row.get("ans1_after_calc_hmc_ion_filter", row.get("ans1", 0.0)) or 0.0)
+                ans2 = float(row.get("ans2_after_calc_hmc_ion_filter", row.get("ans2", 0.0)) or 0.0)
+                if rt == 7 and id2 > int(row.get("nlev", 0) or 0) and upper_label.startswith("1s1"):
+                    current_k_pi += ans1 * pop
+                if rt in {4, 41} and (lower_label.startswith("1s1") or upper_label.startswith("1s1")):
+                    if rt == 4:
+                        fluorescence += ans2 * pop
+                    else:
+                        auger += ans1 * pop
+            buf.log_lines.append(
+                f" {label[:8]:<8s} {pirttoto:11.3E} {fluorescence:11.3E} {auger:11.3E} {fluorescence/(1.0e-34+pirttoto):11.3E}"
+            )
+        previous_k_pi = current_k_pi
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Implement the option22 final lines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.

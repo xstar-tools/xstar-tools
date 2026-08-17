@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.29.3.1 - Option 7 full verbose payload - 2026-08-16
+
+- Reproduce canonical FORTRAN `pprint(7)` full level-population rows: excitation energy, population, LTE population (`rnist`), `xilev/(rnist+1d-36)`, departure coefficient (`bilev`), total outward rate and dominant record, and total inward population-weighted rate and dominant record.
+- Retain the already-computed native element-engine gamma/alpha and dominant-record metadata through the internal publication bridge only; no solver/rate/transport arithmetic changes and no public ABI change.
+- Mirror Option-7 publication in pure Python from the existing `gammag`/`alphag`/`igammamaxg`/`ialphamaxg` and `bilevg` state.
+- Strengthen the `.29.3.1` host comparator so Option 7 requires full row width, source identities, and numerical payload agreement; 250/250 row count alone cannot pass.
+- Scope is Option 7 only. Options 4/6/10/18/29/30 remain unchanged for later subversions.
+
 # 0.6.82.29 - 2026-08-16
 
 - Close `0.6.82.28` after the full FORTRAN/C++/pure-Python host spectrum matrix accepted on `0.6.82.28.1`.

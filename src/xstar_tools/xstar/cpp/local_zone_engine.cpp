@@ -11,6 +11,7 @@
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
 #include "xstar_local_zone_engine.h"
+#include "xstar_local_zone_internal.hpp"
 #include "source_real_energy_grid.hpp"
 #include "source_order_thermal_reducer.hpp"
 #include "canonical_thermal_term.hpp"
@@ -2900,6 +2901,13 @@ struct NativeElementDiagnostic {
     std::vector<double> active_initial_populations;
     std::vector<double> active_final_outer_start_populations;
     std::vector<double> active_final_populations;
+    // 0.6.82.29.3.1 publication-only retention for pprint(7).  These are
+    // the exact element-engine post-solve gamma/alpha arrays and dominant
+    // master-record pointers already computed by msolvelucy semantics.
+    std::vector<double> level_gamma;
+    std::vector<double> level_alpha;
+    std::vector<std::int64_t> level_igammamax;
+    std::vector<std::int64_t> level_ialphamax;
     std::vector<double> final_superlevel_populations_before_solve;
     std::vector<double> final_condensed_matrix;
     std::vector<double> final_condensed_rhs;
@@ -3590,6 +3598,11 @@ struct xstar_fixed_state_context_impl {
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
+    // 0.6.82.29.2 publication-only retention of literal calc_ion_rates
+    // full-stage totals.  These are intentionally separate from the active
+    // compact matrix window used by the solver.
+    std::map<int, std::vector<double>> last_source_ionization_rates_v0682292;
+    std::map<int, std::vector<double>> last_source_recombination_rates_v0682292;
     // v0.6.48.12.3.1: source leveltemp(2,1:5000) is one mutable workspace
     // shared across element solves and fixed-state evaluations.  Type49/53
     // destination-energy ownership therefore cannot be reconstructed from a
@@ -11314,6 +11327,8 @@ int run_impl(
     ctx.last_element_diagnostics.clear();
     ctx.last_detail_pre_mapback_populations_v064812318.clear();
     ctx.last_active_stage_windows_v064812318.clear();
+    ctx.last_source_ionization_rates_v0682292.clear();
+    ctx.last_source_recombination_rates_v0682292.clear();
     ctx.last_element_thermal_budget.clear();
     ctx.last_computed_element_thermal_budget.clear();
     ctx.last_element_electron_contribution.clear();
@@ -11899,6 +11914,22 @@ int run_impl(
         residual_audit_v064812339.preliminary_balance_seconds = elapsed(preliminary_balance_started_v064812339);
         write_preliminary_ion_balance_audit(
             element, preliminary, ctx.critical_ion_fraction);
+        // pprint(10) consumes calc_ion_rates totals for every source stage,
+        // not only the compact active matrix window.  Retain the literal
+        // source eligibility sums before active-stage truncation.
+        std::vector<double> source_pirt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
+        std::vector<double> source_rrrt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
+        for (const auto& row_v0682292 : preliminary.audit_rows_v0648117) {
+            const int stage_v0682292 = row_v0682292.ion_stage;
+            if (stage_v0682292 < 1 || stage_v0682292 > element.element_z) continue;
+            const std::size_t slot_v0682292 = static_cast<std::size_t>(stage_v0682292 - 1);
+            if (row_v0682292.source_ionization_eligible)
+                source_pirt_v0682292[slot_v0682292] += row_v0682292.ans1;
+            if (row_v0682292.source_recombination_eligible)
+                source_rrrt_v0682292[slot_v0682292] += row_v0682292.ans1;
+        }
+        ctx.last_source_ionization_rates_v0682292[element.element_z] = std::move(source_pirt_v0682292);
+        ctx.last_source_recombination_rates_v0682292[element.element_z] = std::move(source_rrrt_v0682292);
         PreliminaryIonBalance active_balance = preliminary;
         const bool retain_active_stage_window =
             (input.runtime_state_flags &
@@ -12838,6 +12869,10 @@ int run_impl(
         element_diagnostic.max_relative_row_residual = eout.max_relative_row_residual;
         element_diagnostic.records_constructed = eout.records_constructed;
         element_diagnostic.terms_constructed = eout.terms_constructed;
+        element_diagnostic.level_gamma = buffers.gamma;
+        element_diagnostic.level_alpha = buffers.alpha;
+        element_diagnostic.level_igammamax = buffers.igamma;
+        element_diagnostic.level_ialphamax = buffers.ialpha;
         if (capture_element_solve_response) {
             element_diagnostic.solve_response_captured = true;
             element_diagnostic.active_raw_global_level_indices.resize(static_cast<std::size_t>(active.element.n_rows), 0);
@@ -15801,6 +15836,57 @@ int run_impl(
 } // namespace
 
 struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
+
+namespace xstar_local_zone_internal {
+
+void capture_publication_state_v0682292(
+    const xstar_fixed_state_context* context,
+    PublicationStateV0682292& out) {
+    out = PublicationStateV0682292{};
+    if (!context) return;
+    out.ionization_rates = context->last_source_ionization_rates_v0682292;
+    out.recombination_rates = context->last_source_recombination_rates_v0682292;
+    out.element_thermal = context->last_element_thermal_budget;
+    // Source calc_hmc_all maps the element-solver gamma/alpha arrays back by
+    // ion/local-level role.  Preserve that role identity here instead of
+    // collapsing shared continuum/next-ground compact rows to one global id.
+    for (const auto& diagnostic : context->last_element_diagnostics) {
+        const auto topology = lte_topology_for_element(context->program,
+            context->program.elements.at(static_cast<std::size_t>(diagnostic.element_index)));
+        for (const auto& topo : topology) {
+            if (topo.ion_stage < diagnostic.active.min_stage ||
+                topo.ion_stage > diagnostic.active.max_stage) continue;
+            for (int local_level = 1; local_level <= topo.nlev; ++local_level) {
+                const int full_row = topo.start_row + local_level - 1;
+                if (full_row < diagnostic.active.full_row_start ||
+                    full_row > diagnostic.active.full_row_end) continue;
+                const std::size_t compact = static_cast<std::size_t>(
+                    full_row - diagnostic.active.full_row_start);
+                if (compact >= diagnostic.level_gamma.size() ||
+                    compact >= diagnostic.level_alpha.size()) continue;
+                const auto key = std::make_tuple(
+                    diagnostic.element_z, topo.ion_stage, local_level);
+                out.level_gamma[key] = diagnostic.level_gamma[compact];
+                out.level_alpha[key] = diagnostic.level_alpha[compact];
+                // calc_hmc_all deliberately does not copy dominant-record
+                // pointers for the final continuum row; global arrays retain 0.
+                if (local_level == topo.nlev) {
+                    out.level_igammamax[key] = 0;
+                    out.level_ialphamax[key] = 0;
+                } else {
+                    out.level_igammamax[key] = compact < diagnostic.level_igammamax.size()
+                        ? diagnostic.level_igammamax[compact] : 0;
+                    out.level_ialphamax[key] = compact < diagnostic.level_ialphamax.size()
+                        ? diagnostic.level_ialphamax[compact] : 0;
+                }
+            }
+        }
+    }
+    out.free_free_heating = context->last_htfreef;
+    out.brems_cooling = context->last_clbrems;
+}
+
+} // namespace xstar_local_zone_internal
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement create context from program as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
