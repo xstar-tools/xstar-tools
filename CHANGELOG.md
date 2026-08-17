@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.5 - Option 4 source rate-family `flinel` gate hotfix - 2026-08-17
+
+- Corrects the remaining `.29.3.3.4` Option-4 rejection after the source `nbinc` bin owner and local two-sided width repair.
+- The `.29.3.3.4` host result shows the major `flinel` surface is now correct: all 161 FORTRAN-nonzero bins are present and the total is `74027.298942` versus canonical `74015.579937`; the remaining excess is a small set of extra C++ contributions.
+- Canonical `calc_emis_ion.f90` updates `flinel(nb1)` only inside `if ((ml_data_type.eq.4).or.(ml_data_type.eq.9))`.  The private C++ pprint(4) replay was iterating every non-bound-free spectral record that survived `nlbin`, including rate-family 14 records that belong to other publication/thermal paths but never execute the FORTRAN `flinel` branch.
+- Restrict the private Option-4 `flinel` delta to source rate families 4 and 9 before the `nlbin` consumer test.  Keep the operational C++ spectral/HEATT/transport stream unchanged.
+- No solver, opacity, rate, thermal, transport, or broad spectral arithmetic changes.  Frozen science revision and ABI identifiers remain unchanged.
+
 ## 0.6.82.29.3.3.4 - Option 4 source `flinel` bin/width hotfix - 2026-08-17
 
 - Corrects the remaining C++ `pprint(4)` `flinel` publication mismatch exposed by the `.29.3.3.3` host run.

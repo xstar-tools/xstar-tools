@@ -14503,6 +14503,14 @@ int run_impl(
                 if (original_c.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE ||
                     original_c.output_index <= 0)
                     continue;
+                // 0.6.82.29.3.3.5: literal calc_emis_ion flinel ownership is
+                // confined to ml_data_type 4 and 9.  The broad C++ spectral
+                // stream also contains rate-14 line-like records for other
+                // publication/thermal roles; those records never execute the
+                // FORTRAN flinel(nb1)+= branch and must not leak into the
+                // private pprint(4) surface.
+                if (original_c.rate_type != 4 && original_c.rate_type != 9)
+                    continue;
                 const auto wavelength_it_v82_patch5208 =
                     source_line_wavelength_by_identity_v82_patch5208.find(
                         {static_cast<std::uint64_t>(original_c.source_position),
