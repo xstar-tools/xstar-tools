@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.8 - integrated C++ verbose closure - 2026-08-18
+
+- Record `0.6.82.29.3.7.1` Option 30 as host-closed: 4/4 rows ACCEPT with `payload_rel=0`, exact ion identities, exact headers, and no placeholders.
+- Add a single integrated C++ `lprint=2..6` host qualification that reruns the verbose matrix together against canonical FORTRAN XSTAR 2.59g.
+- Verify Options 14/21/7/10 at `lprint>=2`, Options 4/6 at `lprint>=3`, and Options 18/29/30 at `lprint>=4`, reusing the accepted option-specific parsers/tolerances rather than weakening any prior gate.
+- Require canonical product inventory and final `pprint` option order for every `lprint=2..6` case.
+- Require publication-only science invariance across the C++ matrix relative to the common `lprint=0` baseline, with the established radial STEP metric reporting `science-invariance cpp=ACCEPT worst=0` for exact closure.
+- This milestone is integration/qualification only: no production science or Python publication file changes are permitted relative to host-accepted `0.6.82.29.3.7.1`; Python integrated verbose closure remains deferred to `0.6.82.29.3.9`.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` frozen.
+
 ## 0.6.82.29.3.7.1 - Option 30 radiative endpoint ownership hotfix - 2026-08-18
 
 - Treats `0.6.82.29.3.7` as host-rejected and preserves its accepted 4-row/header/layout work.
