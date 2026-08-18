@@ -117,6 +117,7 @@ ATOMIC_MASS_AMU = {
     29: 63.546, 30: 65.38,
 }
 TYPE70_SOURCE_ION_IDENTITY_MAGIC_V068213 = 227
+TYPE54_DUAL_ENDPOINT_LAYOUT_MAGIC_V0682293382 = 228
 
 
 @dataclass(frozen=True)
@@ -1101,6 +1102,10 @@ def _lower_record(
     elif dt == 54:
         if len(raw_ints) < 4:
             raise ValueError(f"type54 record {rec} has short integer payload")
+        # 0.6.82.29.3.3.8.2: preserve both canonical Type-54 endpoint roles.
+        # The native evaluator keeps using the tail pair for ucalc/anl1, while
+        # C++ calc_emisab/calc_emis publication consumes raw IDAT(1:2).
+        caller_idest1, caller_idest2 = int(raw_ints[0]), int(raw_ints[1])
         a, b, iq = int(raw_ints[-4]), int(raw_ints[-3]), int(raw_ints[-2])
         lower_row, upper_row = local_pair(a, b)
         ni, nf = _row_n(rows, upper_row), _row_n(rows, lower_row)
@@ -1110,7 +1115,11 @@ def _lower_record(
         if ni < nf:
             ni, nf = nf, ni
         payload_reals = []
-        payload_ints = [ni, nf, li, lf, iq]
+        payload_ints = [
+            ni, nf, li, lf, iq,
+            caller_idest1, caller_idest2, a, b,
+            TYPE54_DUAL_ENDPOINT_LAYOUT_MAGIC_V0682293382,
+        ]
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 57:
         if len(raw_ints) < 2:

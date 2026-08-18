@@ -9452,6 +9452,104 @@ int source_idest_for_full_row(
     return full_row >= ground ? full_row - ground + 1 : 0;
 }
 
+
+constexpr std::int64_t kType54DualEndpointLayoutMagicV0682293382 = 228;
+
+struct SourceLineEndpointOwnershipV0682293382 {
+    bool valid = false;
+    bool dual_type54 = false;
+    int caller_idest1 = 0;
+    int caller_idest2 = 0;
+    int caller_row1 = 0;
+    int caller_row2 = 0;
+    int lower_row = 0;
+    int upper_row = 0;
+    int ucalc_idest1 = 0;
+    int ucalc_idest2 = 0;
+};
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Invert the source-local idest mapping so calc_emisab/calc_emis
+// caller-owned endpoint identities can recover the corresponding full compact
+// rows without reusing UCalc's private endpoint pair.
+// Reference context: calc_emisab_ion.f90/calc_emis_ion.f90 line families 4/9;
+// ucalc.f90 label 54.
+// XSTAR-FUNCTION-COMMENT-END
+int source_full_row_for_idest(
+    const Program& program,
+    const ElementProgram& element,
+    int stage,
+    int idest) {
+    if (idest <= 0) return 0;
+    const int ground = ground_row_for_stage(element, stage);
+    const int nlev = source_nlev_for_stage(program, element, stage);
+    if (ground <= 0 || nlev <= 0) return 0;
+    if (idest <= nlev) {
+        const int row = ground + idest - 1;
+        return row >= 1 && row <= element.n_rows ? row : 0;
+    }
+    if (stage < element.element_z) {
+        const int next_ground = ground_row_for_stage(element, stage + 1);
+        if (next_ground > 0) {
+            const int row = next_ground + (idest - nlev);
+            return row >= 1 && row <= element.n_rows ? row : 0;
+        }
+    }
+    return 0;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Preserve the two distinct endpoint owners of ATDB data type 54.
+// calc_emisab_ion/calc_emis_ion use raw IDAT(1:2) for eligibility,
+// energy-ordering and populations; UCalc label 54 uses the tail pair
+// IDAT(nidt-3:nidt-2) for ni/nf/li/lf, anl1 and ans*.
+// Reference context: calc_emisab_ion.f90, calc_emis_ion.f90, ucalc.f90 label 54.
+// XSTAR-FUNCTION-COMMENT-END
+SourceLineEndpointOwnershipV0682293382 source_line_endpoint_ownership_v0682293382(
+    const Program& program,
+    const ElementProgram& element,
+    const ProgramRecord& record) {
+    SourceLineEndpointOwnershipV0682293382 out;
+    out.caller_idest1 = source_idest_for_full_row(program, element, record.ion_stage, record.lower_row);
+    out.caller_idest2 = source_idest_for_full_row(program, element, record.ion_stage, record.upper_row);
+    out.caller_row1 = record.lower_row;
+    out.caller_row2 = record.upper_row;
+    out.ucalc_idest1 = out.caller_idest1;
+    out.ucalc_idest2 = out.caller_idest2;
+
+    if (record.data_type == 54 && record.rate_type == 4 &&
+        record.int_offset + record.int_count <= program.ints.size() && record.int_count >= 10u) {
+        const auto* ints = program.ints.data() + record.int_offset;
+        if (ints[9] == kType54DualEndpointLayoutMagicV0682293382) {
+            out.dual_type54 = true;
+            out.caller_idest1 = static_cast<int>(ints[5]);
+            out.caller_idest2 = static_cast<int>(ints[6]);
+            out.ucalc_idest1 = static_cast<int>(ints[7]);
+            out.ucalc_idest2 = static_cast<int>(ints[8]);
+            out.caller_row1 = source_full_row_for_idest(
+                program, element, record.ion_stage, out.caller_idest1);
+            out.caller_row2 = source_full_row_for_idest(
+                program, element, record.ion_stage, out.caller_idest2);
+        }
+    }
+
+    if (out.caller_row1 <= 0 || out.caller_row2 <= 0 ||
+        out.caller_row1 > element.n_rows || out.caller_row2 > element.n_rows) {
+        return out;
+    }
+    const double e1 = row_at(element, out.caller_row1).energy_ev;
+    const double e2 = row_at(element, out.caller_row2).energy_ev;
+    if (e1 < e2) {
+        out.lower_row = out.caller_row1;
+        out.upper_row = out.caller_row2;
+    } else {
+        out.lower_row = out.caller_row2;
+        out.upper_row = out.caller_row1;
+    }
+    out.valid = true;
+    return out;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Evaluate source preliminary rate record using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
@@ -13227,34 +13325,42 @@ int run_impl(
                     input.radiation_bin_count,
                     static_cast<std::size_t>(it - input.radiation_energy_ev) + 1));
             }
-            // 0.6.82.29.3.3.7: literal calc_emisab_ion line eligibility is
-            // owned by the raw source-local destinations, before any broad
-            // rcem/oplin publication can enter rlbin/nlbin.  The native
-            // lowered rows are energy ordered, but the predicate is symmetric:
-            // both source idest values must be strictly inside 1..nlev-1.
-            // Do not let a terminal/continuum alias (idest == nlev or beyond)
-            // seed a line slot that canonical FORTRAN never ranks.
-            if (!evaluated[k].bound_free_spectral &&
-                (rec.rate_type == 4 || rec.rate_type == 9 || rec.rate_type == 14)) {
-                const int source_nlev_v068229337 =
-                    source_nlev_for_stage(ctx.program, element, rec.ion_stage);
-                const int source_idest1_v068229337 = source_idest_for_full_row(
-                    ctx.program, element, rec.ion_stage, rec.lower_row);
-                const int source_idest2_v068229337 = source_idest_for_full_row(
-                    ctx.program, element, rec.ion_stage, rec.upper_row);
-                if (!(source_nlev_v068229337 > 0 &&
-                      source_idest1_v068229337 > 0 && source_idest1_v068229337 < source_nlev_v068229337 &&
-                      source_idest2_v068229337 > 0 && source_idest2_v068229337 < source_nlev_v068229337)) {
+            // 0.6.82.29.3.3.8.2: preserve the caller-owned line endpoint
+            // pair separately from UCalc's private endpoints.  This matters
+            // for Type-54/rate-4: raw IDAT(1:2) owns calc_emisab/calc_emis
+            // eligibility, energy ordering and populations, while the tail
+            // pair remains owned by UCalc/anl1.
+            SourceLineEndpointOwnershipV0682293382 line_owner_v0682293382;
+            const bool source_line_family_v0682293382 =
+                !evaluated[k].bound_free_spectral &&
+                (rec.rate_type == 4 || rec.rate_type == 9 || rec.rate_type == 14);
+            if (source_line_family_v0682293382) {
+                if (!source_record) continue;
+                line_owner_v0682293382 = source_line_endpoint_ownership_v0682293382(
+                    ctx.program, element, *source_record);
+                const int source_nlev_v0682293382 =
+                    source_nlev_for_stage(ctx.program, element, source_record->ion_stage);
+                if (!(line_owner_v0682293382.valid && source_nlev_v0682293382 > 0 &&
+                      line_owner_v0682293382.caller_idest1 > 0 &&
+                      line_owner_v0682293382.caller_idest1 < source_nlev_v0682293382 &&
+                      line_owner_v0682293382.caller_idest2 > 0 &&
+                      line_owner_v0682293382.caller_idest2 < source_nlev_v0682293382)) {
                     continue;
                 }
             }
 
+            const int abundance_lower_row_v0682293382 =
+                source_line_family_v0682293382 && line_owner_v0682293382.valid
+                    ? line_owner_v0682293382.lower_row : rec.lower_row;
+            const int abundance_upper_row_v0682293382 =
+                source_line_family_v0682293382 && line_owner_v0682293382.valid
+                    ? line_owner_v0682293382.upper_row : rec.upper_row;
             sc.abundance_lower =
-                source_post_mapback_population_for_full_row(active, buffers.populations, rec.lower_row) *
-                element.abundance;
+                source_post_mapback_population_for_full_row(
+                    active, buffers.populations, abundance_lower_row_v0682293382) * element.abundance;
             sc.abundance_upper =
-                source_post_mapback_population_for_full_row(active, buffers.populations, rec.upper_row) *
-                element.abundance;
+                source_post_mapback_population_for_full_row(
+                    active, buffers.populations, abundance_upper_row_v0682293382) * element.abundance;
             // v0.6.48.12.3.14: literal calc_emisab_ion caller-side line gate.
             // FORTRAN forms abund1/abund2 as xileve*xpx*xeltp and does not call
             // UCalc for line rate families 4/9/14 unless at least one endpoint
@@ -13932,32 +14038,20 @@ int run_impl(
                 const ElementProgram* source_element_v068229338 =
                     pprint4_full_element_v068229338(source_record_v068229338);
                 if (!diagnostic_v068229338 || !source_element_v068229338) return {0.0, 0.0};
-                if (source_record_v068229338.lower_row <= 0 ||
-                    source_record_v068229338.upper_row <= 0 ||
-                    static_cast<std::size_t>(source_record_v068229338.lower_row) > source_element_v068229338->rows.size() ||
-                    static_cast<std::size_t>(source_record_v068229338.upper_row) > source_element_v068229338->rows.size()) {
-                    return {0.0, 0.0};
-                }
-                const double endpoint1_energy_v068229338 =
-                    source_element_v068229338->rows[
-                        static_cast<std::size_t>(source_record_v068229338.lower_row - 1)].energy_ev;
-                const double endpoint2_energy_v068229338 =
-                    source_element_v068229338->rows[
-                        static_cast<std::size_t>(source_record_v068229338.upper_row - 1)].energy_ev;
-                const double endpoint1_population_v068229338 =
+                const auto endpoint_owner_v0682293382 = source_line_endpoint_ownership_v0682293382(
+                    ctx.program, *source_element_v068229338, source_record_v068229338);
+                if (!endpoint_owner_v0682293382.valid) return {0.0, 0.0};
+                const double lower_population_v0682293382 =
                     source_post_mapback_population_for_full_row(
                         diagnostic_v068229338->active,
                         diagnostic_v068229338->active_final_populations,
-                        source_record_v068229338.lower_row) * diagnostic_v068229338->abundance;
-                const double endpoint2_population_v068229338 =
+                        endpoint_owner_v0682293382.lower_row) * diagnostic_v068229338->abundance;
+                const double upper_population_v0682293382 =
                     source_post_mapback_population_for_full_row(
                         diagnostic_v068229338->active,
                         diagnostic_v068229338->active_final_populations,
-                        source_record_v068229338.upper_row) * diagnostic_v068229338->abundance;
-                if (endpoint1_energy_v068229338 < endpoint2_energy_v068229338) {
-                    return {endpoint1_population_v068229338, endpoint2_population_v068229338};
-                }
-                return {endpoint2_population_v068229338, endpoint1_population_v068229338};
+                        endpoint_owner_v0682293382.upper_row) * diagnostic_v068229338->abundance;
+                return {lower_population_v0682293382, upper_population_v0682293382};
             };
         bool source_calc_emis_selection_ready_v82_patch5206 = false;
         if (!defer_product_projection) {
@@ -14657,7 +14751,10 @@ int run_impl(
         // standalone controller accumulates that delta across the pass.
         std::vector<double> pprint4_flinel_v068229334(continuum_capacity, 0.0);
         const char* pprint4_provenance_path_v068229338 =
-            std::getenv("XSTAR_V068229338_PPRINT4_FLINEL_PROVENANCE_PATH");
+            std::getenv("XSTAR_V0682293382_PPRINT4_FLINEL_PROVENANCE_PATH");
+        if (!(pprint4_provenance_path_v068229338 && *pprint4_provenance_path_v068229338))
+            pprint4_provenance_path_v068229338 =
+                std::getenv("XSTAR_V068229338_PPRINT4_FLINEL_PROVENANCE_PATH");
         std::ofstream pprint4_provenance_v068229338;
         if (pprint4_provenance_path_v068229338 && *pprint4_provenance_path_v068229338) {
             const std::filesystem::path provenance_path_v068229338(pprint4_provenance_path_v068229338);
@@ -14665,11 +14762,13 @@ int run_impl(
                 std::filesystem::create_directories(provenance_path_v068229338.parent_path());
             pprint4_provenance_v068229338.open(provenance_path_v068229338, std::ios::app);
             if (!pprint4_provenance_v068229338)
-                throw std::runtime_error("cannot create 0.6.82.29.3.3.8 pprint4 flinel provenance");
+                throw std::runtime_error("cannot create 0.6.82.29.3.3.8.2 pprint4 flinel provenance");
             if (pprint4_provenance_v068229338.tellp() == 0) {
                 pprint4_provenance_v068229338
                     << "source_sequence,source_position,record,data_type,rate_type,element_z,ion_stage,line_slot,"
-                    << "raw_lower_row,raw_upper_row,raw_lower_energy_ev,raw_upper_energy_ev,"
+                    << "ucalc_lower_row,ucalc_upper_row,ucalc_lower_energy_ev,ucalc_upper_energy_ev,"
+                    << "caller_idest1,caller_idest2,caller_row1,caller_row2,caller_energy1_ev,caller_energy2_ev,"
+                    << "ucalc_idest1,ucalc_idest2,dual_type54,"
                     << "abund1_cm3,abund2_cm3,ans1,ans2,ans3,ptmp1,ptmp2,wavelength_a,nb1,rank,"
                     << "net_cm3_s,fline1,fline2,flinel_delta\n";
             }
@@ -14780,6 +14879,21 @@ int run_impl(
                                         static_cast<std::size_t>(source_record_v068229338.upper_row) <= source_element_v068229338->rows.size())
                                         raw_upper_energy_v068229338 = source_element_v068229338->rows[
                                             static_cast<std::size_t>(source_record_v068229338.upper_row - 1)].energy_ev;
+                                    SourceLineEndpointOwnershipV0682293382 endpoint_owner_v0682293382;
+                                    double caller_energy1_v0682293382 = 0.0;
+                                    double caller_energy2_v0682293382 = 0.0;
+                                    if (source_element_v068229338) {
+                                        endpoint_owner_v0682293382 = source_line_endpoint_ownership_v0682293382(
+                                            ctx.program, *source_element_v068229338, source_record_v068229338);
+                                        if (endpoint_owner_v0682293382.caller_row1 > 0 &&
+                                            endpoint_owner_v0682293382.caller_row1 <= source_element_v068229338->n_rows)
+                                            caller_energy1_v0682293382 = row_at(
+                                                *source_element_v068229338, endpoint_owner_v0682293382.caller_row1).energy_ev;
+                                        if (endpoint_owner_v0682293382.caller_row2 > 0 &&
+                                            endpoint_owner_v0682293382.caller_row2 <= source_element_v068229338->n_rows)
+                                            caller_energy2_v0682293382 = row_at(
+                                                *source_element_v068229338, endpoint_owner_v0682293382.caller_row2).energy_ev;
+                                    }
                                     pprint4_provenance_v068229338
                                         << source_sequence_v82_patch511 << ','
                                         << original_c.source_position << ',' << original_c.record << ','
@@ -14788,7 +14902,16 @@ int run_impl(
                                         << source_record_v068229338.ion_stage << ','
                                         << original_c.output_index << ',' << source_record_v068229338.lower_row << ','
                                         << source_record_v068229338.upper_row << ',' << raw_lower_energy_v068229338 << ','
-                                        << raw_upper_energy_v068229338 << ',' << source_abund1_cm3_v068229338 << ','
+                                        << raw_upper_energy_v068229338 << ','
+                                        << endpoint_owner_v0682293382.caller_idest1 << ','
+                                        << endpoint_owner_v0682293382.caller_idest2 << ','
+                                        << endpoint_owner_v0682293382.caller_row1 << ','
+                                        << endpoint_owner_v0682293382.caller_row2 << ','
+                                        << caller_energy1_v0682293382 << ',' << caller_energy2_v0682293382 << ','
+                                        << endpoint_owner_v0682293382.ucalc_idest1 << ','
+                                        << endpoint_owner_v0682293382.ucalc_idest2 << ','
+                                        << (endpoint_owner_v0682293382.dual_type54 ? 1 : 0) << ','
+                                        << source_abund1_cm3_v068229338 << ','
                                         << source_abund2_cm3_v068229338 << ',' << c.ans1 << ',' << c.ans2 << ',' << c.ans3 << ','
                                         << c.ptmp1 << ',' << c.ptmp2 << ',' << pprint4_elmn_wavelength_v068229336 << ','
                                         << nb1_v068229336 << ',' << pprint4_consumer_v068229336.rank_in_bin << ','

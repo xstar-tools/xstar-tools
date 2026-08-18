@@ -40,6 +40,7 @@ constexpr int kType99LayoutMagicZ1Z30V068213 = 226;
 constexpr int kType53LayoutMagicZ1Z30V06481231 = 224;
 constexpr int kType49LayoutMagicZ1Z30V06481231 = 225;
 constexpr int kType70SourceIonIdentityMagicV068213 = 227;
+constexpr int kType54DualEndpointLayoutMagicV0682293382 = 228;
 constexpr double kEvAngstrom = 12398.419843320026;
 
 // Atomic-database record semantics (XSTAR Manual, Chapter 12; Mendoza et al.
@@ -1075,7 +1076,24 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     // information for a bound-bound transition.  Current ucalc.f90 also accepts
     // later fixed-point variants; lowering preserves the source endpoints here.
     else if (dt==51 || dt==56 || dt==69) { need(ii.size()>=2,"short integer payload"); int a=0,c=0; if(dt==51){need(ii.size()>=3,"short integer payload");a=ii[2];c=ii[1];out.ints={ii[0]};}else{a=ii[0];c=ii[1];out.ints.clear();} auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
-    else if (dt==54) { need(ii.size()>=4,"short integer payload"); int a=ii[ii.size()-4],c=ii[ii.size()-3],iq=ii[ii.size()-2];auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;int ni=row_n(l,upper),nf=row_n(l,lower),li=row_l(l,upper),lf=row_l(l,lower);need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");if(ni<nf)std::swap(ni,nf);out.reals.clear();out.ints={ni,nf,li,lf,iq};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==54) {
+        need(ii.size()>=4,"short integer payload");
+        // 0.6.82.29.3.3.8.2: Type-54 has two distinct endpoint owners in
+        // canonical FORTRAN.  calc_emisab_ion/calc_emis_ion use raw IDAT(1:2)
+        // for line eligibility, population ordering and rcem/flinel, while
+        // ucalc label 54 uses IDAT(nidt-3:nidt-2) for the H-like angular
+        // redistribution quantum numbers and ans*.  Preserve both pairs in
+        // the internal integer payload without changing the fixed-state ABI.
+        const int caller_idest1=ii[0], caller_idest2=ii[1];
+        const int a=ii[ii.size()-4], c=ii[ii.size()-3], iq=ii[ii.size()-2];
+        auto q=local_pair(l,ion,a,c); lower=q.first; upper=q.second;
+        int ni=row_n(l,upper),nf=row_n(l,lower),li=row_l(l,upper),lf=row_l(l,lower);
+        need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");
+        if(ni<nf)std::swap(ni,nf);
+        out.reals.clear();
+        out.ints={ni,nf,li,lf,iq,caller_idest1,caller_idest2,a,c,kType54DualEndpointLayoutMagicV0682293382};
+        energy=std::abs(row_energy(l,upper)-row_energy(l,lower));
+    }
     else if (dt==57) { need(ii.size()>=2,"short integer payload"); int i57=ii[0],local=ii[ii.size()-2],parent_local=b.nlev;lower=row_for_local(l,ion,local);upper=row_for_local(l,ion,parent_local);const auto* lv=find_level(l,ion,local);const auto* pv=find_level(l,ion,parent_local);need(lv&&pv,"lacks literal Type-13 levels");int pn=lv->principal_n?lv->principal_n:(row_n(l,lower)?row_n(l,lower):i57);double eth=std::max(pv->energy-lv->energy,0.0);out.reals={lv->energy,eth,lv->weight,pv->weight};out.ints={i57,pn,local};energy=eth; }
     else if (dt==59 || dt==52) {
         need(ii.size()>=4 && rr.size()>=6,"short payload");

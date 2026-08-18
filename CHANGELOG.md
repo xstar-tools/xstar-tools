@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.8.2 - Option 4 Type-54 dual-endpoint ownership - 2026-08-17
+
+- Treat `0.6.82.29.3.3.8.1` as a real host science rejection: standalone production and the Option-4 harness completed, all non-`flinel` columns/tails remained closed, but `flinel` retained 171 nonzero bins versus FORTRAN 161 and the same ten C++-only channels.
+- Use the returned per-record provenance to localize every extra-bin contribution to C IV ATDB data type 54 / rate type 4. Canonical FORTRAN has two distinct endpoint owners for these records: `calc_emisab_ion`/`calc_emis_ion` use raw `IDAT(1:2)`, while UCalc label 54 uses `IDAT(nidt-3:nidt-2)`.
+- Preserve both endpoint pairs in the native Type-54 lowered payload without changing the fixed-state ABI. Raw `IDAT(1:2)` now owns line eligibility, endpoint-energy ordering, `abund1/abund2`, broad `rcem/oplin`, `nlbin` ranking, and selected `fline/flinel`; the tail pair remains the owner of `ni/nf/li/lf`, `anl1`, Type-54 `ans*`, and matrix placement.
+- Apply the same dual-endpoint payload contract in Python `native_fixed_program.py`; pure-Python `emissivity.py` and `ucalc.py` already preserve the canonical caller-vs-UCalc distinction and are retained.
+- Extend the Option-4 provenance CSV to publish both caller and UCalc endpoint identities/rows/energies for any remaining host reject.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen. Option 10 remains blocked until Option 4 host-closes.
+
 ## 0.6.82.29.3.3.8.1 - Option 4 provenance-path host-harness hotfix - 2026-08-17
 
 - Treat `0.6.82.29.3.3.8` as a rejected host candidate because the qualification runner placed the opt-in `pprint4_flinel` provenance CSV inside the standalone product output directory. The native file-silent production contract correctly rejected that non-product artifact before Option-4 publication/comparison could complete.
