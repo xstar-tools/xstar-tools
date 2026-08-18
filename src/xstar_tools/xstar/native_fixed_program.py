@@ -1102,9 +1102,12 @@ def _lower_record(
     elif dt == 54:
         if len(raw_ints) < 4:
             raise ValueError(f"type54 record {rec} has short integer payload")
-        # 0.6.82.29.3.3.8.2: preserve both canonical Type-54 endpoint roles.
-        # The native evaluator keeps using the tail pair for ucalc/anl1, while
-        # C++ calc_emisab/calc_emis publication consumes raw IDAT(1:2).
+        # 0.6.82.29.3.3.8.2 retained both Type-54 endpoint-indexing formulas.
+        # Host provenance subsequently proved that nIdt=4 makes those formulas
+        # coincide for canonical Type-54 records.  Keep the layout for audit
+        # compatibility, but preserve raw RDAT(1) as a separate real sidecar:
+        # xstarsetup owns that value as elmn(line_slot), independently of the
+        # endpoint-energy difference used by UCalc.
         caller_idest1, caller_idest2 = int(raw_ints[0]), int(raw_ints[1])
         a, b, iq = int(raw_ints[-4]), int(raw_ints[-3]), int(raw_ints[-2])
         lower_row, upper_row = local_pair(a, b)
@@ -1114,7 +1117,7 @@ def _lower_record(
             raise ValueError(f"type54 record {rec} missing quantum numbers")
         if ni < nf:
             ni, nf = nf, ni
-        payload_reals = []
+        payload_reals = [float(raw_reals[0]) if raw_reals else 0.0]
         payload_ints = [
             ni, nf, li, lf, iq,
             caller_idest1, caller_idest2, a, b,

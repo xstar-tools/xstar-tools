@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.8.3 - Option 4 source `elmn` / Type-54 RDAT(1) ownership - 2026-08-18
+
+- Treat `0.6.82.29.3.3.8.2` as a host science rejection. Standalone production completed and every non-`flinel` Option-4 field/tail remained closed, but `flinel` was byte-for-byte unchanged: FORTRAN 161 nonzero bins versus C++ 171, the same ten C++-only channels, and totals `74015.5799368` versus `74027.2989422`.
+- The `.8.2` provenance disproves the previous endpoint-pair hypothesis for this inventory: canonical Type-54 records have `nIdt=4`, so raw `IDAT(1:2)` and UCalc's `IDAT(nidt-3:nidt-2)` resolve to the same endpoints. Preserve the `.8.2` payload sidecar only as an audit contract; it is not the science correction.
+- Correct the actual source ownership mismatch on the private `pprint(4)` surface. `xstarsetup.f90` initializes `elmn(slot)=0` and, for rate types other than 9/14, assigns `elmn(slot)=RDAT(1)`. `rlbin.f90` rejects features whose `elmn` lies outside the wavelength range before ranking. Type-54's compact `line_energy_ev` is an endpoint-energy difference and must not be inverted into a synthetic line wavelength for this source surface.
+- Retain raw Type-54 `RDAT(1)` as a one-value internal real sidecar in both native C++ and Python compact lowering, without changing the fixed-state ABI. The private C++ Option-4 `nlbin` reconstruction and selected `fline/flinel` replay now consume that source-owned `elmn`; the operational line/transport coordinate and science surfaces remain frozen.
+- Pure Python already builds its private calc-emis `elmn` array directly from source output metadata gathered from `RDAT(1)` (with the source rate-9/14 zero rule). Add regression coverage rather than altering already-correct Python numerical behavior.
+- The returned `.8.2` provenance attributes `11.7437410709` of selected `flinel` to Type-54 records versus a total C++ excess of `11.7190054007`; the small residual is consistent with legitimate lines displaced by the erroneous Type-54 `nlbin` entries and is expected to be resolved when the source rank table is rebuilt.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen. Option 10 remains blocked until Option 4 host-closes.
+
 ## 0.6.82.29.3.3.8.2 - Option 4 Type-54 dual-endpoint ownership - 2026-08-17
 
 - Treat `0.6.82.29.3.3.8.1` as a real host science rejection: standalone production and the Option-4 harness completed, all non-`flinel` columns/tails remained closed, but `flinel` retained 171 nonzero bins versus FORTRAN 161 and the same ten C++-only channels.

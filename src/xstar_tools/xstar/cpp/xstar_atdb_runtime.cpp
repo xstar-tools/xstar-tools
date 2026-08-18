@@ -1078,19 +1078,25 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==51 || dt==56 || dt==69) { need(ii.size()>=2,"short integer payload"); int a=0,c=0; if(dt==51){need(ii.size()>=3,"short integer payload");a=ii[2];c=ii[1];out.ints={ii[0]};}else{a=ii[0];c=ii[1];out.ints.clear();} auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==54) {
         need(ii.size()>=4,"short integer payload");
-        // 0.6.82.29.3.3.8.2: Type-54 has two distinct endpoint owners in
-        // canonical FORTRAN.  calc_emisab_ion/calc_emis_ion use raw IDAT(1:2)
-        // for line eligibility, population ordering and rcem/flinel, while
-        // ucalc label 54 uses IDAT(nidt-3:nidt-2) for the H-like angular
-        // redistribution quantum numbers and ans*.  Preserve both pairs in
-        // the internal integer payload without changing the fixed-state ABI.
+        // 0.6.82.29.3.3.8.2 retained both endpoint-indexing formulas for
+        // auditability.  The returned host provenance established that the
+        // canonical Type-54 records have nIdt=4, so IDAT(1:2) and
+        // IDAT(nidt-3:nidt-2) are the same pair for this data type.
+        //
+        // 0.6.82.29.3.3.8.3 closes the actual source-ownership gap: xstarsetup
+        // publishes elmn(line_slot)=RDAT(1) for rate types other than 9/14.
+        // Type-54 RDAT(1) is the source line-coordinate field (canonically
+        // zero for these quantum-defect records), whereas line_energy_ev below
+        // is an endpoint-energy difference used by UCalc.  Retain RDAT(1) as
+        // an internal real sidecar so pprint(4)'s private rlbin reconstruction
+        // can consume source elmn without changing the fixed-state ABI.
         const int caller_idest1=ii[0], caller_idest2=ii[1];
         const int a=ii[ii.size()-4], c=ii[ii.size()-3], iq=ii[ii.size()-2];
         auto q=local_pair(l,ion,a,c); lower=q.first; upper=q.second;
         int ni=row_n(l,upper),nf=row_n(l,lower),li=row_l(l,upper),lf=row_l(l,lower);
         need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");
         if(ni<nf)std::swap(ni,nf);
-        out.reals.clear();
+        out.reals={rr.empty()?0.0:rr[0]};
         out.ints={ni,nf,li,lf,iq,caller_idest1,caller_idest2,a,c,kType54DualEndpointLayoutMagicV0682293382};
         energy=std::abs(row_energy(l,upper)-row_energy(l,lower));
     }

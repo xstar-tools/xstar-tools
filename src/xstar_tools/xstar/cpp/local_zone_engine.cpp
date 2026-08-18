@@ -9551,6 +9551,29 @@ SourceLineEndpointOwnershipV0682293382 source_line_endpoint_ownership_v068229338
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Recover pprint(4)'s private xstarsetup elmn coordinate without
+// changing the operational spectral line coordinate.  For rate-9/14 slots
+// xstarsetup leaves elmn at zero.  Type-54 is the currently relevant rate-4
+// family whose compact line_energy_ev is an endpoint-energy difference rather
+// than RDAT(1); the 0.6.82.29.3.3.8.3 lowerer therefore retains raw RDAT(1)
+// as a one-value real sidecar.
+// Reference context: xstarsetup.f90 line-slot initialization and rlbin.f90.
+// XSTAR-FUNCTION-COMMENT-END
+double source_pprint4_elmn_wavelength_v0682293383(
+    const Program& program,
+    const ProgramRecord& record,
+    double fallback_wavelength_a) {
+    if (record.rate_type == 9 || record.rate_type == 14) return 0.0;
+    if (record.data_type == 54 &&
+        record.real_count >= 1u &&
+        record.real_offset < program.reals.size()) {
+        const double source_rdat1 = program.reals[record.real_offset];
+        return std::isfinite(source_rdat1) ? source_rdat1 : 0.0;
+    }
+    return std::isfinite(fallback_wavelength_a) ? fallback_wavelength_a : 0.0;
+}
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Evaluate source preliminary rate record using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
@@ -14178,9 +14201,18 @@ int run_impl(
                 }
                 const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
                 const auto& source_spectral_v068229338 = *source_spectral_it_v068229338->second;
+                // 0.6.82.29.3.3.8.3: private pprint(4) ranking must consume
+                // xstarsetup's elmn slot coordinate, not a wavelength derived
+                // from the UCalc endpoint-energy difference.  This is decisive
+                // for Type-54: canonical RDAT(1)=0, so rlbin rejects it on the
+                // wavelength-range gate even though its rcem weight is nonzero.
+                c_v068229336.wavelength_a = source_pprint4_elmn_wavelength_v0682293383(
+                    ctx.program, source_record_v068229338, c_v068229336.wavelength_a);
+                c_v068229336.energy_ev = c_v068229336.wavelength_a > 0.0
+                    ? local_zone_source_real_literal(12398.4016) /
+                        (local_zone_source_real_literal(1.0e-34) + c_v068229336.wavelength_a)
+                    : 0.0;
                 if (source_record_v068229338.rate_type == 9 || source_record_v068229338.rate_type == 14) {
-                    c_v068229336.wavelength_a = 0.0;
-                    c_v068229336.energy_ev = 0.0;
                     c_v068229336.opacity = 0.0;
                     c_v068229336.emission_sum = 0.0;
                     continue;
@@ -14751,7 +14783,7 @@ int run_impl(
         // standalone controller accumulates that delta across the pass.
         std::vector<double> pprint4_flinel_v068229334(continuum_capacity, 0.0);
         const char* pprint4_provenance_path_v068229338 =
-            std::getenv("XSTAR_V0682293382_PPRINT4_FLINEL_PROVENANCE_PATH");
+            std::getenv("XSTAR_V0682293383_PPRINT4_FLINEL_PROVENANCE_PATH");
         if (!(pprint4_provenance_path_v068229338 && *pprint4_provenance_path_v068229338))
             pprint4_provenance_path_v068229338 =
                 std::getenv("XSTAR_V068229338_PPRINT4_FLINEL_PROVENANCE_PATH");
@@ -14762,7 +14794,7 @@ int run_impl(
                 std::filesystem::create_directories(provenance_path_v068229338.parent_path());
             pprint4_provenance_v068229338.open(provenance_path_v068229338, std::ios::app);
             if (!pprint4_provenance_v068229338)
-                throw std::runtime_error("cannot create 0.6.82.29.3.3.8.2 pprint4 flinel provenance");
+                throw std::runtime_error("cannot create 0.6.82.29.3.3.8.3 pprint4 flinel provenance");
             if (pprint4_provenance_v068229338.tellp() == 0) {
                 pprint4_provenance_v068229338
                     << "source_sequence,source_position,record,data_type,rate_type,element_z,ion_stage,line_slot,"
@@ -14818,9 +14850,18 @@ int run_impl(
                 // a rate-9/14 slot has elmn=0 even though the record may carry a
                 // physical wavelength elsewhere for public metadata.
                 if (original_c.rate_type == 4 || original_c.rate_type == 9) {
+                    const auto source_record_it_v068229338 =
+                        pprint4_record_by_identity_v068229338.find({
+                            static_cast<std::uint64_t>(original_c.source_position),
+                            static_cast<std::int64_t>(original_c.record)});
+                    if (source_record_it_v068229338 == pprint4_record_by_identity_v068229338.end() ||
+                        !source_record_it_v068229338->second) {
+                        continue;
+                    }
+                    const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
                     const double pprint4_elmn_wavelength_v068229336 =
-                        (original_c.rate_type == 9 || original_c.rate_type == 14)
-                            ? 0.0 : operational_line_wavelength_v82_patch5208;
+                        source_pprint4_elmn_wavelength_v0682293383(
+                            ctx.program, source_record_v068229338, operational_line_wavelength_v82_patch5208);
                     const auto pprint4_consumer_v068229336 = source_calc_emis_consumer(
                         original_c.output_index, pprint4_elmn_wavelength_v068229336, false, true,
                         source_pprint4_nlbin_v068229336, input.radiation_energy_ev, continuum_capacity);
@@ -14837,15 +14878,6 @@ int run_impl(
                                 const double source_hc_v068229336 = local_zone_source_real_literal(12398.4016);
                                 const double line_energy_v068229336 =
                                     source_hc_v068229336 / (pprint4_elmn_wavelength_v068229336 + 1.0e-36);
-                                const auto source_record_it_v068229338 =
-                                    pprint4_record_by_identity_v068229338.find({
-                                        static_cast<std::uint64_t>(original_c.source_position),
-                                        static_cast<std::int64_t>(original_c.record)});
-                                if (source_record_it_v068229338 == pprint4_record_by_identity_v068229338.end() ||
-                                    !source_record_it_v068229338->second) {
-                                    continue;
-                                }
-                                const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
                                 const auto source_abundances_v068229338 =
                                     pprint4_energy_ordered_abundances_v068229338(source_record_v068229338);
                                 const double source_abund1_cm3_v068229338 =
