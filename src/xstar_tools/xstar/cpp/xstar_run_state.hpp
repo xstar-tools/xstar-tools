@@ -93,6 +93,22 @@ struct LineIdentityState {
     std::int32_t upper_orbital_l = 0;
 };
 
+// 0.6.82.29.3.6: publication-only literal calc_hmc_ion/UCalc endpoint
+// identity retained for pprint(29).  The two local endpoints are the values
+// returned by UCalc before calc_hmc_ion performs any matrix-facing ordering;
+// nlev is the current-ion calc_rates_level_lte extent.  This is not part of
+// the public fixed-state ABI and never feeds solver, transport, or FITS science.
+struct RateIdentityState {
+    std::int64_t source_record = 0;
+    std::int16_t atomic_number = 0;
+    std::int16_t ion_stage = 0;
+    std::int16_t nlev = 0;
+    std::int32_t data_type = 0;
+    std::int32_t rate_type = 0;
+    std::int32_t source_idest1 = 0;
+    std::int32_t source_idest2 = 0;
+};
+
 struct RrcIdentityState {
     std::int32_t continuum_index = 0;
     std::int32_t level_global_index = 0;
@@ -457,6 +473,8 @@ struct WholeRunAccumulatedState {
     // the source npilev roles separately and therefore publishes both global
     // identities when the shared population passes the source threshold.
     std::vector<LevelIdentityState> detail_level_identities;
+    // 0.6.82.29.3.6: literal UCalc endpoint sidecar for pprint(29).
+    std::vector<RateIdentityState> source_rate_identities;
     std::vector<LineIdentityState> line_identities;
     std::vector<RrcIdentityState> rrc_identities;
     // v0.6.48.12.3.42.1.2: preserve the exact ATDB/source RRC identity
@@ -512,6 +530,8 @@ struct ProductWritingState {
     // the source npilev roles separately and therefore publishes both global
     // identities when the shared population passes the source threshold.
     std::vector<LevelIdentityState> detail_level_identities;
+    // 0.6.82.29.3.6: literal UCalc endpoint sidecar for pprint(29).
+    std::vector<RateIdentityState> source_rate_identities;
     std::vector<LineIdentityState> line_identities;
     std::vector<RrcIdentityState> rrc_identities;
     // v0.6.48.12.3.42.1.2: preserve the exact ATDB/source RRC identity

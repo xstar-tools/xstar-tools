@@ -2102,36 +2102,71 @@ void append_native_lprint_extra_sections(
             return a->source_position < b->source_position;
         });
         // Build the source local-level role map used by pprint(29).  The
-        // detail identity inventory retains continuum/next-ion roles that the
-        // compact solver identity surface deliberately aliases away.
+        // labels come from calc_rates_level_lte for the current ion and are
+        // indexed with min(nlev,idest), exactly as pprint.f90 does.
         std::map<std::tuple<int,int,int>, const xstar_run_state::LevelIdentityState*> level_role_by_local;
+        std::map<std::pair<int,int>,int> nlev_by_stage;
         const auto& source_level_roles = !state.detail_level_identities.empty()
             ? state.detail_level_identities : state.level_identities;
         for (const auto& level : source_level_roles) {
             const int stage = ion_label_to_stage.count(level.ion_label) ? ion_label_to_stage.at(level.ion_label) : 0;
             if (level.atomic_number <= 0 || stage <= 0 || level.upper_index <= 0) continue;
-            level_role_by_local[std::make_tuple(static_cast<int>(level.atomic_number), stage, static_cast<int>(level.upper_index))] = &level;
+            const int z=static_cast<int>(level.atomic_number);
+            const int local=static_cast<int>(level.upper_index);
+            level_role_by_local[std::make_tuple(z,stage,local)] = &level;
+            nlev_by_stage[{z,stage}] = std::max(nlev_by_stage[{z,stage}],local);
         }
+
+        // 0.6.82.29.3.6: pprint(29) publishes the literal UCalc idest pair
+        // saved by calc_hmc_ion, not the compact/energy-ordered endpoints used
+        // by native matrix kernels.  Join the private source sidecar by the
+        // canonical ml record number.  ipmat2 is advanced only across active
+        // stages, so idrates(5:6) must be reconstructed from that active-stage
+        // prefix rather than from Type-13 global level ordinals.
+        std::map<std::int64_t,const xstar_run_state::RateIdentityState*> source_rate_by_record;
+        for (const auto& id : state.source_rate_identities) source_rate_by_record[id.source_record] = &id;
+        auto active_ipmat2 = [&](int z,int stage) {
+            int min_stage=1;
+            if (const auto active=eval->source_detail_active_windows.find(z);
+                active!=eval->source_detail_active_windows.end()) min_stage=active->second[0];
+            int offset=0;
+            for (int s=min_stage;s<stage;++s) {
+                const auto it=nlev_by_stage.find({z,s});
+                if (it!=nlev_by_stage.end()) offset += std::max(it->second-1,0);
+            }
+            return offset;
+        };
         for (const auto* row : rates) {
+            const auto source_it=source_rate_by_record.find(row->record);
+            if (source_it==source_rate_by_record.end())
+                throw std::runtime_error("pprint(29) lacks literal source endpoint identity for record "+std::to_string(row->record));
+            const auto& source=*source_it->second;
+            const int idest1=source.source_idest1;
+            const int idest2=source.source_idest2;
+            const int nlev=std::max(static_cast<int>(source.nlev),1);
+            const int label_idest1=std::min(nlev,std::max(idest1,1));
+            const int label_idest2=std::min(nlev,std::max(idest2,1));
             const auto ion_it = ion_labels.find({row->element_z, row->ion_stage});
             const std::string ion_label = ion_it != ion_labels.end() ? ion_it->second
                 : ("z" + std::to_string(row->element_z) + "_" + std::to_string(row->ion_stage));
-            const auto lower_it = level_role_by_local.find(std::make_tuple(row->element_z, row->ion_stage, row->lower_row));
-            const auto upper_it = level_role_by_local.find(std::make_tuple(row->element_z, row->ion_stage, row->upper_row));
+            const auto lower_it = level_role_by_local.find(std::make_tuple(row->element_z,row->ion_stage,label_idest1));
+            const auto upper_it = level_role_by_local.find(std::make_tuple(row->element_z,row->ion_stage,label_idest2));
             const std::string lower_label = lower_it != level_role_by_local.end()
                 ? lower_it->second->level_label : "unknown";
             const std::string upper_label = upper_it != level_role_by_local.end()
-                ? upper_it->second->level_label : "continuum";
-            const int global_lower = lower_it != level_role_by_local.end()
-                ? lower_it->second->global_index : row->lower_row;
-            const int global_upper = upper_it != level_role_by_local.end()
-                ? upper_it->second->global_index : row->upper_row;
-            out << std::setw(10) << row->record << " " << std::left << std::setw(9) << ion_label.substr(0,9)
-                << std::setw(26) << lower_label.substr(0,25) << std::setw(26) << upper_label.substr(0,25)
-                << std::right << std::setw(8) << row->data_type << std::setw(8) << row->rate_type
-                << std::setw(8) << row->lower_row << std::setw(8) << row->upper_row
-                << std::setw(8) << global_lower << std::setw(8) << global_upper;
-            for (double value : row->ans) out << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5) << value;
+                ? upper_it->second->level_label : "unknown";
+            const int ipmat2=active_ipmat2(row->element_z,row->ion_stage);
+            const int shifted1=idest1+ipmat2;
+            const int shifted2=idest2+ipmat2;
+            // Literal FORTRAN 9939:
+            // (1h ,i9,1x,a9,1x,2(25a1,1x),6i8,6(1pe13.5))
+            out << std::setw(10) << row->record << " " << std::left << std::setw(9) << ion_label.substr(0,9) << " "
+                << std::setw(25) << lower_label.substr(0,25) << " " << std::setw(25) << upper_label.substr(0,25) << " "
+                << std::right << std::setw(8) << source.data_type << std::setw(8) << source.rate_type
+                << std::setw(8) << idest1 << std::setw(8) << idest2
+                << std::setw(8) << shifted1 << std::setw(8) << shifted2;
+            for (double value : row->ans)
+                out << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5) << value;
             out << "\n";
         }
         out << " done with pprint(29)\n";

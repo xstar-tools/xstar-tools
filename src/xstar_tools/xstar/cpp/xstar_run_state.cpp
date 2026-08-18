@@ -637,6 +637,7 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.abundance_radial_rows = state.abundance_radial_rows;
     product.level_identities = state.level_identities;
     product.detail_level_identities = state.detail_level_identities;
+    product.source_rate_identities = state.source_rate_identities;
     product.line_identities = state.line_identities;
     product.rrc_identities = state.rrc_identities;
     product.source_rrc_identities = state.source_rrc_identities;
@@ -688,6 +689,7 @@ ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state
     product.abundance_radial_rows = std::move(state.abundance_radial_rows);
     product.level_identities = std::move(state.level_identities);
     product.detail_level_identities = std::move(state.detail_level_identities);
+    product.source_rate_identities = std::move(state.source_rate_identities);
     product.line_identities = std::move(state.line_identities);
     product.rrc_identities = std::move(state.rrc_identities);
     product.source_rrc_identities = std::move(state.source_rrc_identities);

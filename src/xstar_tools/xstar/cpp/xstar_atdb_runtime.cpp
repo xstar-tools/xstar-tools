@@ -860,8 +860,88 @@ int row_l(const Layout& l,int row) { return row_level(l,row).orbital_l; }
 // Purpose: Provide local pair as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
+const LevelValue* find_level(const Layout& l,int ion,int local);
+
 std::pair<int,int> local_pair(const Layout& l,int ion,int a,int b) {
     int ra=row_for_local(l,ion,a), rb=row_for_local(l,ion,b); return row_energy(l,ra)<=row_energy(l,rb)?std::make_pair(ra,rb):std::make_pair(rb,ra);
+}
+
+// 0.6.82.29.3.6: recover the literal idest1/idest2 pair returned by
+// ucalc.f90 for pprint(29).  Operational lowering is intentionally free to
+// energy-order or compactify endpoints for matrix kernels; this helper keeps
+// that implementation detail off the source publication surface.
+std::pair<int,int> source_ucalc_endpoints_v06822936(
+    const Layout& l,
+    const Block& b,
+    int data_type,
+    int rate_type,
+    const std::vector<std::int64_t>& ii,
+    int lowered_row1,
+    int lowered_row2) {
+    auto as_int = [&](std::size_t at) { return static_cast<int>(ii.at(at)); };
+    auto fallback = [&]() {
+        const int a = lowered_row1 > 0 ? lowered_row1 - b.compact_start + 1 : 0;
+        const int c = lowered_row2 > 0 ? lowered_row2 - b.compact_start + 1 : 0;
+        return std::make_pair(a,c);
+    };
+    auto energy_order = [&](int a,int c,bool upper_first) {
+        const auto* la=find_level(l,b.ion_index,a);
+        const auto* lc=find_level(l,b.ion_index,c);
+        if (!la || !lc) return std::make_pair(a,c);
+        const bool a_lower = la->energy <= lc->energy;
+        if (upper_first) return a_lower ? std::make_pair(c,a) : std::make_pair(a,c);
+        return a_lower ? std::make_pair(a,c) : std::make_pair(c,a);
+    };
+    switch (data_type) {
+        case 51:
+            if (ii.size() >= 3) return energy_order(as_int(2),as_int(1),true);
+            break;
+        case 52:
+        case 59:
+            if (ii.size() >= 4)
+                return {as_int(ii.size()-2),std::max(b.nlev+as_int(ii.size()-4)-1,1)};
+            break;
+        case 53:
+            if (ii.size() >= 4)
+                return {as_int(ii.size()-2),b.nlev+as_int(ii.size()-4)-1};
+            break;
+        case 56:
+        case 60:
+        case 62:
+        case 69:
+            if (ii.size() >= 2) return energy_order(as_int(0),as_int(1),false);
+            break;
+        case 57:
+            if (ii.size() >= 2) return {as_int(ii.size()-2),b.nlev};
+            break;
+        case 63:
+        case 72:
+        case 77:
+            if (ii.size() >= 4) return {as_int(ii.size()-4),as_int(ii.size()-3)};
+            break;
+        case 74:
+            if (ii.size() >= 2) return {as_int(ii.size()-2),b.nlev};
+            break;
+        case 95:
+            if (rate_type == 5) {
+                if (ii.size() >= 2) {
+                    const int idest2 = ii.size() >= 3 ? b.nlev-1+as_int(1) : b.nlev;
+                    // ucalc label 95 resets idest1=1 before returning.
+                    return {1,idest2};
+                }
+            } else {
+                return {1,1};
+            }
+            break;
+        case 99:
+            if (ii.size() >= 4)
+                return {std::min(as_int(ii.size()-2),std::max(b.nlev-1,1)),
+                        std::max(b.nlev+as_int(ii.size()-4)-1,b.nlev)};
+            break;
+        default:
+            break;
+    }
+    return fallback();
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -1726,6 +1806,20 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
             const auto& h=db.header(rec);const int parent=d.npar[rec];const int ion=ion_record_to_index[parent];const auto& b=block_for(l,ion);auto iv=db.ints(rec);auto rv=db.reals(rec);
+            {
+                const auto source_pair = source_ucalc_endpoints_v06822936(
+                    l,b,h.data_type,h.rate_type,iv,lr.record.lower_row,lr.record.upper_row);
+                xstar_run_state::RateIdentityState rate_id;
+                rate_id.source_record=rec;
+                rate_id.atomic_number=static_cast<std::int16_t>(z);
+                rate_id.ion_stage=static_cast<std::int16_t>(b.ion_stage);
+                rate_id.nlev=static_cast<std::int16_t>(b.nlev);
+                rate_id.data_type=h.data_type;
+                rate_id.rate_type=h.rate_type;
+                rate_id.source_idest1=source_pair.first;
+                rate_id.source_idest2=source_pair.second;
+                out.source_rate_identities.push_back(std::move(rate_id));
+            }
             if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=source_atomic_mass_for_ion(db,d,ion,z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;
                 // 0.6.82.29.3.5: pprint(18) consumes calc_rates_level_lte's
                 // literal Type-13 rlev(1:3) and ilev(1:3) endpoint metadata.
@@ -1782,6 +1876,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
                 a.ion_label == b.ion_label && a.upper_index == b.upper_index;
         }),
         out.detail_level_identities.end());
+    std::sort(out.source_rate_identities.begin(),out.source_rate_identities.end(),[](const auto&a,const auto&b){return a.source_record<b.source_record;});
     std::sort(out.line_identities.begin(),out.line_identities.end(),[](const auto&a,const auto&b){return a.line_index<b.line_index;});
     std::sort(out.rrc_identities.begin(),out.rrc_identities.end(),[](const auto&a,const auto&b){return a.continuum_index<b.continuum_index;});
     std::sort(out.source_rrc_identities.begin(),out.source_rrc_identities.end(),[](const auto&a,const auto&b){return a.continuum_index<b.continuum_index;});

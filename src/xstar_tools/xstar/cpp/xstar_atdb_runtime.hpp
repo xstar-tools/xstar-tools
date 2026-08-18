@@ -90,6 +90,8 @@ struct ProgramStorage {
     std::vector<std::int64_t> ints;
     std::vector<xstar_run_state::LevelIdentityState> level_identities;
     std::vector<xstar_run_state::LevelIdentityState> detail_level_identities;
+    // 0.6.82.29.3.6: publication-only literal UCalc endpoint ownership for pprint(29).
+    std::vector<xstar_run_state::RateIdentityState> source_rate_identities;
     std::vector<xstar_run_state::LineIdentityState> line_identities;
     std::vector<xstar_run_state::RrcIdentityState> rrc_identities;
     // 0.6.48.12.3.43.1.1.1: publication-only, literal npcon continuum ownership

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.6 - Option 29 literal rate-record publication - 2026-08-18
+
+- Record `0.6.82.29.3.5` Option 18 as host-closed: the returned host gate reports 1140/1140 rows ACCEPT with `payload_rel=0`, exact identities, zero quantum mismatches, and canonical headers.
+- Preserve the already-correct 1954-row Option-29 inventory while restoring literal `pprint(29)` record identity ownership.  FORTRAN publishes UCalc-returned local `idest1/idest2`, then `idest1+ipmat2` / `idest2+ipmat2`; native C++ previously exposed compact/energy-ordered matrix rows and Type-13 global ordinals on this publication surface.
+- Add a private native `RateIdentityState` sidecar populated from raw ATDB/UCalc endpoint semantics.  It is publication-only, does not alter the public fixed-state ABI, and never feeds matrix, thermal, opacity, transport, or FITS science.
+- Reproduce `calc_rates_level_lte` label lookup with `min(nlev,idest)` and the active-stage-only `ipmat2` prefix used by `calc_hmc_element`.  Restore exact FORTRAN `9939` fixed-width spacing.
+- Correct the corresponding Python Option-29 path now: publish raw pre-filter `ans1..ans6`, clamp endpoint labels through `min(nlev,idest)`, and derive shifted endpoints from the active `ElementCompactBasis` prefix.  Python numerical host closure remains intentionally deferred to `0.6.82.29.3.9`.
+- The historical `0.6.82.29.2` return shows that all 1954 numerical rate payloads were already close (worst field-relative discrepancy about `2.6e-5`); the former `payload_rel=inf` is an identity/publication failure, not a rate-kernel discrepancy.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen. Option 30 remains blocked until Option 29 host-closes.
+
 ## 0.6.82.29.3.5 - Option 18 endpoint and quantum metadata - 2026-08-18
 
 - Record `0.6.82.29.3.4` Option 10 as host-closed: the returned host gate reports 15/15 rows ACCEPT with maximum relative payload error `1.63142e-05`.

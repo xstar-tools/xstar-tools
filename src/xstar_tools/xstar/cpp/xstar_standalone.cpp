@@ -18462,6 +18462,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         whole.native_run_id = std::string("general-standalone-") + XSTAR_API_VERSION_STRING;
         whole.level_identities = program.level_identities;
         whole.detail_level_identities = program.detail_level_identities;
+        whole.source_rate_identities = program.source_rate_identities;
         whole.line_identities = program.line_identities;
         whole.rrc_identities = program.rrc_identities;
         // 0.6.48.12.3.43.1.1: keep executable RRC identities distinct from

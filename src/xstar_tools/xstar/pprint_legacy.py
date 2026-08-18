@@ -1615,7 +1615,11 @@ def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     output_meta = state.control.get("output_atomic_metadata")
     levels = tuple(getattr(output_meta, "levels", ()) or ())
     level_by_ion_local = {(int(row.ion_index), int(row.upper_index)): row for row in levels}
-    rows: list[tuple[int, Mapping[str, Any], Any]] = []
+    ion_label_by_index = {
+        int(i.ion_index): str(i.ion_label)
+        for i in _pprint_metadata(state).ions
+    }
+    rows: list[tuple[int, Mapping[str, Any], Any, Any]] = []
     if fixed is not None:
         for element in getattr(fixed, "element_results", ()):
             eq = getattr(element, "equilibrium", None)
@@ -1625,6 +1629,10 @@ def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
             z = int(getattr(getattr(element, "request", None), "element_z", 0))
             min_stage = int(getattr(element, "selected_min_ion_stage", 1))
             max_stage = int(getattr(element, "selected_max_ion_stage", z))
+            block_by_ion = {
+                int(block.ion_index): block
+                for block in getattr(getattr(assembly, "basis", None), "blocks", ())
+            }
             for row in getattr(assembly, "record_results", ()):
                 rate_type = int(row.get("rate_type", 0) or 0)
                 data_type = int(row.get("data_type", 0) or 0)
@@ -1633,27 +1641,44 @@ def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
                     continue
                 if stage < min_stage or stage > max_stage:
                     continue
-                ans1 = float(row.get("ans1_after_calc_hmc_ion_filter", row.get("ans1", 0.0)) or 0.0)
+                # pprint(29) tests the raw rates(1,ml) value saved immediately
+                # after UCalc, before calc_hmc_ion's rate-type-1 ans1 filter.
+                ans1 = float(row.get("ans1", 0.0) or 0.0)
                 if abs(ans1) <= 1.0e-34:
                     continue
-                rows.append((int(row.get("record", 0) or 0), row, element))
+                ion_index = int(row.get("ion_index", 0) or 0)
+                block = block_by_ion.get(ion_index)
+                if block is None:
+                    continue
+                rows.append((int(row.get("record", 0) or 0), row, element, block))
     rows.sort(key=lambda item: item[0])
-    for record, row, element in rows:
+    for record, row, element, block in rows:
         ion_index = int(row.get("ion_index", 0) or 0)
         id1 = int(row.get("idest1", 0) or 0)
         id2 = int(row.get("idest2", 0) or 0)
-        lower = level_by_ion_local.get((ion_index, id1))
-        upper = level_by_ion_local.get((ion_index, id2))
-        ion_label = str(getattr(lower, "ion_label", "")) or next((str(i.ion_label) for i in _pprint_metadata(state).ions if int(i.ion_index) == ion_index), f"ion_{ion_index}")
+        nlev = max(int(getattr(block, "nlev", row.get("nlev", 1)) or 1), 1)
+        # Literal pprint(29) uses klev(:,min(nlev,idest)) after
+        # calc_rates_level_lte(jkk), so continuum/superlevel destinations
+        # print the current ion's terminal Type-13 level label.
+        label_id1 = min(nlev, max(id1, 1))
+        label_id2 = min(nlev, max(id2, 1))
+        lower = level_by_ion_local.get((ion_index, label_id1))
+        upper = level_by_ion_local.get((ion_index, label_id2))
+        ion_label = str(ion_label_by_index.get(ion_index, getattr(lower, "ion_label", f"ion_{ion_index}")))
         lower_label = str(getattr(lower, "level_label", "unknown"))
-        upper_label = str(getattr(upper, "level_label", "continuum"))
-        global_lower = int(getattr(lower, "global_index", id1))
-        global_upper = int(getattr(upper, "global_index", id2))
+        upper_label = str(getattr(upper, "level_label", "unknown"))
+        # calc_hmc_element's ipmat2 starts at zero and increments by nlev-1
+        # only across selected active stages.  ElementCompactBasis already
+        # encodes that exact active prefix in compact_start.
+        ipmat2 = int(getattr(block, "compact_start", 1)) - 1
+        shifted1 = id1 + ipmat2
+        shifted2 = id2 + ipmat2
         ans = [float(row.get(f"ans{k}", 0.0) or 0.0) for k in range(1, 7)]
-        ans[0] = float(row.get("ans1_after_calc_hmc_ion_filter", ans[0]) or 0.0)
+        # Literal FORTRAN 9939:
+        # (1h ,i9,1x,a9,1x,2(25a1,1x),6i8,6(1pe13.5))
         buf.log_lines.append(
-            f"{record:10d} {ion_label[:9]:<9s} {lower_label[:25]:<25s} {upper_label[:25]:<25s}"
-            f"{int(row.get('data_type',0)):8d}{int(row.get('rate_type',0)):8d}{id1:8d}{id2:8d}{global_lower:8d}{global_upper:8d}"
+            f"{record:10d} {ion_label[:9]:<9s} {lower_label[:25]:<25s} {upper_label[:25]:<25s} "
+            f"{int(row.get('data_type',0)):8d}{int(row.get('rate_type',0)):8d}{id1:8d}{id2:8d}{shifted1:8d}{shifted2:8d}"
             + "".join(f"{v:13.5E}" for v in ans)
         )
     buf.log_lines.append("done with pprint(29)")
