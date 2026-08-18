@@ -689,7 +689,9 @@ struct LevelValue {
     double energy=0.0;
     double weight=1.0;
     double ionpot=0.0;
+    double effective_n=0.0;
     int principal_n=0;
+    int spin_multiplicity=0;
     int orbital_l=0;
     std::string label;
 };
@@ -723,7 +725,10 @@ std::unordered_map<int,LevelValue> level_table(AtdbReader& db,const Derived& d,i
         auto rv=db.reals(rec); auto iv=db.ints(rec); if (iv.size()<2 || rv.size()<2) throw std::runtime_error("short Type-13 record");
         const int local=static_cast<int>(iv[iv.size()-2]);
         LevelValue v; v.record=rec; v.energy=rv[0]; v.weight=rv[1]>0?rv[1]:1.0;
-        v.principal_n=!iv.empty()?static_cast<int>(iv[0]):0; v.orbital_l=iv.size()>2?static_cast<int>(iv[2]):0;
+        v.effective_n=rv.size()>2?rv[2]:0.0;
+        v.principal_n=!iv.empty()?static_cast<int>(iv[0]):0;
+        v.spin_multiplicity=iv.size()>1?static_cast<int>(iv[1]):0;
+        v.orbital_l=iv.size()>2?static_cast<int>(iv[2]):0;
         v.ionpot=rv.size()>=4?rv[3]:0.0; v.label=db.chars(rec); out[local]=v;
         const int next=d.npnxt[rec]; if (next==rec) throw std::runtime_error("Type-13 self-cycle"); rec=next;
         if (++guard>100000) throw std::runtime_error("Type-13 cycle guard");
@@ -1721,7 +1726,12 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
             const auto& h=db.header(rec);const int parent=d.npar[rec];const int ion=ion_record_to_index[parent];const auto& b=block_for(l,ion);auto iv=db.ints(rec);auto rv=db.reals(rec);
-            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=source_atomic_mass_for_ion(db,d,ion,z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
+            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=source_atomic_mass_for_ion(db,d,ion,z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;
+                // 0.6.82.29.3.5: pprint(18) consumes calc_rates_level_lte's
+                // literal Type-13 rlev(1:3) and ilev(1:3) endpoint metadata.
+                if(la){id.lower_excitation_ev=la->energy;id.lower_statistical_weight=la->weight;id.lower_effective_n=la->effective_n;id.lower_principal_n=la->principal_n;id.lower_spin_multiplicity=la->spin_multiplicity;id.lower_orbital_l=la->orbital_l;}
+                if(lc){id.upper_excitation_ev=lc->energy;id.upper_statistical_weight=lc->weight;id.upper_effective_n=lc->effective_n;id.upper_principal_n=lc->principal_n;id.upper_spin_multiplicity=lc->spin_multiplicity;id.upper_orbital_l=lc->orbital_l;}
+                out.line_identities.push_back(id);}
             if(d.npconi2[rec]>0){
                 // Literal pprint.f90/writespectra4.f90 identity metadata is
                 // distinct from the UCalc physical threshold used by the

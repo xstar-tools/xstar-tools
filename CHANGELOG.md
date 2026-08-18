@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.5 - Option 18 endpoint and quantum metadata - 2026-08-18
+
+- Record `0.6.82.29.3.4` Option 10 as host-closed: the returned host gate reports 15/15 rows ACCEPT with maximum relative payload error `1.63142e-05`.
+- Correct only the Option-10 text alignment for the `compton`, `free-free`, and `total` rows so their first numerical column starts in the same source column as the element rows; no Option-10 arithmetic or ownership changes.
+- Restore the full canonical `pprint(18)` row contract for all source line identities: two 25-character endpoint configurations, local endpoint indices, Type-13 `rlev(1:3)` (`eex`, `g`, `neffective`) for both endpoints, and Type-13 `ilev(1:3)` (`n`, `2s+1`, `l`) for both endpoints.
+- Retain these quantities directly from the same Type-13 level records consumed by canonical `calc_rates_level_lte`; do not infer quantum metadata from labels or compact/global row numbers.
+- The historical `0.6.82.29.2` return confirms 1140/1140 Option-18 source identities already match through wavelength, ion, configurations, and local endpoint indices; this revision restores the twelve omitted trailing metadata values and source-format headers.
+- Add the Option-18 runner/checker, focused test, scope evidence, technical note, qualification report, and host instructions to `MANIFEST.in` so the exact sdist is self-qualifying.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen. Option 29 remains blocked until Option 18 host-closes.
+
 ## 0.6.82.29.3.4 - Option 10 mixed pirt/rrrt ownership - 2026-08-18
 
 - Correct Option 10 publication to reproduce `calc_hmc_element.f90` mixed rate ownership: all stages start from first-pass `calc_ion_rates`, while active `mml..mmu` stages are overwritten by second-pass `calc_hmc_ion` `pirt`/`rrrt` totals.

@@ -1883,18 +1883,18 @@ void append_native_lprint_extra_sections(
                 << std::setw(16) << item.heating2 << std::setw(16) << item.cooling2
                 << std::setw(16) << (item.heating2-item.cooling2) << "\n";
         }
-        out << "      compton " << std::uppercase << std::scientific << std::setprecision(8)
+        out << "      compton  " << std::uppercase << std::scientific << std::setprecision(8)
             << std::setw(16) << eval->compton_heating << std::setw(16) << eval->compton_cooling
             << std::setw(16) << (eval->compton_heating-eval->compton_cooling)
             << std::setw(16) << eval->compton_heating << std::setw(16) << eval->compton_cooling
             << std::setw(16) << (eval->compton_heating-eval->compton_cooling) << "\n";
-        out << "      free-free " << std::setw(16) << eval->free_free_heating
+        out << "      free-free" << std::setw(16) << eval->free_free_heating
             << std::setw(16) << eval->brems_cooling << std::setw(16) << (eval->free_free_heating-eval->brems_cooling)
             << std::setw(16) << eval->free_free_heating << std::setw(16) << eval->brems_cooling
             << std::setw(16) << (eval->free_free_heating-eval->brems_cooling) << "\n";
         const double total_heating2 = element_heating2_total + eval->compton_heating + eval->free_free_heating;
         const double total_cooling2 = element_cooling2_total + eval->compton_cooling + eval->brems_cooling;
-        out << "      total " << std::setw(16) << eval->total_heating << std::setw(16) << eval->total_cooling
+        out << "      total    " << std::setw(16) << eval->total_heating << std::setw(16) << eval->total_cooling
             << std::setw(16) << (eval->total_heating-eval->total_cooling)
             << std::setw(16) << total_heating2 << std::setw(16) << total_cooling2
             << std::setw(16) << (total_heating2-total_cooling2) << "\n";
@@ -2058,14 +2058,23 @@ void append_native_lprint_extra_sections(
 
     if (lprint >= 4) {
         out << "\n print option:18\n line wavelengths and levels\n";
-        out << "       index wavelength  ion            lo                  up\n";
+        out << "       index wavelength  ion            configuration                           index     eex                       g                         neffective                  n          2s+1       l\n";
+        out << "                                   lo                  up                       lo    up   lo           up              lo           up              lo           up       lo     up  lo     up  lo     up \n";
         for (const auto* id : source_lines) {
-            out << std::setw(10) << id->line_index << std::setw(13) << std::uppercase
+            // pprint.f90 9929:
+            // (1h ,i9,1pe13.5,1x,a9,1x,2(25a1,1x),2i6,6(1pe13.5),6i6)
+            out << " " << std::setw(9) << id->line_index << std::setw(13) << std::uppercase
                 << std::scientific << std::setprecision(5) << id->wavelength_angstrom << " "
-                << std::left << std::setw(9) << id->ion_label.substr(0,9)
-                << std::setw(25) << id->lower_level.substr(0,25)
-                << std::setw(25) << id->upper_level.substr(0,25) << std::right
-                << std::setw(7) << id->lower_local_index << std::setw(7) << id->upper_local_index << "\n";
+                << std::left << std::setw(9) << id->ion_label.substr(0,9) << " "
+                << std::setw(25) << id->lower_level.substr(0,25) << " "
+                << std::setw(25) << id->upper_level.substr(0,25) << " " << std::right
+                << std::setw(6) << id->lower_local_index << std::setw(6) << id->upper_local_index
+                << std::setw(13) << id->lower_excitation_ev << std::setw(13) << id->upper_excitation_ev
+                << std::setw(13) << id->lower_statistical_weight << std::setw(13) << id->upper_statistical_weight
+                << std::setw(13) << id->lower_effective_n << std::setw(13) << id->upper_effective_n
+                << std::setw(6) << id->lower_principal_n << std::setw(6) << id->upper_principal_n
+                << std::setw(6) << id->lower_spin_multiplicity << std::setw(6) << id->upper_spin_multiplicity
+                << std::setw(6) << id->lower_orbital_l << std::setw(6) << id->upper_orbital_l << "\n";
         }
 
         out << "\n print option:29\n rates\n doing pprint(29)\n";

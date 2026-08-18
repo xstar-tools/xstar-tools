@@ -76,6 +76,21 @@ struct LineIdentityState {
     std::int64_t source_record = 0;
     std::int32_t lower_local_index = 0;
     std::int32_t upper_local_index = 0;
+    // 0.6.82.29.3.5: pprint(18) publishes the literal Type-13 level
+    // metadata returned by calc_rates_level_lte for each line endpoint.
+    // These fields are publication metadata only and do not feed solver state.
+    double lower_excitation_ev = 0.0;
+    double upper_excitation_ev = 0.0;
+    double lower_statistical_weight = 0.0;
+    double upper_statistical_weight = 0.0;
+    double lower_effective_n = 0.0;
+    double upper_effective_n = 0.0;
+    std::int32_t lower_principal_n = 0;
+    std::int32_t upper_principal_n = 0;
+    std::int32_t lower_spin_multiplicity = 0;
+    std::int32_t upper_spin_multiplicity = 0;
+    std::int32_t lower_orbital_l = 0;
+    std::int32_t upper_orbital_l = 0;
 };
 
 struct RrcIdentityState {
