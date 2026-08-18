@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.8.4 - Option 4 displaced rank-10 publication replay - 2026-08-18
+
+- Treat `0.6.82.29.3.3.8.3` as a near-closure host rejection.  The source `elmn=RDAT(1)` repair removed all ten false Type-54 bins: FORTRAN and C++ both retain 161 nonzero `flinel` bins, there are no C++-only bins, and the total differs by only about `2.435e-2`; the only material comparator failure is channel 330 at relative error `3.91412e-3`.
+- Canonical `rlbin.f90` has a subtle rank-10 ownership rule: a candidate that first reaches `mm==nrank` is rejected, but a later stronger insertion at `mm<nrank` shifts the previous rank-9 entry into `nlbin(10,nb1)`.  Canonical `calc_emis_ion.f90` subsequently searches through `mm==nrank` and therefore consumes that displaced rank-10 identity.
+- The `.8.3` private Option-4 `flinel` replay was incorrectly nested behind the established operational selected-line consumer gate.  At channel 330, the private/source table retains line slot 1942 at rank 10, but the operational table does not select that identity; the outer operational `continue` therefore prevented the private source consumer from seeing the valid rank-10 line.
+- Decouple the private `pprint(4)` replay from operational selection.  Each source spectral identity is first tested against the private source-owned `nlbin` table and may contribute to publication `flinel`; only afterward is the independent operational table consulted to build `selected_lines_v82_patch5206`.  Private membership never feeds operational arrays, HEATT, opacity, transport, or FITS science.
+- Pure Python already implements the canonical displaced-rank behavior: `rlbin_insert()` shifts rank 9 into rank 10 and `_feature_is_ranked()` tests the rank-10 slot after its `mm < nrank` search.  Add an executable regression proving a displaced rank-10 identity remains consumable; no Python numerical production change is required.
+- Extend the host provenance diagnostics to report all rank-10 selected rows and specifically channel-330 rank-10 identities/deltas.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen.  Option 10 remains blocked until Option 4 host-closes.
+
 ## 0.6.82.29.3.3.8.3 - Option 4 source `elmn` / Type-54 RDAT(1) ownership - 2026-08-18
 
 - Treat `0.6.82.29.3.3.8.2` as a host science rejection. Standalone production completed and every non-`flinel` Option-4 field/tail remained closed, but `flinel` was byte-for-byte unchanged: FORTRAN 161 nonzero bins versus C++ 171, the same ten C++-only channels, and totals `74015.5799368` versus `74027.2989422`.

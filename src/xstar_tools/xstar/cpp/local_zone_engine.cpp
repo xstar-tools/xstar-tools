@@ -14783,7 +14783,10 @@ int run_impl(
         // standalone controller accumulates that delta across the pass.
         std::vector<double> pprint4_flinel_v068229334(continuum_capacity, 0.0);
         const char* pprint4_provenance_path_v068229338 =
-            std::getenv("XSTAR_V0682293383_PPRINT4_FLINEL_PROVENANCE_PATH");
+            std::getenv("XSTAR_V0682293384_PPRINT4_FLINEL_PROVENANCE_PATH");
+        if (!(pprint4_provenance_path_v068229338 && *pprint4_provenance_path_v068229338))
+            pprint4_provenance_path_v068229338 =
+                std::getenv("XSTAR_V0682293383_PPRINT4_FLINEL_PROVENANCE_PATH");
         if (!(pprint4_provenance_path_v068229338 && *pprint4_provenance_path_v068229338))
             pprint4_provenance_path_v068229338 =
                 std::getenv("XSTAR_V068229338_PPRINT4_FLINEL_PROVENANCE_PATH");
@@ -14794,7 +14797,7 @@ int run_impl(
                 std::filesystem::create_directories(provenance_path_v068229338.parent_path());
             pprint4_provenance_v068229338.open(provenance_path_v068229338, std::ios::app);
             if (!pprint4_provenance_v068229338)
-                throw std::runtime_error("cannot create 0.6.82.29.3.3.8.3 pprint4 flinel provenance");
+                throw std::runtime_error("cannot create 0.6.82.29.3.3.8.4 pprint4 flinel provenance");
             if (pprint4_provenance_v068229338.tellp() == 0) {
                 pprint4_provenance_v068229338
                     << "source_sequence,source_position,record,data_type,rate_type,element_z,ion_stage,line_slot,"
@@ -14831,18 +14834,12 @@ int run_impl(
                         : (original_c.line_energy_eV > 0.0
                             ? local_zone_source_real_literal(12398.4016) / original_c.line_energy_eV
                             : 0.0);
-                const auto line_consumer_v82_patch5208 = source_calc_emis_consumer(
-                    original_c.output_index, operational_line_wavelength_v82_patch5208, false, true,
-                    source_calc_emis_nlbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
-                if (!line_consumer_v82_patch5208.actual_consumer) continue;
-                auto c = original_c;
-                // Literal ordinary Type-50 ucalc calls linopac only above the
-                // opakb1 > 1e-34 guard, while fline/flinel are still published.
-                if (c.data_type == 50 && c.rate_type == 4) {
-                    const double optpp = c.opakab * c.abundance_lower * c.hydrogen_density;
-                    if (!(std::isfinite(optpp) && optpp > 1.0e-34)) c.opakab = 0.0;
-                }
-
+                // 0.6.82.29.3.3.8.4: pprint(4) is a source-owned publication
+                // replay and must not be gated by the operational selected-line
+                // consumer.  rlbin can retain a displaced rank-10 slot, while
+                // the operational table may not select that same identity.
+                // Evaluate the private rank table first and independently; no
+                // private membership is allowed to feed operational arrays.
                 // 0.6.82.29.3.3.6: reproduce the literal xstarsetup ->
                 // calc_emis_ion elmn ownership on the private Option-4 surface.
                 // xstarsetup zeros every line slot, then fills elmn only for
@@ -14854,10 +14851,8 @@ int run_impl(
                         pprint4_record_by_identity_v068229338.find({
                             static_cast<std::uint64_t>(original_c.source_position),
                             static_cast<std::int64_t>(original_c.record)});
-                    if (source_record_it_v068229338 == pprint4_record_by_identity_v068229338.end() ||
-                        !source_record_it_v068229338->second) {
-                        continue;
-                    }
+                    if (source_record_it_v068229338 != pprint4_record_by_identity_v068229338.end() &&
+                        source_record_it_v068229338->second) {
                     const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
                     const double pprint4_elmn_wavelength_v068229336 =
                         source_pprint4_elmn_wavelength_v0682293383(
@@ -14881,16 +14876,16 @@ int run_impl(
                                 const auto source_abundances_v068229338 =
                                     pprint4_energy_ordered_abundances_v068229338(source_record_v068229338);
                                 const double source_abund1_cm3_v068229338 =
-                                    source_abundances_v068229338.first * c.hydrogen_density;
+                                    source_abundances_v068229338.first * original_c.hydrogen_density;
                                 const double source_abund2_cm3_v068229338 =
-                                    source_abundances_v068229338.second * c.hydrogen_density;
+                                    source_abundances_v068229338.second * original_c.hydrogen_density;
                                 const double net_v068229336 =
-                                    c.ans2 * source_abund2_cm3_v068229338 -
-                                    c.ans1 * source_abund1_cm3_v068229338;
+                                    original_c.ans2 * source_abund2_cm3_v068229338 -
+                                    original_c.ans1 * source_abund1_cm3_v068229338;
                                 const double fline1_v068229336 = std::max(
-                                    net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * c.ptmp1, 0.0);
+                                    net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * original_c.ptmp1, 0.0);
                                 const double fline2_v068229336 = std::max(
-                                    net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * c.ptmp2, 0.0);
+                                    net_v068229336 * line_energy_v068229336 * ergsev_v068229336 * original_c.ptmp2, 0.0);
                                 const double flinel_delta_v068229338 =
                                     (fline1_v068229336 + fline2_v068229336) * 2.0 /
                                     width_v068229336 / ergsev_v068229336;
@@ -14944,8 +14939,8 @@ int run_impl(
                                         << endpoint_owner_v0682293382.ucalc_idest2 << ','
                                         << (endpoint_owner_v0682293382.dual_type54 ? 1 : 0) << ','
                                         << source_abund1_cm3_v068229338 << ','
-                                        << source_abund2_cm3_v068229338 << ',' << c.ans1 << ',' << c.ans2 << ',' << c.ans3 << ','
-                                        << c.ptmp1 << ',' << c.ptmp2 << ',' << pprint4_elmn_wavelength_v068229336 << ','
+                                        << source_abund2_cm3_v068229338 << ',' << original_c.ans1 << ',' << original_c.ans2 << ',' << original_c.ans3 << ','
+                                        << original_c.ptmp1 << ',' << original_c.ptmp2 << ',' << pprint4_elmn_wavelength_v068229336 << ','
                                         << nb1_v068229336 << ',' << pprint4_consumer_v068229336.rank_in_bin << ','
                                         << net_v068229336 << ',' << fline1_v068229336 << ',' << fline2_v068229336 << ','
                                         << flinel_delta_v068229338 << '\n';
@@ -14954,6 +14949,19 @@ int run_impl(
                         }
                     }
                 }
+                }
+                const auto line_consumer_v82_patch5208 = source_calc_emis_consumer(
+                    original_c.output_index, operational_line_wavelength_v82_patch5208, false, true,
+                    source_calc_emis_nlbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
+                if (!line_consumer_v82_patch5208.actual_consumer) continue;
+                auto c = original_c;
+                // Literal ordinary Type-50 ucalc calls linopac only above the
+                // opakb1 > 1e-34 guard, while fline/flinel are still published.
+                if (c.data_type == 50 && c.rate_type == 4) {
+                    const double optpp = c.opakab * c.abundance_lower * c.hydrogen_density;
+                    if (!(std::isfinite(optpp) && optpp > 1.0e-34)) c.opakab = 0.0;
+                }
+
                 selected_lines_v82_patch5206.push_back(c);
             }
             std::vector<double> selected_rcem(2 * line_capacity, 0.0);
