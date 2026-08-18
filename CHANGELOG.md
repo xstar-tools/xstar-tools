@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.29.3.3.8.1 - Option 4 provenance-path host-harness hotfix - 2026-08-17
+
+- Treat `0.6.82.29.3.3.8` as a rejected host candidate because the qualification runner placed the opt-in `pprint4_flinel` provenance CSV inside the standalone product output directory. The native file-silent production contract correctly rejected that non-product artifact before Option-4 publication/comparison could complete.
+- Preserve the `.29.3.3.8` C++ and Python science implementations byte-for-byte. This hotfix changes only package/version metadata and the narrow Option-4 qualification harness.
+- Write the optional provenance CSV under the qualification run `logs/` directory, outside `cpp/lprint_3/`, while continuing to pass the same diagnostic path through `XSTAR_V068229338_PPRINT4_FLINEL_PROVENANCE_PATH`.
+- Keep the provenance parser enabled after a successful production run so any remaining `flinel` reject reports exact contributing source records without violating the file-silent production contract.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen. Python science remains aligned with `.29.3.3.8`; Python host qualification is still deferred to `0.6.82.29.3.9`.
+
 ## 0.6.82.29.3.3.8 - Option 4 source endpoint-energy population ownership - 2026-08-17
 
 - Correct the byte-identical `.29.3.3.7` Option-4 host rejection: all non-`flinel` columns/tails remain closed, while `flinel` still has 171 nonzero bins versus FORTRAN 161, the same ten C++-only channels (`250,251,252,255,263,298,300,305,325,326`), and total `74027.2989422` versus `74015.5799368`.
