@@ -1708,7 +1708,9 @@ def _roman_stage_from_ion_label(label: str) -> int:
 
 def _option30_auger_fluorescence(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 30)
-    buf.log_lines.extend(["auger and fluorescence yields", "ion     K shell pi rate  k fluorescence rate auger rate fluorescence yield"])
+    # Literal pprint.f90 CHARACTER concatenation has no blank between
+    # "rate" and "auger" in this header.
+    buf.log_lines.extend(["auger and fluorescence yields", " ion     K shell pi rate  k fluorescence rateauger rate fluorescence yield"])
     meta = _pprint_metadata(state)
     n = max((int(i.ion_index) for i in meta.ions), default=0)
     try:
@@ -1750,26 +1752,38 @@ def _option30_auger_fluorescence(state: XSTARPythonState, buf: LegacyPprintBuffe
         if stage < z:
             for row in records_by_ion.get(int(ion.ion_index), ()):
                 rt = int(row.get("rate_type", 0) or 0)
+                # 0.6.82.29.3.7: Option 30 consumes the same literal UCalc
+                # idest pair retained for Option 29, never compact/matrix rows.
                 id1 = int(row.get("idest1", 0) or 0)
                 id2 = int(row.get("idest2", 0) or 0)
+                nlev = max(int(row.get("nlev", 0) or 0), 1)
                 if id1 <= 0 or id2 <= 0:
                     continue
                 lower = level_by_ion_local.get((int(ion.ion_index), id1))
-                upper = level_by_ion_local.get((int(ion.ion_index), id2))
                 lower_label = str(getattr(lower, "level_label", ""))
-                upper_label = str(getattr(upper, "level_label", ""))
                 pop = _pop(lower)
-                ans1 = float(row.get("ans1_after_calc_hmc_ion_filter", row.get("ans1", 0.0)) or 0.0)
-                ans2 = float(row.get("ans2_after_calc_hmc_ion_filter", row.get("ans2", 0.0)) or 0.0)
-                if rt == 7 and id2 > int(row.get("nlev", 0) or 0) and upper_label.startswith("1s1"):
-                    current_k_pi += ans1 * pop
-                if rt in {4, 41} and (lower_label.startswith("1s1") or upper_label.startswith("1s1")):
-                    if rt == 4:
-                        fluorescence += ans2 * pop
-                    else:
-                        auger += ans1 * pop
+                # calc_hmc_ion publication must use raw UCalc ans values here;
+                # pprint(30) reads rates() directly after the final solve.
+                ans1 = float(row.get("ans1", 0.0) or 0.0)
+                ans2 = float(row.get("ans2", 0.0) or 0.0)
+                if rt == 7 and id2 > nlev:
+                    next_ion_index = int(ion.ion_index) + 1
+                    next_local = max(1, id2 - nlev + 1)
+                    next_upper = level_by_ion_local.get((next_ion_index, next_local))
+                    next_label = str(getattr(next_upper, "level_label", ""))
+                    if next_label.startswith("1s1"):
+                        current_k_pi += ans1 * pop
+                if rt in {4, 41}:
+                    upper = level_by_ion_local.get((int(ion.ion_index), id2))
+                    upper_label = str(getattr(upper, "level_label", ""))
+                    if lower_label.startswith("1s1") or upper_label.startswith("1s1"):
+                        if rt == 4:
+                            fluorescence += ans2 * pop
+                        else:
+                            auger += ans1 * pop
+            # Literal FORTRAN 9822: (1x,8a1,1x,4(1pe11.3))
             buf.log_lines.append(
-                f" {label[:8]:<8s} {pirttoto:11.3E} {fluorescence:11.3E} {auger:11.3E} {fluorescence/(1.0e-34+pirttoto):11.3E}"
+                f" {label[:8]:<8s} {pirttoto:11.3E}{fluorescence:11.3E}{auger:11.3E}{fluorescence/(1.0e-34+pirttoto):11.3E}"
             )
         previous_k_pi = current_k_pi
 

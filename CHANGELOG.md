@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.7 - Option 30 K-shell yield publication - 2026-08-18
+
+- Record `0.6.82.29.3.6` Option 29 as host-closed: the returned host gate reports 1954/1954 rows ACCEPT with `payload_rel=2.55678e-05`, exact literal record identities, canonical headers, and no placeholders.
+- Preserve the already-correct four-row Option-30 inventory while reproducing literal `pprint(30)` K-shell aggregation. The former very large error (`payload_rel` about `2.13e8` in the historical `.29.2` return) came from publication ownership, not a four-row inventory defect.
+- Reuse the private literal UCalc endpoint sidecar introduced for Option 29. K-shell PI now tests the destination in the **next ion** at `idest2-nlev+1`, exactly as FORTRAN does after `calc_rates_level_lte(jkk_ion+1)`, instead of testing an operational current-ion row.
+- Fluorescence and Auger now classify the literal current-ion UCalc endpoints, and all three sums weight by the final source `xilevg` population of literal `idest1`. Preserve FORTRAN's `pirttoto=pirttot` lag: each printed K-shell PI value belongs to the previous qualifying ion.
+- Restore the literal Option-30 header concatenation (`rateauger`) and `9822` row spacing.
+- Correct the corresponding Python Option-30 path with the same raw `idest`, next-ion K-shell test, raw `ans1/ans2`, and final `xilevg` population ownership. Python numerical host closure remains deferred to `0.6.82.29.3.9`.
+- Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen. Integrated C++ verbose closure remains blocked until Option 30 host-closes.
+
 ## 0.6.82.29.3.6 - Option 29 literal rate-record publication - 2026-08-18
 
 - Record `0.6.82.29.3.5` Option 18 as host-closed: the returned host gate reports 1140/1140 rows ACCEPT with `payload_rel=0`, exact identities, zero quantum mismatches, and canonical headers.

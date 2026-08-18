@@ -2172,11 +2172,12 @@ void append_native_lprint_extra_sections(
         out << " done with pprint(29)\n";
 
         out << "\n print option:30\n auger and fluorescence yields\n";
-        out << "ion     K shell pi rate  k fluorescence rate auger rate fluorescence yield\n";
-        // pprint(30) recomputes K-shell aggregates from the evaluated rate
-        // records and retained level populations.  It intentionally prints
-        // the *previous qualifying ion's* K-shell PI total (pirttoto), then
-        // the current ion fluorescence/Auger totals.
+        // Literal pprint.f90 concatenates these two CHARACTER operands without
+        // an intervening blank: "rate" + "auger" -> "rateauger".
+        out << " ion     K shell pi rate  k fluorescence rateauger rate fluorescence yield\n";
+        // 0.6.82.29.3.7: reproduce pprint(30) from the same source-owned
+        // identities used by pprint(29).  Operational matrix rows are not
+        // UCalc idest values and must never be used for K-shell classification.
         std::map<std::pair<int,int>, std::vector<const xstar_run_state::RecordProductDiagnosticState*>> records_by_ion;
         for (const auto& row : eval->record_product_diagnostics) {
             records_by_ion[{row.element_z, row.ion_stage}].push_back(&row);
@@ -2199,6 +2200,9 @@ void append_native_lprint_extra_sections(
             for (int stage = 1; stage <= nstage; ++stage) {
                 const double fraction = fractions[static_cast<std::size_t>(stage-1)];
                 if (!(fraction > 1.0e-12)) continue;
+                // FORTRAN assigns pirttoto=pirttot before zeroing/recomputing
+                // the current ion.  Thus the printed PI rate belongs to the
+                // previous qualifying ion, exactly as retained here.
                 const double pirttoto = previous_k_pi;
                 double current_k_pi = 0.0;
                 double fluorescence = 0.0;
@@ -2207,30 +2211,45 @@ void append_native_lprint_extra_sections(
                     const auto rows_it = records_by_ion.find({z, stage});
                     if (rows_it != records_by_ion.end()) {
                         for (const auto* row : rows_it->second) {
-                            if (row->lower_row <= 0 || row->upper_row <= 0) continue;
-                            const auto* lower = level_role(z, stage, row->lower_row);
-                            const auto* upper = level_role(z, stage, row->upper_row);
+                            const auto source_it = source_rate_by_record.find(row->record);
+                            if (source_it == source_rate_by_record.end())
+                                throw std::runtime_error("pprint(30) lacks literal source endpoint identity for record "+std::to_string(row->record));
+                            const auto& source = *source_it->second;
+                            const int idest1 = source.source_idest1;
+                            const int idest2 = source.source_idest2;
+                            const int nlev = std::max(static_cast<int>(source.nlev), 1);
+                            if (idest1 <= 0 || idest2 <= 0) continue;
+                            const auto* lower = level_role(z, stage, idest1);
                             const double lower_population = retained_population(lower);
-                            if (row->rate_type == 7 && upper && starts_1s1(upper->level_label) &&
-                                row->upper_row > row->lower_row) {
-                                // Literal pprint(30): only continuum/next-ion
-                                // endpoints (idest2>nlev) whose next-ion label
-                                // begins 1s1 contribute to the K-shell PI sum.
-                                if (upper->upper_index == row->upper_row &&
-                                    (upper->level_label == "continuum" || upper->global_index > (lower ? lower->global_index : 0))) {
+
+                            if (row->rate_type == 7 && idest2 > nlev) {
+                                // pprint(30) calls calc_rates_level_lte(jkk+1)
+                                // before testing the K-shell destination.  Its
+                                // destination index is idest2-nlev+1 in the
+                                // NEXT ion, not an operational current-ion row.
+                                const int next_local = std::max(1, idest2 - nlev + 1);
+                                const auto* next_upper = level_role(z, stage + 1, next_local);
+                                if (next_upper && starts_1s1(next_upper->level_label))
                                     current_k_pi += row->ans[0] * lower_population;
-                                }
                             }
-                            if ((row->rate_type == 4 || row->rate_type == 41) &&
-                                ((lower && starts_1s1(lower->level_label)) || (upper && starts_1s1(upper->level_label)))) {
-                                if (row->rate_type == 4) fluorescence += row->ans[1] * lower_population;
-                                else auger += row->ans[0] * lower_population;
+
+                            if (row->rate_type == 4 || row->rate_type == 41) {
+                                // Fluorescence/Auger test both literal current-
+                                // ion endpoints for the 1s1 K-vacancy prefix.
+                                const auto* upper = level_role(z, stage, idest2);
+                                const bool k_shell = (lower && starts_1s1(lower->level_label)) ||
+                                                     (upper && starts_1s1(upper->level_label));
+                                if (k_shell) {
+                                    if (row->rate_type == 4) fluorescence += row->ans[1] * lower_population;
+                                    else auger += row->ans[0] * lower_population;
+                                }
                             }
                         }
                     }
                     const auto found = ion_labels.find({z,stage});
                     const std::string label = found != ion_labels.end() ? found->second : ("z" + std::to_string(z) + "_" + std::to_string(stage));
-                    out << " " << std::left << std::setw(8) << label.substr(0,8) << std::right
+                    // Literal FORTRAN 9822: (1x,8a1,1x,4(1pe11.3))
+                    out << " " << std::left << std::setw(8) << label.substr(0,8) << " " << std::right
                         << std::setw(11) << std::uppercase << std::scientific << std::setprecision(3) << pirttoto
                         << std::setw(11) << fluorescence << std::setw(11) << auger
                         << std::setw(11) << (fluorescence / (1.0e-34 + pirttoto)) << "\n";

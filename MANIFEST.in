@@ -773,3 +773,12 @@ include tests/test_output_control_option29_0_6_82_29_3_6.py
 include output_control_option29_0_6_82_29_3_6.md
 include qualification_report_0_6_82_29_3_6.md
 include xstar_tools-0.6.82.29.3.6_host_validation.md
+
+# 0.6.82.29.3.7 Option-30 K-shell yield publication.
+recursive-include qualification/output_control_option30_0_6_82_29_3_7 *.json *.md
+include tools/qualification/check_output_control_option30_0_6_82_29_3_7.py
+include tools/qualification/run_output_control_option30_host_smoke_0_6_82_29_3_7.py
+include tests/test_output_control_option30_0_6_82_29_3_7.py
+include output_control_option30_0_6_82_29_3_7.md
+include qualification_report_0_6_82_29_3_7.md
+include xstar_tools-0.6.82.29.3.7_host_validation.md
