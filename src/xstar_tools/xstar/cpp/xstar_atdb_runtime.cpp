@@ -893,6 +893,17 @@ std::pair<int,int> source_ucalc_endpoints_v06822936(
         return a_lower ? std::make_pair(a,c) : std::make_pair(c,a);
     };
     switch (data_type) {
+        // 0.6.82.29.3.7.1: pprint(30) consumes the literal UCalc idest1
+        // population owner.  Type-50/91 and Type-76 return the upper-energy
+        // endpoint as idest1 after their source energy swap.  Operational
+        // lowering stores these records lower-energy first, so the generic
+        // compact-row fallback reverses the publication identity and makes
+        // K-fluorescence multiply A by the ground/lower-level population.
+        case 50:
+        case 76:
+        case 91:
+            if (ii.size() >= 2) return energy_order(as_int(0),as_int(1),true);
+            break;
         case 51:
             if (ii.size() >= 3) return energy_order(as_int(2),as_int(1),true);
             break;

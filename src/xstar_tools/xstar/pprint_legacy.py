@@ -1608,6 +1608,37 @@ def _option18_line_levels(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
         )
 
 
+def _source_ucalc_publication_endpoints(
+    row: Mapping[str, Any],
+    ion_index: int,
+    level_by_ion_local: Mapping[tuple[int, int], Any],
+) -> tuple[int, int]:
+    """Return literal UCalc idest1/idest2 for verbose source publication.
+
+    Python's operational Type-50/91 and Type-76 evaluators preserve their
+    matrix-facing/raw-record endpoint pair.  Canonical UCalc swaps those
+    radiative families so idest1 is the upper-energy level before it writes
+    ``rates``/``idrates``.  Keep that source publication identity separate
+    from solver endpoint ownership.
+    """
+    id1 = int(row.get("idest1", 0) or 0)
+    id2 = int(row.get("idest2", 0) or 0)
+    data_type = int(row.get("data_type", 0) or 0)
+    if data_type in {50, 91}:
+        upper = int(row.get("diag_source_upper_id_after_energy_swap", 0) or 0)
+        lower = int(row.get("diag_source_lower_id_after_energy_swap", 0) or 0)
+        if upper > 0 and lower > 0:
+            return upper, lower
+    if data_type in {50, 76, 91} and id1 > 0 and id2 > 0:
+        first = level_by_ion_local.get((ion_index, id1))
+        second = level_by_ion_local.get((ion_index, id2))
+        e1 = float(getattr(first, "excitation_ev", 0.0) or 0.0) if first is not None else None
+        e2 = float(getattr(second, "excitation_ev", 0.0) or 0.0) if second is not None else None
+        if e1 is not None and e2 is not None and e1 < e2:
+            return id2, id1
+    return id1, id2
+
+
 def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 29)
     buf.log_lines.extend(["rates", "doing pprint(29)"])
@@ -1654,8 +1685,7 @@ def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     rows.sort(key=lambda item: item[0])
     for record, row, element, block in rows:
         ion_index = int(row.get("ion_index", 0) or 0)
-        id1 = int(row.get("idest1", 0) or 0)
-        id2 = int(row.get("idest2", 0) or 0)
+        id1, id2 = _source_ucalc_publication_endpoints(row, ion_index, level_by_ion_local)
         nlev = max(int(getattr(block, "nlev", row.get("nlev", 1)) or 1), 1)
         # Literal pprint(29) uses klev(:,min(nlev,idest)) after
         # calc_rates_level_lte(jkk), so continuum/superlevel destinations
@@ -1754,8 +1784,9 @@ def _option30_auger_fluorescence(state: XSTARPythonState, buf: LegacyPprintBuffe
                 rt = int(row.get("rate_type", 0) or 0)
                 # 0.6.82.29.3.7: Option 30 consumes the same literal UCalc
                 # idest pair retained for Option 29, never compact/matrix rows.
-                id1 = int(row.get("idest1", 0) or 0)
-                id2 = int(row.get("idest2", 0) or 0)
+                id1, id2 = _source_ucalc_publication_endpoints(
+                    row, int(ion.ion_index), level_by_ion_local
+                )
                 nlev = max(int(row.get("nlev", 0) or 0), 1)
                 if id1 <= 0 or id2 <= 0:
                     continue

@@ -782,3 +782,13 @@ include tests/test_output_control_option30_0_6_82_29_3_7.py
 include output_control_option30_0_6_82_29_3_7.md
 include qualification_report_0_6_82_29_3_7.md
 include xstar_tools-0.6.82.29.3.7_host_validation.md
+
+# 0.6.82.29.3.7.1 Option-30 radiative UCalc endpoint-ownership hotfix.
+recursive-include qualification/output_control_option30_0_6_82_29_3_7_1 *.json *.md
+include tools/qualification/check_output_control_option30_0_6_82_29_3_7_1.py
+include tools/qualification/run_output_control_option30_host_smoke_0_6_82_29_3_7_1.py
+include tests/test_output_control_option30_0_6_82_29_3_7_1.py
+include output_control_option30_0_6_82_29_3_7_1.md
+include qualification_report_0_6_82_29_3_7_1.md
+include xstar_tools-0.6.82.29.3.7.1_host_validation.md
+include xstar_tools_conversation_summary_through_0.6.82.29.3.7.1.md

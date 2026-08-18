@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.29.3.7.1 - Option 30 radiative endpoint ownership hotfix - 2026-08-18
+
+- Treats `0.6.82.29.3.7` as host-rejected and preserves its accepted 4-row/header/layout work.
+- Corrects the private C++ UCalc endpoint sidecar for radiative Types 50/91 and 76: canonical UCalc returns the upper-energy endpoint as `idest1`, while operational lowering stores those records lower-energy first.
+- Prevents Option 30 from multiplying radiative A-values by the lower/ground population instead of the source K-vacancy upper-level population.
+- Mirrors the same publication-only endpoint rule in Python `pprint_legacy.py` without changing Python solver endpoint ownership; Python numerical closure remains deferred to 0.6.82.29.3.9.
+- Keeps the science revision and C/production-zone/fixed-state ABI identifiers frozen.
+
 ## 0.6.82.29.3.7 - Option 30 K-shell yield publication - 2026-08-18
 
 - Record `0.6.82.29.3.6` Option 29 as host-closed: the returned host gate reports 1954/1954 rows ACCEPT with `payload_rel=2.55678e-05`, exact literal record identities, canonical headers, and no placeholders.
