@@ -1661,7 +1661,11 @@ def _lower_record(
         payload_reals = list(raw_reals)
         ground_row = _compact_row_for_local(basis, ion_index, 1)
         parent_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
-        payload_ints = [ground_row, parent_row]
+        # 0.6.82.29.3.4 mirrors the native C++ internal payload contract:
+        # the first two values remain evaluator-owned compact rows, while the
+        # appended pair preserves UCalc label 72's literal returned idest1/2
+        # for calc_hmc_ion pirt/rrrt ownership diagnostics/publication.
+        payload_ints = [ground_row, parent_row, int(raw_ints[-4]), int(raw_ints[-3])]
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 73:
         if len(raw_ints) < 3 or len(raw_reals) < 7:

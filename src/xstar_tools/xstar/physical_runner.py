@@ -1742,11 +1742,13 @@ def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeStat
                 result.global_rnisg_by_index, state.atomic.derived
             ),
             "xii": _ion_fraction_array(state.atomic.derived, result),
-            # pprint(10) consumes the full-stage preliminary calc_ion_rates
-            # totals, including stages outside the selected compact matrix
-            # window.  Retain those source arrays alongside xii.
-            "pirt": _ion_rate_array(state.atomic.derived, result, result.preliminary_pirt),
-            "rrrt": _ion_rate_array(state.atomic.derived, result, result.preliminary_rrrt),
+            # 0.6.82.29.3.4: calc_hmc_element starts pirt/rrrt from the
+            # full-stage calc_ion_rates first pass, then overwrites active
+            # mml..mmu stages with calc_hmc_ion second-pass totals.  The
+            # FixedStateCalcHMCAllResult.pirt/rrrt maps already preserve that
+            # mixed source ownership; publish those arrays to pprint(10).
+            "pirt": _ion_rate_array(state.atomic.derived, result, result.pirt),
+            "rrrt": _ion_rate_array(state.atomic.derived, result, result.rrrt),
             "htt": _element_array(result.htt),
             "cll": _element_array(result.cll),
             "htt2": _element_array(result.htt2),
@@ -1790,8 +1792,8 @@ def _ion_fraction_array(derived: Any, result: FixedStateCalcHMCAllResult) -> np.
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
-# Purpose: Publish full-stage preliminary calc_ion_rates totals in global Type-12 ion order for pprint(10).
-# Reference context: XSTAR pprint.f90 option 10 consumes pirt/rrrt from calc_ion_rates before compact active-stage truncation.
+# Purpose: Publish calc_hmc_element mixed pirt/rrrt ownership in global Type-12 ion order for pprint(10).
+# Reference context: calc_hmc_element.f90 initializes from calc_ion_rates and overwrites active stages from calc_hmc_ion before pprint(10).
 # XSTAR-FUNCTION-COMMENT-END
 def _ion_rate_array(derived: Any, result: FixedStateCalcHMCAllResult, values: Mapping[tuple[int, int], float]) -> np.ndarray:
     """Return source Type-12 global-ion-order rate array for pprint(10)."""

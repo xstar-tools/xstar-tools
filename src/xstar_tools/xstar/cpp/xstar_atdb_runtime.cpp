@@ -1263,7 +1263,21 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==71 || dt==77) { need(ii.size()>=4,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-4]);upper=row_for_local(l,ion,ii[ii.size()-3]);energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     // Type 72 contains satellite-level autoionization data (autoionization
     // rate, energy above threshold, statistical weight, and continuum endpoint).
-    else if (dt==72) { need(ii.size()>=4&&rr.size()>=2,"short payload");auto q=local_pair(l,ion,ii[ii.size()-4],ii[ii.size()-3]);lower=q.first;upper=q.second;out.ints={row_for_local(l,ion,1),row_for_local(l,ion,b.nlev)};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==72) {
+        need(ii.size()>=4&&rr.size()>=2,"short payload");
+        const int source_idest1=ii[ii.size()-4];
+        const int source_idest2=ii[ii.size()-3];
+        auto q=local_pair(l,ion,source_idest1,source_idest2);
+        lower=q.first;upper=q.second;
+        // 0.6.82.29.3.4: the Type-72 evaluator owns the first two compact
+        // row ids (ground,parent), while calc_hmc_ion owns UCalc's literal
+        // returned idest1/idest2 for pirt/rrrt accumulation.  Append those
+        // raw identities without disturbing the evaluator-facing prefix or
+        // the public fixed-state ABI.
+        out.ints={row_for_local(l,ion,1),row_for_local(l,ion,b.nlev),
+                  source_idest1,source_idest2};
+        energy=std::abs(row_energy(l,upper)-row_energy(l,lower));
+    }
     else if (dt==73) { need(ii.size()>=3&&rr.size()>=7,"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.reals.assign(rr.begin(),rr.begin()+7);out.ints={ii[2]};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==74) { need(ii.size()>=2,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-2]);upper=row_for_local(l,ion,b.nlev);out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     // Type 86 stores K-vacancy Auger/radiative widths and level identities.

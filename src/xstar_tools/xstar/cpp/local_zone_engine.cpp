@@ -9452,6 +9452,92 @@ int source_idest_for_full_row(
     return full_row >= ground ? full_row - ground + 1 : 0;
 }
 
+struct CalcHmcIonEndpointsV06822934 {
+    int idest1 = 0;
+    int idest2 = 0;
+    bool exact = false;
+    const char* owner = "row_fallback";
+};
+
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Recover the literal idest1/idest2 returned by the UCalc data-type
+// branch to calc_hmc_ion for Option-10 detailed pirt/rrrt ownership.  These
+// identities are distinct from any energy-ordered compact matrix endpoints.
+// Reference context: calc_hmc_ion.f90 accumulation after UCalc; ucalc.f90
+// labels 53/59/72/74/99.
+// XSTAR-FUNCTION-COMMENT-END
+CalcHmcIonEndpointsV06822934 calc_hmc_ion_endpoints_v06822934(
+    const Program& program,
+    const ElementProgram& element,
+    const ProgramRecord& record,
+    int nlev) {
+    CalcHmcIonEndpointsV06822934 out;
+    out.idest1 = source_idest_for_full_row(
+        program, element, record.ion_stage, record.lower_row);
+    out.idest2 = source_idest_for_full_row(
+        program, element, record.ion_stage, record.upper_row);
+
+    const bool payload_ok =
+        record.int_offset + record.int_count <= program.ints.size();
+    const std::int64_t* ints = payload_ok && record.int_count > 0
+        ? program.ints.data() + record.int_offset : nullptr;
+
+    switch (record.data_type) {
+        case 53:
+            // Type-53 lowering keeps literal idest1 in lower_row and serializes
+            // the UCalc destination idest2 as ints[1] in its v4 payload.
+            if (ints && record.int_count >= 4u) {
+                out.idest1 = source_idest_for_full_row(
+                    program, element, record.ion_stage, record.lower_row);
+                out.idest2 = static_cast<int>(ints[1]);
+                out.exact = out.idest1 > 0;
+                out.owner = "type53_ucalc";
+            }
+            break;
+        case 52:
+        case 59:
+            // Type-52 is the rate-7 alias of UCalc label 59.  The lowered
+            // payload stores idest1/idest2 verbatim at ints[3:5].
+            if (ints && record.int_count >= 5u) {
+                out.idest1 = static_cast<int>(ints[3]);
+                out.idest2 = static_cast<int>(ints[4]);
+                out.exact = true;
+                out.owner = "type59_ucalc";
+            }
+            break;
+        case 72:
+            // 0.6.82.29.3.4 appends UCalc label-72's raw source pair after
+            // the evaluator-owned [ground_row,parent_row] prefix.
+            if (ints && record.int_count >= 4u) {
+                out.idest1 = static_cast<int>(ints[2]);
+                out.idest2 = static_cast<int>(ints[3]);
+                out.exact = true;
+                out.owner = "type72_ucalc";
+            }
+            break;
+        case 74:
+            // UCalc label 74 returns raw IDAT(nidt-2), nlevp.
+            out.idest1 = source_idest_for_full_row(
+                program, element, record.ion_stage, record.lower_row);
+            out.idest2 = nlev;
+            out.exact = out.idest1 > 0 && nlev > 0;
+            out.owner = "type74_ucalc";
+            break;
+        case 99:
+            // Type-99 persistent payload begins [idest1,nlev,idest2,...].
+            if (ints && record.int_count >= 3u) {
+                out.idest1 = static_cast<int>(ints[0]);
+                out.idest2 = static_cast<int>(ints[2]);
+                out.exact = true;
+                out.owner = "type99_ucalc";
+            }
+            break;
+        default:
+            break;
+    }
+    return out;
+}
+
 
 constexpr std::int64_t kType54DualEndpointLayoutMagicV0682293382 = 228;
 
@@ -12038,9 +12124,10 @@ int run_impl(
         residual_audit_v064812339.preliminary_balance_seconds = elapsed(preliminary_balance_started_v064812339);
         write_preliminary_ion_balance_audit(
             element, preliminary, ctx.critical_ion_fraction);
-        // pprint(10) consumes calc_ion_rates totals for every source stage,
-        // not only the compact active matrix window.  Retain the literal
-        // source eligibility sums before active-stage truncation.
+        // pprint(10) starts from calc_ion_rates totals for every source stage.
+        // Retain that complete first-pass owner here; 0.6.82.29.3.4 below
+        // overwrites active mml..mmu stages with calc_hmc_ion totals exactly
+        // as calc_hmc_element.f90 does.
         std::vector<double> source_pirt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
         std::vector<double> source_rrrt_v0682292(static_cast<std::size_t>(element.element_z), 0.0);
         for (const auto& row_v0682292 : preliminary.audit_rows_v0648117) {
@@ -12257,6 +12344,151 @@ int run_impl(
             element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
         apply_type53_persistent_leveltemp_z1_z30(
             element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
+
+        // 0.6.82.29.3.4: pprint(10) consumes the mixed calc_hmc_element
+        // pirt/rrrt arrays, not the first-pass calc_ion_rates totals for every
+        // stage.  calc_hmc_element first fills all stages from calc_ion_rates,
+        // then overwrites every active mml..mmu stage with the scalar totals
+        // returned by calc_hmc_ion.  Reconstruct that second-pass owner from
+        // the corrected pass-2 EvaluatedRecord stream before publication.
+        // This is publication state only; it does not feed the matrix solve.
+        std::vector<double> detailed_pirt_v06822934(
+            static_cast<std::size_t>(element.element_z), 0.0);
+        std::vector<double> detailed_rrrt_v06822934(
+            static_cast<std::size_t>(element.element_z), 0.0);
+
+        const char* option10_rate_provenance_path_v06822934 =
+            std::getenv("XSTAR_V06822934_OPTION10_RATE_OWNERSHIP_PATH");
+        std::ofstream option10_rate_provenance_v06822934;
+        if (option10_rate_provenance_path_v06822934 &&
+            *option10_rate_provenance_path_v06822934) {
+            std::ifstream probe_v06822934(
+                option10_rate_provenance_path_v06822934, std::ios::binary);
+            const bool fresh_v06822934 = !probe_v06822934.good();
+            probe_v06822934.close();
+            option10_rate_provenance_v06822934.open(
+                option10_rate_provenance_path_v06822934,
+                fresh_v06822934 ? std::ios::out : (std::ios::out | std::ios::app));
+            if (!option10_rate_provenance_v06822934) {
+                throw std::runtime_error(
+                    "cannot create 0.6.82.29.3.4 option10 rate ownership provenance");
+            }
+            if (fresh_v06822934) {
+                option10_rate_provenance_v06822934
+                    << "source_sequence,row_kind,element_z,ion_stage,active,owner,"
+                       "source_position,record,data_type,rate_type,idest1,idest2,nlev,endpoint_exact,endpoint_owner,"
+                       "ans1,ans2,contributes_pirt,contributes_rrrt,running_pirt,running_rrrt,"
+                       "final_pirt,final_rrrt\n";
+            }
+        }
+
+        for (std::size_t k_v06822934 = 0;
+             k_v06822934 < evaluated.size() &&
+             k_v06822934 < evaluated_records.size();
+             ++k_v06822934) {
+            const ProgramRecord* pr_v06822934 = evaluated_records[k_v06822934];
+            if (!pr_v06822934) continue;
+            const auto& c_v06822934 = evaluated[k_v06822934].contribution;
+            const int stage_v06822934 = c_v06822934.ion_stage;
+            const bool active_v06822934 =
+                stage_v06822934 >= active.min_stage &&
+                stage_v06822934 <= active.max_stage;
+            if (!active_v06822934 || stage_v06822934 < 1 ||
+                stage_v06822934 > element.element_z) {
+                continue;
+            }
+
+            const int nlev_v06822934 = source_nlev_for_stage(
+                ctx.program, element, stage_v06822934);
+            if (nlev_v06822934 <= 0) continue;
+            const auto endpoints_v06822934 = calc_hmc_ion_endpoints_v06822934(
+                ctx.program, element, *pr_v06822934, nlev_v06822934);
+            const int idest1_v06822934 = endpoints_v06822934.idest1;
+            const int idest2_v06822934 = endpoints_v06822934.idest2;
+
+            // Literal calc_hmc_ion.f90 call filter.  Rate-type 1 / data-type
+            // 53, rate 15 and rate 8 do not call UCalc in this pass.
+            const bool calc_hmc_ion_called_v06822934 =
+                !(c_v06822934.rate_type == 1 && c_v06822934.data_type == 53) &&
+                c_v06822934.rate_type != 15 && c_v06822934.rate_type != 8;
+            const bool scalar_family_v06822934 =
+                c_v06822934.rate_type == 7 ||
+                c_v06822934.rate_type == 1 ||
+                c_v06822934.rate_type == 40 ||
+                c_v06822934.rate_type == 42;
+            const bool contributes_pirt_v06822934 =
+                calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
+                idest1_v06822934 == 1;
+            const bool contributes_rrrt_v06822934 =
+                calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
+                idest2_v06822934 >= nlev_v06822934;
+            const std::size_t slot_v06822934 =
+                static_cast<std::size_t>(stage_v06822934 - 1);
+            if (contributes_pirt_v06822934) {
+                detailed_pirt_v06822934[slot_v06822934] += c_v06822934.ans1;
+            }
+            if (contributes_rrrt_v06822934) {
+                detailed_rrrt_v06822934[slot_v06822934] += c_v06822934.ans2;
+            }
+
+            if (option10_rate_provenance_v06822934 &&
+                (scalar_family_v06822934 ||
+                 c_v06822934.rate_type == 8 ||
+                 c_v06822934.rate_type == 15)) {
+                option10_rate_provenance_v06822934 << std::setprecision(17)
+                    << source_sequence_v82_patch511 << ",record,"
+                    << element.element_z << ',' << stage_v06822934 << ",1,calc_hmc_ion_second_pass,"
+                    << pr_v06822934->source_position << ',' << pr_v06822934->record << ','
+                    << c_v06822934.data_type << ',' << c_v06822934.rate_type << ','
+                    << idest1_v06822934 << ',' << idest2_v06822934 << ','
+                    << nlev_v06822934 << ',' << (endpoints_v06822934.exact ? 1 : 0) << ','
+                    << endpoints_v06822934.owner << ',' << c_v06822934.ans1 << ','
+                    << c_v06822934.ans2 << ','
+                    << (contributes_pirt_v06822934 ? 1 : 0) << ','
+                    << (contributes_rrrt_v06822934 ? 1 : 0) << ','
+                    << detailed_pirt_v06822934[slot_v06822934] << ','
+                    << detailed_rrrt_v06822934[slot_v06822934] << ",0,0\n";
+            }
+        }
+
+        auto pirt_owner_v06822934 =
+            ctx.last_source_ionization_rates_v0682292.find(element.element_z);
+        auto rrrt_owner_v06822934 =
+            ctx.last_source_recombination_rates_v0682292.find(element.element_z);
+        if (pirt_owner_v06822934 == ctx.last_source_ionization_rates_v0682292.end() ||
+            rrrt_owner_v06822934 == ctx.last_source_recombination_rates_v0682292.end()) {
+            throw std::runtime_error(
+                "0.6.82.29.3.4 option10 preliminary rate owner missing");
+        }
+        auto& mixed_pirt_v06822934 = pirt_owner_v06822934->second;
+        auto& mixed_rrrt_v06822934 = rrrt_owner_v06822934->second;
+        if (mixed_pirt_v06822934.size() < static_cast<std::size_t>(element.element_z) ||
+            mixed_rrrt_v06822934.size() < static_cast<std::size_t>(element.element_z)) {
+            throw std::runtime_error(
+                "0.6.82.29.3.4 option10 preliminary rate owner truncated");
+        }
+        for (int stage_v06822934 = active.min_stage;
+             stage_v06822934 <= active.max_stage; ++stage_v06822934) {
+            if (stage_v06822934 < 1 || stage_v06822934 > element.element_z) continue;
+            const std::size_t slot_v06822934 =
+                static_cast<std::size_t>(stage_v06822934 - 1);
+            mixed_pirt_v06822934[slot_v06822934] =
+                detailed_pirt_v06822934[slot_v06822934];
+            mixed_rrrt_v06822934[slot_v06822934] =
+                detailed_rrrt_v06822934[slot_v06822934];
+            if (option10_rate_provenance_v06822934) {
+                option10_rate_provenance_v06822934 << std::setprecision(17)
+                    << source_sequence_v82_patch511 << ",summary,"
+                    << element.element_z << ',' << stage_v06822934
+                    << ",1,calc_hmc_ion_second_pass,0,0,0,0,0,0,"
+                    << source_nlev_for_stage(ctx.program, element, stage_v06822934)
+                    << ",1,summary,0,0,0,0,"
+                    << detailed_pirt_v06822934[slot_v06822934] << ','
+                    << detailed_rrrt_v06822934[slot_v06822934] << ','
+                    << mixed_pirt_v06822934[slot_v06822934] << ','
+                    << mixed_rrrt_v06822934[slot_v06822934] << '\n';
+            }
+        }
 
         // v82 patch 5.20.9: reproduce xstarsetup's slot-owned errc lifetime
         // before abundance/product filtering.  xstarsetup traverses every rate-7

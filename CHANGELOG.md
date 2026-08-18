@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.29.3.4 - Option 10 mixed pirt/rrrt ownership - 2026-08-18
+
+- Correct Option 10 publication to reproduce `calc_hmc_element.f90` mixed rate ownership: all stages start from first-pass `calc_ion_rates`, while active `mml..mmu` stages are overwritten by second-pass `calc_hmc_ion` `pirt`/`rrrt` totals.
+- Reconstruct active C++ totals from the corrected pass-2 record stream with the literal `calc_hmc_ion` UCalc exclusion and `{1,7,40,42}` scalar accumulation predicates. Preserve UCalc-returned local endpoint identities for Types 53/59/72/74/99 rather than inferring them from compact/global matrix rows; Type 72 appends its raw endpoint pair after the evaluator-owned payload prefix. No matrix/transport science path is fed by the publication arrays.
+- Publish the already source-faithful mixed `result.pirt` / `result.rrrt` arrays in pure Python instead of the preliminary-only maps.
+- Add an opt-in Option-10 ownership provenance CSV outside the production product directory for host diagnosis.
+- Option 4 remains host-closed at `0.6.82.29.3.3.8.4`; this revision is Option-10 only. Science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.29.3.3.8.4 - Option 4 displaced rank-10 publication replay - 2026-08-18
 
 - Treat `0.6.82.29.3.3.8.3` as a near-closure host rejection.  The source `elmn=RDAT(1)` repair removed all ten false Type-54 bins: FORTRAN and C++ both retain 161 nonzero `flinel` bins, there are no C++-only bins, and the total differs by only about `2.435e-2`; the only material comparator failure is channel 330 at relative error `3.91412e-3`.
