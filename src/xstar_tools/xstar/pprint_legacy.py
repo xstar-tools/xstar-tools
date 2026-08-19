@@ -1760,7 +1760,13 @@ def _source_ucalc_publication_endpoints(
         lower = int(row.get("diag_source_lower_id_after_energy_swap", 0) or 0)
         if upper > 0 and lower > 0:
             return upper, lower
-    if data_type in {50, 76, 91} and id1 > 0 and id2 > 0:
+    # Canonical UCalc Type 51 starts from IDAT(3), IDAT(2), then swaps
+    # them when necessary so idest1 is the upper-energy endpoint.  Python's
+    # retained operational record pair is matrix-facing/lower-first, so the
+    # verbose source surface must independently restore UCalc's upper-first
+    # identity.  The same upper-first rule applies to radiative Types 50/91
+    # and 76.
+    if data_type in {50, 51, 76, 91} and id1 > 0 and id2 > 0:
         first = level_by_ion_local.get((ion_index, id1))
         second = level_by_ion_local.get((ion_index, id2))
         e1 = (

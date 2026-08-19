@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.9.2 - pure-Python Option 29 Type-51 identity hotfix - 2026-08-18
+
+- Treat `0.6.82.29.3.9.1` as host-rejected only for Option 29 identity publication: all other `lprint=6` verbose options accept, Option 29 retains the correct 1954-row inventory and accepted numerical payload (`payload_rel=2.55678e-05`), but `identities=0`.
+- Forensic comparison isolates exactly 191 identity mismatches, all Type 51 / rate type 3: 184 `c_iii` rows and 7 `c_iv` rows. In every mismatch Python reverses `idest1/idest2`, the two configuration labels, and both shifted endpoint fields.
+- Restore literal UCalc Type-51 ownership for verbose publication: start from the retained endpoint pair and energy-order it with the upper-energy endpoint as `idest1`, matching canonical `ucalc.f90` and the already host-closed C++ `source_ucalc_endpoints_v06822936` implementation.
+- Do not change rate arithmetic, retained final-state ownership, Option-29 row selection, solver/matrix endpoint ownership, or any C++ production source.
+- Continue using the single pure-Python `lprint=6` host gate because it covers all nine verbose options while testing the corrected 1954-row Option-29 identity surface.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` frozen.
+
 ## 0.6.82.29.3.9.1 - pure-Python verbose retained-state hotfix - 2026-08-18
 
 - Treat `0.6.82.29.3.9` as host-rejected for Python verbose closure: Options 7/10/29/30 reject while 14/21/4/6/18 and exact STEP science invariance accept.
