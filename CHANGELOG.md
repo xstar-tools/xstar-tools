@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.30.2 - noninteractive HEASoft parameter-surface hotfix - 2026-08-19
+
+- Supersede the host-rejected `0.6.82.30.1` qualification harness without changing numerical/science production code.
+- Replace `pquery2/pquery` with non-query `pget` for FORTRAN/XPI parameter readback; query-mode parameters such as `temperature` must never prompt during qualification.
+- Keep `pset` as the one-at-a-time writer into a private PFILES copy. If `pget` is unavailable, read back the private `xstar.par` directly after `pset`.
+- Evaluate invalid stock-XPI probes from the stock `xstar.par` range envelope instead of invoking query semantics.
+- Preserve the literal XSTAR Manual Table-1 baseline and one-parameter-at-a-time policy introduced in `.30.1`.
+- Science revision and ABI identifiers remain frozen.
+
+# Changelog
+
 ## 0.6.82.30.1 - Table-1-default / one-parameter-at-a-time conformance hotfix - 2026-08-19
 
 - Treat `0.6.82.30` as a rejected qualification-harness candidate. Its science code was unchanged and no science failure was established, but its parameter-surface probe used one mixed all-non-default vector and could expose interactive XPI prompts while testing invalid values. The rejected archive is not reused or modified in place.
