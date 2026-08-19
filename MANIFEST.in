@@ -918,3 +918,12 @@ include docs/developer/final_qualification_models_0_6_82_30_6.md
 include final_qualification_models_0_6_82_30_6.md
 include qualification_report_0_6_82_30_6.md
 include xstar_tools-0.6.82.30.6_host_validation.md
+
+# 0.6.82.30.6.1 remaining not-yet-executed qualification cases.
+recursive-include qualification/remaining_qualification_0_6_82_30_6_1 *.json *.md *.txt
+include tools/qualification/run_remaining_qualification_host_smoke_0_6_82_30_6_1.py
+include tests/test_remaining_qualification_0_6_82_30_6_1.py
+include docs/developer/remaining_qualification_0_6_82_30_6_1.md
+include remaining_qualification_0_6_82_30_6_1.md
+include qualification_report_0_6_82_30_6_1.md
+include xstar_tools-0.6.82.30.6.1_host_validation.md

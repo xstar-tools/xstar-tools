@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.30.6.1 — remaining unexecuted qualification cases - 2026-08-19
+
+- Qualification-only follow-up to `.30.6`; no production science or ABI change.
+- Add a resumable FORTRAN-to-C++ host gate for exactly 11 cases that were not executed by the stopped `.30.5/.30.6` final runs: six spectrum/`spectun` cases, `ncn2=999/9999/19999`, and the low/high-density C5 endpoints.
+- Do not rerun already accepted cfrac/emult, niter, lcpres, radexp, `npass=3/5`, C5 reference/low-xi, oxygen, or calcium evidence.
+- Defer `npass=1`, Fe, the multi-element model, and output/element publication cases until after this remaining-case screen.
+- Continue after individual case rejection so all selected cases receive a status in one host run; preserve FORTRAN outputs for later Python qualification.
+
 ## 0.6.82.30.6 - 2026-08-19
 
 - Supersede the broad 38-model `.30.5` final-axis replay with a compact eight-model FORTRAN-to-C++ release-candidate gate.
