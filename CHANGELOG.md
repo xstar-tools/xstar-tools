@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.30.6.2 — Python-only continuation qualification - 2026-08-19
+
+- Qualification-only follow-up to accepted `.30.6.1`; no production science or ABI change.
+- Add two independent pure-Python-to-retained-FORTRAN host testers.
+- Test 1 runs 26 models: niter(4), lcpres(4), radexp(6), npass=1/3/5(3), spectrum/spectun(6), and ncn2(3). `npass=1` is intentionally included to determine whether Python shares the current C++ single-pass SAVD/raw-RRC ownership defect.
+- Test 2 runs six representative already-defined models: C5 reference, difficult C5 low-xi/cfrac=0.4, O, Ca, low-density C5, and high-density C5.
+- Reuse retained canonical FORTRAN outputs from `.30.5`, `.30.6`, and `.30.6.1`; neither tester executes FORTRAN or C++.
+- Continue after individual Python rejection so every selected case receives a result. Fe, multi-element, and output cases remain deferred.
+
 ## 0.6.82.30.6.1 — remaining unexecuted qualification cases - 2026-08-19
 
 - Qualification-only follow-up to `.30.6`; no production science or ABI change.

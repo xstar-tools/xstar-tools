@@ -927,3 +927,13 @@ include docs/developer/remaining_qualification_0_6_82_30_6_1.md
 include remaining_qualification_0_6_82_30_6_1.md
 include qualification_report_0_6_82_30_6_1.md
 include xstar_tools-0.6.82.30.6.1_host_validation.md
+
+# 0.6.82.30.6.2 Python-only continuation qualification.
+recursive-include qualification/python_qualification_continuation_0_6_82_30_6_2 *.json *.md *.txt
+include tools/qualification/run_python_qualification_test1_host_smoke_0_6_82_30_6_2.py
+include tools/qualification/run_python_qualification_test2_host_smoke_0_6_82_30_6_2.py
+include tests/test_python_qualification_continuation_0_6_82_30_6_2.py
+include docs/developer/python_qualification_continuation_0_6_82_30_6_2.md
+include python_qualification_continuation_0_6_82_30_6_2.md
+include qualification_report_0_6_82_30_6_2.md
+include xstar_tools-0.6.82.30.6.2_host_validation.md
