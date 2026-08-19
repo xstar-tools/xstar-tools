@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.82.30.1 - Table-1-default / one-parameter-at-a-time conformance hotfix - 2026-08-19
+
+- Treat `0.6.82.30` as a rejected qualification-harness candidate. Its science code was unchanged and no science failure was established, but its parameter-surface probe used one mixed all-non-default vector and could expose interactive XPI prompts while testing invalid values. The rejected archive is not reused or modified in place.
+- Rebuild the permanent parameter surface around the literal defaults printed in XSTAR Manual Table 1: `temperature=400`, `pressure=0.03`, `density=1e4`, `spectrum='pow'`, `spectrum_file='spct.dat'`, `spectun=0`, `trad=-1`, `rlrad38=1e-6`, `column=1e17`, `rlogxi=5`, `abundtbl='xdef'`, `modelname='XSTAR Default'`, `cfrac=1`, `lcpres=0`, `nsteps=3`, `niter=0`, `lwrite=0`, `lprint=0`, `emult=0.5`, `taumax=5`, `xeemin=0.1`, `critf=1e-7`, `vturbi=1`, `radexp=0`, `ncn2=9999`, `loopcontrol=0`, `npass=1`, and `mode='ql'`, with the Table-1 abundance defaults.
+- Keep `naabund=1` and `lstep=0` explicitly separate as public/source extensions omitted from the displayed Manual Table 1; they are not mislabeled as Table-1 defaults.
+- Make every normal public-parameter surface probe one-parameter-at-a-time from that baseline. The `spectrum='bbody'` value now appears only in the dedicated `spectrum` sensitivity probe; every other ordinary probe retains `spectrum='pow'`. Likewise, `spectrum_file='spect.dat'` is only the non-default `spectrum_file` probe; the baseline is `spct.dat`.
+- Make FORTRAN XPI surface readback noninteractive. The runner materializes a private complete baseline PFILES copy, hides query modes only in that temporary qualification copy, closes stdin, captures all XPI output, and applies a timeout. Invalid probes can no longer stop the host run and wait for typed parameter input.
+- Correct invalid-contract policy for source/XPI exceptions. In particular, stock 2.59g XPI rejects `lwrite=-1`, while C++/Python intentionally accept the source-supported branch already closed by `.29`; `spectun=2` and `radexp<-99` remain dedicated source-semantic replay axes outside the stock XPI envelope.
+- Rebuild the fresh representative matrix from the same literal Table-1 baseline. Ordinary scalar/control/abundance cases change one parameter only. Isolated H+He+C/O/Ca/Fe cases remain explicitly multi-parameter representative science cases.
+- Preserve all `.30` predecessor artifacts for forensic/history use while adding a separate `.30.1` matrix, source checker, host runners, tests, and documentation.
+- No numerical/science production file changes relative to host-closed `0.6.82.29.3.10`: all 137 tracked files remain byte-identical. Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen.
+
 ## 0.6.82.30 — permanent all-Table-1 conformance release-candidate gate - 2026-08-18
 
 - Formally closes **0.6.82.29 — output/control parameters** at the exact host-accepted `0.6.82.29.3.10` archive (`SHA-256 ed0af2a036fd760c0bc85e599e8afb8e274842c5f522e0b1188233e36f32b47f`). The closure is backed by the returned C++/Python verbose evidence and exact science-invariance markers already frozen in that release.
