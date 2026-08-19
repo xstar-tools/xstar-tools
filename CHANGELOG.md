@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.30.4 - benchmark-style direct FORTRAN Table-1 surface hotfix - 2026-08-19
+
+- Supersedes rejected 0.6.82.30.3 without changing numerical/science production code.
+- Replaces the private-PFILES/pget FORTRAN surface probe with the canonical benchmark invocation: `xstar name=value ...` with the complete Table-1/OAT vector supplied directly on the command line.
+- Reads actual FORTRAN runtime values from XSTAR 2.59g's canonical `xout_step.log` `input parameters:` block after `rread1`, then stops the process before the expensive science phase. Full science remains in the representative and inherited core gates.
+- Encodes source-faithful conditional ownership: `pressure` is inactive at Table-1 `lcpres=0`; `spectrum_file` and `spectun` are inactive at `spectrum=pow`; `mode` is XPI-interface-only and is not consumed by `rread1`.
+- Keeps the literal Manual Table-1 baseline (`spectrum=pow`, `spectrum_file=spct.dat`, `cfrac=1`, `temperature=400`, etc.) and strict one-parameter-at-a-time command vectors.
+- Science revision and all ABIs remain frozen.
+
 ## 0.6.82.30.3 - per-case Table-1 PFILES isolation hotfix - 2026-08-19
 
 - Supersede host-rejected `0.6.82.30.2` without changing numerical/science production code.

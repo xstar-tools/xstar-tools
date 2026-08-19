@@ -888,3 +888,15 @@ include docs/developer/table1_conformance_0_6_82_30_3.md
 include table1_conformance_0_6_82_30_3.md
 include qualification_report_0_6_82_30_3.md
 include xstar_tools-0.6.82.30.3_host_validation.md
+
+# 0.6.82.30.4 benchmark-style direct FORTRAN Table-1 surface hotfix.
+recursive-include qualification/table1_conformance_0_6_82_30_4 *.json *.md *.txt
+include tools/qualification/check_table1_conformance_0_6_82_30_4.py
+include tools/qualification/run_table1_parameter_surface_host_smoke_0_6_82_30_4.py
+include tools/qualification/run_table1_representative_host_smoke_0_6_82_30_4.py
+include tools/qualification/run_table1_conformance_host_smoke_0_6_82_30_4.py
+include tests/test_table1_conformance_0_6_82_30_4.py
+include docs/developer/table1_conformance_0_6_82_30_4.md
+include table1_conformance_0_6_82_30_4.md
+include qualification_report_0_6_82_30_4.md
+include xstar_tools-0.6.82.30.4_host_validation.md
