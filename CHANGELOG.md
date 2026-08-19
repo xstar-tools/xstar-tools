@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.30.3 - per-case Table-1 PFILES isolation hotfix - 2026-08-19
+
+- Supersede host-rejected `0.6.82.30.2` without changing numerical/science production code.
+- Preserve the literal XSTAR Manual Table-1 baseline and one-parameter-at-a-time policy introduced in `.30.1`.
+- Remove `pset` from the normal FORTRAN parameter-surface probe. Host evidence showed that after a private Manual Table-1 parameter file was materialized, `pset` could resynchronize it from stock XPI defaults; stock XPI has `cfrac=0` while Manual Table 1 has `cfrac=1`, contaminating every later OAT context.
+- Materialize a fresh private `xstar.par` containing the complete expected 59-value state for every FORTRAN OAT case, then use non-query `pget` for target readback when available or parse the private file directly. `pquery` and `pset` are both forbidden in the normal surface path.
+- Fix surface acceptance accounting so context failures are evaluated per backend/per parameter and cannot contaminate later parameter acceptance through the cumulative failure list.
+- Add an executable regression reproducing the host conflict (`stock cfrac=0`, Table-1 baseline `cfrac=1`) and require an unrelated `temperature` probe to retain `cfrac=1`.
+- Science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.30.2 - noninteractive HEASoft parameter-surface hotfix - 2026-08-19
 
 - Supersede the host-rejected `0.6.82.30.1` qualification harness without changing numerical/science production code.
