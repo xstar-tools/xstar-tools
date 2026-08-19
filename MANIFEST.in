@@ -829,3 +829,26 @@ include output_control_python_option29_type51_0_6_82_29_3_9_2.md
 include qualification_report_0_6_82_29_3_9_2.md
 include xstar_tools-0.6.82.29.3.9.2_host_validation.md
 include xstar_tools_conversation_summary_through_0.6.82.29.3.9.2.md
+
+# 0.6.82.29.3.10 final .29 verbose-output closure.
+recursive-include qualification/output_control_final_verbose_0_6_82_29_3_10 *.json *.txt
+include tools/qualification/check_output_control_final_verbose_closure_0_6_82_29_3_10.py
+include tests/test_output_control_final_verbose_0_6_82_29_3_10.py
+include output_control_final_verbose_closure_0_6_82_29_3_10.md
+include qualification_report_0_6_82_29_3_10.md
+include xstar_tools-0.6.82.29.3.10_final_validation.md
+include xstar_tools_conversation_summary_through_0.6.82.29.3.10.md
+
+# 0.6.82.30 permanent all-Table-1 conformance release-candidate gate.
+recursive-include qualification/table1_conformance_0_6_82_30 *.json *.md *.txt
+include qualification/output_control_0_6_82_29_closure.json
+include tools/qualification/check_table1_conformance_0_6_82_30.py
+include tools/qualification/run_table1_parameter_surface_host_smoke_0_6_82_30.py
+include tools/qualification/run_table1_representative_host_smoke_0_6_82_30.py
+include tools/qualification/run_table1_conformance_host_smoke_0_6_82_30.py
+include tests/test_table1_conformance_0_6_82_30.py
+include docs/developer/output_control_0_6_82_29_closure.md
+include docs/developer/table1_conformance_0_6_82_30.md
+include table1_conformance_0_6_82_30.md
+include qualification_report_0_6_82_30.md
+include xstar_tools-0.6.82.30_host_validation.md

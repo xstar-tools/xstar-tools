@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.30 — permanent all-Table-1 conformance release-candidate gate - 2026-08-18
+
+- Formally closes **0.6.82.29 — output/control parameters** at the exact host-accepted `0.6.82.29.3.10` archive (`SHA-256 ed0af2a036fd760c0bc85e599e8afb8e274842c5f522e0b1188233e36f32b47f`). The closure is backed by the returned C++/Python verbose evidence and exact science-invariance markers already frozen in that release.
+- Adds a permanent 59-public-parameter conformance matrix: 57 Manual Table-1 parameters plus stock public `naabund` and `lstep`, each with a non-default public-value probe, explicit FORTRAN/C++/Python consumers, classification, expected effect surface, and predecessor closure milestone.
+- Adds a 59/59 host parameter-surface gate that verifies supplied values through stock FORTRAN XPI, the native `xstar-cpp` frontend envelope, and the Python parameter contract; invalid/out-of-envelope values are explicit hard errors rather than silent clamps/fallbacks.
+- Adds a fresh FORTRAN/C++/pure-Python representative matrix for scalar sensitivity, `ncn2=999/9999/19999`, output/metadata science invariance, and isolated H+He+C/O/Ca/Fe science.
+- Adds a master host gate that replays the source-specific hard contracts already developed in `.22-.28`: `cfrac=0/0.4/1`, `emult=0.1/0.25/0.5/1`, `niter=0/-99/1/99`, `lcpres=0/1`, analytic and `density.dat` `radexp`, `npass=1/3/5`, and `pow/bbody/bremss/file` spectra including `spectun=0/1/2`.
+- Retains source/XPI distinctions explicitly: FORTRAN `spectun=2`, `radexp<-99`, and the source-supported `lwrite=-1` branch are exercised by their dedicated source-semantic tests using temporary local PFILES range shadows where required; the stock 2.59g XPI surface separately verifies that values outside its declared envelope fail rather than being silently clamped or ignored.
+- This candidate is **qualification-only/science-frozen** relative to `0.6.82.29.3.10`: all 137 tracked numerical/science production files are byte-identical. Science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` remain frozen.
+- Passing `.30` closes the public parameter-contract release-candidate gate, but does not by itself advance the accepted science revision; the broader reopened element/density campaign must also pass.
+
 ## 0.6.82.29.3.9.2 - pure-Python Option 29 Type-51 identity hotfix - 2026-08-18
 
 - Treat `0.6.82.29.3.9.1` as host-rejected only for Option 29 identity publication: all other `lprint=6` verbose options accept, Option 29 retains the correct 1954-row inventory and accepted numerical payload (`payload_rel=2.55678e-05`), but `identities=0`.
