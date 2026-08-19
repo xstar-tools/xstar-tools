@@ -134,6 +134,14 @@ class LevelOutputMetadata:
     atomic_number: int
     level_label: str
     upper_index: int
+    # 0.6.82.29.3.9: retain the literal Type-13 endpoint payload used by
+    # pprint(18).  These fields are publication metadata only; they do not
+    # participate in equilibrium, transfer, opacity, or spectral science.
+    statistical_weight: float = 0.0
+    effective_n: float = 0.0
+    principal_n: int = 0
+    spin_multiplicity: int = 0
+    orbital_l: int = 0
 
 
 @dataclass(frozen=True)

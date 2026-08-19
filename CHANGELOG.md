@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.29.3.9 - integrated pure-Python verbose closure candidate - 2026-08-18
+
+- Record `0.6.82.29.3.8` integrated C++ verbose output as host-closed: Options 4/6/7/10/14/18/21/29/30 all accept together through `lprint=2..6`, with `science-invariance cpp=ACCEPT worst=0`.
+- Add a pure-Python integrated `lprint=2..6` host gate against the identical FORTRAN reference and the exact option-specific parsers/tolerances used by the closed C++ matrix. Require exact pure-Python STEP science invariance relative to its `lprint=0` baseline.
+- Restore the full Python `pprint(18)` Type-13 endpoint payload: `eex`, `g`, `neffective`, `n`, `2s+1`, and `l` for both endpoints. Extend publication metadata/cache ownership directly from raw Type-13 records instead of inferring quantum data from labels.
+- Correct Python radiative UCalc endpoint fallback to use the actual `LevelOutputMetadata.excitation_eV` field, closing the Type-76 upper-first publication rule used by Options 29/30.
+- Align Python Option-10 `compton`, `free-free`, and `total` prefixes with the already host-accepted source-format columns; preserve the host-observed single Option-6 heading and source element/ion/local ordering for Option-7 level roles.
+- C++ production science/publication sources remain byte-identical to host-accepted `0.6.82.29.3.8`; only Python retained metadata/publication files change.
+- Keep science revision `0.6.48.12.3.45.3.3.8` and C/production-zone/fixed-state ABIs `60487/6048110/60488` frozen.
+
 ## 0.6.82.29.3.8 - integrated C++ verbose closure - 2026-08-18
 
 - Record `0.6.82.29.3.7.1` Option 30 as host-closed: 4/4 rows ACCEPT with `payload_rel=0`, exact ion identities, exact headers, and no placeholders.

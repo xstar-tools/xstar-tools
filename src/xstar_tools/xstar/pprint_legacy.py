@@ -833,7 +833,12 @@ def _source_verbose_level_rows(state: XSTARPythonState) -> list[Any]:
         if int(getattr(row, "global_index", 0)) > 0
         and (not active or _row_element_symbol(row) in active)
     ]
-    rows.sort(key=lambda row: int(getattr(row, "global_index", 0)))
+    rows.sort(key=lambda row: (
+        int(getattr(row, "atomic_number", 0)),
+        _roman_stage_from_ion_label(str(getattr(row, "ion_label", ""))),
+        int(getattr(row, "upper_index", 0)),
+        int(getattr(row, "global_index", 0)),
+    ))
     return rows
 
 
@@ -1458,13 +1463,13 @@ def _option10_ion_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> No
     clcomp = float(getattr(continuum, "clcomp", state.control.get("clcomp", 0.0)))
     htfreef = float(getattr(continuum, "htfreef", state.control.get("htfreef", 0.0)))
     clbrems = float(getattr(continuum, "clbrems", state.control.get("clbrems", 0.0)))
-    buf.log_lines.append(f"      compton    {htcomp:16.8E} {clcomp:16.8E} {htcomp-clcomp:16.8E} {htcomp:16.8E} {clcomp:16.8E} {htcomp-clcomp:16.8E}")
-    buf.log_lines.append(f"      free-free  {htfreef:16.8E} {clbrems:16.8E} {htfreef-clbrems:16.8E} {htfreef:16.8E} {clbrems:16.8E} {htfreef-clbrems:16.8E}")
+    buf.log_lines.append(f"      compton  {htcomp:16.8E} {clcomp:16.8E} {htcomp-clcomp:16.8E} {htcomp:16.8E} {clcomp:16.8E} {htcomp-clcomp:16.8E}")
+    buf.log_lines.append(f"      free-free{htfreef:16.8E} {clbrems:16.8E} {htfreef-clbrems:16.8E} {htfreef:16.8E} {clbrems:16.8E} {htfreef-clbrems:16.8E}")
     httot = float(state.control.get("httot", state.thermal.heating))
     cltot = float(state.control.get("cltot", state.thermal.cooling))
     httot2 = float(state.control.get("httot2", httot))
     cltot2 = float(state.control.get("cltot2", cltot))
-    buf.log_lines.append(f"      total      {httot:16.8E} {cltot:16.8E} {httot-cltot:16.8E} {httot2:16.8E} {cltot2:16.8E} {httot2-cltot2:16.8E}")
+    buf.log_lines.append(f"      total    {httot:16.8E} {cltot:16.8E} {httot-cltot:16.8E} {httot2:16.8E} {cltot2:16.8E} {httot2-cltot2:16.8E}")
 
 
 def _option4_continuum_opacity(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
@@ -1599,14 +1604,59 @@ def _option6_continuum_luminosities(state: XSTARPythonState, buf: LegacyPprintBu
 
 def _option18_line_levels(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 18)
-    buf.log_lines.extend(["line wavelengths and levels", "      index wavelength  ion       lo                  up"])
+    # Literal pprint(18) headers and format 9929.  The endpoint payload comes
+    # directly from the retained Type-13 source records; it is publication
+    # metadata and never feeds the solver.
+    buf.log_lines.extend([
+        " line wavelengths and levels",
+        "       index wavelength  ion            configuration                           index     eex                       g                         neffective                  n          2s+1       l",
+        "                                   lo                  up                       lo    up   lo           up              lo           up              lo           up       lo     up  lo     up  lo     up ",
+    ])
+    output_meta = state.control.get("output_atomic_metadata")
+    levels = tuple(getattr(output_meta, "levels", ()) or ())
+    by_label_local = {
+        (str(getattr(level, "ion_label", "")), int(getattr(level, "upper_index", 0))): level
+        for level in levels
+    }
     for row in _source_verbose_line_rows(state):
-        buf.log_lines.append(
-            f"{int(getattr(row,'line_index',0)):10d}{abs(float(getattr(row,'wavelength_angstrom',0.0))):13.5E} "
-            f"{str(getattr(row,'ion_label',''))[:9]:<9s} {str(getattr(row,'lower_level',''))[:25]:<25s} "
-            f"{str(getattr(row,'upper_level',''))[:25]:<25s} {int(getattr(row,'lower_local_index',0)):7d} {int(getattr(row,'upper_local_index',0)):7d}"
+        ion_label = str(getattr(row, "ion_label", ""))
+        lower = by_label_local.get((ion_label, int(getattr(row, "lower_local_index", 0))))
+        upper = by_label_local.get((ion_label, int(getattr(row, "upper_local_index", 0))))
+        if lower is None or upper is None:
+            # The literal source cannot print a line without both Type-13
+            # endpoint records.  Keep the failure explicit rather than
+            # fabricating a zero quantum payload.
+            raise LegacyPprintPortError(
+                f"pprint(18) lacks Type-13 endpoint metadata for line {int(getattr(row, 'line_index', 0))}"
+            )
+        real_payload = (
+            float(getattr(lower, "excitation_eV", 0.0)),
+            float(getattr(upper, "excitation_eV", 0.0)),
+            float(getattr(lower, "statistical_weight", 0.0)),
+            float(getattr(upper, "statistical_weight", 0.0)),
+            float(getattr(lower, "effective_n", 0.0)),
+            float(getattr(upper, "effective_n", 0.0)),
         )
-
+        int_payload = (
+            int(getattr(lower, "principal_n", 0)),
+            int(getattr(upper, "principal_n", 0)),
+            int(getattr(lower, "spin_multiplicity", 0)),
+            int(getattr(upper, "spin_multiplicity", 0)),
+            int(getattr(lower, "orbital_l", 0)),
+            int(getattr(upper, "orbital_l", 0)),
+        )
+        # FORTRAN 9929:
+        # (1h ,i9,1pe13.5,1x,a9,1x,2(25a1,1x),2i6,6(1pe13.5),6i6)
+        buf.log_lines.append(
+            f" {int(getattr(row,'line_index',0)):9d}"
+            f"{abs(float(getattr(row,'wavelength_angstrom',0.0))):13.5E} "
+            f"{ion_label[:9]:<9s} "
+            f"{str(getattr(row,'lower_level',''))[:25]:<25s} "
+            f"{str(getattr(row,'upper_level',''))[:25]:<25s} "
+            f"{int(getattr(row,'lower_local_index',0)):6d}{int(getattr(row,'upper_local_index',0)):6d}"
+            + "".join(f"{value:13.5E}" for value in real_payload)
+            + "".join(f"{value:6d}" for value in int_payload)
+        )
 
 def _source_ucalc_publication_endpoints(
     row: Mapping[str, Any],
@@ -1632,8 +1682,14 @@ def _source_ucalc_publication_endpoints(
     if data_type in {50, 76, 91} and id1 > 0 and id2 > 0:
         first = level_by_ion_local.get((ion_index, id1))
         second = level_by_ion_local.get((ion_index, id2))
-        e1 = float(getattr(first, "excitation_ev", 0.0) or 0.0) if first is not None else None
-        e2 = float(getattr(second, "excitation_ev", 0.0) or 0.0) if second is not None else None
+        e1 = (
+            float(getattr(first, "excitation_eV", getattr(first, "excitation_ev", 0.0)) or 0.0)
+            if first is not None else None
+        )
+        e2 = (
+            float(getattr(second, "excitation_eV", getattr(second, "excitation_ev", 0.0)) or 0.0)
+            if second is not None else None
+        )
         if e1 is not None and e2 is not None and e1 < e2:
             return id2, id1
     return id1, id2
@@ -1641,7 +1697,7 @@ def _source_ucalc_publication_endpoints(
 
 def _option29_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 29)
-    buf.log_lines.extend(["rates", "doing pprint(29)"])
+    buf.log_lines.extend([" rates", " doing pprint(29)"])
     fixed = getattr(state.local_zone, "calc_hmc_all", None)
     output_meta = state.control.get("output_atomic_metadata")
     levels = tuple(getattr(output_meta, "levels", ()) or ())
@@ -1740,7 +1796,7 @@ def _option30_auger_fluorescence(state: XSTARPythonState, buf: LegacyPprintBuffe
     _append_pprint_marker(buf, 30)
     # Literal pprint.f90 CHARACTER concatenation has no blank between
     # "rate" and "auger" in this header.
-    buf.log_lines.extend(["auger and fluorescence yields", " ion     K shell pi rate  k fluorescence rateauger rate fluorescence yield"])
+    buf.log_lines.extend([" auger and fluorescence yields", " ion     K shell pi rate  k fluorescence rateauger rate fluorescence yield"])
     meta = _pprint_metadata(state)
     n = max((int(i.ion_index) for i in meta.ions), default=0)
     try:

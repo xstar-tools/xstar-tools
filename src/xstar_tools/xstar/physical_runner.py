@@ -819,7 +819,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return source_spectrum_ispcg2_diagnostics(zremsz, epi_eV)[0]
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 13
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 14
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -895,6 +895,11 @@ def save_source_output_metadata_cache(
                 level_atomic_number=np.asarray([row.atomic_number for row in metadata.levels], dtype=np.int16),
                 level_label=_string_array([row.level_label for row in metadata.levels]),
                 level_upper_index=np.asarray([row.upper_index for row in metadata.levels], dtype=np.int32),
+                level_statistical_weight=np.asarray([row.statistical_weight for row in metadata.levels], dtype=np.float64),
+                level_effective_n=np.asarray([row.effective_n for row in metadata.levels], dtype=np.float64),
+                level_principal_n=np.asarray([row.principal_n for row in metadata.levels], dtype=np.int32),
+                level_spin_multiplicity=np.asarray([row.spin_multiplicity for row in metadata.levels], dtype=np.int32),
+                level_orbital_l=np.asarray([row.orbital_l for row in metadata.levels], dtype=np.int32),
                 line_index=np.asarray([row.line_index for row in metadata.lines], dtype=np.int32),
                 line_wavelength_angstrom=np.asarray([row.wavelength_angstrom for row in metadata.lines], dtype=np.float64),
                 line_ion_label=_string_array([row.ion_label for row in metadata.lines]),
@@ -954,10 +959,14 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
             LevelOutputMetadata(
                 global_index=int(a), ion_index=int(b), excitation_eV=float(c),
                 ion_label=str(d), atomic_number=int(e), level_label=str(f), upper_index=int(g),
+                statistical_weight=float(h), effective_n=float(i), principal_n=int(j),
+                spin_multiplicity=int(k), orbital_l=int(l),
             )
-            for a, b, c, d, e, f, g in zip(
+            for a, b, c, d, e, f, g, h, i, j, k, l in zip(
                 z["level_global_index"], z["level_ion_index"], z["level_excitation_eV"],
                 z["level_ion_label"], z["level_atomic_number"], z["level_label"], z["level_upper_index"],
+                z["level_statistical_weight"], z["level_effective_n"], z["level_principal_n"],
+                z["level_spin_multiplicity"], z["level_orbital_l"],
             )
         )
         lines = tuple(
@@ -1128,6 +1137,31 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
     has_real = level_nreal > 0
     if np.any(has_real):
         excitation[has_real] = master.rdat1.gather(level_rptr[has_real], dtype=np.float64)
+    statistical_weight = np.zeros(level_records.size, dtype=np.float64)
+    effective_n = np.zeros(level_records.size, dtype=np.float64)
+    principal_n = np.zeros(level_records.size, dtype=np.int64)
+    spin_multiplicity = np.zeros(level_records.size, dtype=np.int64)
+    orbital_l = np.zeros(level_records.size, dtype=np.int64)
+    has_weight = level_nreal > 1
+    if np.any(has_weight):
+        statistical_weight[has_weight] = master.rdat1.gather(
+            level_rptr[has_weight] + 1, dtype=np.float64,
+        )
+    has_effective_n = level_nreal > 2
+    if np.any(has_effective_n):
+        effective_n[has_effective_n] = master.rdat1.gather(
+            level_rptr[has_effective_n] + 2, dtype=np.float64,
+        )
+    has_n = level_nint > 0
+    if np.any(has_n):
+        principal_n[has_n] = master.idat1.gather(level_iptr[has_n], dtype=np.int64)
+    has_spin = level_nint > 1
+    if np.any(has_spin):
+        spin_multiplicity[has_spin] = master.idat1.gather(level_iptr[has_spin] + 1, dtype=np.int64)
+    has_l = level_nint > 2
+    if np.any(has_l):
+        orbital_l[has_l] = master.idat1.gather(level_iptr[has_l] + 2, dtype=np.int64)
+
     packed_local_indices = np.zeros(level_records.size, dtype=np.int64)
     has_local = level_nint >= 2
     if np.any(has_local):
@@ -1178,6 +1212,11 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 atomic_number=z,
                 level_label=_clean_label(master.record_chars(rec), f"level_{local}"),
                 upper_index=local,
+                statistical_weight=float(statistical_weight[pos]),
+                effective_n=float(effective_n[pos]),
+                principal_n=int(principal_n[pos]),
+                spin_multiplicity=int(spin_multiplicity[pos]),
+                orbital_l=int(orbital_l[pos]),
             )
             levels.append(row)
             key = (ion, local)
