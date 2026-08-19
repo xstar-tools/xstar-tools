@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.30.5 - 2026-08-19
+
+- Replace the experimental Table-1 runtime-surface release layer with the permanent Final Qualification Axes gate.
+- Run canonical FORTRAN XSTAR 2.59g and C++ on real science/control cases for cfrac/emult, niter, lcpres, radexp, npass, spectrum/spectun, ncn2, output controls, and representative C/O/Ca/Fe elements.
+- Preserve FORTRAN outputs for the later pure-Python-to-FORTRAN phase.
+- Qualification-only change; science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.30.4 - benchmark-style direct FORTRAN Table-1 surface hotfix - 2026-08-19
 
 - Supersedes rejected 0.6.82.30.3 without changing numerical/science production code.
