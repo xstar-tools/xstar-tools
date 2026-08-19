@@ -18502,6 +18502,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         // count is literal here; source_numrec is replaced by jkp+1 only after
         // pass 1, exactly as in the source.
         const std::size_t effective_npass_v068227 = requested_npass_v068227;
+        // 0.6.82.30.7: SAVD is also the source owner of xo01_detail/detal2/
+        // detal3/detal4 for a single-pass run when lwrite>0.  Earlier native
+        // code retained the SAVD snapshots only when npass>1, then rebuilt
+        // npass=1 detail products from the live/final public state.  That
+        // bypassed the source REAL(4)+FITS-E3 scalar round trip and the sparse
+        // fstepr3 RRC inventory.  Keep transport semantics unchanged; merely
+        // retain the source publication snapshot whenever the source would
+        // have an open detail stream.
+        const bool source_savd_detail_enabled_v0682307 =
+            params.lwrite > 0 || effective_npass_v068227 > 1u;
         if (effective_npass_v068227 > 1u && (effective_npass_v068227 % 2u) == 0u) {
             std::cerr << "V068227_EVEN_NPASS_SPECTRUM_POLICY="
                       << "FINAL_INWARD_PASS_NOT_ACCURATE npass="
@@ -18898,7 +18908,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // xstar.f90 SAVD occurs after HEATT/pprint and before the geometry,
             // STPCUT, and TRNFRN updates.  Multipass execution depends on the
             // exact REAL(4) state stored at this source boundary.
-            if (effective_npass_v068227 > 1u) {
+            if (source_savd_detail_enabled_v0682307) {
                 const double boundary_r19_v068227 = boundary_radius_cm *
                     static_cast<double>(static_cast<float>(1.0e-19));
                 const double boundary_xi_v068227 =
@@ -19227,7 +19237,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 print_xstar_style_live_pprint_row_v0682271(
                     whole.legacy_pprint.radial_rows.back());
             }
-            if (effective_npass_v068227 > 1u) {
+            if (source_savd_detail_enabled_v0682307) {
                 const double terminal_r19_v068227 = current_radius_cm_v068227 *
                     static_cast<double>(static_cast<float>(1.0e-19));
                 const double terminal_xi_v068227 =
@@ -19285,13 +19295,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         whole.legacy_pprint.radial_pass_trajectory_exact =
             !whole.legacy_pprint.radial_rows.empty();
 
-        // 0.6.82.27.3: retain the literal SAVD surfaces for per-pass detail
-        // publication.  The public science products continue to use only the
-        // final pass, but xstar.f90 creates xo0k_detail/detal2/detal3/detal4
-        // for every pass when npass>1.  Build these rows from the REAL(4)
-        // snapshots that UNSAVD itself consumes rather than from final-pass
-        // reconstructed state.
-        if (effective_npass_v068227 > 1u) {
+        // 0.6.82.30.7: retain the literal SAVD surfaces for detail
+        // publication for both source cases: lwrite>0 (including npass=1)
+        // and npass>1.  The public science products continue to use only the
+        // final pass.  Build detail rows from the REAL(4)/FITS-E3 snapshots
+        // that source SAVD owns rather than from reconstructed final state.
+        if (source_savd_detail_enabled_v0682307) {
             whole.multipass_detail_radial_zones.clear();
             whole.multipass_detail_radial_zones.resize(effective_npass_v068227);
             for (std::size_t pass_v0682273 = 1u; pass_v0682273 <= effective_npass_v068227; ++pass_v0682273) {

@@ -937,3 +937,12 @@ include docs/developer/python_qualification_continuation_0_6_82_30_6_2.md
 include python_qualification_continuation_0_6_82_30_6_2.md
 include qualification_report_0_6_82_30_6_2.md
 include xstar_tools-0.6.82.30.6.2_host_validation.md
+
+# 0.6.82.30.7 npass=1 SAVD/detail ownership repair.
+recursive-include qualification/npass1_ownership_0_6_82_30_7 *.json *.md *.txt
+include tools/qualification/run_npass1_ownership_host_smoke_0_6_82_30_7.py
+include tests/test_npass1_ownership_0_6_82_30_7.py
+include docs/developer/npass1_ownership_0_6_82_30_7.md
+include npass1_ownership_0_6_82_30_7.md
+include qualification_report_0_6_82_30_7.md
+include xstar_tools-0.6.82.30.7_host_validation.md

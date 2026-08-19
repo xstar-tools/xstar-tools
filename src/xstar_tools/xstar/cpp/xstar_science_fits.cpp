@@ -10832,11 +10832,14 @@ Result write_historical_science_products(
     const bool write_detail_products = (lwrite > 0) || (npass > 1);
     std::vector<std::string> detail_filenames_v0682272;
     if (write_detail_products) {
-        if (npass > 1 && state.multipass_detail_radial_zones.size() >= static_cast<std::size_t>(npass)) {
-            // xstar.f90 opens a distinct fstepr/fstepr2/fstepr3/fstepr4 file
-            // for every whole-shell pass.  Temporarily move each retained
-            // SAVD surface into the normal detail writers so no large
-            // FixedEvaluationState copies are made at publication time.
+        if (npass >= 1 && state.multipass_detail_radial_zones.size() >= static_cast<std::size_t>(npass)) {
+            // 0.6.82.30.7: source SAVD owns the detail stream whenever
+            // lwrite>0 as well as when npass>1.  Use the retained SAVD
+            // surface for npass=1 too; this preserves FITS-E3 scalar ownership
+            // and fstepr3 sparse RRC inventory without changing final science.
+            // Temporarily move each retained SAVD surface into the normal
+            // detail writers so no large FixedEvaluationState copies are made
+            // at publication time.
             auto final_radial_zones_v0682272 = std::move(state.radial_zones);
             auto final_retained_product_arrays_v0682274 = std::move(state.retained_product_arrays);
             const auto final_product_metadata_path_v0682274 = state.product_metadata_path;

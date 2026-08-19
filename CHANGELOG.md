@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.30.7 — `npass=1` SAVD/detail ownership repair - 2026-08-19
+
+- Narrow C++ publication/ownership correction only; the accepted single-pass controller, DSEC, transport, STEP, final material science, spectrum, line tau, RRC tau, and continuum tau remain unchanged.
+- Retain source SAVD snapshots for the source-valid `npass=1,lwrite>0` detail stream instead of restricting SAVD retention to `npass>1`.
+- Publish `xo01_detail/detal2/detal3/detal4` through the same REAL(4)/FITS-E3 SAVD surface already used by accepted `npass=3/5`, preserving sparse `fstepr3` RRC/`npconi2` ownership.
+- Add a focused C++-only `npass=1` host qualification that reuses the retained `.30.5` FORTRAN reference and does not rerun FORTRAN or `npass=3/5`.
+- Science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.30.6.2 — Python-only continuation qualification - 2026-08-19
 
 - Qualification-only follow-up to accepted `.30.6.1`; no production science or ABI change.
