@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.30.6 - 2026-08-19
+
+- Supersede the broad 38-model `.30.5` final-axis replay with a compact eight-model FORTRAN-to-C++ release-candidate gate.
+- Treat the host-qualified parameter-family work from `.20` through `.29` as accepted predecessor qualification instead of rerunning cfrac/emult, niter, lcpres, radexp, npass, spectrum/spectun, and output-control sweeps.
+- Final models are: H+He+C reference, difficult H+He+C low-xi/cfrac=0.4, isolated O, isolated Ca, isolated Fe, the broad multi-element mixture, one low-density C5 case, and one high-density C5 case.
+- Defer the `ncn2` 999/default/high-resolution axis to a separate focused follow-up; this gate fixes `ncn2=9999`.
+- Preserve all FORTRAN outputs for the later Python-to-FORTRAN comparison phase.
+- Qualification-only change; production science revision and ABI identifiers remain frozen.
+
 ## 0.6.82.30.5 - 2026-08-19
 
 - Replace the experimental Table-1 runtime-surface release layer with the permanent Final Qualification Axes gate.
