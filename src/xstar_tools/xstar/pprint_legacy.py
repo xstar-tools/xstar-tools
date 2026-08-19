@@ -1335,6 +1335,89 @@ def _option21_level_opacity_emissivity(state: XSTARPythonState, buf: LegacyPprin
             )
 
 
+def _option7_source_role_rate_maps(
+    state: XSTARPythonState, fixed: Any | None
+) -> tuple[dict[tuple[int, int, int], float], dict[tuple[int, int, int], float], dict[tuple[int, int, int], int], dict[tuple[int, int, int], int]]:
+    """Reconstruct calc_hmc_all gamma/alpha publication roles.
+
+    ``calc_hmc_element`` owns an overlapping full-element workspace: each
+    lower-ion terminal continuum aliases the next-ion ground row because
+    ``ipmat += nlev-1``.  The selected compact solve can therefore supply
+    gamma/alpha for a source role just outside the active ion-stage window.
+    FORTRAN copies those aliased values to ``gammag/alphag`` while leaving the
+    final-continuum dominant-record pointers zero.  Rebuild that role surface
+    from the retained final element solve instead of treating a missing map
+    entry as a physical zero.
+    """
+    gamma = dict(getattr(fixed, "gammag", {}) or {}) if fixed is not None else {}
+    alpha = dict(getattr(fixed, "alphag", {}) or {}) if fixed is not None else {}
+    igamma = dict(getattr(fixed, "igammamaxg", {}) or {}) if fixed is not None else {}
+    ialpha = dict(getattr(fixed, "ialphamaxg", {}) or {}) if fixed is not None else {}
+    if fixed is None:
+        return gamma, alpha, igamma, ialpha
+
+    output_meta = state.control.get("output_atomic_metadata")
+    levels = tuple(getattr(output_meta, "levels", ()) or ())
+    levels_by_z_ion: dict[tuple[int, int], list[Any]] = {}
+    for level in levels:
+        z = int(getattr(level, "atomic_number", 0))
+        ion_index = int(getattr(level, "ion_index", 0))
+        local = int(getattr(level, "upper_index", 0))
+        if z > 0 and ion_index > 0 and local > 0:
+            levels_by_z_ion.setdefault((z, ion_index), []).append(level)
+
+    for element in tuple(getattr(fixed, "element_results", ()) or ()):
+        eq = getattr(element, "equilibrium", None)
+        assembly = getattr(eq, "assembly", None)
+        solve = getattr(eq, "solve", None)
+        basis = getattr(assembly, "basis", None)
+        blocks = tuple(getattr(basis, "blocks", ()) or ())
+        if solve is None or not blocks:
+            continue
+        z = int(getattr(getattr(element, "request", None), "element_z", 0))
+        if z <= 0:
+            continue
+        ion_rows: list[tuple[int, int, int]] = []
+        for (row_z, ion_index), ion_levels in levels_by_z_ion.items():
+            if row_z != z or not ion_levels:
+                continue
+            nlev = max(int(getattr(level, "upper_index", 0)) for level in ion_levels)
+            label = str(getattr(ion_levels[0], "ion_label", ""))
+            stage = _roman_stage_from_ion_label(label)
+            if nlev > 0 and stage > 0:
+                ion_rows.append((stage, ion_index, nlev))
+        ion_rows.sort()
+        full_start: dict[int, int] = {}
+        cursor = 1
+        for _stage, ion_index, nlev in ion_rows:
+            full_start[ion_index] = cursor
+            cursor += max(0, nlev - 1)
+        first_block = min(blocks, key=lambda block: int(getattr(block, "compact_start", 1)))
+        active_start = full_start.get(int(getattr(first_block, "ion_index", 0)))
+        if active_start is None:
+            continue
+        g = np.asarray(getattr(solve, "gamma", np.zeros(0)), dtype=float).reshape(-1)
+        a = np.asarray(getattr(solve, "alpha", np.zeros(0)), dtype=float).reshape(-1)
+        ig = np.asarray(getattr(solve, "igammamax_record", np.zeros(0)), dtype=np.int64).reshape(-1)
+        ia = np.asarray(getattr(solve, "ialphamax_record", np.zeros(0)), dtype=np.int64).reshape(-1)
+        for stage, ion_index, nlev in ion_rows:
+            start = full_start[ion_index]
+            for local in range(1, nlev + 1):
+                compact = (start + local - 1) - active_start
+                if compact < 0 or compact >= g.size or compact >= a.size:
+                    continue
+                key = (z, stage, local)
+                gamma[key] = float(g[compact])
+                alpha[key] = float(a[compact])
+                if local == nlev:
+                    igamma[key] = 0
+                    ialpha[key] = 0
+                else:
+                    igamma[key] = int(ig[compact]) if compact < ig.size else 0
+                    ialpha[key] = int(ia[compact]) if compact < ia.size else 0
+    return gamma, alpha, igamma, ialpha
+
+
 def _option7_level_populations(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     _append_pprint_marker(buf, 7)
     buf.log_lines.extend(["  level populations ", " ion                      level               e_exc population"])
@@ -1360,18 +1443,15 @@ def _option7_level_populations(state: XSTARPythonState, buf: LegacyPprintBuffers
     fallback_rn = np.asarray(rnis if rnis is not None else np.zeros(0), dtype=float).reshape(-1)
     guarded = fallback_x.size > 1 and abs(fallback_x[0]) == 0.0
 
-    gammag = getattr(fixed, "gammag", None) if fixed is not None else None
-    alphag = getattr(fixed, "alphag", None) if fixed is not None else None
-    igammamaxg = getattr(fixed, "igammamaxg", None) if fixed is not None else None
-    ialphamaxg = getattr(fixed, "ialphamaxg", None) if fixed is not None else None
-    if not isinstance(gammag, Mapping):
-        gammag = state.local_zone.source_arrays.get("gammag", {})
-    if not isinstance(alphag, Mapping):
-        alphag = state.local_zone.source_arrays.get("alphag", {})
-    if not isinstance(igammamaxg, Mapping):
-        igammamaxg = state.local_zone.source_arrays.get("igammamaxg", {})
-    if not isinstance(ialphamaxg, Mapping):
-        ialphamaxg = state.local_zone.source_arrays.get("ialphamaxg", {})
+    gammag, alphag, igammamaxg, ialphamaxg = _option7_source_role_rate_maps(state, fixed)
+    if not gammag:
+        gammag = dict(state.local_zone.source_arrays.get("gammag", {}) or {})
+    if not alphag:
+        alphag = dict(state.local_zone.source_arrays.get("alphag", {}) or {})
+    if not igammamaxg:
+        igammamaxg = dict(state.local_zone.source_arrays.get("igammamaxg", {}) or {})
+    if not ialphamaxg:
+        ialphamaxg = dict(state.local_zone.source_arrays.get("ialphamaxg", {}) or {})
 
     for row in _source_verbose_level_rows(state):
         gi = int(getattr(row, "global_index", 0))
@@ -1454,8 +1534,9 @@ def _option10_ion_rates(state: XSTARPythonState, buf: LegacyPprintBuffers) -> No
         c = cll[ei-1] if ei-1 < cll.size else 0.0
         h2 = htt2[ei-1] if ei-1 < htt2.size else 0.0
         c2 = cll2[ei-1] if ei-1 < cll2.size else 0.0
+        element_name = _pprint_element_column_name(element)
         buf.log_lines.append(
-            f"{ei:5d} {str(element.element_label)[:10]:<10s} {h:16.8E} {c:16.8E} {h-c:16.8E} {h2:16.8E} {c2:16.8E} {h2-c2:16.8E}"
+            f"{ei:5d} {element_name[:10]:<10s} {h:16.8E} {c:16.8E} {h-c:16.8E} {h2:16.8E} {c2:16.8E} {h2-c2:16.8E}"
         )
     fixed = getattr(state.local_zone, "calc_hmc_all", None)
     continuum = getattr(fixed, "continuum", None)

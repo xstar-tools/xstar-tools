@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.29.3.9.1 - pure-Python verbose retained-state hotfix - 2026-08-18
+
+- Treat `0.6.82.29.3.9` as host-rejected for Python verbose closure: Options 7/10/29/30 reject while 14/21/4/6/18 and exact STEP science invariance accept.
+- Retain `calc_hmc_all.element_results` only during the final zero-thickness pure-Python recompute when `lprint>=2`, preserving the literal final UCalc record workspace needed by Options 29/30 and the selected compact solve needed for Option-7 shared continuum/next-ground gamma/alpha publication. Ordinary production evaluations remain memory-trimmed.
+- Reconstruct the source `gammag/alphag` role surface across the overlapping `ipmat += nlev-1` full-element workspace so an inactive lower-ion terminal continuum can inherit the shared first-active-ion ground-row gamma/alpha values while its dominant-record pointers remain zero.
+- Publish Option-10 thermal element identities with the canonical full element names (`hydrogen`, `helium`, `carbon`, ...), without changing the thermal values.
+- Add a single-model pure-Python `lprint=6` host gate that checks all nine verbose options against the same canonical FORTRAN reference. This is the preferred fast hotfix test before rerunning the full integrated matrix.
+- Keep C++ production sources, science revision `0.6.48.12.3.45.3.3.8`, and C/production-zone/fixed-state ABIs `60487/6048110/60488` frozen.
+
 ## 0.6.82.29.3.9 - integrated pure-Python verbose closure candidate - 2026-08-18
 
 - Record `0.6.82.29.3.8` integrated C++ verbose output as host-closed: Options 4/6/7/10/14/18/21/29/30 all accept together through `lprint=2..6`, with `science-invariance cpp=ACCEPT worst=0`.

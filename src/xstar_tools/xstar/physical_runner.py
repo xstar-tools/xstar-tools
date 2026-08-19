@@ -1704,6 +1704,20 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
         # observational only and does not alter any rate, population, or
         # controller state.
         live_dsec_gate = callable(state.control.get("zone1_dsec_evaluation_gate_callback"))
+        # 0.6.82.29.3.9.1: verbose pprint(29/30) consumes the literal final
+        # calc_hmc_ion UCalc record workspace.  Production-memory mode normally
+        # discards ``element_results`` after every evaluator call, which left
+        # the terminal pure-Python verbose writer with headers but no records.
+        # Retain the element result only for the source final zero-thickness
+        # recompute and only for verbose lprint>=2.  Option 7 needs the
+        # retained solve for shared continuum/next-ground gamma/alpha roles,
+        # while Options 29/30 additionally consume the per-record UCalc rows.
+        # This is publication state; it does not feed the solve, transport,
+        # thermal balance, or FITS products.
+        final_verbose_publication = (
+            str(state.control.get("continuum_phase_context", "")).strip().lower() == "final"
+            and int(state.control.get("requested_lpri", 0)) >= 2
+        )
         payload = {
             "compton_context": comp,
             "free_free_context": free,
@@ -1713,7 +1727,9 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
             # per-level/per-ion diagnostic spectra inside every repeated dsec
             # evaluation.  Dense native state arrays remain authoritative.
             "retain_diagnostic_arrays": not production_mode,
-            "retain_element_results": (not production_mode) or live_dsec_gate,
+            "retain_element_results": (
+                (not production_mode) or live_dsec_gate or final_verbose_publication
+            ),
         }
         active_subset = state.control.get("active_atdb_subset")
         if active_subset is not None:
