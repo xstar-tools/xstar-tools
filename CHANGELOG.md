@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.30.8.1 - Fe Type-57 packed-shell ownership correction - 2026-08-20
+
+- Treat host-rejected `0.6.82.30.8` as immutable: its Type-75/96 endpoint correction is source-correct but leaves the Fe trajectory unchanged at `log(T)=5.29`, `ntotit=24,8,8` versus retained FORTRAN `log(T)=5.60`, `ntotit=13,1,1`.
+- Re-audit XSTAR Manual 2.5x, Mendoza et al. (2021) Appendix A, and canonical `ucalc.f90`/`calc_rates_level_lte.f90`.  No missing executable Type-80/83/84 Fe rate kernel is required: Type 80 exits, Type 83 is rate-type-13 Fe UTA level metadata, and Type 84 exits before dormant code.
+- Correct Type-57 source ownership.  Canonical UCalc passes the Type-57 record's own `IDAT(1)` directly to `calt57`; Appendix A defines this as `i1=n`.  The rejected C++ path instead preferred the duplicated Type-13 level-table `principal_n`.  Fe UTA Type-83 level records define `i1=1` as metadata, so that substitution is not source-equivalent.
+- Evaluate the existing Type-57 coefficient kernel with literal packed Type-57 `i1=n`.  Keep the duplicated Type-13 value only as provenance.  No Type-57 formula, endpoint, energy/statistical-weight, heating/cooling, matrix, controller, DSEC, transport, solver, science-revision, or ABI change.
+- Add a focused `.30.8.1` C++ Fe-only host gate reusing the retained `.30.6` FORTRAN `fortran` parent directory.
+- Defer Fe performance optimization until numerical closure; retained `.30.8` timing identifies fixed-record traversal and FITS publication as the dominant later optimization surfaces.
+
 ## 0.6.82.30.8 — isolated Fe XXIV satellite endpoint ownership correction - 2026-08-19
 
 - Record `0.6.82.30.7` as host-accepted: `npass=1` now has zero SAVD scalar mismatches, raw RRC 346/346 with identity 209 present, and the focused result is `ACCEPT`.

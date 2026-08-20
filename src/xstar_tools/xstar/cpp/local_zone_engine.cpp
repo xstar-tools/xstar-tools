@@ -8247,9 +8247,16 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE57_COLLISIONAL_IONIZATION: {
-            if (!ints || record.int_count < 2) throw std::runtime_error("type57 payload requires i57,principal_n");
+            if (!ints || record.int_count < 2) throw std::runtime_error("type57 payload requires packed_n,level_metadata_n");
+            // 0.6.82.30.8.1: literal ucalc.f90 Type-57 semantics.  The first
+            // INTEGER belongs to the Type-57 record itself and is passed
+            // directly to calt57 as the principal quantum number.  Do not
+            // substitute the duplicated Type-13 level metadata: Fe UTA
+            // Type-83 level records carry i1=1 as a fixed metadata field,
+            // not the Type-57 shell n.  Mendoza et al. Appendix A likewise
+            // defines Type-57 i1=n and Type-83 i1=1.
             const int i57=static_cast<int>(ints[0]);
-            const int n=static_cast<int>(ints[1]);
+            const int n=i57;
             const int source_local_level = record.int_count >= 3
                 ? static_cast<int>(ints[2]) : record.lower_row;
             if (i57<=0 || source_local_level<=1) break;
