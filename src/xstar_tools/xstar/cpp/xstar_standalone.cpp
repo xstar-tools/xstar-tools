@@ -21132,6 +21132,10 @@ int command_run_standalone_production(const Options& options, const std::filesys
             xstar_science_fits::write_native_abundance_product({}, output, product);
         }
         performance_v064890.abundance_fits_seconds += performance_elapsed_seconds(abundance_fits_started_v064890);
+        product.measured_controller_seconds = std::max(0.0, controller_seconds);
+        product.measured_publication_before_step_seconds = performance_elapsed_seconds(publication_started_v064890);
+        product.measured_end_to_end_before_step_seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - production_started_v06488).count();
         const auto step_log_started_v064890 = std::chrono::steady_clock::now();
         auto step = xstar_step_log::write_native_step_log(output, product);
         performance_v064890.step_log_seconds += performance_elapsed_seconds(step_log_started_v064890);

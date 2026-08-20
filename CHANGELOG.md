@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.30.8.8 - FITS publication bulk-column performance and timing ownership - 2026-08-20
+
+- Preserve the host-accepted `0.6.82.30.8.7` Fe science and controller implementation; this revision changes publication/serialization and timing reporting only.
+- Replace per-cell CFITSIO publication calls in the common science-product scalar writers with contiguous typed column buffering.  At an HDU boundary or file close, REAL(4), integer, short, long-long, and string values are written as whole contiguous column segments with one `fits_write_col` call per segment.  Existing row construction, row order, type conversion, HDU schemas, keywords, checksums, and source-owned values are unchanged.
+- Because the bulk layer sits underneath the shared scalar helpers, it applies consistently to `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal3.fits`, `xo01_detal4.fits`, public line/RRC/continuum/spectrum products, and the abundance product.  `XSTAR_DISABLE_BULK_FITS_06823088=1` restores the scalar-call path for same-binary A/B measurement.
+- Pre-index sparse line and RRC identities during the hot detail/public writers instead of repeatedly falling back to linear searches through the full identity inventories.  This is publication lookup only and does not change record identity or ordering.
+- Correct the STEP timing footer.  Remove the misleading `native_controller_and_fits` label and report `native_controller`, `native_publication_before_step`, `native_step_log_formatter`, `native_publication_total`, and `native_end_to_end` separately.  `total time`/`total time human` now use the end-to-end measurement available at STEP publication rather than the pre-publication controller time.
+- Add a focused `.30.8.8` Fe publication-performance host runner.  It reuses the retained `.30.6` canonical FORTRAN reference, requires unchanged STEP/material/spectrum/`ntotit=13,1,1` science, validates the new timing contract and bulk-writer markers, and compares publication time with the returned `.30.8.7` host baseline (`99.684676 s`).
+- Do not infer a filesystem regression from the `.30.8.6` versus `.30.8.7` absolute FITS timings: those runs were performed on different laptops.  Same-host `.30.8.7`/`.30.8.8` or the `.30.8.8` scalar-vs-bulk switch is the valid performance comparison.
+- Science revision remains `0.6.48.12.3.45.3.3.8`; C API / production-zone / fixed-state ABI identifiers remain `60487 / 6048110 / 60488`.
+
 ## 0.6.82.30.8.7 - Fe C++ hot-record storage optimization - 2026-08-20
 
 - Preserve the host-accepted `0.6.82.30.8.6` Fe science surface exactly; this revision is performance-only.

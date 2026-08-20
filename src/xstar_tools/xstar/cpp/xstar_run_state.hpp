@@ -561,7 +561,12 @@ struct ProductWritingState {
     bool xout_spect1_computed_from_native_state = false;
     bool xout_step_computed_from_native_state = false;
     bool xout_step_timing_values_measured = false;
+    // Legacy pre-publication/controller timing retained for compatibility.
     double measured_run_seconds = 0.0;
+    // 0.6.82.30.8.8: explicit timing ownership for STEP publication.
+    double measured_controller_seconds = 0.0;
+    double measured_publication_before_step_seconds = 0.0;
+    double measured_end_to_end_before_step_seconds = 0.0;
     // v82 patch 5.20.17.2: file-silent production carries the exact
     // product-write arrays in memory.  Diagnostic/replay modes may still
     // persist the same arrays through exact_product_state_bridge.

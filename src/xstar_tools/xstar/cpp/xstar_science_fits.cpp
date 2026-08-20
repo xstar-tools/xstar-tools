@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstdint>
+#include <chrono>
 #include <cstring>
 #include <cstdlib>
 #include <fstream>
@@ -1117,11 +1118,171 @@ fitsfile* create_fits(const std::filesystem::path& path, const xstar_run_state::
     return fptr;
 }
 
+
+// 0.6.82.30.8.8 publication-performance layer.  Historical writers append
+// table cells in source row order, but issuing one CFITSIO call per cell makes
+// large Fe detail products dominated by syscall/CFITSIO overhead.  Buffer each
+// typed column segment in memory and write the complete contiguous segment with
+// one fits_write_col call at the next HDU boundary or file close.  Values are
+// projected to the same REAL(4)/integer/string type at the same point as the
+// legacy scalar helpers, so this changes serialization granularity only.
+template <typename T>
+struct BulkColumnSegmentV06823088 {
+    long first_row = 0;
+    std::vector<T> values;
+};
+
+struct BulkFitsBufferV06823088 {
+    fitsfile* owner = nullptr;
+    std::map<int,BulkColumnSegmentV06823088<float>> floats;
+    std::map<int,BulkColumnSegmentV06823088<int>> ints;
+    std::map<int,BulkColumnSegmentV06823088<long long>> longlongs;
+    std::map<int,BulkColumnSegmentV06823088<short>> shorts;
+    std::map<int,BulkColumnSegmentV06823088<std::string>> strings;
+};
+
+struct BulkFitsPerfV06823088 {
+    std::uint64_t scalar_cells_buffered = 0;
+    std::uint64_t column_write_calls = 0;
+    std::uint64_t flushes = 0;
+};
+
+thread_local BulkFitsBufferV06823088 g_bulk_fits_buffer_v06823088;
+thread_local BulkFitsPerfV06823088 g_bulk_fits_perf_v06823088;
+
+bool bulk_fits_enabled_v06823088() {
+    if (!true_production_mode()) return false;
+    const char* disable = std::getenv("XSTAR_DISABLE_BULK_FITS_06823088");
+    return !(disable && std::string(disable) == "1");
+}
+
+bool bulk_fits_buffer_empty_v06823088() {
+    return g_bulk_fits_buffer_v06823088.floats.empty() &&
+        g_bulk_fits_buffer_v06823088.ints.empty() &&
+        g_bulk_fits_buffer_v06823088.longlongs.empty() &&
+        g_bulk_fits_buffer_v06823088.shorts.empty() &&
+        g_bulk_fits_buffer_v06823088.strings.empty();
+}
+
+template <typename T>
+void append_bulk_value_v06823088(
+    fitsfile* fptr,
+    std::map<int,BulkColumnSegmentV06823088<T>>& columns,
+    int col, long row, const T& value);
+
+void flush_bulk_fits_v06823088(fitsfile* fptr) {
+    auto& pending = g_bulk_fits_buffer_v06823088;
+    if (bulk_fits_buffer_empty_v06823088()) {
+        pending.owner = fptr;
+        return;
+    }
+    if (pending.owner != fptr) {
+        throw std::runtime_error("0.6.82.30.8.8 bulk FITS owner changed before flush");
+    }
+    int status = 0;
+    for (auto& kv : pending.floats) {
+        auto& seg = kv.second;
+        if (seg.values.empty()) continue;
+        fits_write_col(fptr, TFLOAT, kv.first, seg.first_row, 1,
+                       static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
+        check_fits(status, "0.6.82.30.8.8 bulk float column");
+        ++g_bulk_fits_perf_v06823088.column_write_calls;
+    }
+    for (auto& kv : pending.ints) {
+        auto& seg = kv.second;
+        if (seg.values.empty()) continue;
+        fits_write_col(fptr, TINT, kv.first, seg.first_row, 1,
+                       static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
+        if (status != 0) {
+            status = 0;
+            std::vector<std::string> text;
+            text.reserve(seg.values.size());
+            for (const int value : seg.values) text.push_back(std::to_string(value));
+            std::vector<char*> ptrs;
+            ptrs.reserve(text.size());
+            for (auto& value : text) ptrs.push_back(value.data());
+            fits_write_col(fptr, TSTRING, kv.first, seg.first_row, 1,
+                           static_cast<LONGLONG>(ptrs.size()), ptrs.data(), &status);
+        }
+        check_fits(status, "0.6.82.30.8.8 bulk int column");
+        ++g_bulk_fits_perf_v06823088.column_write_calls;
+    }
+    for (auto& kv : pending.longlongs) {
+        auto& seg = kv.second;
+        if (seg.values.empty()) continue;
+        fits_write_col(fptr, TLONGLONG, kv.first, seg.first_row, 1,
+                       static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
+        check_fits(status, "0.6.82.30.8.8 bulk longlong column");
+        ++g_bulk_fits_perf_v06823088.column_write_calls;
+    }
+    for (auto& kv : pending.shorts) {
+        auto& seg = kv.second;
+        if (seg.values.empty()) continue;
+        fits_write_col(fptr, TSHORT, kv.first, seg.first_row, 1,
+                       static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
+        check_fits(status, "0.6.82.30.8.8 bulk short column");
+        ++g_bulk_fits_perf_v06823088.column_write_calls;
+    }
+    for (auto& kv : pending.strings) {
+        auto& seg = kv.second;
+        if (seg.values.empty()) continue;
+        std::vector<char*> ptrs;
+        ptrs.reserve(seg.values.size());
+        for (auto& value : seg.values) ptrs.push_back(value.data());
+        fits_write_col(fptr, TSTRING, kv.first, seg.first_row, 1,
+                       static_cast<LONGLONG>(ptrs.size()), ptrs.data(), &status);
+        check_fits(status, "0.6.82.30.8.8 bulk string column");
+        ++g_bulk_fits_perf_v06823088.column_write_calls;
+    }
+    pending.floats.clear();
+    pending.ints.clear();
+    pending.longlongs.clear();
+    pending.shorts.clear();
+    pending.strings.clear();
+    ++g_bulk_fits_perf_v06823088.flushes;
+}
+
+template <typename T>
+void append_bulk_value_v06823088(
+    fitsfile* fptr,
+    std::map<int,BulkColumnSegmentV06823088<T>>& columns,
+    int col, long row, const T& value) {
+    auto& pending = g_bulk_fits_buffer_v06823088;
+    if (pending.owner && pending.owner != fptr && !bulk_fits_buffer_empty_v06823088()) {
+        throw std::runtime_error("0.6.82.30.8.8 bulk FITS owner mismatch");
+    }
+    pending.owner = fptr;
+    auto& seg = columns[col];
+    if (seg.values.empty()) {
+        seg.first_row = row;
+    } else if (row != seg.first_row + static_cast<long>(seg.values.size())) {
+        // This writer normally publishes every column in strictly increasing
+        // row order.  Preserve unusual sparse/overwrite behavior by flushing
+        // the current contiguous segments before starting the next one.
+        flush_bulk_fits_v06823088(fptr);
+        auto& restarted = columns[col];
+        restarted.first_row = row;
+        restarted.values.push_back(value);
+        ++g_bulk_fits_perf_v06823088.scalar_cells_buffered;
+        return;
+    }
+    seg.values.push_back(value);
+    ++g_bulk_fits_perf_v06823088.scalar_cells_buffered;
+}
+
+void reset_bulk_fits_perf_v06823088() {
+    if (!bulk_fits_buffer_empty_v06823088()) {
+        throw std::runtime_error("0.6.82.30.8.8 bulk FITS reset with pending cells");
+    }
+    g_bulk_fits_perf_v06823088 = {};
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide close fits for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
 void close_fits(fitsfile* fptr) {
+    if (bulk_fits_enabled_v06823088()) flush_bulk_fits_v06823088(fptr);
     int status = 0;
     int hdu = 1;
     fits_get_num_hdus(fptr, &hdu, &status);
@@ -1161,6 +1322,7 @@ std::vector<std::string> normalize_tform_for_table(int table_type, const std::ve
 void create_table(fitsfile* fptr, int table_type, long rows, const std::string& extname,
                   const std::vector<std::string>& names, const std::vector<std::string>& formats,
                   const std::vector<std::string>& units) {
+    if (bulk_fits_enabled_v06823088()) flush_bulk_fits_v06823088(fptr);
     const auto normalized_formats = normalize_tform_for_table(table_type, formats);
     std::vector<char*> n, f, u;
     for (const auto& x : names) n.push_back(const_cast<char*>(x.c_str()));
@@ -1176,6 +1338,10 @@ void create_table(fitsfile* fptr, int table_type, long rows, const std::string& 
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void write_float(fitsfile* fptr, int col, long row, float value) {
+    if (bulk_fits_enabled_v06823088()) {
+        append_bulk_value_v06823088(fptr, g_bulk_fits_buffer_v06823088.floats, col, row, value);
+        return;
+    }
     int status = 0;
     fits_write_col(fptr, TFLOAT, col, row, 1, 1, &value, &status);
     check_fits(status, "write float");
@@ -1193,6 +1359,10 @@ void write_real4(fitsfile* fptr, int col, long row, double value) {
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void write_int(fitsfile* fptr, int col, long row, int value) {
+    if (bulk_fits_enabled_v06823088()) {
+        append_bulk_value_v06823088(fptr, g_bulk_fits_buffer_v06823088.ints, col, row, value);
+        return;
+    }
     int status = 0;
     fits_write_col(fptr, TINT, col, row, 1, 1, &value, &status);
     if (status != 0) {
@@ -1209,6 +1379,10 @@ void write_int(fitsfile* fptr, int col, long row, int value) {
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void write_longlong(fitsfile* fptr, int col, long row, long long value) {
+    if (bulk_fits_enabled_v06823088()) {
+        append_bulk_value_v06823088(fptr, g_bulk_fits_buffer_v06823088.longlongs, col, row, value);
+        return;
+    }
     int status = 0;
     fits_write_col(fptr, TLONGLONG, col, row, 1, 1, &value, &status);
     check_fits(status, "write long long");
@@ -1218,6 +1392,10 @@ void write_longlong(fitsfile* fptr, int col, long row, long long value) {
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void write_short(fitsfile* fptr, int col, long row, short value) {
+    if (bulk_fits_enabled_v06823088()) {
+        append_bulk_value_v06823088(fptr, g_bulk_fits_buffer_v06823088.shorts, col, row, value);
+        return;
+    }
     int status = 0;
     fits_write_col(fptr, TSHORT, col, row, 1, 1, &value, &status);
     check_fits(status, "write short");
@@ -1227,6 +1405,10 @@ void write_short(fitsfile* fptr, int col, long row, short value) {
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void write_string(fitsfile* fptr, int col, long row, const std::string& value) {
+    if (bulk_fits_enabled_v06823088()) {
+        append_bulk_value_v06823088(fptr, g_bulk_fits_buffer_v06823088.strings, col, row, value);
+        return;
+    }
     int status = 0;
     char* ptr = const_cast<char*>(value.c_str());
     fits_write_col(fptr, TSTRING, col, row, 1, 1, &ptr, &status);
@@ -6989,6 +7171,28 @@ const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template() {
 // Purpose: Compute line identity by index for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
+std::vector<const xstar_run_state::LineIdentityState*> build_line_identity_lookup_v06823088(
+    const xstar_run_state::ProductWritingState& state) {
+    std::size_t max_index = 0;
+    for (const auto& line : state.line_identities) {
+        if (line.line_index > 0) max_index = std::max(max_index, static_cast<std::size_t>(line.line_index));
+    }
+    std::vector<const xstar_run_state::LineIdentityState*> lookup(max_index + 1u, nullptr);
+    for (const auto& line : state.line_identities) {
+        if (line.line_index > 0 && static_cast<std::size_t>(line.line_index) < lookup.size()) {
+            lookup[static_cast<std::size_t>(line.line_index)] = &line;
+        }
+    }
+    return lookup;
+}
+
+const xstar_run_state::LineIdentityState* line_identity_from_lookup_v06823088(
+    const std::vector<const xstar_run_state::LineIdentityState*>& lookup,
+    long long line_index) {
+    if (line_index <= 0 || static_cast<std::size_t>(line_index) >= lookup.size()) return nullptr;
+    return lookup[static_cast<std::size_t>(line_index)];
+}
+
 const xstar_run_state::LineIdentityState* line_identity_by_index(
     const xstar_run_state::ProductWritingState& state,
     long long line_index) {
@@ -7004,15 +7208,26 @@ const xstar_run_state::LineIdentityState* line_identity_by_index(
 // Purpose: Compute rrc identity by index for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-const xstar_run_state::RrcIdentityState* rrc_identity_by_index(
-    const xstar_run_state::ProductWritingState& state,
-    long long continuum_index) {
-    if (continuum_index > 0 && static_cast<std::size_t>(continuum_index) <= state.rrc_identities.size()) {
-        const auto& direct = state.rrc_identities[static_cast<std::size_t>(continuum_index - 1)];
-        if (direct.continuum_index == continuum_index) return &direct;
+std::vector<const xstar_run_state::RrcIdentityState*> build_rrc_identity_lookup_v06823088(
+    const xstar_run_state::ProductWritingState& state) {
+    std::size_t max_index = 0;
+    for (const auto& rrc : state.rrc_identities) {
+        if (rrc.continuum_index > 0) max_index = std::max(max_index, static_cast<std::size_t>(rrc.continuum_index));
     }
-    for (const auto& rrc : state.rrc_identities) if (rrc.continuum_index == continuum_index) return &rrc;
-    return nullptr;
+    std::vector<const xstar_run_state::RrcIdentityState*> lookup(max_index + 1u, nullptr);
+    for (const auto& rrc : state.rrc_identities) {
+        if (rrc.continuum_index > 0 && static_cast<std::size_t>(rrc.continuum_index) < lookup.size()) {
+            lookup[static_cast<std::size_t>(rrc.continuum_index)] = &rrc;
+        }
+    }
+    return lookup;
+}
+
+const xstar_run_state::RrcIdentityState* rrc_identity_from_lookup_v06823088(
+    const std::vector<const xstar_run_state::RrcIdentityState*>& lookup,
+    long long continuum_index) {
+    if (continuum_index <= 0 || static_cast<std::size_t>(continuum_index) >= lookup.size()) return nullptr;
+    return lookup[static_cast<std::size_t>(continuum_index)];
 }
 
 
@@ -8513,6 +8728,7 @@ void write_line_detail(const std::filesystem::path& path,
     // depth, which changed option-23 ordering and terminal public depths.
     std::map<long long,double> cumulative_line_tau_in;
     double previous_line_depth_cm = 0.0;
+    const auto line_identity_lookup_v06823088 = build_line_identity_lookup_v06823088(state);
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
@@ -8542,7 +8758,7 @@ void write_line_detail(const std::filesystem::path& path,
             for (std::size_t i = 0; i < pw_line_index.size(); ++i) {
                 const long long line_index = static_cast<long long>(std::llround(pw_line_index[i]));
                 const auto* label = i < detail_line_labels.size() ? &detail_line_labels[i] : nullptr;
-                const auto* identity = line_identity_by_index(state, line_index);
+                const auto* identity = line_identity_from_lookup_v06823088(line_identity_lookup_v06823088, line_index);
                 const long row = static_cast<long>(i + 1);
                 write_longlong(fptr, 1, row, label ? label->index : line_index);
                 write_real4(fptr, 2, row, label ? label->wavelength_angstrom : (identity ? identity->wavelength_angstrom : 0.0));
@@ -8585,7 +8801,7 @@ void write_line_detail(const std::filesystem::path& path,
                 LineRow r = lines[i];
                 const auto found_diag = diagnostic_lines.find(r.record);
                 if (found_diag != diagnostic_lines.end()) r = merged_line_row(r, &found_diag->second);
-                const auto* id = line_identity_by_index(state, r.record);
+                const auto* id = line_identity_from_lookup_v06823088(line_identity_lookup_v06823088, r.record);
                 const auto found_pw = pw_line_by_index.find(r.record);
                 if (state.backend.find("native") == std::string::npos && found_pw != pw_line_by_index.end()) {
                     const std::size_t pi = found_pw->second;
@@ -8992,6 +9208,7 @@ void write_rrc_detail(const std::filesystem::path& path,
         std::size_t tau_in_depth_fallback = 0;
     };
     std::vector<Detal3AuditRow> detal3_audit;
+    const auto rrc_identity_lookup_v06823088 = build_rrc_identity_lookup_v06823088(state);
     // Source heatt accumulates tauc over individual shells rather than
     // multiplying the current-zone opakab by the terminal cumulative depth.
     std::map<long long,double> cumulative_rrc_tau_in;
@@ -9047,7 +9264,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             for (std::size_t i = 0; i < pw_rrc_index.size(); ++i) {
                 const long long rrc_index = static_cast<long long>(std::llround(pw_rrc_index[i]));
                 const auto* label = i < detail_rrc_labels.size() ? &detail_rrc_labels[i] : nullptr;
-                const auto* identity = rrc_identity_by_index(state, rrc_index);
+                const auto* identity = rrc_identity_from_lookup_v06823088(rrc_identity_lookup_v06823088, rrc_index);
                 const long row = static_cast<long>(i + 1);
                 write_int(fptr, 1, row, static_cast<int>(label ? label->index : rrc_index));
                 write_int(fptr, 2, row, static_cast<int>(label ? label->level_index : (identity ? identity->level_global_index : 0)));
@@ -9086,7 +9303,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                 RrcRow r = rrcs[i];
                 const auto found_diag = diagnostic_rrcs.find(r.record);
                 r = merged_rrc_row(r, found_diag != diagnostic_rrcs.end() ? &found_diag->second : nullptr);
-                const auto* id = rrc_identity_by_index(state, r.record);
+                const auto* id = rrc_identity_from_lookup_v06823088(rrc_identity_lookup_v06823088, r.record);
                 const auto pw = pw_rrc_by_index.find(r.record);
                 if (pw != pw_rrc_by_index.end()) {
                     const std::size_t pi = pw->second;
@@ -10310,6 +10527,7 @@ void write_public_lines(const std::filesystem::path& path,
                         const std::vector<ElementMeta>& elements,
                         const std::vector<RowMeta>& rows) {
     (void)rows;
+    const auto line_identity_lookup_v06823088 = build_line_identity_lookup_v06823088(state);
     const std::size_t final_index = terminal_physical_zone_index(state);
     const auto& final_zone = state.radial_zones[final_index];
     auto terminal_list = public_line_rows_from_identities(
@@ -10383,7 +10601,7 @@ void write_public_lines(const std::filesystem::path& path,
         public_line_labels.reserve(pw_line_index.size());
         for (const double raw_index : pw_line_index) {
             const auto line_index = static_cast<long long>(std::llround(raw_index));
-            const auto* id = line_identity_by_index(state, line_index);
+            const auto* id = line_identity_from_lookup_v06823088(line_identity_lookup_v06823088, line_index);
             if (!id) { public_line_labels.clear(); break; }
             public_line_labels.push_back(LineLabelTemplateRow{
                 static_cast<int>(line_index), id->wavelength_angstrom, id->ion_label.c_str(),
@@ -10406,7 +10624,7 @@ void write_public_lines(const std::filesystem::path& path,
         }
         public_line_labels.reserve(ranked.size());
         for (const auto& line : ranked) {
-            const auto* id = line_identity_by_index(state, line.record);
+            const auto* id = line_identity_from_lookup_v06823088(line_identity_lookup_v06823088, line.record);
             if (!id) continue;
             public_line_labels.push_back(LineLabelTemplateRow{
                 static_cast<int>(id->line_index), id->wavelength_angstrom, id->ion_label.c_str(),
@@ -10818,6 +11036,7 @@ Result write_historical_science_products(
         throw std::runtime_error("native FITS anti-copy provenance is incomplete");
     }
     std::filesystem::create_directories(output_dir);
+    if (true_production_mode()) reset_bulk_fits_perf_v06823088();
     const auto elements = read_elements(state, program_dir);
     const auto rows = read_rows(state, program_dir);
 
@@ -10924,6 +11143,12 @@ Result write_historical_science_products(
             {"xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits"});
     }
     if (lwrite >= -1) result.filenames.push_back("xout_spect1.fits");
+    if (true_production_mode()) {
+        std::cout << "V06823088_BULK_FITS_ENABLED=" << (bulk_fits_enabled_v06823088() ? "YES" : "NO") << "\n"
+                  << "V06823088_BULK_FITS_SCALAR_CELLS=" << g_bulk_fits_perf_v06823088.scalar_cells_buffered << "\n"
+                  << "V06823088_BULK_FITS_COLUMN_WRITES=" << g_bulk_fits_perf_v06823088.column_write_calls << "\n"
+                  << "V06823088_BULK_FITS_FLUSHES=" << g_bulk_fits_perf_v06823088.flushes << "\n";
+    }
     return result;
 }
 

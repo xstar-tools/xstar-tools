@@ -2263,14 +2263,26 @@ void append_native_lprint_extra_sections(
 }
 
 void append_source_like_timing_footer(std::ofstream& out,
-                                      double measured_run_seconds,
+                                      const xstar_run_state::ProductWritingState& state,
                                       double formatter_seconds) {
-    const double total_seconds = std::max(0.0, measured_run_seconds) + std::max(0.0, formatter_seconds);
+    const double controller_seconds = std::max(0.0,
+        state.measured_controller_seconds > 0.0 ? state.measured_controller_seconds : state.measured_run_seconds);
+    const double publication_before_step_seconds = std::max(0.0, state.measured_publication_before_step_seconds);
+    const double step_seconds = std::max(0.0, formatter_seconds);
+    const double publication_total_seconds = publication_before_step_seconds + step_seconds;
+    const double end_to_end_before_step_seconds = std::max(0.0,
+        state.measured_end_to_end_before_step_seconds > 0.0
+            ? state.measured_end_to_end_before_step_seconds
+            : controller_seconds + publication_before_step_seconds);
+    const double end_to_end_seconds = end_to_end_before_step_seconds + step_seconds;
     out << "\nnative output timing (measured):\n";
-    out << "  native_step_log_formatter " << std::setprecision(9) << formatter_seconds << "\n";
-    out << "  native_controller_and_fits " << std::setprecision(9) << measured_run_seconds << "\n";
-    out << "total time " << std::setprecision(9) << total_seconds << "\n";
-    out << "total time human " << human_time(total_seconds) << "\n";
+    out << "  native_controller " << std::setprecision(9) << controller_seconds << "\n";
+    out << "  native_publication_before_step " << std::setprecision(9) << publication_before_step_seconds << "\n";
+    out << "  native_step_log_formatter " << std::setprecision(9) << step_seconds << "\n";
+    out << "  native_publication_total " << std::setprecision(9) << publication_total_seconds << "\n";
+    out << "  native_end_to_end " << std::setprecision(9) << end_to_end_seconds << "\n";
+    out << "total time " << std::setprecision(9) << end_to_end_seconds << "\n";
+    out << "total time human " << human_time(end_to_end_seconds) << "\n";
 }
 
 } // namespace
@@ -2322,7 +2334,7 @@ Result write_native_step_log(
     }
     const double formatter_seconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - started).count();
-    append_source_like_timing_footer(out, state.measured_run_seconds, formatter_seconds);
+    append_source_like_timing_footer(out, state, formatter_seconds);
     out.close();
 
     state.xout_step_computed_from_native_state = true;
