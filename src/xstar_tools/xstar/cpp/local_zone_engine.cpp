@@ -1621,6 +1621,27 @@ struct Type99SourceShadow {
     bool used_dsec_radiation = false;
 };
 
+// 0.6.82.30.8.7 performance-only storage repair: Type-49/53 records need a
+// large source-diagnostic sidecar, but ordinary records do not.  Keeping six
+// Type53SourceShadow objects inline made every EvaluatedRecord roughly 6 KiB
+// and forced millions of unnecessary cache-line copies during Fe DSEC.  Move
+// that bound-free-only state behind a copy-on-write pointer.  The payload is
+// allocated only for records that touch it; retained copies remain value-like
+// because mutable access detaches a shared payload before modification.
+struct BoundFreeEvaluatedPayloadV06823087 {
+    Type53SourceShadow type53_shadow{};
+    Type53SourceShadow type53_calc_emisab_shadow{};
+    Type53SourceShadow type53_calc_emis_shadow{};
+    Type53SourceShadow type49_calc_emisab_shadow{};
+    Type53SourceShadow type49_calc_emis_shadow{};
+    Type53SourceShadow type49_shadow{};
+    Type53RecordContext bound_free_record_context_v064895{};
+    double bound_free_ptmp_sum_v064895 = 1.0;
+    double bound_free_threshold_ev_v064895 = 0.0;
+    bool bound_free_type49_v064895 = false;
+    bool bound_free_row46_contract_v064895 = false;
+};
+
 struct EvaluatedRecord {
     xstar_element_contribution_v1 contribution{};
     bool spectral = false;
@@ -1632,28 +1653,23 @@ struct EvaluatedRecord {
     double natural_width_ev = 0.0;
     double opakab = 0.0;
     double type56_upsilon = std::numeric_limits<double>::quiet_NaN();
-    Type53SourceShadow type53_shadow{};
-    // v82 patch 5.18.1: calc_emisab_all evaluates Type-53 on the reduced
-    // epim/bremsam workspace before calc_emis_all ranks and selectively
-    // revisits rate-7 records on the full radiation grid.  Keep those two
-    // lifetimes distinct.  A selected full-grid UCalc revisit starts with
-    // opakab=0 and either publishes its own threshold value or leaves zero.
-    Type53SourceShadow type53_calc_emisab_shadow{};
-    // v82 patch 5.20.14: distinct full-grid calc_emis_ion revisit.
-    Type53SourceShadow type53_calc_emis_shadow{};
-    // v82 patch 5.20.8: calc_emisab_all uses the same reduced epim/bremsam
-    // workspace for Type-49 rate-7 records.  Keep the reduced-grid seed
-    // distinct from the later full-grid calc_emis_ion evaluation.
-    Type53SourceShadow type49_calc_emisab_shadow{};
-    Type53SourceShadow type49_calc_emis_shadow{};
-    Type53SourceShadow type49_shadow{};
-    // v0.6.48.9.5: retain the immutable decoded bound-free context plus the
-    // live escape sum needed to execute a selected full-grid revisit lazily.
-    Type53RecordContext bound_free_record_context_v064895{};
-    double bound_free_ptmp_sum_v064895 = 1.0;
-    double bound_free_threshold_ev_v064895 = 0.0;
-    bool bound_free_type49_v064895 = false;
-    bool bound_free_row46_contract_v064895 = false;
+    std::shared_ptr<BoundFreeEvaluatedPayloadV06823087> bound_free_payload_v06823087{};
+
+    BoundFreeEvaluatedPayloadV06823087& bound_free_payload() {
+        if (!bound_free_payload_v06823087) {
+            bound_free_payload_v06823087 = std::make_shared<BoundFreeEvaluatedPayloadV06823087>();
+        } else if (!bound_free_payload_v06823087.unique()) {
+            bound_free_payload_v06823087 =
+                std::make_shared<BoundFreeEvaluatedPayloadV06823087>(*bound_free_payload_v06823087);
+        }
+        return *bound_free_payload_v06823087;
+    }
+
+    const BoundFreeEvaluatedPayloadV06823087& bound_free_payload() const {
+        static const BoundFreeEvaluatedPayloadV06823087 empty{};
+        return bound_free_payload_v06823087 ? *bound_free_payload_v06823087 : empty;
+    }
+
     // v0.6.48.12.1: dynamic source-generic bound-free profile retained by
     // Type70/calt70 after its density/temperature-dependent Milne rescaling.
     std::vector<double> generic_bound_free_offset_ryd_v0648120;
@@ -7185,11 +7201,11 @@ EvaluatedRecord evaluate_record(
                 }
             }
             const double source_threshold = row46_contract ? row46_contract->threshold_ev : threshold;
-            out.bound_free_record_context_v064895 = record_context;
-            out.bound_free_ptmp_sum_v064895 = contract_ptmp1 + contract_ptmp2;
-            out.bound_free_threshold_ev_v064895 = source_threshold;
-            out.bound_free_type49_v064895 = false;
-            out.bound_free_row46_contract_v064895 = row46_contract != nullptr;
+            out.bound_free_payload().bound_free_record_context_v064895 = record_context;
+            out.bound_free_payload().bound_free_ptmp_sum_v064895 = contract_ptmp1 + contract_ptmp2;
+            out.bound_free_payload().bound_free_threshold_ev_v064895 = source_threshold;
+            out.bound_free_payload().bound_free_type49_v064895 = false;
+            out.bound_free_payload().bound_free_row46_contract_v064895 = row46_contract != nullptr;
             const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
                 prepared_bound_free_geometry(
                     program, record, calc_hmc_input, source_threshold, false, false,
@@ -7199,7 +7215,7 @@ EvaluatedRecord evaluate_record(
                 r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record.record, false, false,
-                source_shadow, &out.type53_shadow, prepared_reduced_v064895);
+                source_shadow, &out.bound_free_payload().type53_shadow, prepared_reduced_v064895);
             if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
                 ++rate_context.bound_free_perf->reduced_dynamic_integrals;
 
@@ -7214,7 +7230,7 @@ EvaluatedRecord evaluate_record(
                 if (!rate_context.force_legacy_bound_free && source_exact) {
                     // The calc_hmc source call above already consumed the exact
                     // same epim/bremsam workspace and all dynamic inputs.
-                    out.type53_calc_emisab_shadow = out.type53_shadow;
+                    out.bound_free_payload().type53_calc_emisab_shadow = out.bound_free_payload().type53_shadow;
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->reduced_duplicate_reuses;
                 } else {
@@ -7227,10 +7243,10 @@ EvaluatedRecord evaluate_record(
                         r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
                         contract_ptmp1 + contract_ptmp2, row46_contract,
                         record_context.valid ? &record_context : nullptr, record.record, false, false,
-                        calc_emisab_contribution, &out.type53_calc_emisab_shadow);
+                        calc_emisab_contribution, &out.bound_free_payload().type53_calc_emisab_shadow);
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_reduced_duplicate_integrals;
-                    if (!calc_emisab_exact) out.type53_calc_emisab_shadow = Type53SourceShadow{};
+                    if (!calc_emisab_exact) out.bound_free_payload().type53_calc_emisab_shadow = Type53SourceShadow{};
                 }
             }
             // v82 patch 5.20.14: selected calc_emis_ion is a second UCalc
@@ -7248,16 +7264,16 @@ EvaluatedRecord evaluate_record(
                         r, pair_real_count, lower, upper, calc_emis_input, source_threshold,
                         contract_ptmp1 + contract_ptmp2, row46_contract,
                         record_context.valid ? &record_context : nullptr, record.record, false, false,
-                        calc_emis_contribution, &out.type53_calc_emis_shadow);
+                        calc_emis_contribution, &out.bound_free_payload().type53_calc_emis_shadow);
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_full_eager_integrals;
-                    if (!calc_emis_exact) out.type53_calc_emis_shadow = Type53SourceShadow{};
+                    if (!calc_emis_exact) out.bound_free_payload().type53_calc_emis_shadow = Type53SourceShadow{};
                 } else {
                     // The full-grid Type53 curve geometry is identical to the
                     // reduced curve.  Retain metadata for broad product replay;
                     // the dynamic 9999-bin integral is executed only after the
                     // source rlbin/ncbin selection proves this record is consumed.
-                    out.type53_calc_emis_shadow = out.type53_shadow;
+                    out.bound_free_payload().type53_calc_emis_shadow = out.bound_free_payload().type53_shadow;
                 }
             }
             // v0.6.48.12.3.19 / source UCalc escape ownership: every
@@ -7277,10 +7293,10 @@ EvaluatedRecord evaluate_record(
                 shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
                 shadow.continuum_tau_count = input.continuum_tau_count;
             };
-            stamp_type53_escape_state(out.type53_shadow);
-            stamp_type53_escape_state(out.type53_calc_emisab_shadow);
-            stamp_type53_escape_state(out.type53_calc_emis_shadow);
-            out.type53_shadow.helium_live_escape_state_applied = helium_live_escape_applied;
+            stamp_type53_escape_state(out.bound_free_payload().type53_shadow);
+            stamp_type53_escape_state(out.bound_free_payload().type53_calc_emisab_shadow);
+            stamp_type53_escape_state(out.bound_free_payload().type53_calc_emis_shadow);
+            out.bound_free_payload().type53_shadow.helium_live_escape_state_applied = helium_live_escape_applied;
             if (row46_contract) {
                 if (!source_exact) throw std::runtime_error("type53 row46 source-faithful evaluator did not produce a result");
                 if (captured_state_anchor) {
@@ -7298,40 +7314,40 @@ EvaluatedRecord evaluate_record(
                     c.ans5 = source_shadow.ans5;
                     c.ans6 = source_shadow.ans6;
                 }
-                out.type53_shadow.captured_state_anchor = captured_state_anchor;
-                out.type53_shadow.tau_in = contract_tau_in;
-                out.type53_shadow.tau_out = contract_tau_out;
-                out.type53_shadow.ptmp1 = contract_ptmp1;
-                out.type53_shadow.ptmp2 = contract_ptmp2;
-                out.type53_shadow.covering_fraction = contract_covering;
-                out.type53_shadow.runtime_state_abi_used =
+                out.bound_free_payload().type53_shadow.captured_state_anchor = captured_state_anchor;
+                out.bound_free_payload().type53_shadow.tau_in = contract_tau_in;
+                out.bound_free_payload().type53_shadow.tau_out = contract_tau_out;
+                out.bound_free_payload().type53_shadow.ptmp1 = contract_ptmp1;
+                out.bound_free_payload().type53_shadow.ptmp2 = contract_ptmp2;
+                out.bound_free_payload().type53_shadow.covering_fraction = contract_covering;
+                out.bound_free_payload().type53_shadow.runtime_state_abi_used =
                     input.dsec_radiation_energy_ev && input.dsec_bremsa &&
                     input.dsec_radiation_bin_count >= 3 && input.continuum_tau_in &&
                     input.continuum_tau_out && row46_contract->continuum_index_one_based > 0 &&
                     static_cast<std::size_t>(row46_contract->continuum_index_one_based) <= input.continuum_tau_count;
-                out.type53_shadow.continuum_index_one_based = row46_contract->continuum_index_one_based;
-                out.type53_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
-                out.type53_shadow.continuum_tau_count = input.continuum_tau_count;
+                out.bound_free_payload().type53_shadow.continuum_index_one_based = row46_contract->continuum_index_one_based;
+                out.bound_free_payload().type53_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
+                out.bound_free_payload().type53_shadow.continuum_tau_count = input.continuum_tau_count;
             } else {
                 if (hydrogen_source_faithful && !source_exact) {
                     throw std::runtime_error(
                         "hydrogen type53 source-faithful evaluator did not produce a result");
                 }
                 if (hydrogen_source_faithful || magnesium_replacement) {
-                    out.type53_shadow.captured_state_anchor = false;
-                    out.type53_shadow.tau_in = contract_tau_in;
-                    out.type53_shadow.tau_out = contract_tau_out;
-                    out.type53_shadow.ptmp1 = contract_ptmp1;
-                    out.type53_shadow.ptmp2 = contract_ptmp2;
-                    out.type53_shadow.covering_fraction = contract_covering;
-                    out.type53_shadow.runtime_state_abi_used =
+                    out.bound_free_payload().type53_shadow.captured_state_anchor = false;
+                    out.bound_free_payload().type53_shadow.tau_in = contract_tau_in;
+                    out.bound_free_payload().type53_shadow.tau_out = contract_tau_out;
+                    out.bound_free_payload().type53_shadow.ptmp1 = contract_ptmp1;
+                    out.bound_free_payload().type53_shadow.ptmp2 = contract_ptmp2;
+                    out.bound_free_payload().type53_shadow.covering_fraction = contract_covering;
+                    out.bound_free_payload().type53_shadow.runtime_state_abi_used =
                         input.dsec_radiation_energy_ev && input.dsec_bremsa &&
                         input.dsec_radiation_bin_count >= 3 && input.continuum_tau_in &&
                         input.continuum_tau_out && record_context.continuum_index_one_based > 0 &&
                         static_cast<std::size_t>(record_context.continuum_index_one_based) <= input.continuum_tau_count;
-                    out.type53_shadow.continuum_index_one_based = record_context.continuum_index_one_based;
-                    out.type53_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
-                    out.type53_shadow.continuum_tau_count = input.continuum_tau_count;
+                    out.bound_free_payload().type53_shadow.continuum_index_one_based = record_context.continuum_index_one_based;
+                    out.bound_free_payload().type53_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
+                    out.bound_free_payload().type53_shadow.continuum_tau_count = input.continuum_tau_count;
                 }
                 const bool helium_source_faithful = !production_source_faithful_type53 &&
                     element.element_z == 2 && (record_context.valid || record.ion_stage == 2);
@@ -7359,31 +7375,31 @@ EvaluatedRecord evaluate_record(
                     c.ans5 = source_shadow.ans5;
                     c.ans6 = source_shadow.ans6;
                 }
-                out.type53_shadow.legacy_ans = legacy_type53_ans;
-                out.type53_shadow.legacy_max_abs = 0.0;
-                out.type53_shadow.committed_max_abs = 0.0;
+                out.bound_free_payload().type53_shadow.legacy_ans = legacy_type53_ans;
+                out.bound_free_payload().type53_shadow.legacy_max_abs = 0.0;
+                out.bound_free_payload().type53_shadow.committed_max_abs = 0.0;
                 for (double value : legacy_type53_ans) {
-                    out.type53_shadow.legacy_nonfinite = out.type53_shadow.legacy_nonfinite || !std::isfinite(value);
-                    if (std::isfinite(value)) out.type53_shadow.legacy_max_abs = std::max(out.type53_shadow.legacy_max_abs, std::abs(value));
+                    out.bound_free_payload().type53_shadow.legacy_nonfinite = out.bound_free_payload().type53_shadow.legacy_nonfinite || !std::isfinite(value);
+                    if (std::isfinite(value)) out.bound_free_payload().type53_shadow.legacy_max_abs = std::max(out.bound_free_payload().type53_shadow.legacy_max_abs, std::abs(value));
                 }
                 const std::array<double,6> committed{{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6}};
                 for (double value : committed) {
-                    out.type53_shadow.committed_nonfinite = out.type53_shadow.committed_nonfinite || !std::isfinite(value);
-                    if (std::isfinite(value)) out.type53_shadow.committed_max_abs = std::max(out.type53_shadow.committed_max_abs, std::abs(value));
+                    out.bound_free_payload().type53_shadow.committed_nonfinite = out.bound_free_payload().type53_shadow.committed_nonfinite || !std::isfinite(value);
+                    if (std::isfinite(value)) out.bound_free_payload().type53_shadow.committed_max_abs = std::max(out.bound_free_payload().type53_shadow.committed_max_abs, std::abs(value));
                 }
                 constexpr double kImplausibleBoundFreeRate = 1.0e40;
-                out.type53_shadow.legacy_implausible = out.type53_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
-                out.type53_shadow.committed_implausible = out.type53_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-                out.type53_shadow.source_faithful_mode =
+                out.bound_free_payload().type53_shadow.legacy_implausible = out.bound_free_payload().type53_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
+                out.bound_free_payload().type53_shadow.committed_implausible = out.bound_free_payload().type53_shadow.committed_max_abs > kImplausibleBoundFreeRate;
+                out.bound_free_payload().type53_shadow.source_faithful_mode =
                     magnesium_source_faithful || carbon_source_faithful || generic_source_faithful_bound_free;
-                out.type53_shadow.replacement_applied =
+                out.bound_free_payload().type53_shadow.replacement_applied =
                     (magnesium_replacement || carbon_source_faithful || generic_source_faithful_bound_free) && source_exact;
                 if (magnesium_replacement &&
-                    (out.type53_shadow.committed_nonfinite || out.type53_shadow.committed_implausible)) {
+                    (out.bound_free_payload().type53_shadow.committed_nonfinite || out.bound_free_payload().type53_shadow.committed_implausible)) {
                     throw std::runtime_error("Mg Type-53 finite-state replacement remained nonfinite or implausibly large");
                 }
                 if (carbon_source_faithful &&
-                    (out.type53_shadow.committed_nonfinite || out.type53_shadow.committed_implausible)) {
+                    (out.bound_free_payload().type53_shadow.committed_nonfinite || out.bound_free_payload().type53_shadow.committed_implausible)) {
                     throw std::runtime_error("carbon Type-53 source-faithful Milne rate remained nonfinite or implausibly large");
                 }
                 if (carbon_source_faithful) {
@@ -7408,7 +7424,7 @@ EvaluatedRecord evaluate_record(
             // spectral commit applies the live lower-level population,
             // elemental abundance, and hydrogen density exactly once.
             out.opakab = source_exact
-                ? std::max(0.0, out.type53_shadow.threshold_cross_section_cm2)
+                ? std::max(0.0, out.bound_free_payload().type53_shadow.threshold_cross_section_cm2)
                 : 0.0;
             break;
         }
@@ -7595,26 +7611,26 @@ EvaluatedRecord evaluate_record(
             bool source_exact = false;
             if (source_zero_gate) {
                 source_exact = true;
-                out.type49_shadow.valid = true;
-                out.type49_shadow.ans = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-                out.type49_shadow.type49_semantics = true;
-                out.type49_shadow.phextrap_applied = false;
-                out.type49_shadow.source_zero_gate = true;
-                out.type49_shadow.base_threshold_ev = record_context.base_threshold_ev;
-                out.type49_shadow.threshold_ev = source_threshold;
-                out.type49_shadow.bound_energy_ev = record_context.bound_energy_ev;
-                out.type49_shadow.continuum_energy_ev = record_context.continuum_energy_ev;
-                out.type49_shadow.destination_energy_ev = record_context.leveltemp_destination_energy_ev;
-                out.type49_shadow.excited_parent_energy_ev = record_context.excited_parent_energy_ev;
-                out.type49_shadow.bound_statistical_weight = record_context.bound_statistical_weight;
-                out.type49_shadow.continuum_statistical_weight = record_context.continuum_statistical_weight;
-                out.type49_shadow.destination_statistical_weight = record_context.destination_statistical_weight;
-                out.type49_shadow.excited_parent_statistical_weight = record_context.excited_parent_statistical_weight;
-                out.type49_shadow.milne_partition_context_used = record_context.layout_version >= 2;
-                out.type49_shadow.phextrap_source_reference_order = true;
-                out.type49_shadow.phextrap_input_pair_count = static_cast<int>(pair_real_count / 2);
-                out.type49_shadow.phextrap_output_pair_count = 0;
-                out.type49_shadow.phextrap_max_points = record_context.phextrap_max_points > 0
+                out.bound_free_payload().type49_shadow.valid = true;
+                out.bound_free_payload().type49_shadow.ans = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+                out.bound_free_payload().type49_shadow.type49_semantics = true;
+                out.bound_free_payload().type49_shadow.phextrap_applied = false;
+                out.bound_free_payload().type49_shadow.source_zero_gate = true;
+                out.bound_free_payload().type49_shadow.base_threshold_ev = record_context.base_threshold_ev;
+                out.bound_free_payload().type49_shadow.threshold_ev = source_threshold;
+                out.bound_free_payload().type49_shadow.bound_energy_ev = record_context.bound_energy_ev;
+                out.bound_free_payload().type49_shadow.continuum_energy_ev = record_context.continuum_energy_ev;
+                out.bound_free_payload().type49_shadow.destination_energy_ev = record_context.leveltemp_destination_energy_ev;
+                out.bound_free_payload().type49_shadow.excited_parent_energy_ev = record_context.excited_parent_energy_ev;
+                out.bound_free_payload().type49_shadow.bound_statistical_weight = record_context.bound_statistical_weight;
+                out.bound_free_payload().type49_shadow.continuum_statistical_weight = record_context.continuum_statistical_weight;
+                out.bound_free_payload().type49_shadow.destination_statistical_weight = record_context.destination_statistical_weight;
+                out.bound_free_payload().type49_shadow.excited_parent_statistical_weight = record_context.excited_parent_statistical_weight;
+                out.bound_free_payload().type49_shadow.milne_partition_context_used = record_context.layout_version >= 2;
+                out.bound_free_payload().type49_shadow.phextrap_source_reference_order = true;
+                out.bound_free_payload().type49_shadow.phextrap_input_pair_count = static_cast<int>(pair_real_count / 2);
+                out.bound_free_payload().type49_shadow.phextrap_output_pair_count = 0;
+                out.bound_free_payload().type49_shadow.phextrap_max_points = record_context.phextrap_max_points > 0
                     ? record_context.phextrap_max_points : 999;
                 std::vector<double> zero_gate_energy;
                 std::vector<double> zero_gate_sigma;
@@ -7624,19 +7640,19 @@ EvaluatedRecord evaluate_record(
                     zero_gate_energy.push_back(r[2 * pair]);
                     zero_gate_sigma.push_back(std::max(0.0, r[2 * pair + 1]));
                 }
-                out.type49_shadow.phextrap_input_energy_hash = binary64_sequence_fnv1a(zero_gate_energy);
-                out.type49_shadow.phextrap_input_sigma_hash = binary64_sequence_fnv1a(zero_gate_sigma);
-                out.type49_shadow.phextrap_output_energy_hash = binary64_sequence_fnv1a(std::vector<double>{});
-                out.type49_shadow.phextrap_output_sigma_hash = binary64_sequence_fnv1a(std::vector<double>{});
-                out.type49_shadow.electron_density_cm3 = input.electron_density_cm3;
-                out.type49_shadow.hydrogen_density_cm3 = input.hydrogen_density_cm3;
-                out.type49_shadow.matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
+                out.bound_free_payload().type49_shadow.phextrap_input_energy_hash = binary64_sequence_fnv1a(zero_gate_energy);
+                out.bound_free_payload().type49_shadow.phextrap_input_sigma_hash = binary64_sequence_fnv1a(zero_gate_sigma);
+                out.bound_free_payload().type49_shadow.phextrap_output_energy_hash = binary64_sequence_fnv1a(std::vector<double>{});
+                out.bound_free_payload().type49_shadow.phextrap_output_sigma_hash = binary64_sequence_fnv1a(std::vector<double>{});
+                out.bound_free_payload().type49_shadow.electron_density_cm3 = input.electron_density_cm3;
+                out.bound_free_payload().type49_shadow.hydrogen_density_cm3 = input.hydrogen_density_cm3;
+                out.bound_free_payload().type49_shadow.matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
             } else {
-                out.bound_free_record_context_v064895 = record_context;
-                out.bound_free_ptmp_sum_v064895 = ptmp1 + ptmp2;
-                out.bound_free_threshold_ev_v064895 = source_threshold;
-                out.bound_free_type49_v064895 = true;
-                out.bound_free_row46_contract_v064895 = false;
+                out.bound_free_payload().bound_free_record_context_v064895 = record_context;
+                out.bound_free_payload().bound_free_ptmp_sum_v064895 = ptmp1 + ptmp2;
+                out.bound_free_payload().bound_free_threshold_ev_v064895 = source_threshold;
+                out.bound_free_payload().bound_free_type49_v064895 = true;
+                out.bound_free_payload().bound_free_row46_contract_v064895 = false;
                 const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
                     prepared_bound_free_geometry(
                         program, record, calc_hmc_input, source_threshold, true, true,
@@ -7644,7 +7660,7 @@ EvaluatedRecord evaluate_record(
                 source_exact = evaluate_type53_source_integral(
                     r, pair_real_count, lower, upper, calc_hmc_input, source_threshold, ptmp1 + ptmp2,
                     nullptr, record_context.valid ? &record_context : nullptr, record.record,
-                    true, true, source_shadow, &out.type49_shadow, prepared_reduced_v064895);
+                    true, true, source_shadow, &out.bound_free_payload().type49_shadow, prepared_reduced_v064895);
                 if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
                     ++rate_context.bound_free_perf->reduced_dynamic_integrals;
             }
@@ -7654,11 +7670,11 @@ EvaluatedRecord evaluate_record(
             // reduced-grid UCalc path; do not seed cemab/opakab from the later
             // full-grid answer.
             if (source_zero_gate) {
-                out.type49_calc_emisab_shadow = out.type49_shadow;
+                out.bound_free_payload().type49_calc_emisab_shadow = out.bound_free_payload().type49_shadow;
             } else if (calc_emisab_workspace && calc_emisab_workspace->epim.size() >= 3 &&
                        calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
                 if (!rate_context.force_legacy_bound_free && source_exact) {
-                    out.type49_calc_emisab_shadow = out.type49_shadow;
+                    out.bound_free_payload().type49_calc_emisab_shadow = out.bound_free_payload().type49_shadow;
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->reduced_duplicate_reuses;
                 } else {
@@ -7671,16 +7687,16 @@ EvaluatedRecord evaluate_record(
                         r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
                         ptmp1 + ptmp2, nullptr, record_context.valid ? &record_context : nullptr,
                         record.record, true, true, calc_emisab_contribution,
-                        &out.type49_calc_emisab_shadow);
+                        &out.bound_free_payload().type49_calc_emisab_shadow);
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_reduced_duplicate_integrals;
-                    if (!calc_emisab_exact) out.type49_calc_emisab_shadow = Type53SourceShadow{};
+                    if (!calc_emisab_exact) out.bound_free_payload().type49_calc_emisab_shadow = Type53SourceShadow{};
                 }
             }
             // v82 patch 5.20.14: preserve the later full-grid calc_emis_ion
             // UCalc result independently from the reduced matrix/seed stages.
             if (source_zero_gate) {
-                out.type49_calc_emis_shadow = out.type49_shadow;
+                out.bound_free_payload().type49_calc_emis_shadow = out.bound_free_payload().type49_shadow;
             } else {
                 Type53RecordContext calc_emis_record_context = record_context;
                 const std::size_t full_calc_emis_bins = input.radiation_bin_count;
@@ -7694,19 +7710,19 @@ EvaluatedRecord evaluate_record(
                     const bool calc_emis_exact = evaluate_type53_source_integral(
                         r, pair_real_count, lower, upper, calc_emis_input, source_threshold, ptmp1 + ptmp2,
                         nullptr, calc_emis_record_context.valid ? &calc_emis_record_context : nullptr, record.record,
-                        true, true, calc_emis_contribution, &out.type49_calc_emis_shadow);
+                        true, true, calc_emis_contribution, &out.bound_free_payload().type49_calc_emis_shadow);
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_full_eager_integrals;
-                    if (!calc_emis_exact) out.type49_calc_emis_shadow = Type53SourceShadow{};
+                    if (!calc_emis_exact) out.bound_free_payload().type49_calc_emis_shadow = Type53SourceShadow{};
                 } else {
                     // Broad calc_emis opacity replay needs the full-grid Type49
                     // phextrap caller capacity, but not the dynamic phint53
                     // integral.  Retain exact curve metadata and defer the
                     // expensive 9999-bin integral until source selection.
-                    out.type49_calc_emis_shadow = out.type49_shadow;
-                    out.type49_calc_emis_shadow.phextrap_max_points =
+                    out.bound_free_payload().type49_calc_emis_shadow = out.bound_free_payload().type49_shadow;
+                    out.bound_free_payload().type49_calc_emis_shadow.phextrap_max_points =
                         static_cast<int>(full_calc_emis_bins);
-                    out.type49_calc_emis_shadow.phextrap_applied = true;
+                    out.bound_free_payload().type49_calc_emis_shadow.phextrap_applied = true;
                 }
             }
             // v0.6.82.11: canonical ucalc Type-49 is element-independent.
@@ -7743,34 +7759,34 @@ EvaluatedRecord evaluate_record(
                 c.ans5 = source_shadow.ans5;
                 c.ans6 = source_shadow.ans6;
             }
-            out.type49_shadow.legacy_ans = legacy_type49_ans;
-            out.type49_shadow.legacy_max_abs = 0.0;
-            out.type49_shadow.committed_max_abs = 0.0;
+            out.bound_free_payload().type49_shadow.legacy_ans = legacy_type49_ans;
+            out.bound_free_payload().type49_shadow.legacy_max_abs = 0.0;
+            out.bound_free_payload().type49_shadow.committed_max_abs = 0.0;
             for (double value : legacy_type49_ans) {
-                out.type49_shadow.legacy_nonfinite = out.type49_shadow.legacy_nonfinite || !std::isfinite(value);
-                if (std::isfinite(value)) out.type49_shadow.legacy_max_abs = std::max(out.type49_shadow.legacy_max_abs, std::abs(value));
+                out.bound_free_payload().type49_shadow.legacy_nonfinite = out.bound_free_payload().type49_shadow.legacy_nonfinite || !std::isfinite(value);
+                if (std::isfinite(value)) out.bound_free_payload().type49_shadow.legacy_max_abs = std::max(out.bound_free_payload().type49_shadow.legacy_max_abs, std::abs(value));
             }
             const std::array<double,6> committed{{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6}};
             for (double value : committed) {
-                out.type49_shadow.committed_nonfinite = out.type49_shadow.committed_nonfinite || !std::isfinite(value);
-                if (std::isfinite(value)) out.type49_shadow.committed_max_abs = std::max(out.type49_shadow.committed_max_abs, std::abs(value));
+                out.bound_free_payload().type49_shadow.committed_nonfinite = out.bound_free_payload().type49_shadow.committed_nonfinite || !std::isfinite(value);
+                if (std::isfinite(value)) out.bound_free_payload().type49_shadow.committed_max_abs = std::max(out.bound_free_payload().type49_shadow.committed_max_abs, std::abs(value));
             }
             constexpr double kImplausibleBoundFreeRate = 1.0e40;
-            out.type49_shadow.legacy_implausible = out.type49_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
-            out.type49_shadow.committed_implausible = out.type49_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-            out.type49_shadow.source_faithful_mode = all_element_source_faithful_type49;
-            out.type49_shadow.replacement_applied = all_element_source_faithful_type49;
-            out.type49_shadow.tau_in = tau_in;
-            out.type49_shadow.tau_out = tau_out;
-            out.type49_shadow.ptmp1 = ptmp1;
-            out.type49_shadow.ptmp2 = ptmp2;
-            out.type49_shadow.covering_fraction = covering;
-            out.type49_shadow.runtime_state_abi_used =
+            out.bound_free_payload().type49_shadow.legacy_implausible = out.bound_free_payload().type49_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
+            out.bound_free_payload().type49_shadow.committed_implausible = out.bound_free_payload().type49_shadow.committed_max_abs > kImplausibleBoundFreeRate;
+            out.bound_free_payload().type49_shadow.source_faithful_mode = all_element_source_faithful_type49;
+            out.bound_free_payload().type49_shadow.replacement_applied = all_element_source_faithful_type49;
+            out.bound_free_payload().type49_shadow.tau_in = tau_in;
+            out.bound_free_payload().type49_shadow.tau_out = tau_out;
+            out.bound_free_payload().type49_shadow.ptmp1 = ptmp1;
+            out.bound_free_payload().type49_shadow.ptmp2 = ptmp2;
+            out.bound_free_payload().type49_shadow.covering_fraction = covering;
+            out.bound_free_payload().type49_shadow.runtime_state_abi_used =
                 input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3 &&
                 has_continuum_workspace;
-            out.type49_shadow.continuum_index_one_based = continuum_index;
-            out.type49_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
-            out.type49_shadow.continuum_tau_count = input.continuum_tau_count;
+            out.bound_free_payload().type49_shadow.continuum_index_one_based = continuum_index;
+            out.bound_free_payload().type49_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
+            out.bound_free_payload().type49_shadow.continuum_tau_count = input.continuum_tau_count;
             // v82 patch 5.20.9: literal xstarsetup.f90 gives Type-49 its own
             // setup/rank geometry: eth=rdat1(np1r)*13.598, with 13.598 a
             // default-REAL literal.  Unlike Type-53/99, Type-49 has no 0.1-eV
@@ -7778,12 +7794,12 @@ EvaluatedRecord evaluate_record(
             // Keep this setup coordinate separate from the UCalc kernel threshold.
             const double source_type49_rydberg_ev_v82_patch5209 =
                 static_cast<double>(static_cast<float>(xstar_constants::kLegacyXstarSetupRydbergEv));
-            out.type49_shadow.source_errc_rank_energy_ev =
+            out.bound_free_payload().type49_shadow.source_errc_rank_energy_ev =
                 (r && pair_real_count >= 2)
                     ? std::max(1.0e-34, r[0] * source_type49_rydberg_ev_v82_patch5209)
-                    : std::max(1.0e-34, out.type49_shadow.base_threshold_ev);
+                    : std::max(1.0e-34, out.bound_free_payload().type49_shadow.base_threshold_ev);
             if (all_element_source_faithful_type49 &&
-                (out.type49_shadow.committed_nonfinite || out.type49_shadow.committed_implausible)) {
+                (out.bound_free_payload().type49_shadow.committed_nonfinite || out.bound_free_payload().type49_shadow.committed_implausible)) {
                 throw std::runtime_error(
                     "all-element Type-49 source-faithful result remained nonfinite or implausibly large");
             }
@@ -7799,7 +7815,7 @@ EvaluatedRecord evaluate_record(
             // spectral commit applies the live lower-level population,
             // elemental abundance, and hydrogen density exactly once.
             out.opakab = source_exact
-                ? std::max(0.0, out.type49_shadow.threshold_cross_section_cm2)
+                ? std::max(0.0, out.bound_free_payload().type49_shadow.threshold_cross_section_cm2)
                 : 0.0;
             break;
         }
@@ -8788,7 +8804,7 @@ EvaluatedRecord evaluate_record(
                     c.ans4 = ph.ans4 * scale;
                     c.ans5 = ph.ans5;
                     c.ans6 = ph.ans6 * scale;
-                    out.type53_shadow = sh;
+                    out.bound_free_payload().type53_shadow = sh;
                     out.generic_bound_free_offset_ryd_v0648120 = cal.e_ryd;
                     out.generic_bound_free_sigma_cm2_v0648120.resize(cal.xs_mb.size());
                     for (std::size_t q = 0; q < cal.xs_mb.size(); ++q) {
@@ -8937,11 +8953,11 @@ void write_type49_identical_state_probe(
         probe_context.bound_free_perf = nullptr;
         const EvaluatedRecord evaluated = evaluate_record(
             ctx.program, element, *target, probe_input, probe_context);
-        if (!evaluated.type49_shadow.valid || !evaluated.type49_shadow.source_faithful_mode ||
-            !evaluated.type49_shadow.replacement_applied) {
+        if (!evaluated.bound_free_payload().type49_shadow.valid || !evaluated.bound_free_payload().type49_shadow.source_faithful_mode ||
+            !evaluated.bound_free_payload().type49_shadow.replacement_applied) {
             throw std::runtime_error("v0648123431113 target Type49 source-shadow re-evaluation invalid");
         }
-        const auto& sh = evaluated.type49_shadow;
+        const auto& sh = evaluated.bound_free_payload().type49_shadow;
         const double sumc_ev = -evaluated.contribution.ans3 / kErgPerEv;
         out << std::setprecision(17)
             << source_sequence << ',' << label << ',' << temperature_k << ','
@@ -8974,7 +8990,7 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     const RateEvaluationContextV064894& rate_context) {
     if (rate_context.force_legacy_bound_free) {
         return record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
-            ? evaluated.type49_calc_emis_shadow : evaluated.type53_calc_emis_shadow;
+            ? evaluated.bound_free_payload().type49_calc_emis_shadow : evaluated.bound_free_payload().type53_calc_emis_shadow;
     }
     Type53SourceShadow shadow{};
     if (record.opcode != XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
@@ -8988,17 +9004,17 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
     const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
     const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
-    Type53RecordContext record_context = evaluated.bound_free_record_context_v064895;
+    Type53RecordContext record_context = evaluated.bound_free_payload().bound_free_record_context_v064895;
     const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
     if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
     const std::size_t pair_real_count = record_context.valid
         ? record_context.pair_real_count : record.real_count;
     if (pair_real_count < 4 || pair_real_count % 2 != 0) return shadow;
-    if (type49 && evaluated.bound_free_threshold_ev_v064895 <= 0.0) {
-        return evaluated.type49_shadow;
+    if (type49 && evaluated.bound_free_payload().bound_free_threshold_ev_v064895 <= 0.0) {
+        return evaluated.bound_free_payload().type49_shadow;
     }
     const xstar_type53_row46_dsec_runtime_oracle::Entry* row46_contract = nullptr;
-    if (!type49 && evaluated.bound_free_row46_contract_v064895) {
+    if (!type49 && evaluated.bound_free_payload().bound_free_row46_contract_v064895) {
         row46_contract = find_type53_row46_dsec_runtime_oracle_entry(
             record.source_position, record.record);
     }
@@ -9007,14 +9023,14 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     full_input.dsec_bremsa = nullptr;
     full_input.dsec_radiation_bin_count = 0;
     const BoundFreePreparedGeometryV064895* prepared = prepared_bound_free_geometry(
-        program, record, full_input, evaluated.bound_free_threshold_ev_v064895,
+        program, record, full_input, evaluated.bound_free_payload().bound_free_threshold_ev_v064895,
         type49, type49, record_context.valid ? &record_context : nullptr,
         true, rate_context);
     xstar_element_contribution_v1 contribution{};
     const bool ok = evaluate_type53_source_integral(
         r, pair_real_count, lower, upper, full_input,
-        evaluated.bound_free_threshold_ev_v064895,
-        evaluated.bound_free_ptmp_sum_v064895,
+        evaluated.bound_free_payload().bound_free_threshold_ev_v064895,
+        evaluated.bound_free_payload().bound_free_ptmp_sum_v064895,
         row46_contract, record_context.valid ? &record_context : nullptr,
         record.record, type49, type49, contribution, &shadow, prepared);
     if (!ok) return Type53SourceShadow{};
@@ -9157,7 +9173,7 @@ void apply_type53_persistent_leveltemp_z1_z30(
     if (element.element_z < 1 || element.element_z > 30) return;
     for (auto& item : evaluated) {
         auto& contribution = item.contribution;
-        auto& shadow = item.type53_shadow;
+        auto& shadow = item.bound_free_payload().type53_shadow;
         if (contribution.data_type != 53 || !shadow.valid || shadow.type49_semantics ||
             contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
             continue;
@@ -9209,7 +9225,7 @@ void apply_type49_persistent_leveltemp_z1_z30(
     if (element.element_z < 1 || element.element_z > 30) return;
     for (auto& item : evaluated) {
         auto& contribution = item.contribution;
-        auto& shadow = item.type49_shadow;
+        auto& shadow = item.bound_free_payload().type49_shadow;
         if (contribution.data_type != 49 || !shadow.valid || !shadow.type49_semantics ||
             contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
             continue;
@@ -10841,9 +10857,9 @@ bool native_bound_free_curve(const Program& program,
         // belongs to calc_hmc on the reduced DSEC grid.  In particular,
         // Type49 phextrap must retain the full caller ncn2=9999 limit here.
         const Type53SourceShadow& base_shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
-            ? evaluated.type49_shadow : evaluated.type53_shadow;
+            ? evaluated.bound_free_payload().type49_shadow : evaluated.bound_free_payload().type53_shadow;
         const Type53SourceShadow& calc_emis_shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
-            ? evaluated.type49_calc_emis_shadow : evaluated.type53_calc_emis_shadow;
+            ? evaluated.bound_free_payload().type49_calc_emis_shadow : evaluated.bound_free_payload().type53_calc_emis_shadow;
         const Type53SourceShadow& shadow =
             prefer_full_calc_emis_shadow && calc_emis_shadow.valid ? calc_emis_shadow : base_shadow;
         const int pair_count = shadow.phextrap_input_pair_count > 0
@@ -11006,7 +11022,7 @@ void accumulate_native_bound_free_rrc_from_abundances(
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
         const auto mapped = phint53_grid_map(
             curve, input.radiation_energy_ev, static_cast<int>(n));
-        if (!mapped.valid || !(evaluated.type53_shadow.rnist > 0.0)) return;
+        if (!mapped.valid || !(evaluated.bound_free_payload().type53_shadow.rnist > 0.0)) return;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
         const double covering = effective_spectral_covering_fraction(input);
@@ -11024,7 +11040,7 @@ void accumulate_native_bound_free_rrc_from_abundances(
                 density > 0.0 && epiip > 0.0) {
                 const double exptmpp = type53_expo(-exptst);
                 const double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
-                const double common = upper_abundance * density * evaluated.type53_shadow.rnist *
+                const double common = upper_abundance * density * evaluated.bound_free_payload().type53_shadow.rnist *
                     bbnurjp * sgtpp * exptmpp;
                 rccemis[static_cast<std::size_t>(kl)] += common * ptmp1;
                 rccemis[n + static_cast<std::size_t>(kl)] += common * ptmp2;
@@ -11046,7 +11062,7 @@ void accumulate_native_bound_free_rrc_from_abundances(
         // Keep the 5.20.14.9 dual curve ownership untouched: curve here is
         // still the dedicated emission curve, not the full opacity curve.
         const Type53SourceShadow* shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
-            ? &evaluated.type49_shadow : &evaluated.type53_shadow;
+            ? &evaluated.bound_free_payload().type49_shadow : &evaluated.bound_free_payload().type53_shadow;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
         const double covering = effective_spectral_covering_fraction(input);
@@ -11191,8 +11207,8 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     const bool type99 = record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
     const bool source_generic = record.opcode == XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC && curve.generic_data_type != 0;
     const Type53SourceShadow* shadow = nullptr;
-    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) shadow = &evaluated.type49_shadow;
-    else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) shadow = &evaluated.type53_shadow;
+    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) shadow = &evaluated.bound_free_payload().type49_shadow;
+    else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) shadow = &evaluated.bound_free_payload().type53_shadow;
 
     if (type49_or_53) {
         const auto mapped = phint53_grid_map(
@@ -11825,6 +11841,16 @@ int run_impl(
     const bool retain_record_provenance_v064897 =
         !defer_product_projection || !native_production_v064897 ||
         force_096_record_provenance_v064897;
+    // 0.6.82.30.8.7: true-production DSEC consumes thermal/state outputs, not
+    // the retained element-product diagnostic package.  Avoid deep-copying
+    // contributions, populations and residual workspaces on those deferred
+    // root-finding evaluations.  Accepted-boundary/final evaluations and
+    // non-production library calls retain the historical diagnostic surface.
+    const bool force_element_diagnostics_v06823087 =
+        environment_flag("XSTAR_V06823087_FORCE_ELEMENT_DIAGNOSTICS");
+    const bool retain_element_diagnostics_v06823087 =
+        !defer_product_projection || !native_production_v064897 ||
+        force_element_diagnostics_v06823087;
     // Fail closed against a stale accepted-boundary snapshot if this
     // evaluation exits before the exact source workspaces are committed.
     ctx.last_source_workspaces_valid_v064894 = false;
@@ -12515,10 +12541,10 @@ int run_impl(
                 if (!pr || pr->rate_type != 7 || pr->continuum_index_one_based <= 0) continue;
                 const auto& item = evaluated[k];
                 double rank_energy_ev = 0.0;
-                if (pr->data_type == 49 && item.type49_shadow.valid)
-                    rank_energy_ev = item.type49_shadow.source_errc_rank_energy_ev;
-                else if (pr->data_type == 53 && item.type53_shadow.valid)
-                    rank_energy_ev = item.type53_shadow.source_errc_rank_energy_ev;
+                if (pr->data_type == 49 && item.bound_free_payload().type49_shadow.valid)
+                    rank_energy_ev = item.bound_free_payload().type49_shadow.source_errc_rank_energy_ev;
+                else if (pr->data_type == 53 && item.bound_free_payload().type53_shadow.valid)
+                    rank_energy_ev = item.bound_free_payload().type53_shadow.source_errc_rank_energy_ev;
                 else if (pr->data_type == 99 && item.type99_shadow.valid)
                     rank_energy_ev = item.type99_shadow.source_errc_rank_energy_ev;
                 if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
@@ -13201,6 +13227,7 @@ int run_impl(
         ctx.last_element_electron_contribution[element.element_z] =
             element_electron_contribution_v0648121;
 
+        if (retain_element_diagnostics_v06823087) {
         NativeElementDiagnostic element_diagnostic;
         element_diagnostic.committed_contributions = contributions;
         element_diagnostic.canonical_thermal_terms = canonical_thermal_ledger.terms;
@@ -13309,6 +13336,7 @@ int run_impl(
         }
         write_c_call1_compact_solve_attribution(ctx.program, element_diagnostic);
         ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));
+        }
 
         // Reconstruct the complete native bound-free continuum surface from
         // the source cross-section records.  The former product path retained
@@ -13406,9 +13434,9 @@ int run_impl(
                         const double first_offset_ev = std::max(0.0, kType53RydEv * type88_curve.offset_ryd.front());
                         const double rnist = rnissel * limited_exp(
                             -first_offset_ev / std::max(xstar_constants::kLegacyBoltzmannEvPerT4 * t4, 1.0e-300));
-                        type88_eval.type53_shadow = Type53SourceShadow{};
-                        type88_eval.type53_shadow.valid = rnist > 0.0;
-                        type88_eval.type53_shadow.rnist = rnist;
+                        type88_eval.bound_free_payload().type53_shadow = Type53SourceShadow{};
+                        type88_eval.bound_free_payload().type53_shadow.valid = rnist > 0.0;
+                        type88_eval.bound_free_payload().type53_shadow.rnist = rnist;
                         DeferredRrcRecordV82Patch520 deferred;
                         deferred.source_position = static_cast<std::uint64_t>(source_record.source_position);
                         deferred.record = static_cast<std::int64_t>(source_record.record);
@@ -13499,9 +13527,9 @@ int run_impl(
                 }
                 row.native_opacity_bin_sum_cm1 = row.native_lower_population * row.abundance *
                     row.hydrogen_density_cm3 * row.sigma_bin_sum_cm2;
-                if (evaluated[k].type53_shadow.valid) {
-                    row.threshold_cross_section_cm2 = evaluated[k].type53_shadow.threshold_cross_section_cm2;
-                    row.threshold_stimulated_cross_section_cm2 = evaluated[k].type53_shadow.threshold_stimulated_cross_section_cm2;
+                if (evaluated[k].bound_free_payload().type53_shadow.valid) {
+                    row.threshold_cross_section_cm2 = evaluated[k].bound_free_payload().type53_shadow.threshold_cross_section_cm2;
+                    row.threshold_stimulated_cross_section_cm2 = evaluated[k].bound_free_payload().type53_shadow.threshold_stimulated_cross_section_cm2;
                 }
                 mg_type53_kernel_rows_v82_patch512.push_back(row);
             }
@@ -13676,14 +13704,14 @@ int run_impl(
                 // The spectral engine multiplies sc.opakab by abund1*xpx,
                 // so retain the equivalent per-lower-population coefficient.
                 const Type53SourceShadow* opacity_shadow = nullptr;
-                if (evaluated[k].type53_shadow.valid) {
+                if (evaluated[k].bound_free_payload().type53_shadow.valid) {
                     // v82 patch 5.18.1: rank the calc_emisab-equivalent
                     // reduced-grid threshold seed, not the later full-grid
                     // calc_emis_ion revisit value.
-                    opacity_shadow = evaluated[k].type53_calc_emisab_shadow.valid
-                        ? &evaluated[k].type53_calc_emisab_shadow
-                        : &evaluated[k].type53_shadow;
-                } else if (evaluated[k].type49_shadow.valid) {
+                    opacity_shadow = evaluated[k].bound_free_payload().type53_calc_emisab_shadow.valid
+                        ? &evaluated[k].bound_free_payload().type53_calc_emisab_shadow
+                        : &evaluated[k].bound_free_payload().type53_shadow;
+                } else if (evaluated[k].bound_free_payload().type49_shadow.valid) {
                     // v82 patch 5.20.9.4: literal xstarcalc calls
                     // calc_emisab_all on epim/bremsam before the full-grid
                     // calc_emis_all revisit.  rlbin ranks the record-local
@@ -13693,9 +13721,9 @@ int run_impl(
                     // exposes non-source Mg II RRC luminosity from that owner.
                     // Keep full-grid Type-49 only for the later selected
                     // calc_emis replay; broad rank/public seed is reduced.
-                    opacity_shadow = evaluated[k].type49_calc_emisab_shadow.valid
-                        ? &evaluated[k].type49_calc_emisab_shadow
-                        : &evaluated[k].type49_shadow;
+                    opacity_shadow = evaluated[k].bound_free_payload().type49_calc_emisab_shadow.valid
+                        ? &evaluated[k].bound_free_payload().type49_calc_emisab_shadow
+                        : &evaluated[k].bound_free_payload().type49_shadow;
                 }
                 if (opacity_shadow && sc.abundance_lower > 0.0 &&
                     opacity_shadow->threshold_publication_reached) {
@@ -13717,13 +13745,13 @@ int run_impl(
                 sc.ptmp1 = evaluated[k].type50_shadow.ptmp1;
                 sc.ptmp2 = evaluated[k].type50_shadow.ptmp2;
             } else if (evaluated[k].bound_free_spectral &&
-                       evaluated[k].type53_shadow.valid) {
-                sc.ptmp1 = evaluated[k].type53_shadow.ptmp1;
-                sc.ptmp2 = evaluated[k].type53_shadow.ptmp2;
+                       evaluated[k].bound_free_payload().type53_shadow.valid) {
+                sc.ptmp1 = evaluated[k].bound_free_payload().type53_shadow.ptmp1;
+                sc.ptmp2 = evaluated[k].bound_free_payload().type53_shadow.ptmp2;
             } else if (evaluated[k].bound_free_spectral &&
-                       evaluated[k].type49_shadow.valid) {
-                sc.ptmp1 = evaluated[k].type49_shadow.ptmp1;
-                sc.ptmp2 = evaluated[k].type49_shadow.ptmp2;
+                       evaluated[k].bound_free_payload().type49_shadow.valid) {
+                sc.ptmp1 = evaluated[k].bound_free_payload().type49_shadow.ptmp1;
+                sc.ptmp2 = evaluated[k].bound_free_payload().type49_shadow.ptmp2;
             }
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;
@@ -13743,17 +13771,17 @@ int run_impl(
             // record-local opakab/cemab.  calc_emis_all may later overwrite
             // selected opakab and full-grid opakc/rccemis, but it does not
             // overwrite cemab.
-            if (evaluated[k].bound_free_spectral && evaluated[k].type53_calc_emisab_shadow.valid) {
-                sc.ans1 = evaluated[k].type53_calc_emisab_shadow.ans[0];
-                sc.ans2 = evaluated[k].type53_calc_emisab_shadow.ans[1];
-                sc.ans3 = evaluated[k].type53_calc_emisab_shadow.ans[2];
-                sc.ans4 = evaluated[k].type53_calc_emisab_shadow.ans[3];
+            if (evaluated[k].bound_free_spectral && evaluated[k].bound_free_payload().type53_calc_emisab_shadow.valid) {
+                sc.ans1 = evaluated[k].bound_free_payload().type53_calc_emisab_shadow.ans[0];
+                sc.ans2 = evaluated[k].bound_free_payload().type53_calc_emisab_shadow.ans[1];
+                sc.ans3 = evaluated[k].bound_free_payload().type53_calc_emisab_shadow.ans[2];
+                sc.ans4 = evaluated[k].bound_free_payload().type53_calc_emisab_shadow.ans[3];
             } else if (evaluated[k].bound_free_spectral &&
-                       evaluated[k].type49_calc_emisab_shadow.valid) {
-                sc.ans1 = evaluated[k].type49_calc_emisab_shadow.ans[0];
-                sc.ans2 = evaluated[k].type49_calc_emisab_shadow.ans[1];
-                sc.ans3 = evaluated[k].type49_calc_emisab_shadow.ans[2];
-                sc.ans4 = evaluated[k].type49_calc_emisab_shadow.ans[3];
+                       evaluated[k].bound_free_payload().type49_calc_emisab_shadow.valid) {
+                sc.ans1 = evaluated[k].bound_free_payload().type49_calc_emisab_shadow.ans[0];
+                sc.ans2 = evaluated[k].bound_free_payload().type49_calc_emisab_shadow.ans[1];
+                sc.ans3 = evaluated[k].bound_free_payload().type49_calc_emisab_shadow.ans[2];
+                sc.ans4 = evaluated[k].bound_free_payload().type49_calc_emisab_shadow.ans[3];
             }
             if (!evaluated[k].bound_free_spectral) sc.opakab = evaluated[k].opakab;
             sc.line_energy_eV = spectral_feature_energy_ev_v82_patch5206;
@@ -14587,11 +14615,11 @@ int run_impl(
                     static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
                 if (eit == type53_revisit_evaluated_v82_patch5181.end()) continue;
                 const auto& item = eit->second;
-                const Type53SourceShadow& seed_shadow = item.type53_calc_emisab_shadow.valid
-                    ? item.type53_calc_emisab_shadow : item.type53_shadow;
+                const Type53SourceShadow& seed_shadow = item.bound_free_payload().type53_calc_emisab_shadow.valid
+                    ? item.bound_free_payload().type53_calc_emisab_shadow : item.bound_free_payload().type53_shadow;
                 Type53SourceShadow lazy_revisit_shadow_v064895{};
                 const Type53SourceShadow* revisit_shadow_ptr_v064895 =
-                    &item.type53_calc_emis_shadow;
+                    &item.bound_free_payload().type53_calc_emis_shadow;
                 if (selected && !rate_context_v064894.force_legacy_bound_free) {
                     const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
                         static_cast<std::uint64_t>(c.source_position),
@@ -14733,7 +14761,7 @@ int run_impl(
                 if (eit_v82_patch52082 == type49_revisit_evaluated_v82_patch52082.end()) continue;
                 const auto& item_v82_patch52082 = eit_v82_patch52082->second;
                 const Type53SourceShadow& reduced_shadow_v82_patch52082 =
-                    item_v82_patch52082.type49_calc_emisab_shadow;
+                    item_v82_patch52082.bound_free_payload().type49_calc_emisab_shadow;
 
                 const xstar_spectral_contribution_v1* spectral_item_v82_patch52082 = nullptr;
                 for (const auto& candidate_v82_patch52082 : spectral) {
@@ -14758,7 +14786,7 @@ int run_impl(
                 if (selected_v82_patch52082) ++type49_selected_v82_patch52082;
                 Type53SourceShadow lazy_full_shadow_v064895{};
                 const Type53SourceShadow* full_shadow_ptr_v064895 =
-                    &item_v82_patch52082.type49_calc_emis_shadow;
+                    &item_v82_patch52082.bound_free_payload().type49_calc_emis_shadow;
                 if (selected_v82_patch52082 && !rate_context_v064894.force_legacy_bound_free) {
                     const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
                         static_cast<std::uint64_t>(c.source_position),
@@ -15606,14 +15634,14 @@ int run_impl(
                 double tau_in_v82_patch52017381 = 0.0;
                 double tau_out_v82_patch52017381 = 0.0;
                 if (rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
-                    rnist_v82_patch52017381 = deferred.evaluated.type53_shadow.rnist;
+                    rnist_v82_patch52017381 = deferred.evaluated.bound_free_payload().type53_shadow.rnist;
                     ptmp1_v82_patch52017381 = 0.5 * (1.0 - covering_v82_patch52017381);
                     ptmp2_v82_patch52017381 = 0.5 * (1.0 + covering_v82_patch52017381);
                 } else if (rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
                            rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
                     const Type53SourceShadow* shadow_v82_patch52017381 =
                         rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
-                            ? &deferred.evaluated.type49_shadow : &deferred.evaluated.type53_shadow;
+                            ? &deferred.evaluated.bound_free_payload().type49_shadow : &deferred.evaluated.bound_free_payload().type53_shadow;
                     rnist_v82_patch52017381 = shadow_v82_patch52017381->rnist;
                     ptmp1_v82_patch52017381 = covering_v82_patch52017381 >= 1.0 - 1.0e-15
                         ? 0.0 : (shadow_v82_patch52017381->valid
@@ -17372,36 +17400,36 @@ int xstar_fixed_state_get_last_record_product_diagnostics_v1(
         out.type50_ptmp2 = item.type50_shadow.ptmp2;
         out.type50_tau_in = item.type50_shadow.line_tau_in;
         out.type50_tau_out = item.type50_shadow.line_tau_out;
-        out.type53_valid = item.type53_shadow.valid ? 1u : 0u;
-        out.type49_valid = item.type49_shadow.valid ? 1u : 0u;
+        out.type53_valid = item.bound_free_payload().type53_shadow.valid ? 1u : 0u;
+        out.type49_valid = item.bound_free_payload().type49_shadow.valid ? 1u : 0u;
         out.type99_valid = item.type99_shadow.valid ? 1u : 0u;
-        if (item.type49_shadow.valid) {
-            out.continuum_index_one_based = item.type49_shadow.continuum_index_one_based;
-        } else if (item.type53_shadow.valid) {
-            out.continuum_index_one_based = item.type53_shadow.continuum_index_one_based;
+        if (item.bound_free_payload().type49_shadow.valid) {
+            out.continuum_index_one_based = item.bound_free_payload().type49_shadow.continuum_index_one_based;
+        } else if (item.bound_free_payload().type53_shadow.valid) {
+            out.continuum_index_one_based = item.bound_free_payload().type53_shadow.continuum_index_one_based;
         } else if (item.type99_shadow.valid) {
             out.continuum_index_one_based = item.type99_shadow.nbinc_threshold_one_based;
         } else {
             out.continuum_index_one_based = item.continuum_index_one_based;
         }
-        out.type53_threshold_ev = item.type53_shadow.threshold_ev;
-        out.type53_base_threshold_ev = item.type53_shadow.base_threshold_ev;
-        out.type49_threshold_ev = item.type49_shadow.threshold_ev;
+        out.type53_threshold_ev = item.bound_free_payload().type53_shadow.threshold_ev;
+        out.type53_base_threshold_ev = item.bound_free_payload().type53_shadow.base_threshold_ev;
+        out.type49_threshold_ev = item.bound_free_payload().type49_shadow.threshold_ev;
         out.type99_threshold_ev = item.type99_shadow.threshold_ev;
-        if (item.type49_shadow.valid) {
-            out.threshold_abs_sigma_cm2 = item.type49_shadow.threshold_cross_section_cm2;
-            out.threshold_stimulated_sigma_cm2 = item.type49_shadow.threshold_stimulated_cross_section_cm2;
-        } else if (item.type53_shadow.valid) {
-            out.threshold_abs_sigma_cm2 = item.type53_shadow.threshold_cross_section_cm2;
-            out.threshold_stimulated_sigma_cm2 = item.type53_shadow.threshold_stimulated_cross_section_cm2;
+        if (item.bound_free_payload().type49_shadow.valid) {
+            out.threshold_abs_sigma_cm2 = item.bound_free_payload().type49_shadow.threshold_cross_section_cm2;
+            out.threshold_stimulated_sigma_cm2 = item.bound_free_payload().type49_shadow.threshold_stimulated_cross_section_cm2;
+        } else if (item.bound_free_payload().type53_shadow.valid) {
+            out.threshold_abs_sigma_cm2 = item.bound_free_payload().type53_shadow.threshold_cross_section_cm2;
+            out.threshold_stimulated_sigma_cm2 = item.bound_free_payload().type53_shadow.threshold_stimulated_cross_section_cm2;
         } else {
             out.threshold_abs_sigma_cm2 = item.opakab;
             out.threshold_stimulated_sigma_cm2 = 0.0;
         }
-        out.type53_ptmp1 = item.type53_shadow.ptmp1;
-        out.type53_ptmp2 = item.type53_shadow.ptmp2;
-        out.type53_tau_in = item.type53_shadow.tau_in;
-        out.type53_tau_out = item.type53_shadow.tau_out;
+        out.type53_ptmp1 = item.bound_free_payload().type53_shadow.ptmp1;
+        out.type53_ptmp2 = item.bound_free_payload().type53_shadow.ptmp2;
+        out.type53_tau_in = item.bound_free_payload().type53_shadow.tau_in;
+        out.type53_tau_out = item.bound_free_payload().type53_shadow.tau_out;
     }
     copy_text(message, message_size, "native record product diagnostics returned");
     return 0;
@@ -18017,47 +18045,47 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << c.ans1 << ',' << c.ans2 << ',' << c.ans3 << ',' << c.ans4 << ',' << c.ans5 << ',' << c.ans6 << ','
                         << c.density_scale << ',' << item.line_energy_ev << ',' << item.atomic_mass_amu << ','
                         << item.natural_width_ev << ',' << item.opakab << ',' << item.type56_upsilon << ','
-                        << (item.type53_shadow.valid ? 1 : 0);
-            for (std::size_t k = 0; k < item.type53_shadow.ans.size(); ++k) {
-                record_file << ',' << item.type53_shadow.ans[k];
+                        << (item.bound_free_payload().type53_shadow.valid ? 1 : 0);
+            for (std::size_t k = 0; k < item.bound_free_payload().type53_shadow.ans.size(); ++k) {
+                record_file << ',' << item.bound_free_payload().type53_shadow.ans[k];
             }
             const std::array<double,6> applied_values{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6};
-            for (std::size_t k = 0; k < item.type53_shadow.ans.size(); ++k) {
-                record_file << ',' << (item.type53_shadow.ans[k] - applied_values[k]);
+            for (std::size_t k = 0; k < item.bound_free_payload().type53_shadow.ans.size(); ++k) {
+                record_file << ',' << (item.bound_free_payload().type53_shadow.ans[k] - applied_values[k]);
             }
-            record_file << ',' << item.type53_shadow.base_threshold_ev
-                        << ',' << item.type53_shadow.threshold_ev
-                        << ',' << item.type53_shadow.bound_energy_ev
-                        << ',' << item.type53_shadow.continuum_energy_ev
-                        << ',' << item.type53_shadow.destination_energy_ev
-                        << ',' << item.type53_shadow.excited_parent_energy_ev
-                        << ',' << item.type53_shadow.bound_statistical_weight
-                        << ',' << item.type53_shadow.continuum_statistical_weight
-                        << ',' << item.type53_shadow.destination_statistical_weight
-                        << ',' << item.type53_shadow.excited_parent_statistical_weight
-                        << ',' << (item.type53_shadow.milne_partition_context_used ? 1 : 0)
-                        << ',' << (item.type53_shadow.excited_threshold_context_used ? 1 : 0)
-                        << ',' << (item.type53_shadow.corrected_threshold_before_mapping ? 1 : 0)
-                        << ',' << (item.type53_shadow.phextrap_source_reference_order ? 1 : 0)
-                        << ',' << item.type53_shadow.phextrap_input_pair_count
-                        << ',' << item.type53_shadow.phextrap_output_pair_count
-                        << ',' << item.type53_shadow.rnist
-                        << ',' << item.type53_shadow.sumr << ',' << item.type53_shadow.sumi
-                        << ',' << item.type53_shadow.sumh << ',' << item.type53_shadow.sumh2
-                        << ',' << item.type53_shadow.sumc << ',' << item.type53_shadow.sumc2
-                        << ',' << (item.type53_shadow.sumc_ieee_nextafter_applied ? 1 : 0)
-                        << ',' << item.type53_shadow.nb1_one_based << ',' << item.type53_shadow.klmax_one_based
-                        << ',' << item.type53_shadow.integration_intervals
-                        << ',' << (item.type53_shadow.helium_live_escape_state_applied ? 1 : 0)
-                        << ',' << (item.type53_shadow.row46_contract ? 1 : 0)
-                        << ',' << (item.type53_shadow.captured_state_anchor ? 1 : 0)
-                        << ',' << item.type53_shadow.tau_in << ',' << item.type53_shadow.tau_out
-                        << ',' << item.type53_shadow.ptmp1 << ',' << item.type53_shadow.ptmp2
-                        << ',' << item.type53_shadow.covering_fraction
-                        << ',' << (item.type53_shadow.runtime_state_abi_used ? 1 : 0)
-                        << ',' << item.type53_shadow.continuum_index_one_based
-                        << ',' << item.type53_shadow.dsec_radiation_bin_count
-                        << ',' << item.type53_shadow.continuum_tau_count
+            record_file << ',' << item.bound_free_payload().type53_shadow.base_threshold_ev
+                        << ',' << item.bound_free_payload().type53_shadow.threshold_ev
+                        << ',' << item.bound_free_payload().type53_shadow.bound_energy_ev
+                        << ',' << item.bound_free_payload().type53_shadow.continuum_energy_ev
+                        << ',' << item.bound_free_payload().type53_shadow.destination_energy_ev
+                        << ',' << item.bound_free_payload().type53_shadow.excited_parent_energy_ev
+                        << ',' << item.bound_free_payload().type53_shadow.bound_statistical_weight
+                        << ',' << item.bound_free_payload().type53_shadow.continuum_statistical_weight
+                        << ',' << item.bound_free_payload().type53_shadow.destination_statistical_weight
+                        << ',' << item.bound_free_payload().type53_shadow.excited_parent_statistical_weight
+                        << ',' << (item.bound_free_payload().type53_shadow.milne_partition_context_used ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.excited_threshold_context_used ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.corrected_threshold_before_mapping ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.phextrap_source_reference_order ? 1 : 0)
+                        << ',' << item.bound_free_payload().type53_shadow.phextrap_input_pair_count
+                        << ',' << item.bound_free_payload().type53_shadow.phextrap_output_pair_count
+                        << ',' << item.bound_free_payload().type53_shadow.rnist
+                        << ',' << item.bound_free_payload().type53_shadow.sumr << ',' << item.bound_free_payload().type53_shadow.sumi
+                        << ',' << item.bound_free_payload().type53_shadow.sumh << ',' << item.bound_free_payload().type53_shadow.sumh2
+                        << ',' << item.bound_free_payload().type53_shadow.sumc << ',' << item.bound_free_payload().type53_shadow.sumc2
+                        << ',' << (item.bound_free_payload().type53_shadow.sumc_ieee_nextafter_applied ? 1 : 0)
+                        << ',' << item.bound_free_payload().type53_shadow.nb1_one_based << ',' << item.bound_free_payload().type53_shadow.klmax_one_based
+                        << ',' << item.bound_free_payload().type53_shadow.integration_intervals
+                        << ',' << (item.bound_free_payload().type53_shadow.helium_live_escape_state_applied ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.row46_contract ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.captured_state_anchor ? 1 : 0)
+                        << ',' << item.bound_free_payload().type53_shadow.tau_in << ',' << item.bound_free_payload().type53_shadow.tau_out
+                        << ',' << item.bound_free_payload().type53_shadow.ptmp1 << ',' << item.bound_free_payload().type53_shadow.ptmp2
+                        << ',' << item.bound_free_payload().type53_shadow.covering_fraction
+                        << ',' << (item.bound_free_payload().type53_shadow.runtime_state_abi_used ? 1 : 0)
+                        << ',' << item.bound_free_payload().type53_shadow.continuum_index_one_based
+                        << ',' << item.bound_free_payload().type53_shadow.dsec_radiation_bin_count
+                        << ',' << item.bound_free_payload().type53_shadow.continuum_tau_count
                         << ',' << (item.type50_shadow.valid ? 1 : 0);
             for (double value : item.type50_shadow.ans) record_file << ',' << value;
             record_file << ',' << item.type50_shadow.stored_wavelength_a
@@ -18130,64 +18158,64 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type99_shadow.last_pass_last_kl_one_based
                         << ',' << item.type99_shadow.cached_atmp22_stale_reuses
                         << ',' << (item.type99_shadow.used_dsec_radiation ? 1 : 0)
-                        << ',' << item.type53_shadow.legacy_max_abs
-                        << ',' << item.type53_shadow.shadow_max_abs
-                        << ',' << item.type53_shadow.committed_max_abs
-                        << ',' << (item.type53_shadow.legacy_nonfinite ? 1 : 0)
-                        << ',' << (item.type53_shadow.legacy_implausible ? 1 : 0)
-                        << ',' << (item.type53_shadow.replacement_applied ? 1 : 0)
-                        << ',' << (item.type53_shadow.committed_nonfinite ? 1 : 0)
-                        << ',' << (item.type53_shadow.committed_implausible ? 1 : 0)
-                        << ',' << item.type53_shadow.exponent_energy_ev
-                        << ',' << item.type53_shadow.exponent_dimensionless
-                        << ',' << item.type53_shadow.electron_density_cm3
-                        << ',' << item.type53_shadow.hydrogen_density_cm3
-                        << ',' << item.type53_shadow.matrix_density_scale
-                        << ',' << (item.type53_shadow.source_faithful_mode ? 1 : 0)
-                        << ',' << (item.type49_shadow.valid ? 1 : 0);
-            for (double value : item.type49_shadow.ans) record_file << ',' << value;
-            record_file << ',' << item.type49_shadow.legacy_max_abs
-                        << ',' << item.type49_shadow.shadow_max_abs
-                        << ',' << item.type49_shadow.committed_max_abs
-                        << ',' << (item.type49_shadow.legacy_nonfinite ? 1 : 0)
-                        << ',' << (item.type49_shadow.legacy_implausible ? 1 : 0)
-                        << ',' << (item.type49_shadow.replacement_applied ? 1 : 0)
-                        << ',' << (item.type49_shadow.committed_nonfinite ? 1 : 0)
-                        << ',' << (item.type49_shadow.committed_implausible ? 1 : 0)
-                        << ',' << item.type49_shadow.base_threshold_ev
-                        << ',' << item.type49_shadow.threshold_ev
-                        << ',' << item.type49_shadow.bound_energy_ev
-                        << ',' << item.type49_shadow.continuum_energy_ev
-                        << ',' << item.type49_shadow.destination_energy_ev
-                        << ',' << item.type49_shadow.excited_parent_energy_ev
-                        << ',' << item.type49_shadow.bound_statistical_weight
-                        << ',' << item.type49_shadow.continuum_statistical_weight
-                        << ',' << item.type49_shadow.destination_statistical_weight
-                        << ',' << item.type49_shadow.excited_parent_statistical_weight
-                        << ',' << (item.type49_shadow.milne_partition_context_used ? 1 : 0)
-                        << ',' << (item.type49_shadow.excited_threshold_context_used ? 1 : 0)
-                        << ',' << (item.type49_shadow.corrected_threshold_before_mapping ? 1 : 0)
-                        << ',' << (item.type49_shadow.phextrap_source_reference_order ? 1 : 0)
-                        << ',' << item.type49_shadow.phextrap_input_pair_count
-                        << ',' << item.type49_shadow.phextrap_output_pair_count
-                        << ',' << item.type49_shadow.phextrap_max_points
-                        << ',' << item.type49_shadow.phextrap_input_energy_hash
-                        << ',' << item.type49_shadow.phextrap_input_sigma_hash
-                        << ',' << item.type49_shadow.phextrap_output_energy_hash
-                        << ',' << item.type49_shadow.phextrap_output_sigma_hash
-                        << ',' << item.type49_shadow.rnist
-                        << ',' << item.type49_shadow.exponent_energy_ev
-                        << ',' << item.type49_shadow.exponent_dimensionless
-                        << ',' << item.type49_shadow.electron_density_cm3
-                        << ',' << item.type49_shadow.hydrogen_density_cm3
-                        << ',' << item.type49_shadow.matrix_density_scale
-                        << ',' << (item.type49_shadow.phextrap_applied ? 1 : 0)
-                        << ',' << (item.type49_shadow.source_zero_gate ? 1 : 0)
-                        << ',' << (item.type49_shadow.source_faithful_mode ? 1 : 0)
-                        << ',' << (item.type49_shadow.runtime_state_abi_used ? 1 : 0)
-                        << ',' << item.type49_shadow.continuum_index_one_based
-                        << ',' << item.type49_shadow.dsec_radiation_bin_count
-                        << ',' << item.type49_shadow.continuum_tau_count
+                        << ',' << item.bound_free_payload().type53_shadow.legacy_max_abs
+                        << ',' << item.bound_free_payload().type53_shadow.shadow_max_abs
+                        << ',' << item.bound_free_payload().type53_shadow.committed_max_abs
+                        << ',' << (item.bound_free_payload().type53_shadow.legacy_nonfinite ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.legacy_implausible ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.replacement_applied ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.committed_nonfinite ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type53_shadow.committed_implausible ? 1 : 0)
+                        << ',' << item.bound_free_payload().type53_shadow.exponent_energy_ev
+                        << ',' << item.bound_free_payload().type53_shadow.exponent_dimensionless
+                        << ',' << item.bound_free_payload().type53_shadow.electron_density_cm3
+                        << ',' << item.bound_free_payload().type53_shadow.hydrogen_density_cm3
+                        << ',' << item.bound_free_payload().type53_shadow.matrix_density_scale
+                        << ',' << (item.bound_free_payload().type53_shadow.source_faithful_mode ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.valid ? 1 : 0);
+            for (double value : item.bound_free_payload().type49_shadow.ans) record_file << ',' << value;
+            record_file << ',' << item.bound_free_payload().type49_shadow.legacy_max_abs
+                        << ',' << item.bound_free_payload().type49_shadow.shadow_max_abs
+                        << ',' << item.bound_free_payload().type49_shadow.committed_max_abs
+                        << ',' << (item.bound_free_payload().type49_shadow.legacy_nonfinite ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.legacy_implausible ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.replacement_applied ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.committed_nonfinite ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.committed_implausible ? 1 : 0)
+                        << ',' << item.bound_free_payload().type49_shadow.base_threshold_ev
+                        << ',' << item.bound_free_payload().type49_shadow.threshold_ev
+                        << ',' << item.bound_free_payload().type49_shadow.bound_energy_ev
+                        << ',' << item.bound_free_payload().type49_shadow.continuum_energy_ev
+                        << ',' << item.bound_free_payload().type49_shadow.destination_energy_ev
+                        << ',' << item.bound_free_payload().type49_shadow.excited_parent_energy_ev
+                        << ',' << item.bound_free_payload().type49_shadow.bound_statistical_weight
+                        << ',' << item.bound_free_payload().type49_shadow.continuum_statistical_weight
+                        << ',' << item.bound_free_payload().type49_shadow.destination_statistical_weight
+                        << ',' << item.bound_free_payload().type49_shadow.excited_parent_statistical_weight
+                        << ',' << (item.bound_free_payload().type49_shadow.milne_partition_context_used ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.excited_threshold_context_used ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.corrected_threshold_before_mapping ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.phextrap_source_reference_order ? 1 : 0)
+                        << ',' << item.bound_free_payload().type49_shadow.phextrap_input_pair_count
+                        << ',' << item.bound_free_payload().type49_shadow.phextrap_output_pair_count
+                        << ',' << item.bound_free_payload().type49_shadow.phextrap_max_points
+                        << ',' << item.bound_free_payload().type49_shadow.phextrap_input_energy_hash
+                        << ',' << item.bound_free_payload().type49_shadow.phextrap_input_sigma_hash
+                        << ',' << item.bound_free_payload().type49_shadow.phextrap_output_energy_hash
+                        << ',' << item.bound_free_payload().type49_shadow.phextrap_output_sigma_hash
+                        << ',' << item.bound_free_payload().type49_shadow.rnist
+                        << ',' << item.bound_free_payload().type49_shadow.exponent_energy_ev
+                        << ',' << item.bound_free_payload().type49_shadow.exponent_dimensionless
+                        << ',' << item.bound_free_payload().type49_shadow.electron_density_cm3
+                        << ',' << item.bound_free_payload().type49_shadow.hydrogen_density_cm3
+                        << ',' << item.bound_free_payload().type49_shadow.matrix_density_scale
+                        << ',' << (item.bound_free_payload().type49_shadow.phextrap_applied ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.source_zero_gate ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.source_faithful_mode ? 1 : 0)
+                        << ',' << (item.bound_free_payload().type49_shadow.runtime_state_abi_used ? 1 : 0)
+                        << ',' << item.bound_free_payload().type49_shadow.continuum_index_one_based
+                        << ',' << item.bound_free_payload().type49_shadow.dsec_radiation_bin_count
+                        << ',' << item.bound_free_payload().type49_shadow.continuum_tau_count
                         << ',' << (item.type51_shadow.valid ? 1 : 0)
                         << ',' << (item.type51_shadow.source_faithful_mode ? 1 : 0)
                         << ',' << (item.type51_shadow.replacement_applied ? 1 : 0)
@@ -18213,10 +18241,10 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type51_shadow.q_deexcitation_cm3_s;
             for (double value : item.type51_shadow.ans) record_file << ',' << value;
             for (double value : item.type51_shadow.legacy_ans) record_file << ',' << value;
-            record_file << ',' << item.type53_shadow.threshold_cross_section_cm2
-                        << ',' << item.type53_shadow.threshold_stimulated_cross_section_cm2
-                        << ',' << item.type49_shadow.threshold_cross_section_cm2
-                        << ',' << item.type49_shadow.threshold_stimulated_cross_section_cm2;
+            record_file << ',' << item.bound_free_payload().type53_shadow.threshold_cross_section_cm2
+                        << ',' << item.bound_free_payload().type53_shadow.threshold_stimulated_cross_section_cm2
+                        << ',' << item.bound_free_payload().type49_shadow.threshold_cross_section_cm2
+                        << ',' << item.bound_free_payload().type49_shadow.threshold_stimulated_cross_section_cm2;
             record_file << '\n';
             auto& summary = summaries[c.data_type];
             if (summary.records == 0) summary.first_source_position = c.source_position;
@@ -18650,10 +18678,10 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                 std::array<double,6> source_answers{{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6}};
                 const auto& item = diagnostic.evaluated;
                 const char* source_answer_basis = "committed_source_faithful";
-                if (c.data_type == 53 && item.type53_shadow.valid) {
-                    source_answers = item.type53_shadow.ans; source_answer_basis = "type53_source_shadow";
-                } else if (c.data_type == 49 && item.type49_shadow.valid) {
-                    source_answers = item.type49_shadow.ans; source_answer_basis = "type49_source_shadow";
+                if (c.data_type == 53 && item.bound_free_payload().type53_shadow.valid) {
+                    source_answers = item.bound_free_payload().type53_shadow.ans; source_answer_basis = "type53_source_shadow";
+                } else if (c.data_type == 49 && item.bound_free_payload().type49_shadow.valid) {
+                    source_answers = item.bound_free_payload().type49_shadow.ans; source_answer_basis = "type49_source_shadow";
                 } else if (c.data_type == 50 && item.type50_shadow.valid) {
                     source_answers = item.type50_shadow.ans; source_answer_basis = "type50_source_shadow";
                 } else if (c.data_type == 51 && item.type51_shadow.valid) {

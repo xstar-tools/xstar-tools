@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.30.8.7 - Fe C++ hot-record storage optimization - 2026-08-20
+
+- Preserve the host-accepted `0.6.82.30.8.6` Fe science surface exactly; this revision is performance-only.
+- Move the six Type-49/53 source-shadow objects plus bound-free record context out of every `EvaluatedRecord` into a lazy copy-on-write sidecar.  Ordinary records now carry only a pointer; Type-49/53 records allocate the sidecar on demand, and mutation detaches shared retained copies to preserve value semantics.
+- Reduce `sizeof(EvaluatedRecord)` from 6016 bytes to 1184 bytes on the qualification build, cutting pass-2 vector stride/cache traffic during the approximately 2.2 million Fe record evaluations.
+- During true-production deferred DSEC/root-finding evaluations, skip deep-copying the element diagnostic package (contributions, populations and residual arrays), which is not consumed until accepted-boundary/final evaluations.  Non-production/diagnostic library behavior remains available unchanged, with an opt-in force flag.
+- Keep Type-49/53 rates, source ordering, Type-82 orientation, matrix assembly, Lucy solve, thermal balance, controller sequencing, transport, science revision, and ABI identifiers unchanged.
+- Add a focused Fe host runner using the accepted `.30.8.6` timing (`85.216579 s` controller, `56.662577 s` traversal) as the performance baseline while requiring the same canonical FORTRAN science acceptance.
+
 ## 0.6.82.30.8.6 - Fe C++ deferred-publication performance optimization - 2026-08-20
 
 - Preserve the host-accepted `0.6.82.30.8.4/.30.8.5` Fe science surface exactly; this revision is performance-only.
