@@ -79,8 +79,6 @@
 - Preserve the literal XSTAR Manual Table-1 baseline and one-parameter-at-a-time policy introduced in `.30.1`.
 - Science revision and ABI identifiers remain frozen.
 
-# Changelog
-
 ## 0.6.82.30.1 - Table-1-default / one-parameter-at-a-time conformance hotfix - 2026-08-19
 
 - Treat `0.6.82.30` as a rejected qualification-harness candidate. Its science code was unchanged and no science failure was established, but its parameter-surface probe used one mixed all-non-default vector and could expose interactive XPI prompts while testing invalid values. The rejected archive is not reused or modified in place.
@@ -328,7 +326,7 @@
 - Strengthen the `.29.3.1` host comparator so Option 7 requires full row width, source identities, and numerical payload agreement; 250/250 row count alone cannot pass.
 - Scope is Option 7 only. Options 4/6/10/18/29/30 remain unchanged for later subversions.
 
-# 0.6.82.29 - 2026-08-16
+## 0.6.82.29 - 2026-08-16
 
 - Close `0.6.82.28` after the full FORTRAN/C++/pure-Python host spectrum matrix accepted on `0.6.82.28.1`.
 - Complete source-faithful output/control semantics without changing physical science.
@@ -340,7 +338,7 @@
 - Final local release qualification: dedicated `.29` scope gate ACCEPT, 161 selected npass/spectrum/Table-1/output-control regressions PASS, Type-50 successor gate PASS, compiled canonical-FORTRAN spectrum oracle ACCEPT, source-function-comment gate ACCEPT, Python compileall ACCEPT, and C++17 syntax checks ACCEPT.
 - The exact source archive is independently extracted and requalified; external ATDB/PFILES host execution remains the evidence gate for promoting the `.29` milestone to host-accepted closure.
 
-# 0.6.82.9 — source-faithful `msolvelucy` fixed-point loop control - 2026-08-16
+## 0.6.82.9 — source-faithful `msolvelucy` fixed-point loop control - 2026-08-16
 
 - Remove the C++-only `if (fixed_diff >= 1.0e3) break;` from the Lucy fixed-point loop. Canonical `msolvelucy.f90` uses `diff2 >= 1.e3` only to stop the per-row *difference accumulation* inside an iteration; the fixed-point loop itself continues until `nitmx2` or `crit2`.
 - Preserve the source `diff2`/`diff` tolerances, superlevel/LU loop, matrix terms, Type-63 cutoff, 0.6.82.8 persistent `rnisi(nd=20000)` workspace, and 0.6.82.6 terminal STEP endpoint unchanged.
@@ -348,7 +346,7 @@
 - Host `rlogxi=0` validation now reproduces FORTRAN from the first DSEC state through most of the radial trajectory, including the canonical first-row `h-c=-0.05, ntotit=42`; the first remaining late divergence appears around `log(N)=19.80` (`FORTRAN h-c=0.00, ntotit=8`; C++ `h-c=0.13, ntotit=16`). This release therefore records the late low-xi divergence as **open** and does not claim full `rlogxi<=0` closure.
 - Reject the earlier Type-73 `expo(-delt)` and `T4 -> K -> T4` experiments as root causes for this trajectory defect; neither is included in production 0.6.82.9.
 
-# 0.6.82.8 — source-faithful fixed-size `rnisi` LTE workspace lifetime - 2026-08-16
+## 0.6.82.8 — source-faithful fixed-size `rnisi` LTE workspace lifetime - 2026-08-16
 
 - Reproduce canonical `levwkelement.f90` storage semantics for `real(8) rnisi(nd)` with source `nd=20000`: one zero-initialized workspace is retained on the reusable fixed-state context across elements and DSEC/fixed-state evaluations.
 - Match `levwk.f90` write ownership exactly: active ions overwrite and normalize only `rnisi(1:nlev)`; inactive ions zero the corresponding `rnise` projection but do not clear or resize `rnisi`.
@@ -358,7 +356,7 @@
 - Keep the 0.6.82.7 Type-63 `delt > 50` repair, 0.6.82.6 canonical terminal STEP endpoint, all public ABIs, and unrelated rate/matrix/thermal algorithms unchanged.
 - Host qualification starts with the previously failing H+He+C `density=1e12`, `cfrac=1`, `column=1e20`, `xdef`, `rlogxi=-5` case, then resumes the preserved `-5..+5` canonical FORTRAN grid if that point succeeds.
 
-# 0.6.82.7 — canonical Type-63 low-temperature source cutoff - 2026-08-16
+## 0.6.82.7 — canonical Type-63 low-temperature source cutoff - 2026-08-16
 
 - Restore the literal `ucalc.f90` Type-63 pre-branch gate: compute `elin`,
   `ekt=0.861707*T4`, `delt=12398.4016/elin/ekt`, and return all six channels
@@ -375,7 +373,7 @@
   the five historical rlogxi=1.5 density cases; only after those close do we
   widen to the normal -5..+5 ionization-parameter range.
 
-# 0.6.82.6 — canonical terminal STEP endpoint restoration - 2026-08-16
+## 0.6.82.6 — canonical terminal STEP endpoint restoration - 2026-08-16
 
 - Restore the XSTAR 2.59g post-loop `pprint(9)` endpoint to STEP Option 17.  The endpoint after the final STPCUT/TRNFRN commit is a physical radial publication row, not the later zero-thickness `pprint(22)` reset/final-evaluation state.
 - Count the retained post-transport endpoint in `physical_radial_boundaries_expected/retained`, so native STEP emits the complete controller trajectory instead of dropping the final row.
@@ -383,7 +381,7 @@
 - Preserve the historical C5 H+He+C common-row science unchanged; the five `rlogxi=1.5` reruns showed exact common-row STEP/`ntotit` agreement with frozen C++44 and only the final endpoint was missing.
 - Keep the newly exposed H+He+C `rlogxi=1.0` thermal discrepancy open as a separate science investigation.  This release deliberately does not change HMC/rate/matrix/thermal calculations.
 
-# 0.6.82.5 — Type-85/DSEC/STEP physical-trajectory closure - 2026-08-16
+## 0.6.82.5 — Type-85/DSEC/STEP physical-trajectory closure - 2026-08-16
 
 - Preserve `0.6.82.4` as the host-rejected broad-mixture milestone: geometry and lowering were correct, but Fe heating/cooling remained effectively zero, STEP emitted 15 rows for a 14-zone physical trajectory, `ntotit` was still reconstructed inconsistently, and runtime was 3.83x FORTRAN.
 - Restore the source-faithful Type-85 post-`phintfo` rearrangement (`ans4=-ph.ans[2]`, `ans6=-ph.ans[4]`, reverse channels zero) while retaining the `0.6.82.4` energy-ordered endpoint ownership from `calc_hmc_ion.f90`.
@@ -392,7 +390,7 @@
 - Make STEP Option 17 own the physical controller trajectory only.  The terminal synthetic/reset publication row no longer expands STEP through `max(radial_zones, publication_rows)`.
 - Preserve the canonical 14-row FORTRAN 2.59g STEP/material oracle and the `<1%` material criterion.  Broad-host science/performance remain external gates until canonical `atdb.fits` qualification is returned.
 
-# 0.6.82.4 — broad multi-element FORTRAN-oracle thermal/STEP/performance closure - 2026-08-16
+## 0.6.82.4 — broad multi-element FORTRAN-oracle thermal/STEP/performance closure - 2026-08-16
 
 - Preserve `0.6.82.3` as the host-rejected broad-science milestone.  Its live progress and radius/log-xi correction worked, but first-zone Fe heating remained effectively zero (`1.50024e-13` versus FORTRAN `8.1714`), thermal convergence diagnostics differed, and runtime was about 3145 s versus 870 s for XSTAR 2.59g.
 - Correct Type-85 endpoint ownership against `ucalc.f90` plus `calc_hmc_ion.f90`: retain the source endpoint with `idest2=1`, then apply the source universal energy ordering for rate types other than 7/41 before thermal diagonal construction.  This makes Type-85 photoionization heating multiply the source lower-energy population rather than the sparse excited endpoint.
@@ -402,7 +400,7 @@
 - Add a permanent 14-row FORTRAN 2.59g STEP oracle and a version-locked host runner that separately gates material science (`<1%`) and performance (default runtime ratio <=1.25 relative to the supplied 869.676651 s FORTRAN run).
 - Preserve accepted historical science revision and all public ABIs.  Broad-host science/performance remain external gates until the canonical `atdb.fits` run is returned.
 
-# 0.6.82.3 — broad multi-element radius/Fe thermal closure + live zone progress - 2026-08-16
+## 0.6.82.3 — broad multi-element radius/Fe thermal closure + live zone progress - 2026-08-16
 
 - Preserve `0.6.82.2` as the rejected broad-science host milestone.  Its 15-element ATDB lowering and Type-51 fallback complete, but the canonical broad fixture exposed an incorrect retained radius/log-xi, effectively missing Fe Type-85 heating, and a roughly 3.7x native runtime penalty relative to FORTRAN.
 - Preserve the controller-owned source `rread1` radius when constructing retained/public product workspaces.  The public `.par -> JSON` envelope intentionally has no `initial_radius_cm`; `0.6.82.2` incorrectly replaced the live controller radius with a historical `1.778279410038923e17` fallback, changing the broad fixture from canonical `log(r)=15.50, log(xi)=1.00` to `17.25,-2.50` and multiplying radius-squared luminosity products by about 3162.
@@ -412,7 +410,7 @@
 - Keep the accepted historical science revision and ABIs unchanged.  The radius and Type-85 corrections qualify a previously rejected broad multi-element surface; already accepted frozen surfaces remain protected by aggregate parity.
 - Do not claim broad-host parity from source-only qualification.  Canonical `atdb.fits` remains an external host gate.  The broad performance problem is recorded but is deliberately not optimized in this release before corrected science is remeasured.
 
-# 0.6.82.2 — broad-element Type-51 production fallback closure - 2026-08-16
+## 0.6.82.2 — broad-element Type-51 production fallback closure - 2026-08-16
 
 - Preserve `0.6.82.1` as the rejected broad-host milestone: its generic multi-element ATDB lowering reached 15 active elements successfully, but the first production evaluation still aborted on a legacy Type-51 payload.
 - Preserve every previously accepted finite legacy Type-51 result. When the legacy evaluator cannot represent a source-valid record, commit the canonical source-faithful Type-51 result instead of aborting the model.
@@ -422,7 +420,7 @@
 - Add a regression that protects the adjacent Type-54, Type-57, and Type-59 production cases from accidental deletion while changing the Type-51 switch branch.
 - Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ reference `0.6.48.12.3.44`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60488`, and XSPEC-table ABI `1`.
 
-# 0.6.82 — XSTAR public parameter-contract closure - 2026-08-16
+## 0.6.82 — XSTAR public parameter-contract closure - 2026-08-16
 
 - Add source-concordant `abundtbl` support for the ten XSTAR abundance bases documented by the manual: `xdef`, `angr`, `aspl`, `feld`, `aneb`, `grsa`, `wilm`, `lodd`, `lpgp`, and `lpgs`; also accept the supplied 2.59g source spellings `lgpp`/`lgps` as aliases.
 - Apply element parameters as multipliers of the selected abundance base in both Python normalization and the raw native production-parameter reader; unknown tables fall back to `xdef` as in `xstarsetup.f90`.
@@ -896,7 +894,7 @@
 - Preserve the 0.6.82.10 all-element Type-53 live escape-state, 0.6.82.9 Lucy-loop, 0.6.82.8 rnisi, 0.6.82.7 Type-63, and 0.6.82.6 terminal STEP repairs.
 - Host science status remains open for H+He+C rlogxi=-3,-2,-5; this release does not claim those regimes are fixed until canonical host reruns confirm it.
 
-# 0.6.82.11 — all-element Type-49 source-faithful bound-free promotion - 2026-08-11
+## 0.6.82.11 — all-element Type-49 source-faithful bound-free promotion - 2026-08-11
 
 - Generalize canonical Type-49 `phint53`/Milne rate commitment to every active element. Earlier production preserved H/He/C/Mg compatibility answers while only Mg and other elements committed the already-computed source-faithful result; canonical `ucalc.f90` has no element split for Type-49.
 - In native production, fail closed unless each Type-49 record has lowered source context, the live continuum `tauc` workspace, and a successful source-faithful integral. Historical compact unit fixtures that intentionally lack lowered context retain the legacy fallback outside native production.
@@ -904,7 +902,7 @@
 - Target the remaining H+He+C `cfrac=1` low-ionization failures: `rlogxi=-3` first diverges at the first finite radial zone and `rlogxi=-2` diverges only deep in the slab; `rlogxi=-5` is already material-acceptable with two small `ntotit` mismatches. Host FORTRAN qualification remains required before claiming these points closed.
 - Keep the accepted historical science revision and public ABIs unchanged during the open broad all-element campaign.
 
-# 0.6.82.10 — all-element Type-53 live escape-state generalization - 2026-08-10
+## 0.6.82.10 — all-element Type-53 live escape-state generalization - 2026-08-10
 
 - Promote the source-faithful Type-53/RRC escape-state calculation to every active element. Canonical `calc_hmc_ion.f90` computes the Type-53 `ptmp1`/`ptmp2` factors from each record's live continuum optical depths and `cfrac`; the native path no longer relies on Carbon-only/default `0.5/0.5` ownership.
 - Bind the common source equations before historical H/He/C/Mg compatibility/audit branches: `ptmp1=pescv(tau_in)*(1-cfrac)` and `ptmp2=pescv(tau_out)*(1-cfrac)+2*pescv(tau_in+tau_out)*cfrac`, with `pescv=max(exp(-tau),1e-12)/2`. This is valid for the full `0<=cfrac<=1` domain; `cfrac<1` remains to be host-qualified against FORTRAN.
@@ -912,7 +910,7 @@
 - Host `cfrac=1` status at release creation: `rlogxi=-4,-1,0` close at STEP/material level, with `rlogxi=0` displayed STEP and `ntotit` matching FORTRAN throughout. `rlogxi=-5` has material acceptance but two remaining `ntotit` mismatches; `rlogxi=-3,-2` remain scientifically open with material and convergence-sequence differences.
 - Preserve accepted science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` until the broad all-element FORTRAN-concordance campaign is closed; ABI numbers are changed only for actual binary-interface changes.
 
-# 0.6.82.1 — full multi-element native ATDB/lowering closure - 2026-08-10
+## 0.6.82.1 — full multi-element native ATDB/lowering closure - 2026-08-10
 
 - Generalize native ATDB endpoint lowering for realistic multi-element XSTAR mixtures instead of rejecting source-valid `idest` endpoints that extend beyond the compact element matrix dimension.
 - Follow canonical `calc_hmc_ion.f90` / `calc_hmc_element.f90` / `msolvelucy.f90` semantics: retain the raw shifted source endpoint through lowering and apply the source `min(ipmat,indb(...))` alias only at the matrix-consumption boundary.
@@ -922,7 +920,7 @@
 - Add source-concordance and structural qualification against the supplied XSTAR 2.59g `calc_hmc_ion`, `calc_hmc_element`, `msolvelucy`, `levwkelement`, `ucalc`, and `setptrs` sources.
 - Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ reference `0.6.48.12.3.44`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60488`, and XSPEC-table ABI `1`; the change expands previously rejected native inputs and does not alter accepted in-bounds regressions.
 
-# 0.6.81.1 — canonical XSTAR2TABLE 2x3-grid closure - 2026-08-10
+## 0.6.81.1 — canonical XSTAR2TABLE 2x3-grid closure - 2026-08-10
 
 - Correct the historical `SliceEnergySpectra` edge interpretation: the reported high index is an energy edge, so the selected table-bin count is `high-low`, not `high-low+1`.
 - Restore canonical C floating-point evaluation for additive AIN/AOUT normalization by using the historical double literal `8.356e-7` and storing the final result as `float`; do not force the normalization constant itself to `float`.
@@ -930,14 +928,14 @@
 - Require bit-exact `ENERG_LO`, `ENERG_HI`, `PARAMVAL`, and `INTPSPEC` parity for all four canonical outputs (`xout_ain.fits`, `xout_aout.fits`, `xout_mtable.fits`, `xout_etable.fits`) on that grid.
 - Preserve XSPEC-table ABI 1 and all frozen XSTAR science/production ABIs; this hotfix changes only the table-conversion characterization layer.
 
-# 0.6.80.1 — zone-python legacy console cleanup - 2026-08-10
+## 0.6.80.1 — zone-python legacy console cleanup - 2026-08-10
 
 - Suppress six historical parity-campaign `V...` console markers during normal public `zone-python` execution.
 - Preserve the existing native behavior for `zone-cpp`, `zone-all`, and `xstar-cpp`.
 - Allow explicit debugging to retain the legacy markers with `XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS=0`.
 - No scientific arithmetic, FITS publication, ABI, or accepted Python diagnostics behavior changes.
 
-# 0.6.80 — production Python diagnostics cleanup - 2026-08-10
+## 0.6.80 — production Python diagnostics cleanup - 2026-08-10
 
 - Keep the accepted `diagnostics_mode=full` numerical/orchestration path for `pure-python` and `zone-python`, but separate diagnostic computation from diagnostic file emission.
 - Stable public `run_xstar` / `xstar-tools run` executions no longer capture or write parity-campaign sidecars such as phase snapshots, UCalc continuum side effects, continuum diagnostic summaries, or `radial_spectrum_diagnostics_v0500/`.
@@ -946,7 +944,7 @@
 - Do not switch production runs to `diagnostics_mode=none`, because that mode has separate internal retention/ownership semantics; this release changes observability/output only.
 - Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
 
-# 0.6.79 — Milestone 11 current-reference normalization and release-candidate boundary - 2026-08-10
+## 0.6.79 — Milestone 11 current-reference normalization and release-candidate boundary - 2026-08-10
 
 - Add `references/current/` as the canonical metadata catalog for current scientific/reference decisions without moving or rewriting frozen historical evidence.
 - Add a 62-case model registry derived from the qualified frozen C++44 exact model list, with element, density, ionization, smoke-eligibility, and Fortran publication-diagnostic metadata.
@@ -956,7 +954,7 @@
 - Add a public release-candidate static boundary and tag workflow that composes parity-freeze, layered-CI, current-reference, clean-tree, package/ABI, changelog, license, and release-workflow contracts. Dynamic Tier-2/Tier-3 science and packaging/docs/conda evidence remain separate required workflows.
 - Do not run all-62 as part of this source/reference normalization; preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
 
-# 0.6.78 — Milestone 10 layered CI and release engineering - 2026-08-10
+## 0.6.78 — Milestone 10 layered CI and release engineering - 2026-08-10
 
 - Add Tier 0 PR CI for Python syntax/imports, public API type contracts, conservative lint/format policy, complete C++ compilation, active tests, package metadata, generated-artifact rejection, ABI/header checks, and parity-freeze integrity.
 - Add Tier 1 selected O/Mg/Ca scientific smoke on scientific/orchestration changes; C5 remains excluded by default and is manual opt-in only.
@@ -967,7 +965,7 @@
 - Add testable CI helper scripts, Milestone-10 documentation, a qualification manifest/checker, and regression tests.
 - Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
 
-# 0.6.77 — warning-clean retained-helper annotations - 2026-08-10
+## 0.6.77 — warning-clean retained-helper annotations - 2026-08-10
 
 - Fix the 12 `-Wunused-function` warnings emitted by the real C++ Makefile build in `xstar_standalone.cpp` and `xstar_step_log.cpp`.
 - Mark only the intentionally retained internal/qualification helpers `[[maybe_unused]]`; do not add `-Wno-*` suppression flags and do not alter scientific expressions.
@@ -975,7 +973,7 @@
 - Extend historical qualification compatibility by exact SHA-256 only; original milestone manifests remain unchanged.
 - Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
 
-# 0.6.76 — source-name hygiene and retired diagnostic cleanup - 2026-08-10
+## 0.6.76 — source-name hygiene and retired diagnostic cleanup - 2026-08-10
 
 - Rename 401 active private C++ helpers and 21 private Python helpers from development-version/patch labels to stable semantic names.
 - Remove 32 demonstrably unreachable private C++ functions rather than carrying historical development names in active production source.
@@ -1005,7 +1003,7 @@
 - Consolidate the public `xstar_cpp_frontend.cpp` into `src/xstar_tools/xstar/cpp/`; all active C++ sources/headers now live in that directory, and normal `make all` no longer reads C++ source/header/version inputs from a parent directory.
 - Accepted scientific revision remains `0.6.48.12.3.45.3.3.8`; frozen C++ baseline remains `0.6.48.12.3.44`; C API ABI remains `60487`; production-zone ABI remains `6048110`.
 
-# 0.6.74 — Fedora/Python-3.13 host compatibility and benchmark semantic restoration - 2026-08-10
+## 0.6.74 — Fedora/Python-3.13 host compatibility and benchmark semantic restoration - 2026-08-10
 
 - Includes `Python.h` before project/system headers in `xstar_backend_python.cpp`, following the CPython C-API include-order requirement and eliminating newer glibc/Python 3.13 `_POSIX_C_SOURCE` / `_XOPEN_SOURCE` redefinition warnings.
 - Retains the source-equivalent Fortran `comp2` `sum2`/`cfake` diagnostic accumulation while marking the aggregate intentionally `[[maybe_unused]]`, eliminating GCC unused-but-set warnings without changing arithmetic.
@@ -1017,7 +1015,7 @@
 - Consolidate the public `xstar_cpp_frontend.cpp` into `src/xstar_tools/xstar/cpp/`; all active C++ sources/headers now live in that directory, and normal `make all` no longer reads C++ source/header/version inputs from a parent directory.
 - Accepted scientific revision remains `0.6.48.12.3.45.3.3.8`; frozen C++ baseline remains `0.6.48.12.3.44`; C API ABI remains `60487`; production-zone ABI remains `6048110`.
 
-# 0.6.73 — source-level scientific function documentation - 2026-08-10
+## 0.6.73 — source-level scientific function documentation - 2026-08-10
 
 - Re-read the supplied XSTAR manual and five reference papers page-by-page and map their physical/process descriptions back to the active Python/C++ implementation.
 - Add reversible per-function comment blocks to 1,490 Python functions/methods and 1,177 C++ functions across 102 active source/header files.
@@ -1028,7 +1026,7 @@
 - Preserve accepted Option-24 semantics in the comments: native/Python publication keeps clean He II Type-7 identities and does not reproduce the known Fortran pprint(24) stale-local H I/He II alias.
 - No executable scientific statement changes; science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110` remain unchanged.
 
-# 0.6.72 — Milestone 9: conda/conda-forge packaging - 2026-08-09
+## 0.6.72 — Milestone 9: conda/conda-forge packaging - 2026-08-09
 
 - Add a conda-forge-ready single-package recipe/feedstock seed under `conda/`, using the mature conda-build `meta.yaml` format.
 - Linux conda builds reuse the retained qualified native Makefile through the Milestone-8 setuptools hook with conda-forge compiler/stdlib activation and CFITSIO; macOS/Windows remain explicit Python-only capability builds.
@@ -1040,7 +1038,7 @@
 - Keep one `xstar-tools` package; do not split `xstar-cpp` or `xstar-data` until their dependency/update lifecycles justify it.
 - No file under `src/xstar_tools/xstar/` changes; science revision and ABIs remain frozen.
 
-# 0.6.71 — Milestone 8: stabilized pip/native packaging - 2026-08-09
+## 0.6.71 — Milestone 8: stabilized pip/native packaging - 2026-08-09
 
 - Made `pyproject.toml` authoritative for package metadata/configuration; removed active `setup.cfg` and reduced `setup.py` to a thin custom-build hook.
 - Formalized Linux native wheel builds around the retained qualified Makefile without changing frozen compiler/scientific semantics.
@@ -1049,8 +1047,6 @@
 - Moved installed data configuration/default downloads out of site-packages into user-owned XDG-style locations; `atdb.fits` remains external and never downloads during normal runs.
 - Added packaging qualification, wheel-content tests, and cross-platform packaging CI with native Linux and Python-only macOS/Windows jobs.
 - No `src/xstar_tools/xstar/` scientific/native source changed; science revision and ABIs remain frozen.
-
-# Changelog
 
 ## 0.6.70 — Milestone 7 user-centered documentation
 
@@ -1088,7 +1084,7 @@
 - Linked the public frontend to the same frozen shared native core used by Python `zone-cpp` / `zone-all`; the compatibility `xstar_cpp run-production` executable remains the single standalone scientific control implementation.
 - Added native ABI/user documentation and qualification coverage. No Python or C++ scientific implementation changed.
 
-# xstar_tools 0.6.68 - 2026-08-09
+## 0.6.68 - 2026-08-09
 
 - Complete Milestone 5 CLI consolidation around the primary `xstar-tools <command>` interface: `run`, `inspect`, `data`, `backends`, `compare`, `doctor`, and `version`.
 - Make `xstar-tools run INPUT --mode ...` construct `XStarConfig` and call the same top-level `run_xstar(config)` orchestration layer as the stable Python API; remove the historical source-port CLI from the normal run path.
@@ -1099,7 +1095,7 @@
 - Add `qualification/unified_cli_0_6_68.json`, `tools/qualification/check_unified_cli.py`, developer documentation, and CLI/API orchestration characterization tests.
 - No `src/xstar_tools/xstar/` scientific implementation or C++ scientific source/header changes; the complete scientific tree is byte-identical to 0.6.67, accepted science remains `0.6.48.12.3.45.3.3.8`, frozen C++ baseline remains `0.6.48.12.3.44`, C API ABI remains `60487`, and production-zone ABI remains `6048110`.
 
-# xstar_tools 0.6.67 - 2026-08-09
+## 0.6.67 - 2026-08-09
 
 - Restore the already-qualified Option-24 Fortran `pprint(24)` stale-local semantic quarantine in the public benchmark comparator without changing Python/C++ Option-24 science.
 - Keep the frozen Option-23 comparator byte-identical and add `qualification/current/compare_step_log_science.py` as a productization overlay used by the public benchmark harness.
@@ -1108,7 +1104,7 @@
 - Split Python-controller host version labeling into distribution/package version `0.6.67` and frozen science revision `0.6.48.12.3.45.3.3.8`.
 - No `xstar_tools.xstar` scientific implementation or C++ scientific source/header changes; frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110` remain unchanged.
 
-# xstar_tools 0.6.66 - 2026-08-09
+## 0.6.66 - 2026-08-09
 
 - Add the Milestone-4 stable public Python API: `XStarConfig`, `XStarData`, `XStarProducts`, `XStarResult`, and configuration-driven `run_xstar(config)`.
 - Support parameter sources from HEASoft/IRAF-style `.par` files, in-memory mappings, and original Fortran run directories containing `run_xstar.sh`; provide deterministic `.par` export.
@@ -1118,7 +1114,7 @@
 - Add `qualification/public_python_api_0_6_66.json`, a dependency-light checker, developer documentation, and characterization tests.
 - No `xstar_tools.xstar` scientific implementation or C++ scientific source/header changes; accepted science revision and ABIs remain frozen.
 
-# xstar_tools 0.6.65 - 2026-08-09
+## 0.6.65 - 2026-08-09
 
 - Retire the remaining historical source-port attribution/DSEC/probe command layer from active `src/xstar_tools/`: archive 39 top-level modules and remove 37 obsolete console-script aliases.
 - `source_port_dsec_eval2_internal_cli.py` is historical-only and now lives under `historical/python/source_port_cli_campaign/`.
@@ -1127,7 +1123,7 @@
 - Extend the local-zone/source-root/parity cleanup gates so historical relocation is recognized without weakening the frozen science evidence.
 - No scientific implementation, C++ science source, accepted science revision, or ABI changes.
 
-# xstar_tools 0.6.64 - 2026-08-09
+## xstar_tools 0.6.64 - 2026-08-09
 
 - Remove the generated empty `o7_solver_source_fit_density_xstar_grid/` directory from the package tree and make its absence an explicit cleanliness contract.
 - Archive 31 top-level parity/attribution/probe modules from `src/xstar_tools/` that have no active source importer and no active console entry point; preserve their exact bytes and hashes under `historical/python/source_root_parity_campaign/`.
@@ -1136,7 +1132,7 @@
 - Remove archived parity modules from active Sphinx API declarations.
 - Add a source-root history-cleanup gate; no scientific implementation, C++ science source, ABI, or accepted science revision changes.
 
-# xstar_tools 0.6.63 - 2026-08-09
+## 0.6.63 - 2026-08-09
 
 - Clean the active `examples/` surface: archive 150 legacy numbered/parity-era example files under `historical/examples/xstar_atomic_legacy/`, preserving hashes and relocation provenance.
 - Remove all active-example references to the retired `xstar_atomic` namespace.
@@ -1146,7 +1142,7 @@
 - Replace the Sphinx examples page so it no longer literal-includes retired scripts.
 - Add an example-history cleanup gate; no scientific implementation or ABI changes.
 
-# xstar_tools 0.6.62 - 2026-08-09
+## 0.6.62 - 2026-08-09
 
 - Clean the active test namespace: archive 189 obsolete tests while preserving them under `historical/tests/` with hashes and relocation provenance.
 - Remove all active-test references to the retired `xstar_atomic` namespace; keep 66 tests that target current code/contracts.
@@ -1158,7 +1154,7 @@
 - Repair the packaged O VII density-grid reference template so it points to the shipped density-specific `xstar_test_run/o7_ne*/` CSVs rather than placeholder rows.
 - No scientific implementation or frozen ABI is changed; accepted science remains `0.6.48.12.3.45.3.3.8`, frozen C++ baseline remains `0.6.48.12.3.44`, and production-zone ABI remains `6048110`.
 
-# xstar_tools 0.6.61 - 2026-08-09
+## 0.6.61 - 2026-08-09
 
 - Rewrote `README.md` around the five stable public execution modes with CLI, native, Python API, provenance, and benchmark examples.
 - Added `xstar-tools benchmark list|run|compare|all` and the `xstar-tools-benchmark` console entry point.
@@ -1235,7 +1231,7 @@
 - Archive superseded `Makefile.before_v67` under `historical/cpp/build/`.
 - Add a C++ history-cleanup gate; active native science and ABI remain unchanged.
 
-# 0.6.56 - active Python namespace / parity-history cleanup - 2026-08-08
+## 0.6.56 - active Python namespace / parity-history cleanup - 2026-08-08
 
 - Move 51 parity-campaign-only Python audit, attribution, closure, replay, and oracle utilities out of `src/xstar_tools/xstar/` into `historical/python/xstar_parity_campaign/`, preserving their 0.6.55 bytes and SHA-256 hashes.
 - Move 36 dedicated historical tests with those modules; active tests no longer import archived parity-campaign modules.
@@ -1244,7 +1240,7 @@
 - Add a dependency-free active-namespace cleanup gate and preserve the Type53 source-comment record as archived provenance.
 - No active scientific implementation, frozen C++ science, ABI `6048110`, comparator semantics, or accepted science revision is changed.
 
-# 0.6.55 - Python Fortran/source and atomic-data comments - 2026-08-08
+## 0.6.55 - Python Fortran/source and atomic-data comments - 2026-08-08
 
 - Added marked Fortran/source-correspondence comments to 45 production Python modules under `src/xstar_tools/xstar/`.
 - Added source-derived ATDB data-type comments to 20 modules using XSTAR Manual Chapter 12 and Mendoza et al. (2021) Appendix A.
@@ -1266,7 +1262,7 @@
 - Added concise atomic-data/data-type comments grounded in XSTAR Manual Chapter 12, Mendoza et al. (2021) Appendix A, and canonical `ucalc.f90`.
 - Scientific revision remains `0.6.48.12.3.45.3.3.8`; ABI remains `6048110`.
 
-# 0.6.53 - C++ Fortran-source correspondence comments - 2026-08-08
+## 0.6.53 - C++ Fortran-source correspondence comments - 2026-08-08
 
 - Re-read the relevant canonical XSTAR 2.59g Fortran routines and add a standardized `XSTAR-SOURCE-CORRESPONDENCE` comment block to all 47 `.cpp`, `.h`, and `.hpp` files under `src/xstar_tools/xstar/cpp/`.
 - Each block identifies the Fortran authority (or explicitly states that no direct Fortran routine exists), the C++ role, implementation relation, concordance IDs, and qualification boundary.
@@ -1275,7 +1271,7 @@
 - Add `tools/qualification/check_cpp_source_comments.py` and contract tests proving all 47 annotations are complete and reversible.
 - Scientific revision remains `0.6.48.12.3.45.3.3.8`; frozen C++ scientific baseline remains `0.6.48.12.3.44`; ABI remains `6048110`.
 
-# 0.6.52 - Milestone 2 source concordance - 2026-08-08
+## 0.6.52 - Milestone 2 source concordance - 2026-08-08
 
 - Re-read the supplied XSTAR 2.59g Fortran source and supplied XSTAR manual/papers and documented the authority hierarchy: accepted qualification evidence, canonical executable source semantics, then literature context.
 - Added `docs/developer/architecture.md`, `fortran_source_map.md`, and `python_cpp_fortran_concordance.md`.
@@ -1284,7 +1280,7 @@
 - Added concise source-correspondence comments only to unpinned Python/C API files. Frozen C++ production sources and frozen Python publication/controller sources remain byte-identical to 0.6.51.
 - No science revision, accepted comparator policy, C5 behavior, Ca/O exception, Type50 science, radial trajectory, matrix semantics, or production-zone ABI is changed.
 
-# 0.6.51 - 2026-08-08
+## 0.6.51 - 2026-08-08
 
 - Pre-Milestone-2 documentation/history cleanup on the frozen `0.6.48.12.3.45.3.3.8` science baseline.
 - Remove all version-specific artifacts from active `docs/`, including old host instructions, physical-DSEC notes, versioned validation references, and the malformed `docs/v06481232_cpp_ucalc_102_label_coverage.csv/` directory.
@@ -1294,7 +1290,7 @@
 - Add relocation metadata and extend the parity-freeze gate so active docs cannot regain version-specific artifacts and root parity reports/handoffs cannot reappear.
 - No `src/` scientific/runtime source, frozen C++, ABI `6048110`, comparator policy, thresholds, or accepted scientific outputs are changed.
 
-# 0.6.50 - 2026-08-08
+## 0.6.50 - 2026-08-08
 
 - Milestone benchmark/reference cleanup on the frozen `0.6.48.12.3.45.3.3.8` science baseline.
 - Move 13 completely unreferenced benchmark/acceptance/oracle directories to `historical/qualification/benchmarks/`.
@@ -1304,7 +1300,7 @@
 - Remove obsolete benchmark package-data entries and delete unused `acceptance.py`, `matrix.py`, and `smoke.py`.
 - Extend the parity-freeze gate to enforce the reduced benchmark footprint; frozen C++ sources, ABI `6048110`, comparators, and accepted science remain unchanged.
 
-# 0.6.49 - 2026-08-08
+## 0.6.49 - 2026-08-08
 
 - Milestone 1.1 productization-only qualification-history cleanup on the accepted `0.6.48.12.3.45.3.3.8` science baseline.
 - Keep the complete `src/` runtime/science tree byte-identical to 45.3.3.8; distribution metadata advances to `0.6.49` outside `src/`.
@@ -1395,7 +1391,7 @@
 - Regression-test readiness with synthetic compiled artifacts in both baseline and candidate trees; readiness remains ACCEPT.
 - Preserve the C5-only first smoke and all 45.3.3 orphan diagnostics unchanged except the qualification-output prefix is now `V064812345331_`.
 
-# #0.6.48.12.3.45.3.3 - 2026-08-07
+##0.6.48.12.3.45.3.3 - 2026-08-07
 
 - Python-only canonical `npcon` orphan-Type7 absorption attribution/repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
 - Preserve the 45.3.1 canonical `npcon` Type-7 FITS identity universe and the 45.3 source-record publication lifetime; retire the rejected 45.3.2 prior-evaluation slot history from publication authority.
@@ -1578,7 +1574,7 @@
 - Compare repeated `XSTAR_RADIAL` HDUs by occurrence, separate common-row numerical science from inventory/order/metadata, gate per-field normalized L1 at <1%, and keep rowwise >1% tails and `frac_heat_error` diagnostic-only.
 - Preserve production-zone ABI `6048110`; production implementation hashes remain frozen relative to 12.3.42.1.3.
 
-# 0.6.48.12.3.42.1.3 - 2026-08-05
+## 0.6.48.12.3.42.1.3 - 2026-08-05
 
 - Final STEP-publication hotfix after 0.6.48.12.3.42.1.2 closed every targeted gate except O VII Option 19 inventory.
 - For `o7_ne1e10`, the remaining Option-19 difference is exactly 45 candidate-only O IV RRC identities, with zero FORTRAN-only rows. Every one of the 45 has a non-positive reconstructed physical threshold; every common/FORTRAN Option-19 row has a strictly positive threshold.
@@ -2683,7 +2679,7 @@ Pure-Python Type50 detail-publication regression hotfix.
 - Add a strict Type-50 edge closure analyzer and one-time pure-Python / accelerated-Python / standalone-C++ qualification runner.
 - Preserve the 0.6.48.8 production/controller, source-real energy-grid, Type99 source-zero, writer, and standalone-progress contracts.
 
-# 0.6.48.11.5 - 2026-07-29
+## 0.6.48.11.5 - 2026-07-29
 
 - Added diagnostic-only first-STEP opacity-family attribution for the C V `c5_ne1e10` limiting bin.
 - Retains the existing bound-free/free-free/line/Thomson decomposition before and after source-order GSSMOOTH without changing production `opakc`.
@@ -6467,9 +6463,6 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Aligned the C++ type-51 energy-conversion constant with the Python/source-faithful evaluator.
 - Intended to make `mg_type51_rates_matrix_cpp_kernel.cpp_calls` and `ucalc_cpp_applied` nonzero in full `mg11_ne1e8` runs so rate-construction timing can be rechecked.
 
-
-This changelog is now the canonical package history for the `xstar-tools` transition. Future releases should update this file first, then package artifacts and release notes should refer back to it.
-
 ## v0.6.0a5
 
 - Adopt the uploaded full-history changelog as the package changelog for the `xstar_tools` line and add the missing `v0.6.0a0`--`v0.6.0a4` entries.
@@ -6512,8 +6505,6 @@ This changelog is now the canonical package history for the `xstar-tools` transi
 - Added the first migration scaffold from `xstar_atomic` to `xstar_tools.xstar`.
 - Preserved source-faithful runtime behavior while beginning the namespace/layout transition.
 - No physics-speed changes were intended in this layout-only migration step.
-
-This changelog has been updated from the available v0.5.72 source tree, the subsequent v0.5.73--v0.5.75 benchmark/release notes, the uploaded archive containing source packages v0.5.37--v0.5.49 and v0.5.51, the uploaded pre-v0.5.00 changelog/source-change archive, and the current ChatGPT development conversation through the v0.5.75 `mg11_ne1e8` benchmark result plus the later output/timing follow-up discussion. It emphasizes what is implemented, what benchmarks showed, and what remains explicitly unfinished.
 
 ### Unreleased / Next planned work
 
