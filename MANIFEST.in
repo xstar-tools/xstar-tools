@@ -946,3 +946,12 @@ include docs/developer/npass1_ownership_0_6_82_30_7.md
 include npass1_ownership_0_6_82_30_7.md
 include qualification_report_0_6_82_30_7.md
 include xstar_tools-0.6.82.30.7_host_validation.md
+
+# 0.6.82.30.8 isolated Fe XXIV satellite endpoint correction.
+recursive-include qualification/fe_reference_0_6_82_30_8 *.json *.md *.txt
+include tools/qualification/run_fe_reference_host_smoke_0_6_82_30_8.py
+include tests/test_fe_reference_0_6_82_30_8.py
+include docs/developer/fe_reference_0_6_82_30_8.md
+include fe_reference_0_6_82_30_8.md
+include qualification_report_0_6_82_30_8.md
+include xstar_tools-0.6.82.30.8_host_validation.md

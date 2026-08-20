@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.30.8 — isolated Fe XXIV satellite endpoint ownership correction - 2026-08-19
+
+- Record `0.6.82.30.7` as host-accepted: `npass=1` now has zero SAVD scalar mismatches, raw RRC 346/346 with identity 209 present, and the focused result is `ACCEPT`.
+- Reuse the retained canonical FORTRAN `fe_reference_ne1e8` products from `0.6.82.30.6`; do not rerun FORTRAN or any already accepted final model.
+- Audit the XSTAR Manual 2.5x data-type catalog, Mendoza et al. (2021) Appendix A, and canonical `ucalc.f90`/`calc_hmc_ion.f90` Fe branches. C++ already covers the executable Fe-specific families 37/75/81/82/85/86/96/97; canonical Types 80 and 83 are UCalc no-op/metadata paths and Type 84 exits before its dormant calculation.
+- Correct a literal ATDB endpoint-decoding error shared by Fe XXIV satellite Types 75 and 96. Canonical UCalc reads `idest1` from packed `i2=k_N` (`ii[nidt-4]` in zero-based C++), while the old lowerer used packed `i3=ion_(N-1)` (`ii[nidt-3]`) as a local level endpoint. Keep `idest2=nlev+i4-1` unchanged.
+- Apply the same literal Type-75/96 endpoint pair to the private source-UCalc publication identity helper. Do not change Fe rate equations, Type-85 `pexs/phintfo`, Type-86 Auger arithmetic, DSEC/controller ordering, solver semantics, science revision, or ABI identifiers.
+- Add a focused C++-only Fe host gate that reports STEP, material, spectrum, `ntotit`, and `log(T)` trajectory against the retained FORTRAN reference.
+- Science revision remains `0.6.48.12.3.45.3.3.8`; C/production-zone/fixed-state ABIs remain `60487/6048110/60488`.
+
 ## 0.6.82.30.7 — `npass=1` SAVD/detail ownership repair - 2026-08-19
 
 - Narrow C++ publication/ownership correction only; the accepted single-pass controller, DSEC, transport, STEP, final material science, spectrum, line tau, RRC tau, and continuum tau remain unchanged.

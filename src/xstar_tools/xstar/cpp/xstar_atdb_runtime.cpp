@@ -930,6 +930,12 @@ std::pair<int,int> source_ucalc_endpoints_v06822936(
         case 77:
             if (ii.size() >= 4) return {as_int(ii.size()-4),as_int(ii.size()-3)};
             break;
+        case 75:
+        case 96:
+            if (ii.size() >= 4)
+                return {std::max(as_int(ii.size()-4),1),
+                        std::max(b.nlev+as_int(ii.size()-2)-1,1)};
+            break;
         case 74:
             if (ii.size() >= 2) return {as_int(ii.size()-2),b.nlev};
             break;
@@ -1323,7 +1329,22 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
                 out.ints.push_back(kType70SourceIonIdentityMagicV068213);
                 break;
             }
-            case 75: { need(ii.size()>=3&&rr.size()>=2,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); break; }
+            case 75: {
+                need(ii.size()>=4&&rr.size()>=2,"short payload");
+                // 0.6.82.30.8: literal ucalc.f90 Type-75 ownership is
+                //   idest1 = IDAT(nidt-3) with Fortran's 1-based pointer
+                //            expression np1i-1+nidt-3 -> C++ ii[nidt-4],
+                //   idest2 = nlev + IDAT(nidt-1) - 1
+                //            expression np1i+nidt-2 -> C++ ii[nidt-2].
+                // Appendix-A Type-75 layout makes ii[nidt-4] = k_N while
+                // ii[nidt-3] = ion_(N-1).  The old generic lowerer used the
+                // latter global ion identity as a local level endpoint,
+                // which could alias to the terminal compact row.
+                const int id1=std::max<int>(ii[ii.size()-4],1);
+                const int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1);
+                set_pair(id1,id2);
+                break;
+            }
             case 79: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 81: need(ii.size()>=2&&!rr.empty(),"short payload"); energy_order_pair(ii[0],ii[1]); break;
             case 82: need(ii.size()>=2&&rr.size()>=4,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
@@ -1343,7 +1364,16 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             }
             case 89: need(ii.size()>=2&&rr.size()>=3,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 92: need(ii.size()>=3&&rr.size()>=42,"short payload"); set_pair(ii[0],ii[1]); break;
-            case 96: { need(ii.size()>=3&&rr.size()>=3,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); energy=rr[2]; break; }
+            case 96: {
+                need(ii.size()>=4&&rr.size()>=3,"short payload");
+                // Historical Type 96 uses the same Fe-XXIV satellite endpoint
+                // convention as Type 75 in canonical ucalc.f90.
+                const int id1=std::max<int>(ii[ii.size()-4],1);
+                const int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1);
+                set_pair(id1,id2);
+                energy=rr[2];
+                break;
+            }
             case 97: { need(rr.size()>=4,"short payload"); int id1=1,id2=1; if(rt==5){id1=!ii.empty()?ii[0]:1; id2=b.nlev-1+(ii.size()>=3?ii[1]:1);} set_pair(id1,id2); break; }
             case 98: need(ii.size()>=2&&rr.size()>=5,"short payload"); energy_order_pair(ii[0],ii[1]); break;
             case 101: need(ii.size()>=2&&rr.size()>=2,"short payload"); energy_order_pair(ii[0],ii[1]); break;
