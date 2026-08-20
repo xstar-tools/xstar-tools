@@ -235,6 +235,15 @@ struct PerformanceInstrumentationV064890 {
     double abundance_fits_seconds = 0.0;
     double step_log_seconds = 0.0;
     double publication_seconds = 0.0;
+    double detail_population_seconds = 0.0;
+    double detail_line_seconds = 0.0;
+    double detail_rrc_seconds = 0.0;
+    double detail_spectrum_seconds = 0.0;
+    double public_lines_seconds = 0.0;
+    double public_rrc_seconds = 0.0;
+    double public_cont_seconds = 0.0;
+    double public_spect_seconds = 0.0;
+    bool public_lines_retained_fast_path = false;
     std::uint64_t retained_array_count = 0u;
     std::uint64_t retained_array_values = 0u;
     std::uint64_t retained_array_bytes = 0u;
@@ -20570,6 +20579,15 @@ void emit_controller_performance_instrumentation(
             << "V064890_PERF_ABUNDANCE_FITS_SECONDS=" << perf.abundance_fits_seconds << "\n"
             << "V064890_PERF_STEP_LOG_SECONDS=" << perf.step_log_seconds << "\n"
             << "V064890_PERF_PUBLICATION_SECONDS=" << perf.publication_seconds << "\n"
+            << "DETAIL_POPULATION_SECONDS=" << perf.detail_population_seconds << "\n"
+            << "DETAIL_LINE_SECONDS=" << perf.detail_line_seconds << "\n"
+            << "DETAIL_RRC_SECONDS=" << perf.detail_rrc_seconds << "\n"
+            << "DETAIL_SPECTRUM_SECONDS=" << perf.detail_spectrum_seconds << "\n"
+            << "PUBLIC_LINES_SECONDS=" << perf.public_lines_seconds << "\n"
+            << "PUBLIC_RRC_SECONDS=" << perf.public_rrc_seconds << "\n"
+            << "PUBLIC_CONT_SECONDS=" << perf.public_cont_seconds << "\n"
+            << "PUBLIC_SPECT_SECONDS=" << perf.public_spect_seconds << "\n"
+            << "V06823089_PUBLIC_LINES_RETAINED_FAST_PATH=" << (perf.public_lines_retained_fast_path ? "YES" : "NO") << "\n"
             << "V064890_PERF_RETAINED_ARRAY_COUNT=" << perf.retained_array_count << "\n"
             << "V064890_PERF_RETAINED_ARRAY_VALUES=" << perf.retained_array_values << "\n"
             << "V064890_PERF_RETAINED_ARRAY_BYTES=" << perf.retained_array_bytes << "\n"
@@ -21126,6 +21144,15 @@ int command_run_standalone_production(const Options& options, const std::filesys
         auto science = xstar_science_fits::write_historical_science_products({}, output, product,
             product.fixed_evaluations.empty() ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev);
         performance_v064890.science_fits_seconds += performance_elapsed_seconds(science_fits_started_v064890);
+        performance_v064890.detail_population_seconds += science.detail_population_seconds;
+        performance_v064890.detail_line_seconds += science.detail_line_seconds;
+        performance_v064890.detail_rrc_seconds += science.detail_rrc_seconds;
+        performance_v064890.detail_spectrum_seconds += science.detail_spectrum_seconds;
+        performance_v064890.public_lines_seconds += science.public_lines_seconds;
+        performance_v064890.public_rrc_seconds += science.public_rrc_seconds;
+        performance_v064890.public_cont_seconds += science.public_cont_seconds;
+        performance_v064890.public_spect_seconds += science.public_spect_seconds;
+        performance_v064890.public_lines_retained_fast_path = science.public_lines_retained_fast_path;
         (void)science;
         const auto abundance_fits_started_v064890 = std::chrono::steady_clock::now();
         if (abundance_required_by_lprint(product)) {

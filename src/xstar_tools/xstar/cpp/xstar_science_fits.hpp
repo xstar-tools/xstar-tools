@@ -32,6 +32,15 @@ struct Result {
     bool all_fits_products_byte_exact = false;
     bool benchmark_archive_materialized = false;
     bool generalized_product_reduction_qualified = false;
+    double detail_population_seconds = 0.0;
+    double detail_line_seconds = 0.0;
+    double detail_rrc_seconds = 0.0;
+    double detail_spectrum_seconds = 0.0;
+    double public_lines_seconds = 0.0;
+    double public_rrc_seconds = 0.0;
+    double public_cont_seconds = 0.0;
+    double public_spect_seconds = 0.0;
+    bool public_lines_retained_fast_path = false;
     std::vector<std::string> filenames;
 };
 

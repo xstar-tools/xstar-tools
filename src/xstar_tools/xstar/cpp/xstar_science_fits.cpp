@@ -48,6 +48,8 @@ bool true_production_mode() {
     return value && std::string(value) == "1";
 }
 
+thread_local bool g_public_lines_fast_path_v06823089 = false;
+
 // v82 patch 5.20.17.3.8.1: diagnostic-only audit of the exact
 // xo01_detal4 inward-emission writer path.  The public column is 1E/float32,
 // so the correct writer comparison is retained binary64 -> static_cast<float>
@@ -10527,6 +10529,67 @@ void write_public_lines(const std::filesystem::path& path,
                         const std::vector<ElementMeta>& elements,
                         const std::vector<RowMeta>& rows) {
     (void)rows;
+
+    // 0.6.82.30.8.9: true-production retained public-line state is complete
+    // before any terminal/diagnostic reconstruction is needed.  Check the
+    // writer-owned arrays first so the common 600-row production path does not
+    // build terminal_list, terminal_depth_list, or diagnostics_by_zone.  The
+    // historical reconstruction path below remains the fail-soft fallback for
+    // incomplete retained states and non-standalone callers.
+    const auto pw_line_index = optional_bridge_array_for_hdu(state, "product_write_public_line_index", 3);
+    const auto pw_line_emit_in = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_inward", 3, pw_line_index.size());
+    const auto pw_line_emit_out = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_outward", 3, pw_line_index.size());
+    const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
+    const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
+    constexpr std::size_t kRetainedPublicLineRowsV06823089 = 600u;
+    const bool retained_public_line_arrays_complete_v06823089 =
+        pw_line_index.size() == kRetainedPublicLineRowsV06823089 &&
+        pw_line_emit_in.size() == kRetainedPublicLineRowsV06823089 &&
+        pw_line_emit_out.size() == kRetainedPublicLineRowsV06823089 &&
+        pw_line_depth_in.size() == kRetainedPublicLineRowsV06823089 &&
+        pw_line_depth_out.size() == kRetainedPublicLineRowsV06823089;
+
+    if (retained_public_line_arrays_complete_v06823089) {
+        const auto line_identity_lookup_v06823088 = build_line_identity_lookup_v06823088(state);
+        std::vector<LineLabelTemplateRow> retained_labels_v06823089;
+        retained_labels_v06823089.reserve(kRetainedPublicLineRowsV06823089);
+        for (const double raw_index : pw_line_index) {
+            const auto line_index = static_cast<long long>(std::llround(raw_index));
+            const auto* id = line_identity_from_lookup_v06823088(line_identity_lookup_v06823088, line_index);
+            if (!id) {
+                retained_labels_v06823089.clear();
+                break;
+            }
+            retained_labels_v06823089.push_back(LineLabelTemplateRow{
+                static_cast<int>(line_index), id->wavelength_angstrom, id->ion_label.c_str(),
+                id->lower_level.c_str(), id->upper_level.c_str()});
+        }
+        if (retained_labels_v06823089.size() == kRetainedPublicLineRowsV06823089) {
+            g_public_lines_fast_path_v06823089 = true;
+            fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
+            create_table(fptr, ASCII_TBL, static_cast<long>(retained_labels_v06823089.size()), "XSTAR_LINES",
+                {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
+                {"I6","A9","A20","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","","A","erg/s/10**38","erg/s/10**38","",""});
+            for (std::size_t i = 0; i < retained_labels_v06823089.size(); ++i) {
+                const auto& label = retained_labels_v06823089[i];
+                const long row = static_cast<long>(i + 1);
+                write_int(fptr, 1, row, label.index);
+                write_string(fptr, 2, row, oracle_ion_label(label.ion));
+                write_string(fptr, 3, row, label.lower_level);
+                write_string(fptr, 4, row, label.upper_level);
+                write_real4(fptr, 5, row, label.wavelength_angstrom);
+                write_real4(fptr, 6, row, std::isfinite(pw_line_emit_in[i]) ? pw_line_emit_in[i] : 0.0);
+                write_real4(fptr, 7, row, std::isfinite(pw_line_emit_out[i]) ? pw_line_emit_out[i] : 0.0);
+                write_real4(fptr, 8, row, std::isfinite(pw_line_depth_in[i]) ? pw_line_depth_in[i] : 0.0);
+                write_real4(fptr, 9, row, std::isfinite(pw_line_depth_out[i]) ? pw_line_depth_out[i] : 0.0);
+            }
+            close_fits(fptr);
+            return;
+        }
+    }
+
+    // Fail-soft fallback: preserve the complete pre-0.6.82.30.8.9
+    // reconstruction path when the retained writer surface is incomplete.
     const auto line_identity_lookup_v06823088 = build_line_identity_lookup_v06823088(state);
     const std::size_t final_index = terminal_physical_zone_index(state);
     const auto& final_zone = state.radial_zones[final_index];
@@ -10583,12 +10646,6 @@ void write_public_lines(const std::filesystem::path& path,
         }
         return best;
     };
-
-    const auto pw_line_index = optional_bridge_array_for_hdu(state, "product_write_public_line_index", 3);
-    const auto pw_line_emit_in = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_inward", 3, pw_line_index.size());
-    const auto pw_line_emit_out = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_outward", 3, pw_line_index.size());
-    const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
-    const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
 
     // 12.3.41 publication/rank attachment repair.  The retained
     // product_write_public_line_index array is the writer-owned identity rank
@@ -11037,8 +11094,23 @@ Result write_historical_science_products(
     }
     std::filesystem::create_directories(output_dir);
     if (true_production_mode()) reset_bulk_fits_perf_v06823088();
+    g_public_lines_fast_path_v06823089 = false;
     const auto elements = read_elements(state, program_dir);
     const auto rows = read_rows(state, program_dir);
+    double detail_population_seconds_v06823089 = 0.0;
+    double detail_line_seconds_v06823089 = 0.0;
+    double detail_rrc_seconds_v06823089 = 0.0;
+    double detail_spectrum_seconds_v06823089 = 0.0;
+    double public_lines_seconds_v06823089 = 0.0;
+    double public_rrc_seconds_v06823089 = 0.0;
+    double public_cont_seconds_v06823089 = 0.0;
+    double public_spect_seconds_v06823089 = 0.0;
+    auto timed_publication_v06823089 = [](double& accumulator, auto&& fn) {
+        const auto started = std::chrono::steady_clock::now();
+        fn();
+        accumulator += std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - started).count();
+    };
 
     // Source contract: xstar.f90 opens and writes fstepr/fstepr2/fstepr3/
     // fstepr4 detail products only when lwrite>0 or a multipass calculation
@@ -11076,10 +11148,10 @@ Result write_historical_science_products(
                     const std::string prefix_v0682272 =
                         "xo" + (pass_v0682272 < 10 ? std::string("0") : std::string()) +
                         std::to_string(pass_v0682272) + "_";
-                    write_population_detail(output_dir / (prefix_v0682272 + "detail.fits"), state, elements, rows);
-                    write_line_detail(output_dir / (prefix_v0682272 + "detal2.fits"), state, elements, rows);
-                    write_rrc_detail(output_dir / (prefix_v0682272 + "detal3.fits"), state, elements, rows);
-                    write_spectrum_detail(output_dir / (prefix_v0682272 + "detal4.fits"), state);
+                    timed_publication_v06823089(detail_population_seconds_v06823089, [&] { write_population_detail(output_dir / (prefix_v0682272 + "detail.fits"), state, elements, rows); });
+                    timed_publication_v06823089(detail_line_seconds_v06823089, [&] { write_line_detail(output_dir / (prefix_v0682272 + "detal2.fits"), state, elements, rows); });
+                    timed_publication_v06823089(detail_rrc_seconds_v06823089, [&] { write_rrc_detail(output_dir / (prefix_v0682272 + "detal3.fits"), state, elements, rows); });
+                    timed_publication_v06823089(detail_spectrum_seconds_v06823089, [&] { write_spectrum_detail(output_dir / (prefix_v0682272 + "detal4.fits"), state); });
                     detail_filenames_v0682272.insert(detail_filenames_v0682272.end(), {
                         prefix_v0682272 + "detail.fits", prefix_v0682272 + "detal2.fits",
                         prefix_v0682272 + "detal3.fits", prefix_v0682272 + "detal4.fits"});
@@ -11095,21 +11167,21 @@ Result write_historical_science_products(
             state.retained_product_arrays = std::move(final_retained_product_arrays_v0682274);
             state.product_metadata_path = final_product_metadata_path_v0682274;
         } else {
-            write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
-            write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
-            write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
-            write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+            timed_publication_v06823089(detail_population_seconds_v06823089, [&] { write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows); });
+            timed_publication_v06823089(detail_line_seconds_v06823089, [&] { write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows); });
+            timed_publication_v06823089(detail_rrc_seconds_v06823089, [&] { write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows); });
+            timed_publication_v06823089(detail_spectrum_seconds_v06823089, [&] { write_spectrum_detail(output_dir / "xo01_detal4.fits", state); });
             detail_filenames_v0682272 = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"};
         }
     }
     // Literal xstar.f90 writes the full spectrum for lwrite>=-1, while
     // lines/continuum/RRC publication is gated by lwrite>=0.
     if (lwrite >= 0) {
-        write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
+        timed_publication_v06823089(public_lines_seconds_v06823089, [&] { write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows); });
         state.xout_lines1_computed_from_native_state = true;
-        write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows);
+        timed_publication_v06823089(public_rrc_seconds_v06823089, [&] { write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows); });
         state.xout_rrc1_computed_from_native_state = true;
-        write_public_spectrum(output_dir / "xout_cont1.fits", state, false);
+        timed_publication_v06823089(public_cont_seconds_v06823089, [&] { write_public_spectrum(output_dir / "xout_cont1.fits", state, false); });
         state.xout_cont1_computed_from_native_state = true;
     } else {
         state.xout_lines1_computed_from_native_state = false;
@@ -11117,7 +11189,7 @@ Result write_historical_science_products(
         state.xout_cont1_computed_from_native_state = false;
     }
     if (lwrite >= -1) {
-        write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
+        timed_publication_v06823089(public_spect_seconds_v06823089, [&] { write_public_spectrum(output_dir / "xout_spect1.fits", state, true); });
         state.xout_spect1_computed_from_native_state = true;
     } else {
         state.xout_spect1_computed_from_native_state = false;
@@ -11137,6 +11209,15 @@ Result write_historical_science_products(
     result.all_fits_products_byte_exact = false;
     result.benchmark_archive_materialized = false;
     result.generalized_product_reduction_qualified = false;
+    result.detail_population_seconds = detail_population_seconds_v06823089;
+    result.detail_line_seconds = detail_line_seconds_v06823089;
+    result.detail_rrc_seconds = detail_rrc_seconds_v06823089;
+    result.detail_spectrum_seconds = detail_spectrum_seconds_v06823089;
+    result.public_lines_seconds = public_lines_seconds_v06823089;
+    result.public_rrc_seconds = public_rrc_seconds_v06823089;
+    result.public_cont_seconds = public_cont_seconds_v06823089;
+    result.public_spect_seconds = public_spect_seconds_v06823089;
+    result.public_lines_retained_fast_path = g_public_lines_fast_path_v06823089;
     result.filenames = detail_filenames_v0682272;
     if (lwrite >= 0) {
         result.filenames.insert(result.filenames.end(),
@@ -11147,7 +11228,8 @@ Result write_historical_science_products(
         std::cout << "V06823088_BULK_FITS_ENABLED=" << (bulk_fits_enabled_v06823088() ? "YES" : "NO") << "\n"
                   << "V06823088_BULK_FITS_SCALAR_CELLS=" << g_bulk_fits_perf_v06823088.scalar_cells_buffered << "\n"
                   << "V06823088_BULK_FITS_COLUMN_WRITES=" << g_bulk_fits_perf_v06823088.column_write_calls << "\n"
-                  << "V06823088_BULK_FITS_FLUSHES=" << g_bulk_fits_perf_v06823088.flushes << "\n";
+                  << "V06823088_BULK_FITS_FLUSHES=" << g_bulk_fits_perf_v06823088.flushes << "\n"
+                  << "V06823089_PUBLIC_LINES_RETAINED_FAST_PATH=" << (g_public_lines_fast_path_v06823089 ? "YES" : "NO") << "\n";
     }
     return result;
 }

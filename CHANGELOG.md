@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.30.8.9 - retained public-line fast path and per-product publication timing - 2026-08-20
+
+- Preserve host-accepted `0.6.82.30.8.8` science, controller, and bulk-CFITSIO serialization unchanged; this revision is publication-only.
+- Read/check the five retained `product_write_public_line_*` arrays before any public-line reconstruction work.  When all five arrays contain the complete 600-row writer-owned surface and every retained line index resolves through the `.30.8.8` pre-indexed identity lookup, serialize the 600 labels and retained emission/depth arrays directly and return.
+- In the complete retained-state path, do **not** construct `terminal_list`, `terminal_depth_list`, their record maps/search lambdas, or `diagnostics_by_zone`.
+- Preserve the entire pre-`.30.8.9` public-line reconstruction path as the fail-soft fallback for incomplete retained arrays or missing identity metadata.
+- Add direct per-product publication clocks: `DETAIL_POPULATION_SECONDS`, `DETAIL_LINE_SECONDS`, `DETAIL_RRC_SECONDS`, `DETAIL_SPECTRUM_SECONDS`, `PUBLIC_LINES_SECONDS`, `PUBLIC_RRC_SECONDS`, `PUBLIC_CONT_SECONDS`, and `PUBLIC_SPECT_SECONDS`.  Detail clocks accumulate across passes when `npass>1`.
+- Retain the `.30.8.8` bulk column writer, `XSTAR_DISABLE_BULK_FITS_06823088=1` A/B escape hatch, sparse identity indices, STEP timing ownership, REAL(4) conversion boundary, row/HDU ordering, checksums, and science schemas unchanged.
+- Use the accepted `.30.8.8` same-host baseline (`53.264775 s` controller, `34.933226 s` traversal, `77.680234 s` publication, `139.293629 s` total) in the focused `.30.8.9` host runner.
+- Science revision remains `0.6.48.12.3.45.3.3.8`; C API / production-zone / fixed-state ABI identifiers remain `60487 / 6048110 / 60488`.
+
 ## 0.6.82.30.8.8 - FITS publication bulk-column performance and timing ownership - 2026-08-20
 
 - Preserve the host-accepted `0.6.82.30.8.7` Fe science and controller implementation; this revision changes publication/serialization and timing reporting only.
