@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.30.8.6 - Fe C++ deferred-publication performance optimization - 2026-08-20
+
+- Preserve the host-accepted `0.6.82.30.8.4/.30.8.5` Fe science surface exactly; this revision is performance-only.
+- Skip construction of line/RRC spectral-publication contributions when `XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION` is set.  DSEC/root-finding evaluations consume thermal/state outputs only, while accepted/final boundaries retain the unchanged publication path.
+- Stop retaining Type-49/53 full-grid revisit `EvaluatedRecord` copies and `errc` publication maps during deferred evaluations; these objects are consumed only by `calc_emis`/publication.
+- Reuse the immutable context-level source-record identity index for private pprint(4) lookup instead of rebuilding an approximately 155k-entry ordered map on every Fe fixed-state evaluation.
+- Remove an unused full copy of the matrix-contribution vector.
+- Keep rates, Type-82 orientation, matrix assembly, Lucy solve, thermal balance, controller ordering, transport, science revision, and ABI identifiers unchanged.
+- Add a focused Fe C++ host runner that applies the same FORTRAN science comparator as `.30.8.4` and separately reports controller/traversal/total timing versus the accepted `.30.8.4` host baseline.
+
 ## 0.6.82.30.8.5 - Python Type-82 Fe UTA matrix-orientation closure - 2026-08-20
 
 - Record `0.6.82.30.8.4` as host-accepted for the isolated Fe reference: STEP/material/spectrum/ntotit all ACCEPT, `ntotit=13,1,1`, and `LOGT_MAX_ABS=0` against canonical FORTRAN.

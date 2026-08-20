@@ -12275,11 +12275,15 @@ int run_impl(
             } else {
                 item = evaluate_source_record(record);
             }
-            if (record.data_type == 53 && record.rate_type == 7) {
+            // 0.6.82.30.8.6: these retained full-grid UCalc records are consumed
+            // only by calc_emis/product publication. DSEC/root-finding calls set
+            // DEFER_PRODUCT_PROJECTION, so avoid copying the ~6 KiB EvaluatedRecord
+            // payload into ordered maps on those transient evaluations.
+            if (!defer_product_projection && record.data_type == 53 && record.rate_type == 7) {
                 type53_revisit_evaluated_v82_patch5181[std::make_pair(
                     static_cast<std::uint64_t>(record.source_position),
                     static_cast<std::uint64_t>(record.record))] = item;
-            } else if (record.data_type == 49 && record.rate_type == 7) {
+            } else if (!defer_product_projection && record.data_type == 49 && record.rate_type == 7) {
                 type49_revisit_evaluated_v82_patch52082[std::make_pair(
                     static_cast<std::uint64_t>(record.source_position),
                     static_cast<std::uint64_t>(record.record))] = item;
@@ -12505,36 +12509,38 @@ int run_impl(
         // and Program validation guarantees monotonically increasing source
         // positions.  Type-49, Type-53 and Type-99 all participate in this same
         // rate-7 errc slot workspace.
-        for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
-            const ProgramRecord* pr = evaluated_records[k];
-            if (!pr || pr->rate_type != 7 || pr->continuum_index_one_based <= 0) continue;
-            const auto& item = evaluated[k];
-            double rank_energy_ev = 0.0;
-            if (pr->data_type == 49 && item.type49_shadow.valid)
-                rank_energy_ev = item.type49_shadow.source_errc_rank_energy_ev;
-            else if (pr->data_type == 53 && item.type53_shadow.valid)
-                rank_energy_ev = item.type53_shadow.source_errc_rank_energy_ev;
-            else if (pr->data_type == 99 && item.type99_shadow.valid)
-                rank_energy_ev = item.type99_shadow.source_errc_rank_energy_ev;
-            if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
-            const auto identity = std::make_pair(
-                static_cast<std::uint64_t>(pr->source_position),
-                static_cast<std::int64_t>(pr->record));
-            source_errc_rank_energy_by_identity_v82_patch5205[identity] = rank_energy_ev;
-            double patch52082_identity_energy_ev = rank_energy_ev;
-            if (pr->data_type == 49 && pr->real_count >= 2 &&
-                pr->real_offset < ctx.program.reals.size()) {
-                // Exact pre-5.20.9 behavior: identity-owned Type-49 setup energy
-                // used a double 13.598 literal and incorrectly imposed 0.1 eV.
-                patch52082_identity_energy_ev = std::max(
-                    0.1, ctx.program.reals[pr->real_offset] * 13.598);
+        if (!defer_product_projection) {
+            for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
+                const ProgramRecord* pr = evaluated_records[k];
+                if (!pr || pr->rate_type != 7 || pr->continuum_index_one_based <= 0) continue;
+                const auto& item = evaluated[k];
+                double rank_energy_ev = 0.0;
+                if (pr->data_type == 49 && item.type49_shadow.valid)
+                    rank_energy_ev = item.type49_shadow.source_errc_rank_energy_ev;
+                else if (pr->data_type == 53 && item.type53_shadow.valid)
+                    rank_energy_ev = item.type53_shadow.source_errc_rank_energy_ev;
+                else if (pr->data_type == 99 && item.type99_shadow.valid)
+                    rank_energy_ev = item.type99_shadow.source_errc_rank_energy_ev;
+                if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
+                const auto identity = std::make_pair(
+                    static_cast<std::uint64_t>(pr->source_position),
+                    static_cast<std::int64_t>(pr->record));
+                source_errc_rank_energy_by_identity_v82_patch5205[identity] = rank_energy_ev;
+                double patch52082_identity_energy_ev = rank_energy_ev;
+                if (pr->data_type == 49 && pr->real_count >= 2 &&
+                    pr->real_offset < ctx.program.reals.size()) {
+                    // Exact pre-5.20.9 behavior: identity-owned Type-49 setup energy
+                    // used a double 13.598 literal and incorrectly imposed 0.1 eV.
+                    patch52082_identity_energy_ev = std::max(
+                        0.1, ctx.program.reals[pr->real_offset] * 13.598);
+                }
+                source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209[identity] =
+                    patch52082_identity_energy_ev;
+                source_errc_rank_energy_by_slot_v82_patch5209[pr->continuum_index_one_based] = rank_energy_ev;
+                source_errc_owner_by_slot_v82_patch5209[pr->continuum_index_one_based] =
+                    std::make_tuple(static_cast<std::uint64_t>(pr->source_position),
+                                    static_cast<std::int64_t>(pr->record), pr->data_type);
             }
-            source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209[identity] =
-                patch52082_identity_energy_ev;
-            source_errc_rank_energy_by_slot_v82_patch5209[pr->continuum_index_one_based] = rank_energy_ev;
-            source_errc_owner_by_slot_v82_patch5209[pr->continuum_index_one_based] =
-                std::make_tuple(static_cast<std::uint64_t>(pr->source_position),
-                                static_cast<std::int64_t>(pr->record), pr->data_type);
         }
 
         std::vector<xstar_element_contribution_v1> contributions;
@@ -12637,7 +12643,9 @@ int run_impl(
             }
         }
 
-        const std::vector<xstar_element_contribution_v1> preclosure_contributions = contributions;
+        // 0.6.82.30.8.6: removed an unused full copy of the contribution
+        // vector. It had no consumer and only added allocator/memory-bandwidth
+        // work on every fixed-state evaluation.
         if (matrix_construction_closure) {
             apply_matrix_closure_contribution_corrections(
                 contributions, active.element,
@@ -13523,6 +13531,11 @@ int run_impl(
             }
         }
 
+        // 0.6.82.30.8.6: DEFER_PRODUCT_PROJECTION is set for DSEC/root
+        // trials. Those calls consume H/C and state only; calc_emisab/calc_emis
+        // publication is intentionally deferred to accepted/final boundaries.
+        // Skip constructing the line/RRC publication stream in that hot path.
+        if (!defer_product_projection) {
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
             if (!evaluated[k].spectral) continue;
             const auto& rec = evaluated[k].contribution;
@@ -13803,6 +13816,7 @@ int run_impl(
             // record before this calc_emisab abundance gate.  Do not rewrite it
             // here from only the subset that survives spectral publication.
             spectral.push_back(sc);
+        }
         }
     }
     stats.traversal_seconds += elapsed(traversal_start);
@@ -14261,21 +14275,28 @@ int run_impl(
         // idest1/idest2 order.  Keep operational spectral contributions frozen
         // during the narrow verbose-output campaign, but make the private
         // pprint(4) rank/revisit surface use the literal source ownership.
-        std::map<std::pair<std::uint64_t,std::int64_t>,const ProgramRecord*>
-            pprint4_record_by_identity_v068229338;
-        for (const auto& source_record_v068229338 : ctx.program.records) {
-            pprint4_record_by_identity_v068229338[{
-                static_cast<std::uint64_t>(source_record_v068229338.source_position),
-                static_cast<std::int64_t>(source_record_v068229338.record)}] =
-                &source_record_v068229338;
-        }
         std::map<std::pair<std::uint64_t,std::int64_t>,const xstar_spectral_contribution_v1*>
             pprint4_spectral_by_identity_v068229338;
-        for (const auto& source_spectral_v068229338 : spectral) {
-            pprint4_spectral_by_identity_v068229338[{
-                static_cast<std::uint64_t>(source_spectral_v068229338.source_position),
-                static_cast<std::int64_t>(source_spectral_v068229338.record)}] =
-                &source_spectral_v068229338;
+        // 0.6.82.30.8.6: source-record identity is immutable and already
+        // indexed once when the fixed-state context is created. Reuse that
+        // prepared index instead of rebuilding a ~155k-entry ordered map on
+        // every evaluation. The spectral identity index remains boundary-local
+        // because it contains live per-evaluation contributions.
+        const auto pprint4_record_by_identity_v06823086 =
+            [&](std::uint64_t source_position, std::int64_t record) -> const ProgramRecord* {
+                const auto it = ctx.record_index_by_identity_v064895.find({
+                    source_position, static_cast<std::uint64_t>(record)});
+                if (it == ctx.record_index_by_identity_v064895.end() ||
+                    it->second >= ctx.program.records.size()) return nullptr;
+                return &ctx.program.records[it->second];
+            };
+        if (!defer_product_projection) {
+            for (const auto& source_spectral_v068229338 : spectral) {
+                pprint4_spectral_by_identity_v068229338[{
+                    static_cast<std::uint64_t>(source_spectral_v068229338.source_position),
+                    static_cast<std::int64_t>(source_spectral_v068229338.record)}] =
+                    &source_spectral_v068229338;
+            }
         }
         const auto pprint4_element_diagnostic_v068229338 =
             [&](const ProgramRecord& source_record_v068229338) -> const NativeElementDiagnostic* {
@@ -14422,23 +14443,22 @@ int run_impl(
             // order and therefore cannot be used as the pprint(4) ranking oracle.
             auto pprint4_line_candidates_v068229336 = line_candidates_v82_patch5206;
             for (auto& c_v068229336 : pprint4_line_candidates_v068229336) {
-                const auto source_record_it_v068229338 =
-                    pprint4_record_by_identity_v068229338.find({
+                const ProgramRecord* source_record_ptr_v068229338 =
+                    pprint4_record_by_identity_v06823086(
                         static_cast<std::uint64_t>(c_v068229336.source_position),
-                        static_cast<std::int64_t>(c_v068229336.record)});
+                        static_cast<std::int64_t>(c_v068229336.record));
                 const auto source_spectral_it_v068229338 =
                     pprint4_spectral_by_identity_v068229338.find({
                         static_cast<std::uint64_t>(c_v068229336.source_position),
                         static_cast<std::int64_t>(c_v068229336.record)});
-                if (source_record_it_v068229338 == pprint4_record_by_identity_v068229338.end() ||
-                    !source_record_it_v068229338->second ||
+                if (!source_record_ptr_v068229338 ||
                     source_spectral_it_v068229338 == pprint4_spectral_by_identity_v068229338.end() ||
                     !source_spectral_it_v068229338->second) {
                     c_v068229336.opacity = 0.0;
                     c_v068229336.emission_sum = 0.0;
                     continue;
                 }
-                const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
+                const ProgramRecord& source_record_v068229338 = *source_record_ptr_v068229338;
                 const auto& source_spectral_v068229338 = *source_spectral_it_v068229338->second;
                 // 0.6.82.29.3.3.8.3: private pprint(4) ranking must consume
                 // xstarsetup's elmn slot coordinate, not a wavelength derived
@@ -15086,13 +15106,12 @@ int run_impl(
                 // a rate-9/14 slot has elmn=0 even though the record may carry a
                 // physical wavelength elsewhere for public metadata.
                 if (original_c.rate_type == 4 || original_c.rate_type == 9) {
-                    const auto source_record_it_v068229338 =
-                        pprint4_record_by_identity_v068229338.find({
+                    const ProgramRecord* source_record_ptr_v068229338 =
+                        pprint4_record_by_identity_v06823086(
                             static_cast<std::uint64_t>(original_c.source_position),
-                            static_cast<std::int64_t>(original_c.record)});
-                    if (source_record_it_v068229338 != pprint4_record_by_identity_v068229338.end() &&
-                        source_record_it_v068229338->second) {
-                    const ProgramRecord& source_record_v068229338 = *source_record_it_v068229338->second;
+                            static_cast<std::int64_t>(original_c.record));
+                    if (source_record_ptr_v068229338) {
+                    const ProgramRecord& source_record_v068229338 = *source_record_ptr_v068229338;
                     const double pprint4_elmn_wavelength_v068229336 =
                         source_pprint4_elmn_wavelength_v0682293383(
                             ctx.program, source_record_v068229338, operational_line_wavelength_v82_patch5208);
