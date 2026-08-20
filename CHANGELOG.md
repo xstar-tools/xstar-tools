@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.30.8.3 - Fe detailed-matrix/Lucy first-divergence diagnostic - 2026-08-20
+
+- Qualification-only successor to diagnostic `0.6.82.30.8.2`; no numerical science formula is changed.
+- The `.30.8.2` paired call-1/eval-1 run proves H/He and continuum thermal terms match while Fe collapses from the correct preliminary broad ion distribution to nearly pure Fe XVI inside the detailed 4456-row element solve.
+- Canonical `init.f90` explicitly initializes `xilevg(:)=0`, so the zero first-call solver seed is source-correct and is not changed.
+- Adds a second paired FORTRAN/C++ diagnostic that captures the exact Fe `indb/ajisb/cjisb` matrix-entry stream, superlevel map, first condensed Lucy matrix/solution, and first fixed-point update at the common `T4=100`, `xee=1` state.
+- Enables the existing C++ iteration-resolved solver trace only under the diagnostic runner; diagnostics remain observational and are never read by production science.
+- Retains the proven finding that current C++ contribution ordering differs from canonical FORTRAN rate-type traversal; this revision diagnoses the first numerical solver divergence before promoting any ordering or solver change to production.
+
 ## 0.6.82.30.8.2 - Fe call-1/eval-1 thermal diagnostic capture - 2026-08-20
 
 - Qualification-only successor to rejected 0.6.82.30.8.1; no science formulas are changed.

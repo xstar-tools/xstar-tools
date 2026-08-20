@@ -46,6 +46,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 extern "C" int xstar_emissivity_build_binemis_profile(
@@ -15719,9 +15720,51 @@ int standalone_iteration_evaluator(
         ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
         ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
         snapshot.source_global_rnisg = data->global_rnisg;
+        // 0.6.82.30.8.3 qualification-only Fe matrix/Lucy diagnostic.
+        // Enable the existing iteration-resolved trace only around the actual
+        // call-1/eval-1 Fe fixed-state solve.  Preserve any caller environment
+        // exactly and restore it immediately after the solve; the trace is never
+        // consumed by production science.
+        const char* fe_matrix_diag_root_v06823083 =
+            std::getenv("XSTAR_FE_CALL1_MATRIX_DIAG_DIR");
+        const bool fe_matrix_diag_active_v06823083 =
+            snapshot.kind == "dsec" && snapshot.call_index == 1u &&
+            snapshot.evaluation_index == 1u && fe_matrix_diag_root_v06823083 &&
+            *fe_matrix_diag_root_v06823083;
+        const auto saved_env_v06823083 = [](const char* name) {
+            const char* value = std::getenv(name);
+            return std::make_pair(value != nullptr, value ? std::string(value) : std::string());
+        };
+        const auto saved_trace_enable_v06823083 =
+            saved_env_v06823083("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE");
+        const auto saved_trace_targets_v06823083 =
+            saved_env_v06823083("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS");
+        const auto saved_trace_dir_v06823083 =
+            saved_env_v06823083("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR");
+        if (fe_matrix_diag_active_v06823083) {
+            ::setenv("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE", "1", 1);
+            const std::string fe_trace_target_v06823083 = sequence + ":26";
+            ::setenv("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS",
+                     fe_trace_target_v06823083.c_str(), 1);
+            ::setenv("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR",
+                     fe_matrix_diag_root_v06823083, 1);
+        }
         const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
             data->fixed_context, &input, &output, &source, &data->cumulative_stats,
             message.data(), message.size());
+        const auto restore_env_v06823083 = [](const char* name,
+                                               const std::pair<bool,std::string>& saved) {
+            if (saved.first) ::setenv(name, saved.second.c_str(), 1);
+            else ::unsetenv(name);
+        };
+        if (fe_matrix_diag_active_v06823083) {
+            restore_env_v06823083("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE",
+                                   saved_trace_enable_v06823083);
+            restore_env_v06823083("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS",
+                                   saved_trace_targets_v06823083);
+            restore_env_v06823083("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR",
+                                   saved_trace_dir_v06823083);
+        }
         if (rc != 0) {
             set_callback_error(error, error_size, std::string("standalone fixed-state evaluation failed: ") + message.data());
             return rc;
