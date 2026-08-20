@@ -15792,6 +15792,71 @@ int standalone_iteration_evaluator(
                 }
             }
         }
+        // 0.6.82.30.8.2 qualification-only Fe thermal diagnostic.
+        // Capture the already-computed call-1/eval-1 state before the thermal
+        // trajectories diverge.  These files are never read back by science.
+        if (snapshot.kind == "dsec" && snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
+            if (const char* fe_diag_root_text = std::getenv("XSTAR_FE_CALL1_THERMAL_DIAG_DIR")) {
+                if (*fe_diag_root_text) {
+                    try {
+                        const std::filesystem::path fe_diag_root(fe_diag_root_text);
+                        std::filesystem::create_directories(fe_diag_root);
+                        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> fe_diag_message{};
+
+                        const auto budget_path = fe_diag_root / "cpp_call1_eval1_thermal_budget.csv";
+                        int fe_diag_rc = xstar_fixed_state_write_last_thermal_budget_v1(
+                            data->fixed_context, budget_path.string().c_str(), snapshot.sequence,
+                            snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                            fe_diag_message.data(), fe_diag_message.size());
+                        if (fe_diag_rc != 0) {
+                            throw std::runtime_error(std::string("Fe call1/eval1 thermal-budget capture failed: ") +
+                                fe_diag_message.data());
+                        }
+
+                        fe_diag_message.fill('\0');
+                        const auto elements_path = fe_diag_root / "cpp_call1_eval1_elements.csv";
+                        fe_diag_rc = xstar_fixed_state_write_last_element_fixed_state_v0648121(
+                            data->fixed_context, elements_path.string().c_str(), snapshot.sequence,
+                            snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                            fe_diag_message.data(), fe_diag_message.size());
+                        if (fe_diag_rc != 0) {
+                            throw std::runtime_error(std::string("Fe call1/eval1 element-budget capture failed: ") +
+                                fe_diag_message.data());
+                        }
+
+                        fe_diag_message.fill('\0');
+                        const auto records_root = fe_diag_root / "cpp_call1_eval1_records";
+                        std::filesystem::create_directories(records_root);
+                        fe_diag_rc = xstar_fixed_state_write_last_diagnostics_v1(
+                            data->fixed_context, records_root.string().c_str(), snapshot.sequence,
+                            fe_diag_message.data(), fe_diag_message.size());
+                        if (fe_diag_rc != 0) {
+                            throw std::runtime_error(std::string("Fe call1/eval1 record capture failed: ") +
+                                fe_diag_message.data());
+                        }
+
+                        fe_diag_message.fill('\0');
+                        const auto fe_root = fe_diag_root / "cpp_call1_eval1_fe";
+                        std::filesystem::create_directories(fe_root);
+                        fe_diag_rc = xstar_fixed_state_write_last_element_attribution_v06481235(
+                            data->fixed_context, fe_root.string().c_str(), 26, snapshot.sequence,
+                            snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                            fe_diag_message.data(), fe_diag_message.size());
+                        if (fe_diag_rc != 0) {
+                            throw std::runtime_error(std::string("Fe call1/eval1 Z=26 attribution failed: ") +
+                                fe_diag_message.data());
+                        }
+
+                        std::cerr << "FE_CALL1_THERMAL_DIAG_06823082_CPP_CAPTURE=COMPLETE\n"
+                                  << "FE_CALL1_THERMAL_DIAG_06823082_CPP_ROOT="
+                                  << fe_diag_root.string() << "\n";
+                    } catch (const std::exception& fe_diag_exc) {
+                        set_callback_error(error, error_size, fe_diag_exc.what());
+                        return 1;
+                    }
+                }
+            }
+        }
         if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
             std::cerr << std::setprecision(17)
                       << "V0648117_CPP_ZONE_CALL1_EVAL1_T4=" << snapshot.temperature_t4 << "\n"

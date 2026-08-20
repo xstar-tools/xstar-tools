@@ -964,3 +964,9 @@ include docs/developer/fe_reference_0_6_82_30_8_1.md
 include fe_reference_0_6_82_30_8_1.md
 include qualification_report_0_6_82_30_8_1.md
 include xstar_tools-0.6.82.30.8.1_host_validation.md
+
+# 0.6.82.30.8.2 Fe call-1/eval-1 thermal diagnostic bundle.
+recursive-include tools/qualification/diagnostics/fe_call1_06823082_v1 *.py *.sh *.patch *.md
+include fe_call1_thermal_diag_0_6_82_30_8_2.md
+include xstar_tools-0.6.82.30.8.2_host_validation.md
+include qualification_report_0_6_82_30_8_2.md

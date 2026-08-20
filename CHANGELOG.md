@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.30.8.2 - Fe call-1/eval-1 thermal diagnostic capture - 2026-08-20
+
+- Qualification-only successor to rejected 0.6.82.30.8.1; no science formulas are changed.
+- Adds an opt-in `XSTAR_FE_CALL1_THERMAL_DIAG_DIR` hook on the actual production standalone fixed-state path.
+- At call 1 / DSEC evaluation 1, serializes the already-computed thermal budget, all-element budget, full record diagnostics, and Fe (Z=26) stage/population/family/record attribution.
+- Diagnostics are observational only and are never read back by matrix, thermal, transfer, controller, or publication science.
+- Adds the paired FORTRAN/C++ Fe diagnostic bundle under `tools/qualification/diagnostics/fe_call1_06823082_v1/`.
+
 ## 0.6.82.30.8.1 - Fe Type-57 packed-shell ownership correction - 2026-08-20
 
 - Treat host-rejected `0.6.82.30.8` as immutable: its Type-75/96 endpoint correction is source-correct but leaves the Fe trajectory unchanged at `log(T)=5.29`, `ntotit=24,8,8` versus retained FORTRAN `log(T)=5.60`, `ntotit=13,1,1`.
