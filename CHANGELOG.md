@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.30.8.4 - Fe Type-82 UTA matrix-orientation source-parity repair - 2026-08-20
+
+- Treat `.30.8.3` as a diagnostic-only immutable predecessor; correct its comparator interpretation by isolating the Fe `FE2_SOLVER 4456 33 519720` block and comparing C++ physical stage `ion_charge+1`.  The Fe input topology and 129930-record matrix inventory are exact.
+- Isolate the dominant structural discrepancy to 462 Type-82 Fe UTA radiative records (1848 four-term matrix insertions).  The old lowerer stored source upper/lower as fixed-program `lower_row/upper_row`, so the generic element expander transposed every Type-82 transition relative to canonical `ucalc.f90` + `calc_hmc_ion.f90`.
+- Lower Type-82 endpoints with `energy_order_pair`: the fixed-program ABI stores energy-low/energy-high, allowing `element_engine` to emit the canonical first matrix term at `(upper,lower)`.  Type-82 rate coefficients and `ans1/ans2` ownership are unchanged.
+- Captured-matrix replay proves the Type-82-only orientation change converts the Fe solve from non-converged/pure Fe XVI to converged with the canonical FORTRAN stage-11 through stage-26 distribution to printed precision.  Type-92 and Type-75/rate-40 are deliberately unchanged.
+- Correct the public C++ Makefile package-version default, which remained at `.30.8.2` in diagnostic `.30.8.3`.
+- Keep science revision and all ABI identifiers frozen; final acceptance remains the focused host Fe comparison against retained `.30.6` FORTRAN products.
+
 ## 0.6.82.30.8.3 - Fe detailed-matrix/Lucy first-divergence diagnostic - 2026-08-20
 
 - Qualification-only successor to diagnostic `0.6.82.30.8.2`; no numerical science formula is changed.

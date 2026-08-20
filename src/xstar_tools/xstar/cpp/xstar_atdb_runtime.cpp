@@ -1347,7 +1347,21 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             }
             case 79: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 81: need(ii.size()>=2&&!rr.empty(),"short payload"); energy_order_pair(ii[0],ii[1]); break;
-            case 82: need(ii.size()>=2&&rr.size()>=4,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
+            case 82: {
+                need(ii.size()>=2&&rr.size()>=4,"short payload");
+                // 0.6.82.30.8.4: canonical ucalc.f90 Type 82 first orders
+                // idest1/idest2 as upper/lower and swaps ans1/ans2 so ans1 is
+                // the upward photoexcitation rate and ans2 the downward
+                // radiative-decay rate.  calc_hmc_ion.f90 then applies its
+                // normal (rate_type != 7,41) energy ordering and inserts the
+                // first matrix term at (upper,lower).  The fixed-program ABI
+                // instead stores lower_row/upper_row and element_engine.cpp
+                // emits that first term as (upper_row,lower_row), so Type 82
+                // must be lowered low/high here.  upper_lower_pair transposed
+                // all 462 Fe UTA records (1848 matrix terms) in the Fe case.
+                energy_order_pair(ii[0],ii[1]);
+                break;
+            }
             // Type 85 is the compact Fe K-edge photoionization parameterization.
             // ucalc.f90 publishes idest1=the source payload endpoint and idest2=1,
             // then calc_hmc_ion.f90 applies the universal energy ordering for all

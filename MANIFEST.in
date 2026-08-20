@@ -976,3 +976,12 @@ include fe_matrix_lucy_diag_0_6_82_30_8_3.md
 include xstar_tools-0.6.82.30.8.3_host_validation.md
 include qualification_report_0_6_82_30_8_3.md
 include tests/test_fe_matrix_lucy_diag_0_6_82_30_8_3.py
+
+# 0.6.82.30.8.4 Fe Type-82 UTA matrix orientation repair.
+recursive-include qualification/fe_reference_0_6_82_30_8_4 *.json *.md *.txt
+include tools/qualification/run_fe_reference_host_smoke_0_6_82_30_8_4.py
+include tests/test_fe_type82_matrix_orientation_0_6_82_30_8_4.py
+include docs/developer/fe_type82_matrix_orientation_0_6_82_30_8_4.md
+include fe_type82_matrix_orientation_0_6_82_30_8_4.md
+include qualification_report_0_6_82_30_8_4.md
+include xstar_tools-0.6.82.30.8.4_host_validation.md
