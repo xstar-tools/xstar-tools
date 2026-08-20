@@ -1591,7 +1591,14 @@ def _lower_record(
         elif dt == 82:
             if len(raw_ints) < 2 or len(raw_reals) < 4:
                 raise ValueError(f"type82 record {rec} has short payload")
-            upper_lower_source_pair(int(raw_ints[0]), int(raw_ints[1]))
+            # 0.6.82.30.8.5: Type-82 UCalc returns source idest1/idest2 as
+            # upper/lower, then calc_hmc_ion applies the ordinary rate-type-4
+            # energy ordering before matrix insertion.  NativeFixedRecord's
+            # lower_row/upper_row ABI is already energy-low/energy-high, so
+            # storing upper/lower here transposes all four matrix terms.
+            # Match the accepted 0.6.82.30.8.4 C++ repair and canonical
+            # ucalc.f90 + calc_hmc_ion.f90 by lowering the pair in energy order.
+            energy_order_source_pair(int(raw_ints[0]), int(raw_ints[1]))
         elif dt == 85:
             if len(raw_ints) < 3 or len(raw_reals) < 5:
                 raise ValueError(f"type85 record {rec} has short payload")

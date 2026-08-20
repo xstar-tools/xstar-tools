@@ -2473,6 +2473,9 @@ class SourceFaithfulUCalc:
     # XSTAR-FUNCTION-COMMENT-END
     def _eval_type82(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type82_short_record")
+        # Canonical UCalc itself returns Type-82 idest1/idest2 as upper/lower.
+        # The downstream calc_hmc_ion-equivalent matrix builder performs the
+        # ordinary rate-type-4 energy ordering; do not reverse this source API.
         a,b=int(r.integers[0]),int(r.integers[1]); up,lo=(a,b) if c.levels.energy(a)>=c.levels.energy(b) else (b,a)
         wavelength=abs(float(r.reals[0])); flin=float(r.reals[2]); aij=float(r.reals[3]); mass=self._atomic_mass(r,c)
         if mass is None: return self._context_blocked(r,s,"type82_requires_parent_element_atomic_mass")

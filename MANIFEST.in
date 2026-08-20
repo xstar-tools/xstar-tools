@@ -985,3 +985,12 @@ include docs/developer/fe_type82_matrix_orientation_0_6_82_30_8_4.md
 include fe_type82_matrix_orientation_0_6_82_30_8_4.md
 include qualification_report_0_6_82_30_8_4.md
 include xstar_tools-0.6.82.30.8.4_host_validation.md
+
+# 0.6.82.30.8.5 Python Type-82 UTA matrix orientation closure.
+recursive-include qualification/fe_python_reference_0_6_82_30_8_5 *.json *.md *.txt
+include tools/qualification/run_fe_reference_python_host_smoke_0_6_82_30_8_5.py
+include tests/test_fe_type82_python_orientation_0_6_82_30_8_5.py
+include docs/developer/fe_type82_python_orientation_0_6_82_30_8_5.md
+include fe_type82_python_orientation_0_6_82_30_8_5.md
+include qualification_report_0_6_82_30_8_5.md
+include xstar_tools-0.6.82.30.8.5_host_validation.md

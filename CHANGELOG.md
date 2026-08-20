@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.30.8.5 - Python Type-82 Fe UTA matrix-orientation closure - 2026-08-20
+
+- Record `0.6.82.30.8.4` as host-accepted for the isolated Fe reference: STEP/material/spectrum/ntotit all ACCEPT, `ntotit=13,1,1`, and `LOGT_MAX_ABS=0` against canonical FORTRAN.
+- Audit the Python paths separately.  Pure `ucalc.py` already returns canonical Type-82 upper/lower source endpoints and `element_equilibrium.py` already energy-orders ordinary rate-type-4 endpoints before matrix insertion; keep that numerical path unchanged.
+- Correct `native_fixed_program.py`, which still stored Type-82 upper/lower directly into the fixed-program `lower_row/upper_row` ABI.  Lower Type 82 with `energy_order_source_pair()` so accelerated/native Python orchestration cannot transpose the four matrix terms.
+- Add focused Python Fe host qualification for both `zone-python` and `pure-python`, reusing the retained `.30.6` FORTRAN reference and never rerunning FORTRAN.
+- Keep Type-82 rates, thermal equations, Lucy solver, controller, transport, science revision, and ABI identifiers unchanged.
+
 ## 0.6.82.30.8.4 - Fe Type-82 UTA matrix-orientation source-parity repair - 2026-08-20
 
 - Treat `.30.8.3` as a diagnostic-only immutable predecessor; correct its comparator interpretation by isolating the Fe `FE2_SOLVER 4456 33 519720` block and comparing C++ physical stage `ion_charge+1`.  The Fe input topology and 129930-record matrix inventory are exact.

@@ -1345,6 +1345,10 @@ def _endpoint_energy(levels: UCalcLevelTable, endpoint: int) -> Optional[float]:
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
 def _lower_upper(result: UCalcResult, levels: UCalcLevelTable) -> Tuple[int, int]:
+    # 0.6.82.30.8.5: this ordinary energy-order step is the pure-Python
+    # counterpart of calc_hmc_ion.f90.  It is essential for Type 82, whose
+    # source UCalc result is upper/lower while matrix construction requires
+    # lower/upper before emitting the first (upper,lower) term.
     id1, id2 = int(result.idest1), int(result.idest2)
     lower, upper = id1, id2
     if id1 <= 0 or id2 <= 0:
