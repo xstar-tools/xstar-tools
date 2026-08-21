@@ -1146,6 +1146,13 @@ int run_element_impl(
     if (capture_iteration_resolved_trace) {
         const int sequence = current_source_sequence_local();
         write_iteration_resolved_trace(input, w, sequence);
+        // Diagnostic-only stop used by the Al XII call-1/eval-1 forensic runner.
+        // It fires only after the trace files have been fully serialized and is
+        // never enabled by production/qualification science runs.
+        if (environment_flag_local("XSTAR_ALXII_DIAG_STOP_AFTER_TRACE") &&
+            sequence == 1 && input.element_z == 13) {
+            throw std::runtime_error("ALXII_DIAG_TRACE_COMPLETE");
+        }
     }
 
     output.solver_seconds = seconds_since(solver_t0);

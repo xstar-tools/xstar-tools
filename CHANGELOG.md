@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.30.8.13 - Al XII residual-spectrum first-state diagnostic - 2026-08-20
+
+- Treat `.30.8.12` as an improved but still host-rejected spectrum candidate: emitted NL1 falls from about `1.63e-4` to `5.54e-5` and max relative error from about `0.498` to `0.149`, while STEP structure/science, `ntotit`, and material remain accepted.
+- Localize the remaining maximum to the Al XII `6.313901 A` `1s2.1S_0 -> 1s1.4p1.1P_1` line.  In the first physical shell its C++/FORTRAN emissivity ratio and upper-level-population ratio are both about `0.844299`, proving the residual is upstream of final spectrum publication.
+- Carry the `.30.8.12` Type-50/56 source-zero science repair forward unchanged.  Do not carry the rejected `.30.8.10` Type-71/77 experiment.
+- Add an environment-gated C++ stop after the existing source-sequence-1 aluminum (`Z=13`) element-input and iteration-resolved traces are fully serialized.  Normal production behavior is unchanged when the diagnostic flag is absent.
+- Add a matching canonical FORTRAN XSTAR 2.59g patch that traces the first aluminum element matrix/solver state and terminates with the expected diagnostic `STOP 97`.
+- Extend the paired comparator with a focus on Al XII ion stage 12, local level 31 (`1s1.4p1.1P_1`), ranking mismatched matrix terms/families touching that row.
+- No new production rate formula, matrix arithmetic, controller, solver, transport, publication, science-revision, or ABI change.
+
 ## 0.6.82.30.8.12 - N VI Type-50/56 source-zero rate parity repair - 2026-08-20
 
 - Base this science repair on accepted `0.6.82.30.8.9`; do not carry forward rejected `.30.8.10` Type-71/77 orientation changes. `.30.8.11` remains diagnostic-only.
