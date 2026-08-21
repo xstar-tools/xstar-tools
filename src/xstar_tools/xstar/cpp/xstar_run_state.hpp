@@ -491,6 +491,10 @@ struct WholeRunAccumulatedState {
     bool radial_state_complete = false;
     bool native_product_inputs_complete = false;
     bool native_detail_state_retained = false;
+    // 0.6.82.33: npass=1 source-SAVD detail products can be serialized at
+    // the canonical radial event and released immediately rather than retained
+    // for whole-run publication.
+    bool incremental_detail_products_complete_v068233 = false;
     bool continuum_depths_derived_from_native_opacity = false;
     bool exact_source_metadata_retained = false;
     bool exact_source_workspaces_retained = false;
@@ -547,6 +551,10 @@ struct ProductWritingState {
     bool radial_state_complete = false;
     bool native_product_inputs_complete = false;
     bool native_detail_state_retained = false;
+    // 0.6.82.33: npass=1 source-SAVD detail products can be serialized at
+    // the canonical radial event and released immediately rather than retained
+    // for whole-run publication.
+    bool incremental_detail_products_complete_v068233 = false;
     bool continuum_depths_derived_from_native_opacity = false;
     bool exact_source_metadata_retained = false;
     bool exact_source_workspaces_retained = false;

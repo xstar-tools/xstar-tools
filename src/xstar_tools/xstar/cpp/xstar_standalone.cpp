@@ -50,6 +50,7 @@
 #include <vector>
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/resource.h>
+#include <unistd.h>
 #endif
 
 extern "C" int xstar_emissivity_build_binemis_profile(
@@ -272,6 +273,30 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t compacted_rrc_zones = 0u;
     std::uint64_t compacted_rrc_values_before = 0u;
     std::uint64_t compacted_rrc_values_after = 0u;
+    // 0.6.82.33: canonical incremental-publication and bounded-lifetime
+    // accounting.  These are diagnostics only; they never participate in
+    // controller/science decisions.
+    std::uint64_t step_rows_streamed_v068233 = 0u;
+    std::uint64_t detail_rows_streamed_v068233 = 0u;
+    std::uint64_t detal2_rows_streamed_v068233 = 0u;
+    std::uint64_t detal3_rows_streamed_v068233 = 0u;
+    std::uint64_t detal4_rows_streamed_v068233 = 0u;
+    std::uint64_t publication_retained_current_bytes_v068233 = 0u;
+    std::uint64_t publication_retained_peak_bytes_v068233 = 0u;
+    std::uint64_t publication_retained_current_capacity_bytes_v068233 = 0u;
+    std::uint64_t publication_retained_peak_capacity_bytes_v068233 = 0u;
+    std::uint64_t zone_publication_scratch_bytes_v068233 = 0u;
+    std::uint64_t atdb_decoded_logical_bytes_v068233 = 0u;
+    std::uint64_t atdb_decoded_capacity_bytes_v068233 = 0u;
+    std::uint64_t prepared_sidecar_logical_bytes_v068233 = 0u;
+    std::uint64_t prepared_sidecar_capacity_bytes_v068233 = 0u;
+    std::uint64_t rss_after_atdb_bytes_v068233 = 0u;
+    std::uint64_t rss_before_final_publication_bytes_v068233 = 0u;
+    std::uint64_t rss_after_finalization_bytes_v068233 = 0u;
+    std::uint64_t radial_rss_last_bytes_v068233 = 0u;
+    std::uint64_t radial_rss_peak_bytes_v068233 = 0u;
+    std::vector<std::uint64_t> radial_rss_samples_bytes_v068233;
+    std::uint64_t saved_shells_streamed_v068233 = 0u;
     std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
     xstar_local_zone_internal::PerformanceFoundationV068231 foundation_v068231{};
 };
@@ -297,6 +322,21 @@ std::uint64_t peak_rss_bytes_v068231() {
         ? static_cast<std::uint64_t>(usage.ru_maxrss) * 1024u
         : 0u;
 #endif
+#else
+    return 0u;
+#endif
+}
+
+
+std::uint64_t current_rss_bytes_v068233() {
+#if defined(__linux__)
+    std::ifstream in("/proc/self/statm");
+    std::uint64_t total_pages = 0u;
+    std::uint64_t resident_pages = 0u;
+    if (!(in >> total_pages >> resident_pages)) return 0u;
+    const long page_size = ::sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) return 0u;
+    return resident_pages * static_cast<std::uint64_t>(page_size);
 #else
     return 0u;
 #endif
@@ -2804,6 +2844,127 @@ struct FixedDsecSnapshot {
     std::vector<xstar_run_state::ElementThermalProductState> element_thermal_products;
 };
 
+struct MemoryBytesV068233 {
+    std::uint64_t logical = 0u;
+    std::uint64_t capacity = 0u;
+};
+
+template <typename T>
+void add_vector_memory_v068233(MemoryBytesV068233& out, const std::vector<T>& values) {
+    out.logical += static_cast<std::uint64_t>(values.size()) * sizeof(T);
+    out.capacity += static_cast<std::uint64_t>(values.capacity()) * sizeof(T);
+}
+
+template <typename K, typename V>
+void add_map_payload_memory_v068233(MemoryBytesV068233& out, const std::map<K,V>& values) {
+    const auto bytes = static_cast<std::uint64_t>(values.size()) * sizeof(typename std::map<K,V>::value_type);
+    out.logical += bytes;
+    // std::map exposes no capacity/node allocation API.  Report the concrete
+    // key/value payload as a conservative allocated lower bound.
+    out.capacity += bytes;
+}
+
+void add_map_vector_memory_v068233(MemoryBytesV068233& out, const std::map<int,std::vector<double>>& values) {
+    add_map_payload_memory_v068233(out, values);
+    for (const auto& item : values) add_vector_memory_v068233(out, item.second);
+}
+
+MemoryBytesV068233 snapshot_memory_v068233(const FixedDsecSnapshot& s) {
+    MemoryBytesV068233 out;
+    out.logical = sizeof(FixedDsecSnapshot) + s.kind.size();
+    out.capacity = sizeof(FixedDsecSnapshot) + s.kind.capacity();
+#define XSTAR_ADD_SNAPSHOT_VECTOR_V068233(name) add_vector_memory_v068233(out, s.name)
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(source_global_xilevg);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(source_global_rnisg);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(source_global_bilevg);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(source_detail_pre_mapback_populations);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(source_detail_global_xilevg);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(populations);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(lte_populations);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(radiation_energy_ev);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(radiation_flux);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(continuum_tau_in);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(continuum_tau_out);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(continuum_spectrum);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(spectrum);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opacity);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(rcem);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(oplin);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(tau0);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(elum);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(cemab);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(elumab);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(cabab);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakab);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(tauc);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(rccemis);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakcont);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_bound_free_pre_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_free_free_pre_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_line_pre_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_thomson_pre_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_bound_free_post_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_free_free_post_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_line_post_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(opakc_thomson_post_gsmooth_v0648115);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(fline);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(flinel);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(pprint4_opakc);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(pprint4_rccemis);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(pprint4_brcems);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(pprint4_flinel);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(zrems);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(dpthc);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(dpthcont);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(zremsz);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(line_profile_workspace);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(record_product_diagnostics);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(continuum_product_diagnostics);
+    XSTAR_ADD_SNAPSHOT_VECTOR_V068233(element_thermal_products);
+#undef XSTAR_ADD_SNAPSHOT_VECTOR_V068233
+    add_map_payload_memory_v068233(out, s.source_global_gammag);
+    add_map_payload_memory_v068233(out, s.source_global_alphag);
+    add_map_payload_memory_v068233(out, s.source_global_igammamaxg);
+    add_map_payload_memory_v068233(out, s.source_global_ialphamaxg);
+    add_map_vector_memory_v068233(out, s.source_ion_stage_fractions);
+    add_map_vector_memory_v068233(out, s.source_ionization_rates);
+    add_map_vector_memory_v068233(out, s.source_recombination_rates);
+    add_map_payload_memory_v068233(out, s.source_detail_active_windows);
+    return out;
+}
+
+MemoryBytesV068233 program_memory_v068233(const xstar_atdb_runtime::ProgramStorage& p, bool sidecars) {
+    MemoryBytesV068233 out;
+    if (!sidecars) {
+        add_vector_memory_v068233(out, p.elements);
+        add_vector_memory_v068233(out, p.rows);
+        add_vector_memory_v068233(out, p.records);
+        add_vector_memory_v068233(out, p.lte_ion_topology);
+        add_vector_memory_v068233(out, p.lte_levels);
+        add_vector_memory_v068233(out, p.reals);
+        add_vector_memory_v068233(out, p.ints);
+        add_vector_memory_v068233(out, p.unsupported_data_types);
+    } else {
+        add_vector_memory_v068233(out, p.level_identities);
+        add_vector_memory_v068233(out, p.detail_level_identities);
+        add_vector_memory_v068233(out, p.source_rate_identities);
+        add_vector_memory_v068233(out, p.line_identities);
+        add_vector_memory_v068233(out, p.rrc_identities);
+        add_vector_memory_v068233(out, p.source_rrc_identities);
+        add_vector_memory_v068233(out, p.element_metadata);
+        add_vector_memory_v068233(out, p.row_metadata);
+        // Nested alias vectors are capacity-bearing sidecars.
+        out.logical += static_cast<std::uint64_t>(p.row_global_level_aliases.size()) * sizeof(std::vector<std::int32_t>);
+        out.capacity += static_cast<std::uint64_t>(p.row_global_level_aliases.capacity()) * sizeof(std::vector<std::int32_t>);
+        for (const auto& v : p.row_global_level_aliases) add_vector_memory_v068233(out, v);
+        out.logical += static_cast<std::uint64_t>(p.row_global_level_terminal_roles.size()) * sizeof(std::vector<std::uint8_t>);
+        out.capacity += static_cast<std::uint64_t>(p.row_global_level_terminal_roles.capacity()) * sizeof(std::vector<std::uint8_t>);
+        for (const auto& v : p.row_global_level_terminal_roles) add_vector_memory_v068233(out, v);
+    }
+    return out;
+}
+
 // 0.6.82.22: intermediate accepted zones do not need the sparse 301301-slot
 // RRC source address space after their local source calculation and transport
 // are complete.  Preserve exact values in the immutable publication identity
@@ -2983,6 +3144,59 @@ void print_xstar_style_live_pprint_row_v0682271(
     std::cerr.unsetf(std::ios::floatfield);
     std::cerr << std::setprecision(17);
     ++g_live_zone_rows;
+}
+
+// 0.6.82.33: source xstar.f90 calls pprint(17) once per pass to emit the
+// compact radial header, then pprint(9) appends each accepted radial event.
+// Mirror that file lifetime while the current scalar state is live.  The final
+// historical STEP serializer still rewrites the complete file after science
+// publication so legacy verbose sections and normalized final text stay on the
+// accepted .32 path.
+void append_live_step_row_v068233(
+    const std::filesystem::path& path,
+    const xstar_run_state::LegacyPprintRadialRowState& r) {
+    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
+    const bool empty = !std::filesystem::is_regular_file(path) ||
+        std::filesystem::file_size(path) == 0u;
+    static thread_local std::size_t last_pass_v068233 = 0u;
+    if (empty) last_pass_v068233 = 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("0.6.82.33 cannot append live xout_step.log");
+    if (last_pass_v068233 != r.pass_index) {
+        out << "pass number=" << std::setw(2) << r.pass_index << " "
+            << (r.direction >= 0 ? 1 : -1) << "\n"
+            << "print option:17\n"
+            << "  log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
+            << "                                                               fwd    rev\n";
+        last_pass_v068233 = r.pass_index;
+    }
+    auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
+    const double radial_ratio = r.radius_cm > 0.0
+        ? std::max(1.0e-36, std::min(99.0, r.radial_depth_cm / r.radius_cm))
+        : 1.0e-36;
+    out << std::fixed << std::setprecision(2)
+        << std::setw(8) << safe_log(r.radius_cm, -10.0)
+        << std::setw(7) << std::log10(radial_ratio)
+        << std::setw(7) << safe_log(std::max(r.column_density_cm2, 1.0e-10), -10.0)
+        << std::setw(7) << r.log_ionization_parameter
+        << std::setw(7) << r.electron_fraction
+        << std::setw(7) << safe_log(r.density_cm3, -10.0)
+        << std::setw(7) << (r.temperature_t4 > 0.0 ? 4.0 + std::log10(r.temperature_t4) : -10.0)
+        << std::setw(7) << std::clamp(100.0 * r.hmctot, -99.99, 99.99)
+        << std::setw(7) << std::clamp(r.radiation_balance_percent, -99.99, 99.99)
+        << std::setw(7) << std::log10(std::max(r.forward_reference_tau, 1.0e-10))
+        << std::setw(7) << std::log10(std::max(r.reverse_reference_tau, 1.0e-10))
+        << std::setw(3) << r.dsec_ntotit << "\n";
+    out.flush();
+    if (!out) throw std::runtime_error("0.6.82.33 live xout_step.log flush failed");
+    if (g_performance_v064890) {
+        ++g_performance_v064890->step_rows_streamed_v068233;
+        const auto rss_v068233 = current_rss_bytes_v068233();
+        g_performance_v064890->radial_rss_last_bytes_v068233 = rss_v068233;
+        g_performance_v064890->radial_rss_peak_bytes_v068233 = std::max(
+            g_performance_v064890->radial_rss_peak_bytes_v068233, rss_v068233);
+        g_performance_v064890->radial_rss_samples_bytes_v068233.push_back(rss_v068233);
+    }
 }
 
 void print_xstar_style_live_zone(
@@ -7519,12 +7733,16 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         // first zero-depth HDU.  Now that call-1 executes its source-order
         // GSSMOOTH and calc_emis_all rebuilds rccemis correctly, publish the
         // actual call-1 opakc/rccemis state instead of duplicating call-2.
-        append_native_array(inventory, product, hdu, "product_write_detail_level_index", level_indices);
-        append_native_array(inventory, product, hdu, "product_write_detail_level_population", resize_or_zero(eval.populations, level_indices.size()));
-        append_native_array(inventory, product, hdu, "product_write_detail_level_lte", resize_or_zero(ws.lte_populations, level_indices.size()));
+        if (!product.incremental_detail_products_complete_v068233) {
+            append_native_array(inventory, product, hdu, "product_write_detail_level_index", level_indices);
+            append_native_array(inventory, product, hdu, "product_write_detail_level_population", resize_or_zero(eval.populations, level_indices.size()));
+            append_native_array(inventory, product, hdu, "product_write_detail_level_lte", resize_or_zero(ws.lte_populations, level_indices.size()));
+        }
 
         append_native_array(inventory, product, hdu, "detail_energy_ev", eval.radiation_energy_ev);
-        append_native_array(inventory, product, hdu, "product_write_detail_energy_ev", eval.radiation_energy_ev);
+        if (!product.incremental_detail_products_complete_v068233) {
+            append_native_array(inventory, product, hdu, "product_write_detail_energy_ev", eval.radiation_energy_ev);
+        }
         append_native_array(inventory, product, hdu, "opakc", resize_or_zero(
             ws.opakc.empty() ? eval.opacity : ws.opakc, n));
         append_native_array(inventory, product, hdu, "product_write_opakc", resize_or_zero(
@@ -7565,7 +7783,9 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         const std::size_t line_count = line_indices_all.size();
         const std::size_t native_line_stride = native_line_plane_stride(ws);
         append_native_array(inventory, product, hdu, "line_indices", line_indices_all);
-        append_native_array(inventory, product, hdu, "product_write_detail_line_index", line_indices_all);
+        if (!product.incremental_detail_products_complete_v068233) {
+            append_native_array(inventory, product, hdu, "product_write_detail_line_index", line_indices_all);
+        }
         // rcem is the local volumetric detailed-line emissivity.  elum is the
         // radially accumulated public luminosity and must not replace rcem in
         // xo01_detal2.fits.
@@ -7589,14 +7809,18 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         append_native_array(inventory, product, hdu, "line_opacity_final", line_opacity);
         append_native_array(inventory, product, hdu, "line_tau_in_final", line_tau_in);
         append_native_array(inventory, product, hdu, "line_tau_out_final", line_tau_out);
-        append_native_array(inventory, product, hdu, "product_write_detail_line_emis_inward", line_emit_in);
-        append_native_array(inventory, product, hdu, "product_write_detail_line_emis_outward", line_emit_out);
-        append_native_array(inventory, product, hdu, "product_write_detail_line_opacity", line_opacity);
-        append_native_array(inventory, product, hdu, "product_write_detail_line_tau_in", line_tau_in);
-        append_native_array(inventory, product, hdu, "product_write_detail_line_tau_out", line_tau_out);
+        if (!product.incremental_detail_products_complete_v068233) {
+            append_native_array(inventory, product, hdu, "product_write_detail_line_emis_inward", line_emit_in);
+            append_native_array(inventory, product, hdu, "product_write_detail_line_emis_outward", line_emit_out);
+            append_native_array(inventory, product, hdu, "product_write_detail_line_opacity", line_opacity);
+            append_native_array(inventory, product, hdu, "product_write_detail_line_tau_in", line_tau_in);
+            append_native_array(inventory, product, hdu, "product_write_detail_line_tau_out", line_tau_out);
+        }
 
         append_native_array(inventory, product, hdu, "rrc_indices", rrc_indices_all);
-        append_native_array(inventory, product, hdu, "product_write_detail_rrc_index", rrc_indices_all);
+        if (!product.incremental_detail_products_complete_v068233) {
+            append_native_array(inventory, product, hdu, "product_write_detail_rrc_index", rrc_indices_all);
+        }
         const auto rrc_emit_in = rrc_plane_values(product, ws, ws.cemab, retained_rccemis, 0);
         const auto rrc_emit_out = rrc_plane_values(product, ws, ws.cemab, retained_rccemis, 1);
         const auto rrc_abs = rrc_scalar_values(product, ws, ws.cabab, ws.opakab);
@@ -7611,12 +7835,14 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         append_native_array(inventory, product, hdu, "cemab", compact_cemab);
         append_native_array(inventory, product, hdu, "cabab", rrc_abs);
         append_native_array(inventory, product, hdu, "opakab", rrc_opacity);
-        append_native_array(inventory, product, hdu, "product_write_detail_rrc_emis_inward", rrc_emit_in);
-        append_native_array(inventory, product, hdu, "product_write_detail_rrc_emis_outward", rrc_emit_out);
-        append_native_array(inventory, product, hdu, "product_write_detail_rrc_integrated_absn", rrc_abs);
-        append_native_array(inventory, product, hdu, "product_write_detail_rrc_opacity", rrc_opacity);
-        append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_in", rrc_tau_in);
-        append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_out", rrc_tau_out);
+        if (!product.incremental_detail_products_complete_v068233) {
+            append_native_array(inventory, product, hdu, "product_write_detail_rrc_emis_inward", rrc_emit_in);
+            append_native_array(inventory, product, hdu, "product_write_detail_rrc_emis_outward", rrc_emit_out);
+            append_native_array(inventory, product, hdu, "product_write_detail_rrc_integrated_absn", rrc_abs);
+            append_native_array(inventory, product, hdu, "product_write_detail_rrc_opacity", rrc_opacity);
+            append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_in", rrc_tau_in);
+            append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_out", rrc_tau_out);
+        }
     }
 
     const std::size_t hdu = 3;
@@ -17830,6 +18056,40 @@ struct NativeSavedPassV068227 {
     }
 };
 
+MemoryBytesV068233 saved_passes_memory_v068233(
+    const std::vector<NativeSavedPassV068227>& passes) {
+    MemoryBytesV068233 out;
+    out.logical += static_cast<std::uint64_t>(passes.size()) * sizeof(NativeSavedPassV068227);
+    out.capacity += static_cast<std::uint64_t>(passes.capacity()) * sizeof(NativeSavedPassV068227);
+    for (const auto& pass : passes) {
+        out.logical += static_cast<std::uint64_t>(pass.hdus.size()) * sizeof(std::optional<NativeSavedShellV068227>);
+        out.capacity += static_cast<std::uint64_t>(pass.hdus.capacity()) * sizeof(std::optional<NativeSavedShellV068227>);
+        for (const auto& shell_opt : pass.hdus) {
+            if (!shell_opt) continue;
+            const auto& shell = *shell_opt;
+            const auto snap = snapshot_memory_v068233(shell.snapshot);
+            out.logical += snap.logical;
+            out.capacity += snap.capacity;
+            add_vector_memory_v068233(out, shell.saved_level_slots_v0682273);
+            add_vector_memory_v068233(out, shell.saved_line_slots_v0682273);
+            add_vector_memory_v068233(out, shell.saved_rrc_slots_v0682273);
+        }
+    }
+    return out;
+}
+
+void update_saved_pass_memory_v068233(
+    const std::vector<NativeSavedPassV068227>& passes) {
+    if (!g_performance_v064890) return;
+    const auto bytes = saved_passes_memory_v068233(passes);
+    g_performance_v064890->publication_retained_current_bytes_v068233 = bytes.logical;
+    g_performance_v064890->publication_retained_peak_bytes_v068233 = std::max(
+        g_performance_v064890->publication_retained_peak_bytes_v068233, bytes.logical);
+    g_performance_v064890->publication_retained_current_capacity_bytes_v068233 = bytes.capacity;
+    g_performance_v064890->publication_retained_peak_capacity_bytes_v068233 = std::max(
+        g_performance_v064890->publication_retained_peak_capacity_bytes_v068233, bytes.capacity);
+}
+
 double source_real4_v068227(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
@@ -17961,6 +18221,102 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     out.zeta = source_savd_keyword_e3_v0682276(zeta);
     out.terminal_record = terminal_record;
     return out;
+}
+
+xstar_run_state::RadialZoneState saved_shell_radial_zone_v068233(
+    const NativeSavedShellV068227& saved,
+    std::size_t pass_index,
+    std::size_t zone_index) {
+    xstar_run_state::AcceptedControllerState accepted;
+    accepted.call_index = saved.snapshot.call_index;
+    accepted.accepted_sequence = saved.snapshot.sequence;
+    accepted.acceptance_reason = "0.6.82.33 live source SAVD detail surface";
+    accepted.evaluation = copy_real_native_snapshot(saved.snapshot, 0.0);
+
+    xstar_run_state::RadialZoneState zone;
+    zone.zone_index = zone_index;
+    zone.pass_index = pass_index;
+    zone.radius_cm = saved.radius_cm;
+    zone.outer_radius_cm = saved.step_size_cm;
+    zone.delta_radius_cm = saved.radial_depth_cm;
+    zone.density_cm3 = saved.hydrogen_density_cm3;
+    zone.pressure_dyn_cm2 = saved.pressure_dyn_cm2;
+    zone.log_ionization_parameter = saved.zeta;
+    zone.ionization_parameter = std::isfinite(saved.zeta) ? std::pow(10.0, saved.zeta) : 0.0;
+    zone.column_density_cm2 = saved.column_cm2;
+    zone.temperature_t4 = saved.snapshot.temperature_t4;
+    zone.electron_fraction = saved.electron_fraction;
+    zone.provisional_from_controller = false;
+    zone.accepted_boundary_exact = true;
+    zone.boundary_provenance = "0.6.82.33 source SAVD FITS-E3/REAL4 live detail surface";
+    zone.accepted_controller = std::move(accepted);
+    return zone;
+}
+
+void stream_saved_shell_detail_v068233(
+    xstar_run_state::ProductWritingState& stream_state,
+    const NativeSavedShellV068227& saved,
+    std::size_t pass_index,
+    std::size_t zone_index,
+    const std::filesystem::path& output_dir) {
+    if (zone_index == 1u) {
+        const std::string prefix = "xo" + (pass_index < 10u ? std::string("0") : std::string()) +
+            std::to_string(pass_index) + "_";
+        for (const char* suffix : {"detail.fits", "detal2.fits", "detal3.fits", "detal4.fits"}) {
+            std::error_code ec;
+            std::filesystem::remove(output_dir / (prefix + suffix), ec);
+        }
+    }
+    const auto scratch = snapshot_memory_v068233(saved.snapshot);
+    if (g_performance_v064890) {
+        // The incremental ProductWritingState contains one converted
+        // FixedEvaluationState in addition to the transient SAVD snapshot.
+        // Two snapshot-capacity lower bounds therefore approximate the maximum
+        // publication-only scratch live for one radial event.
+        g_performance_v064890->zone_publication_scratch_bytes_v068233 = std::max(
+            g_performance_v064890->zone_publication_scratch_bytes_v068233,
+            2u * scratch.capacity);
+    }
+    stream_state.radial_zones.clear();
+    stream_state.radial_zones.push_back(saved_shell_radial_zone_v068233(saved, pass_index, zone_index));
+    stream_state.native_detail_state_retained = true;
+    stream_state.exact_source_workspaces_retained =
+        stream_state.radial_zones.front().accepted_controller.evaluation.source_workspace.complete();
+    stream_state.exact_accepted_radial_boundaries_retained = true;
+    stream_state.radial_state_complete = true;
+    stream_state.native_product_inputs_complete = true;
+    stream_state.product_state_complete = true;
+    const auto result = xstar_science_fits::append_incremental_detail_zone_v068233(
+        output_dir, stream_state, pass_index);
+    if (g_performance_v064890) {
+        g_performance_v064890->detail_population_seconds += result.detail_population_seconds;
+        g_performance_v064890->detail_line_seconds += result.detail_line_seconds;
+        g_performance_v064890->detail_line_identity_seconds += result.detail_line_identity_seconds;
+        g_performance_v064890->detail_line_cpu_staging_seconds += result.detail_line_cpu_staging_seconds;
+        g_performance_v064890->detail_line_fits_write_seconds += result.detail_line_fits_write_seconds;
+        g_performance_v064890->detail_line_checksum_seconds += result.detail_line_checksum_seconds;
+        g_performance_v064890->detail_rrc_seconds += result.detail_rrc_seconds;
+        g_performance_v064890->detail_rrc_cpu_staging_seconds += result.detail_rrc_cpu_staging_seconds;
+        g_performance_v064890->detail_rrc_fits_write_seconds += result.detail_rrc_fits_write_seconds;
+        g_performance_v064890->detail_rrc_checksum_seconds += result.detail_rrc_checksum_seconds;
+        g_performance_v064890->detail_spectrum_seconds += result.detail_spectrum_seconds;
+        g_performance_v064890->detail_rows_streamed_v068233 += result.detail_rows;
+        g_performance_v064890->detal2_rows_streamed_v068233 += result.detal2_rows;
+        g_performance_v064890->detal3_rows_streamed_v068233 += result.detal3_rows;
+        // detal4 has one row per native continuum bin.
+        g_performance_v064890->detal4_rows_streamed_v068233 +=
+            stream_state.radial_zones.front().accepted_controller.evaluation.radiation_energy_ev.size();
+        ++g_performance_v064890->saved_shells_streamed_v068233;
+        const auto rss = current_rss_bytes_v068233();
+        g_performance_v064890->radial_rss_last_bytes_v068233 = rss;
+        g_performance_v064890->radial_rss_peak_bytes_v068233 = std::max(
+            g_performance_v064890->radial_rss_peak_bytes_v068233, rss);
+        g_performance_v064890->radial_rss_samples_bytes_v068233.push_back(rss);
+    }
+    // Release the per-zone converted writer state immediately.  Capacity is
+    // intentionally not retained because canonical FORTRAN reuses the SAVD
+    // arrays rather than accumulating historical C++ evaluation objects.
+    std::vector<xstar_run_state::RadialZoneState>().swap(stream_state.radial_zones);
 }
 
 void initialize_native_radial_pass_v068227(
@@ -18663,6 +19019,29 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         std::vector<NativeSavedPassV068227> saved_passes_v068227(
             effective_npass_v068227 + 1u);
+        const bool incremental_detail_stream_v068233 =
+            source_savd_detail_enabled_v0682307 && effective_npass_v068227 == 1u &&
+            !data.reference_diagnostics_enabled && !data.diagnostic_full_trajectory_continue;
+        std::optional<xstar_run_state::ProductWritingState> incremental_detail_state_v068233;
+        if (incremental_detail_stream_v068233) {
+            incremental_detail_state_v068233.emplace(
+                xstar_run_state::build_product_writing_state(whole));
+            incremental_detail_state_v068233->backend = "cpp-general-standalone";
+            incremental_detail_state_v068233->product_metadata_path =
+                std::filesystem::path(options.output_dir) / ".v068233_source_savd_no_bridge";
+            incremental_detail_state_v068233->embedded_public_fits_payloads_absent = true;
+            incremental_detail_state_v068233->embedded_full_xout_step_payload_absent = true;
+            whole.incremental_detail_products_complete_v068233 = true;
+        }
+        if (g_performance_v064890) {
+            const auto decoded_v068233 = program_memory_v068233(program, false);
+            const auto sidecars_v068233 = program_memory_v068233(program, true);
+            g_performance_v064890->atdb_decoded_logical_bytes_v068233 = decoded_v068233.logical;
+            g_performance_v064890->atdb_decoded_capacity_bytes_v068233 = decoded_v068233.capacity;
+            g_performance_v064890->prepared_sidecar_logical_bytes_v068233 = sidecars_v068233.logical;
+            g_performance_v064890->prepared_sidecar_capacity_bytes_v068233 = sidecars_v068233.capacity;
+            g_performance_v064890->rss_after_atdb_bytes_v068233 = current_rss_bytes_v068233();
+        }
         std::size_t source_numrec_v068227 = 2u;
         double current_radius_cm_v068227 = source_initial_radius_cm_v068226;
         double last_geometry_segment_cm_v068227 = 0.0;
@@ -19044,6 +19423,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     kk_v068227, data.radial_direction_v068227, call,
                     boundary_radius_cm, data.cumulative_depth_cm,
                     data.cumulative_column_cm2, source_ntotit_v068227, false));
+            append_live_step_row_v068233(
+                std::filesystem::path(options.output_dir) / "xout_step.log",
+                whole.legacy_pprint.radial_rows.back());
             if (effective_npass_v068227 > 1u && live_text_zone_progress_enabled()) {
                 print_xstar_style_live_pprint_row_v0682271(
                     whole.legacy_pprint.radial_rows.back());
@@ -19064,15 +19446,22 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 const double boundary_zeta_v068227 = boundary_xi_v068227 > 0.0
                     ? std::log10(boundary_xi_v068227)
                     : -std::numeric_limits<double>::infinity();
-                saved_passes_v068227[kk_v068227].insert_after_hdu(
-                    call + 1u,
-                    make_saved_shell_v068227(
-                        pretransport_boundary_v82_patch520145, program,
-                        params.pressure_dyn_cm2, boundary_radius_cm,
-                        data.cumulative_depth_cm, segment,
-                        data.cumulative_column_cm2,
-                        boundary.electron_fraction_input,
-                        boundary.hydrogen_density_cm3, boundary_zeta_v068227, false));
+                auto saved_shell_v068233 = make_saved_shell_v068227(
+                    pretransport_boundary_v82_patch520145, program,
+                    params.pressure_dyn_cm2, boundary_radius_cm,
+                    data.cumulative_depth_cm, segment,
+                    data.cumulative_column_cm2,
+                    boundary.electron_fraction_input,
+                    boundary.hydrogen_density_cm3, boundary_zeta_v068227, false);
+                if (incremental_detail_stream_v068233) {
+                    stream_saved_shell_detail_v068233(
+                        *incremental_detail_state_v068233, saved_shell_v068233,
+                        kk_v068227, call, std::filesystem::path(options.output_dir));
+                } else {
+                    saved_passes_v068227[kk_v068227].insert_after_hdu(
+                        call + 1u, std::move(saved_shell_v068233));
+                    update_saved_pass_memory_v068233(saved_passes_v068227);
+                }
             }
 
             double source_geometry_segment_v068226 = segment;
@@ -19377,6 +19766,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     kk_v068227, data.radial_direction_v068227, finals.size(),
                     current_radius_cm_v068227, data.cumulative_depth_cm,
                     data.cumulative_column_cm2, source_ntotit_v068227, true));
+            append_live_step_row_v068233(
+                std::filesystem::path(options.output_dir) / "xout_step.log",
+                whole.legacy_pprint.radial_rows.back());
             if (effective_npass_v068227 > 1u && live_text_zone_progress_enabled()) {
                 print_xstar_style_live_pprint_row_v0682271(
                     whole.legacy_pprint.radial_rows.back());
@@ -19402,14 +19794,22 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 // made xo03/xo05_detal2 repeat the pre-terminal depth.
                 FixedDsecSnapshot terminal_saved_boundary_v0682274 =
                     *terminal_transport_boundary_v82_patch520144;
-                saved_passes_v068227[kk_v068227].insert_after_hdu(
-                    finals.size() + 1u,
-                    make_saved_shell_v068227(
-                        terminal_saved_boundary_v0682274, program,
-                        params.pressure_dyn_cm2, current_radius_cm_v068227,
-                        data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
-                        data.cumulative_column_cm2, state.electron_fraction_xee,
-                        state.hydrogen_density_cm3, terminal_zeta_v068227, true));
+                auto terminal_saved_shell_v068233 = make_saved_shell_v068227(
+                    terminal_saved_boundary_v0682274, program,
+                    params.pressure_dyn_cm2, current_radius_cm_v068227,
+                    data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
+                    data.cumulative_column_cm2, state.electron_fraction_xee,
+                    state.hydrogen_density_cm3, terminal_zeta_v068227, true);
+                if (incremental_detail_stream_v068233) {
+                    stream_saved_shell_detail_v068233(
+                        *incremental_detail_state_v068233, terminal_saved_shell_v068233,
+                        kk_v068227, finals.size() + 1u,
+                        std::filesystem::path(options.output_dir));
+                } else {
+                    saved_passes_v068227[kk_v068227].insert_after_hdu(
+                        finals.size() + 1u, std::move(terminal_saved_shell_v068233));
+                    update_saved_pass_memory_v068233(saved_passes_v068227);
+                }
             }
             if (effective_npass_v068227 > 1u) {
                 const auto& terminal_saved_v0682274 = saved_passes_v068227[kk_v068227].at_hdu(
@@ -19444,7 +19844,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         // and npass>1.  The public science products continue to use only the
         // final pass.  Build detail rows from the REAL(4)/FITS-E3 snapshots
         // that source SAVD owns rather than from reconstructed final state.
-        if (source_savd_detail_enabled_v0682307) {
+        if (source_savd_detail_enabled_v0682307 && !incremental_detail_stream_v068233) {
             whole.multipass_detail_radial_zones.clear();
             whole.multipass_detail_radial_zones.resize(effective_npass_v068227);
             for (std::size_t pass_v0682273 = 1u; pass_v0682273 <= effective_npass_v068227; ++pass_v0682273) {
@@ -19482,6 +19882,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     detail_zones_v0682273.push_back(std::move(zone_v0682273));
                 }
             }
+        }
+        if (incremental_detail_stream_v068233) {
+            whole.multipass_detail_radial_zones.clear();
+            whole.incremental_detail_products_complete_v068233 = true;
+            whole.native_detail_state_retained = true;
         }
 
         if (g_performance_v064890) {
@@ -20666,12 +21071,61 @@ void emit_controller_performance_instrumentation(
         const std::uint64_t peak_rss_v068231 = peak_rss_bytes_v068231();
         out << "V068231_PERF_PEAK_RSS_BYTES=" << peak_rss_v068231 << "\n"
             << "V068231_PERF_PEAK_RSS_MIB=" << (static_cast<double>(peak_rss_v068231) / (1024.0 * 1024.0)) << "\n"
+            << "V068233_PUBLICATION_RETAINED_CURRENT_BYTES=" << perf.publication_retained_current_bytes_v068233 << "\n"
+            << "V068233_PUBLICATION_RETAINED_PEAK_BYTES=" << perf.publication_retained_peak_bytes_v068233 << "\n"
+            << "V068233_PUBLICATION_RETAINED_CURRENT_CAPACITY_BYTES=" << perf.publication_retained_current_capacity_bytes_v068233 << "\n"
+            << "V068233_PUBLICATION_RETAINED_PEAK_CAPACITY_BYTES=" << perf.publication_retained_peak_capacity_bytes_v068233 << "\n"
+            << "V068233_ZONE_PUBLICATION_SCRATCH_BYTES=" << perf.zone_publication_scratch_bytes_v068233 << "\n"
+            << "V068233_STEP_ROWS_STREAMED=" << perf.step_rows_streamed_v068233 << "\n"
+            << "V068233_DETAIL_ROWS_STREAMED=" << perf.detail_rows_streamed_v068233 << "\n"
+            << "V068233_DETAL2_ROWS_STREAMED=" << perf.detal2_rows_streamed_v068233 << "\n"
+            << "V068233_DETAL3_ROWS_STREAMED=" << perf.detal3_rows_streamed_v068233 << "\n"
+            << "V068233_DETAL4_ROWS_STREAMED=" << perf.detal4_rows_streamed_v068233 << "\n"
+            << "V068233_SAVED_SHELLS_STREAMED=" << perf.saved_shells_streamed_v068233 << "\n"
+            << "V068233_ATDB_DECODED_LOGICAL_BYTES=" << perf.atdb_decoded_logical_bytes_v068233 << "\n"
+            << "V068233_ATDB_DECODED_CAPACITY_BYTES=" << perf.atdb_decoded_capacity_bytes_v068233 << "\n"
+            << "V068233_PREPARED_SIDECAR_LOGICAL_BYTES=" << perf.prepared_sidecar_logical_bytes_v068233 << "\n"
+            << "V068233_PREPARED_SIDECAR_CAPACITY_BYTES=" << perf.prepared_sidecar_capacity_bytes_v068233 << "\n"
+            << "V068233_RETAINED_PRODUCT_ARRAY_BYTES=" << perf.retained_array_bytes << "\n"
+            << "V068233_PERSISTENT_SCRATCH_BYTES=" << perf.foundation_v068231.persistent_reserved_bytes << "\n"
+            << "V068233_RSS_AFTER_ATDB_BYTES=" << perf.rss_after_atdb_bytes_v068233 << "\n"
+            << "V068233_RSS_RADIAL_EVENT_LAST_BYTES=" << perf.radial_rss_last_bytes_v068233 << "\n"
+            << "V068233_RSS_RADIAL_EVENT_PEAK_BYTES=" << perf.radial_rss_peak_bytes_v068233 << "\n"
+            << "V068233_RSS_RADIAL_EVENT_SAMPLES=" << perf.radial_rss_samples_bytes_v068233.size() << "\n"
+            << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
+            << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
             << "V068231_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"
             << "V068222_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"
             << "V068222_PERF_RRC_VALUES_BEFORE=" << perf.compacted_rrc_values_before << "\n"
             << "V068222_PERF_RRC_VALUES_AFTER=" << perf.compacted_rrc_values_after << "\n"
             << "V068222_PERF_RRC_ESTIMATED_BYTES_SAVED="
-            << 8u * (perf.compacted_rrc_values_before - perf.compacted_rrc_values_after) << "\n";
+            << 8u * (perf.compacted_rrc_values_before - perf.compacted_rrc_values_after) << "\n"
+            << "V068233_MEMORY_ACCOUNTING_POLICY=LOGICAL_AND_CAPACITY_LOWER_BOUND\n"
+            << "V068233_ATDB_DECODED_LOGICAL_BYTES=" << perf.atdb_decoded_logical_bytes_v068233 << "\n"
+            << "V068233_ATDB_DECODED_CAPACITY_BYTES=" << perf.atdb_decoded_capacity_bytes_v068233 << "\n"
+            << "V068233_PREPARED_SIDECAR_LOGICAL_BYTES=" << perf.prepared_sidecar_logical_bytes_v068233 << "\n"
+            << "V068233_PREPARED_SIDECAR_CAPACITY_BYTES=" << perf.prepared_sidecar_capacity_bytes_v068233 << "\n"
+            << "V068233_PUBLICATION_RETAINED_CURRENT_BYTES=" << perf.publication_retained_current_bytes_v068233 << "\n"
+            << "V068233_PUBLICATION_RETAINED_PEAK_BYTES=" << perf.publication_retained_peak_bytes_v068233 << "\n"
+            << "V068233_ZONE_PUBLICATION_SCRATCH_BYTES=" << perf.zone_publication_scratch_bytes_v068233 << "\n"
+            << "V068233_STEP_ROWS_STREAMED=" << perf.step_rows_streamed_v068233 << "\n"
+            << "V068233_DETAIL_ROWS_STREAMED=" << perf.detail_rows_streamed_v068233 << "\n"
+            << "V068233_DETAL2_ROWS_STREAMED=" << perf.detal2_rows_streamed_v068233 << "\n"
+            << "V068233_DETAL3_ROWS_STREAMED=" << perf.detal3_rows_streamed_v068233 << "\n"
+            << "V068233_DETAL4_ROWS_STREAMED=" << perf.detal4_rows_streamed_v068233 << "\n"
+            << "V068233_SAVED_SHELLS_STREAMED=" << perf.saved_shells_streamed_v068233 << "\n"
+            << "V068233_RSS_AFTER_ATDB_BYTES=" << perf.rss_after_atdb_bytes_v068233 << "\n"
+            << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
+            << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
+            << "V068233_RADIAL_RSS_LAST_BYTES=" << perf.radial_rss_last_bytes_v068233 << "\n"
+            << "V068233_RADIAL_RSS_PEAK_BYTES=" << perf.radial_rss_peak_bytes_v068233 << "\n"
+            << "V068233_RADIAL_RSS_SAMPLE_COUNT=" << perf.radial_rss_samples_bytes_v068233.size() << "\n";
+        out << "V068233_RADIAL_RSS_SAMPLES_BYTES=";
+        for (std::size_t i = 0; i < perf.radial_rss_samples_bytes_v068233.size(); ++i) {
+            if (i) out << ';';
+            out << perf.radial_rss_samples_bytes_v068233[i];
+        }
+        out << "\n";
         for (std::size_t i = 0; i < family_types.size(); ++i) {
             out << "V064890_PERF_RECORD_TYPE" << family_types[i] << "_COUNT=" << perf.record_family_counts[i] << "\n";
         }
@@ -21203,6 +21657,8 @@ int command_run_standalone_production(const Options& options, const std::filesys
                       << prefix << "LAST_LINE_WORKSPACE_EXACT=" << (last_ws.line_workspace_exact ? "YES" : "NO") << "\n"
                       << prefix << "LAST_LINE_TAU_EXACT=" << (last_ws.line_tau_workspace_exact ? "YES" : "NO") << "\n";
         }
+        performance_v064890.rss_before_final_publication_bytes_v068233 =
+            current_rss_bytes_v068233();
         std::cout << " final print:           1\n"
                   << " xstar: Prepping to write spectral data\n" << std::flush;
         ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
@@ -21241,6 +21697,7 @@ int command_run_standalone_production(const Options& options, const std::filesys
         auto step = xstar_step_log::write_native_step_log(output, product);
         performance_v064890.step_log_seconds += performance_elapsed_seconds(step_log_started_v064890);
         performance_v064890.publication_seconds += performance_elapsed_seconds(publication_started_v064890);
+        performance_v064890.rss_after_finalization_bytes_v068233 = current_rss_bytes_v068233();
         std::cout << " xstar: Done writing spectral data\n";
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         const std::size_t fits_count = count_native_fits_products(output);

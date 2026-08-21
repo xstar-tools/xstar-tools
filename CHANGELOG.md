@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.82.33 - canonical incremental publication and bounded radial memory - 2026-08-21
+
+- Base this performance/lifetime revision on host-accepted `0.6.82.32`; keep science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487 / 6048110 / 60488` frozen.
+- Mirror canonical FORTRAN `pprint(17)`/`pprint(9)` lifetime by appending the compact STEP progress surface at accepted radial events while those scalars are live. The established final STEP serializer still rewrites the complete historical text so normalized final STEP semantics remain on the accepted path.
+- For ordinary single-pass source-SAVD detail publication (`lwrite>0`, `npass=1`), write `xo01_detail/detal2/detal3/detal4.fits` incrementally at each literal SAVD boundary and immediately release the temporary one-zone writer state. Preserve the existing retained whole-pass path unchanged for multipass and diagnostic trajectories.
+- Eliminate the single-pass whole-run `NativeSavedPassV068227` detail-history retention and the later second conversion into `multipass_detail_radial_zones`; each SAVD snapshot is serialized while live and then destroyed.
+- Reuse the already-qualified detail writers to preserve source row membership/order, FITS schemas, REAL(4)/FITS-E3 conversion points, and HDU payload semantics. Append only the radial HDU to the persistent target; parameter/metadata HDUs are created once from the first event.
+- Add `.33` memory ownership telemetry for decoded ATDB storage, prepared/identity sidecars, retained SAVD publication state, one-zone publication scratch, live/current RSS snapshots, streamed STEP/detail row counts, and RSS samples across radial publication events. Existing `.31/.32` allocation, fixed-state, Type-50, and publication timing counters remain available.
+- Adopt tiered host qualification: Fe reference is the default first gate, C5 low-`xi` is the routine high-memory stress gate, and the expensive broad multi-element case is an explicit milestone/final gate rather than an automatic run after every revision.
+- Require candidate-vs-accepted-`.32` material/STEP/spectrum acceptance, exact public spectrum and normalized STEP rows, identical FITS inventory, and bit-exact raw FITS HDU data payloads. During the memory campaign Fe may not regress RSS by more than 3%; C5/broad require an unmistakable reduction target (candidate <=80% of fresh same-host `.32` RSS) before formal memory-objective acceptance.
+- Do not alter rate formulas, controller decisions, solver arithmetic, source traversal/accumulation order, Type-50 mathematics, or deferred `.34` publication-correctness issues.
+
 ## 0.6.82.32 - prepared-record, Type-50/profile, and detail-publication hot paths - 2026-08-21
 
 - Base the performance-only revision on the host-accepted `0.6.82.31` foundation and carry forward the same three mandatory anchors: C5 `xi=-3,cfrac=0,emult=0.25`, `multi_element_xi1_ne1e12`, and the Fe reference. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487 / 6048110 / 60488` remain frozen.

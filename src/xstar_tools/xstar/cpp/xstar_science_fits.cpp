@@ -33,6 +33,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -11101,7 +11102,152 @@ void write_public_spectrum(const std::filesystem::path& path,
 }
 
 
-} // namespace
+ } // namespace
+
+IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& one_zone_state,
+    std::size_t pass_index) {
+    if (one_zone_state.radial_zones.size() != 1u) {
+        throw std::runtime_error("0.6.82.33 incremental detail append requires exactly one radial zone");
+    }
+    std::filesystem::create_directories(output_dir);
+    reset_bulk_fits_perf_v06823088();
+    const auto elements = read_elements(one_zone_state, std::filesystem::path{});
+    const auto rows = read_rows(one_zone_state, std::filesystem::path{});
+    const auto& zone = one_zone_state.radial_zones.front();
+    const std::string prefix = "xo" + (pass_index < 10u ? std::string("0") : std::string()) +
+        std::to_string(pass_index) + "_";
+    const std::string tag = std::to_string(pass_index) + "_" +
+        std::to_string(zone.zone_index) + "_" +
+        std::to_string(zone.accepted_controller.accepted_sequence);
+
+    auto zone_capacity_bytes = [&]() -> std::uint64_t {
+        const auto& e = zone.accepted_controller.evaluation;
+        std::uint64_t total = 0u;
+        auto add = [&](const auto& v) {
+            using value_type = typename std::decay_t<decltype(v)>::value_type;
+            total += static_cast<std::uint64_t>(v.capacity()) * sizeof(value_type);
+        };
+        add(e.source_global_xilevg); add(e.source_global_rnisg);
+        add(e.source_detail_pre_mapback_populations); add(e.source_detail_global_xilevg);
+        add(e.populations); add(e.radiation_energy_ev); add(e.radiation_flux);
+        add(e.continuum_tau_in); add(e.continuum_tau_out); add(e.continuum_spectrum);
+        add(e.spectrum); add(e.opacity);
+        const auto& w = e.source_workspace;
+        add(w.lte_populations); add(w.rcem); add(w.oplin); add(w.tau0); add(w.elum);
+        add(w.cemab); add(w.cabab); add(w.opakab); add(w.tauc); add(w.elumab);
+        add(w.zrems); add(w.opakc); add(w.opakcont); add(w.flinel); add(w.rccemis);
+        add(w.dpthc); add(w.dpthcont); add(w.zremsz); add(w.line_profile_workspace);
+        return total;
+    };
+
+    auto row_count_hdu3 = [&](const std::filesystem::path& path) -> std::uint64_t {
+        fitsfile* fptr = nullptr;
+        int status = 0;
+        fits_open_file(&fptr, path.string().c_str(), READONLY, &status);
+        check_fits(status, "0.6.82.33 open incremental detail row-count file");
+        int hdu_type = 0;
+        fits_movabs_hdu(fptr, 3, &hdu_type, &status);
+        check_fits(status, "0.6.82.33 select incremental detail row-count HDU");
+        LONGLONG nrows = 0;
+        fits_get_num_rowsll(fptr, &nrows, &status);
+        check_fits(status, "0.6.82.33 count incremental detail rows");
+        fits_close_file(fptr, &status);
+        check_fits(status, "0.6.82.33 close incremental detail row-count file");
+        return nrows > 0 ? static_cast<std::uint64_t>(nrows) : 0u;
+    };
+
+    auto append_radial_hdu = [&](const std::filesystem::path& temporary,
+                                 const std::filesystem::path& target) -> double {
+        const auto started = std::chrono::steady_clock::now();
+        if (!std::filesystem::exists(target)) {
+            std::filesystem::rename(temporary, target);
+            return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        }
+        fitsfile* src = nullptr;
+        fitsfile* dst = nullptr;
+        int status = 0;
+        fits_open_file(&src, temporary.string().c_str(), READONLY, &status);
+        check_fits(status, "0.6.82.33 open incremental detail source");
+        fits_open_file(&dst, target.string().c_str(), READWRITE, &status);
+        if (status != 0) {
+            int close_status = 0;
+            if (src) fits_close_file(src, &close_status);
+            check_fits(status, "0.6.82.33 open incremental detail target");
+        }
+        int src_type = 0;
+        fits_movabs_hdu(src, 3, &src_type, &status);
+        check_fits(status, "0.6.82.33 select incremental radial HDU");
+        int dst_hdus = 0;
+        fits_get_num_hdus(dst, &dst_hdus, &status);
+        check_fits(status, "0.6.82.33 count incremental target HDUs");
+        int dst_type = 0;
+        fits_movabs_hdu(dst, dst_hdus, &dst_type, &status);
+        check_fits(status, "0.6.82.33 select incremental target tail");
+        fits_copy_hdu(src, dst, 0, &status);
+        check_fits(status, "0.6.82.33 append incremental radial HDU");
+        fits_write_chksum(dst, &status);
+        check_fits(status, "0.6.82.33 checksum incremental radial HDU");
+        int src_close = 0;
+        fits_close_file(src, &src_close);
+        check_fits(src_close, "0.6.82.33 close incremental detail source");
+        int dst_close = 0;
+        fits_close_file(dst, &dst_close);
+        check_fits(dst_close, "0.6.82.33 close incremental detail target");
+        std::error_code ec;
+        std::filesystem::remove(temporary, ec);
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    };
+
+    IncrementalDetailResultV068233 result;
+    result.zone_publication_scratch_bytes = zone_capacity_bytes();
+    auto publish_one = [&](const std::string& suffix, auto&& writer,
+                           double& total_seconds, double* fits_seconds,
+                           std::uint64_t* rows_out) {
+        const auto target = output_dir / (prefix + suffix + ".fits");
+        const auto temporary = output_dir / (".v068233_" + tag + "_" + suffix + ".fits");
+        std::error_code ec;
+        std::filesystem::remove(temporary, ec);
+        const double fits_before = g_bulk_fits_perf_v06823088.write_seconds;
+        const double checksum_before = g_fits_checksum_seconds_v068232;
+        const auto started = std::chrono::steady_clock::now();
+        writer(temporary);
+        if (rows_out) *rows_out += row_count_hdu3(temporary);
+        const double append_seconds = append_radial_hdu(temporary, target);
+        total_seconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        if (fits_seconds) {
+            *fits_seconds += std::max(0.0, g_bulk_fits_perf_v06823088.write_seconds - fits_before) + append_seconds;
+        }
+        return std::max(0.0, g_fits_checksum_seconds_v068232 - checksum_before);
+    };
+
+    publish_one("detail",
+        [&](const auto& path) { write_population_detail(path, one_zone_state, elements, rows); },
+        result.detail_population_seconds, nullptr, &result.detail_rows);
+
+    const double line_identity_before = g_detail_line_identity_seconds_v068232;
+    result.detail_line_checksum_seconds += publish_one("detal2",
+        [&](const auto& path) { write_line_detail(path, one_zone_state, elements, rows); },
+        result.detail_line_seconds, &result.detail_line_fits_write_seconds, &result.detal2_rows);
+    result.detail_line_identity_seconds = std::max(0.0,
+        g_detail_line_identity_seconds_v068232 - line_identity_before);
+    result.detail_line_cpu_staging_seconds = std::max(0.0,
+        result.detail_line_seconds - result.detail_line_identity_seconds -
+        result.detail_line_fits_write_seconds - result.detail_line_checksum_seconds);
+
+    result.detail_rrc_checksum_seconds += publish_one("detal3",
+        [&](const auto& path) { write_rrc_detail(path, one_zone_state, elements, rows); },
+        result.detail_rrc_seconds, &result.detail_rrc_fits_write_seconds, &result.detal3_rows);
+    result.detail_rrc_cpu_staging_seconds = std::max(0.0,
+        result.detail_rrc_seconds - result.detail_rrc_fits_write_seconds -
+        result.detail_rrc_checksum_seconds);
+
+    publish_one("detal4",
+        [&](const auto& path) { write_spectrum_detail(path, one_zone_state); },
+        result.detail_spectrum_seconds, nullptr, nullptr);
+    return result;
+}
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Write historical science products from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
@@ -11183,7 +11329,19 @@ Result write_historical_science_products(
     const int npass = static_cast<int>(std::llround(parameter_value(state, "npass", 1.0)));
     const bool write_detail_products = (lwrite > 0) || (npass > 1);
     std::vector<std::string> detail_filenames_v0682272;
-    if (write_detail_products) {
+    if (write_detail_products && state.incremental_detail_products_complete_v068233) {
+        // 0.6.82.33: npass=1 detail HDUs were already appended at the literal
+        // SAVD boundary while the source workspaces were live.  Do not rebuild
+        // them from retained whole-run state at final publication.
+        for (int pass_v068233 = 1; pass_v068233 <= std::max(npass, 1); ++pass_v068233) {
+            const std::string prefix_v068233 =
+                "xo" + (pass_v068233 < 10 ? std::string("0") : std::string()) +
+                std::to_string(pass_v068233) + "_";
+            detail_filenames_v0682272.insert(detail_filenames_v0682272.end(), {
+                prefix_v068233 + "detail.fits", prefix_v068233 + "detal2.fits",
+                prefix_v068233 + "detal3.fits", prefix_v068233 + "detal4.fits"});
+        }
+    } else if (write_detail_products) {
         if (npass >= 1 && state.multipass_detail_radial_zones.size() >= static_cast<std::size_t>(npass)) {
             // 0.6.82.30.7: source SAVD owns the detail stream whenever
             // lwrite>0 as well as when npass>1.  Use the retained SAVD

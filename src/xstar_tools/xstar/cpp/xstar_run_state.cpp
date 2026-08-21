@@ -648,6 +648,8 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
     product.native_detail_state_retained = state.native_detail_state_retained;
+    product.incremental_detail_products_complete_v068233 =
+        state.incremental_detail_products_complete_v068233;
     product.continuum_depths_derived_from_native_opacity =
         state.continuum_depths_derived_from_native_opacity;
     product.native_product_inputs_complete = state.native_product_inputs_complete;
@@ -700,6 +702,8 @@ ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
     product.native_detail_state_retained = state.native_detail_state_retained;
+    product.incremental_detail_products_complete_v068233 =
+        state.incremental_detail_products_complete_v068233;
     product.continuum_depths_derived_from_native_opacity = state.continuum_depths_derived_from_native_opacity;
     product.native_product_inputs_complete = state.native_product_inputs_complete;
     product.exact_source_metadata_retained = state.exact_source_metadata_retained;

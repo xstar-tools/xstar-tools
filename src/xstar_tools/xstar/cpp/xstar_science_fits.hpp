@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -20,6 +21,29 @@
 namespace xstar_science_fits {
 
 using Snapshot = xstar_run_state::FixedEvaluationState;
+
+struct IncrementalDetailResultV068233 {
+    double detail_population_seconds = 0.0;
+    double detail_line_seconds = 0.0;
+    double detail_line_identity_seconds = 0.0;
+    double detail_line_cpu_staging_seconds = 0.0;
+    double detail_line_fits_write_seconds = 0.0;
+    double detail_line_checksum_seconds = 0.0;
+    double detail_rrc_seconds = 0.0;
+    double detail_rrc_cpu_staging_seconds = 0.0;
+    double detail_rrc_fits_write_seconds = 0.0;
+    double detail_rrc_checksum_seconds = 0.0;
+    double detail_spectrum_seconds = 0.0;
+    std::uint64_t zone_publication_scratch_bytes = 0u;
+    std::uint64_t detail_rows = 0u;
+    std::uint64_t detal2_rows = 0u;
+    std::uint64_t detal3_rows = 0u;
+};
+
+IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& one_zone_state,
+    std::size_t pass_index);
 
 struct Result {
     std::size_t files_written = 0;
