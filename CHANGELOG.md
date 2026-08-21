@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.33.5 - zero-preserving lifetime qualification hotfix - 2026-08-21
+
+- Revise host-tested `0.6.82.33.4` as `0.6.82.33.5` under the no-version-reuse rule. The Fe host run showed exact science, normalized STEP, bit-exact FITS payload, RSS, memory, and performance acceptance; the only rejection was the lifetime gate in the Python host harness.
+- Preserve the complete `.33.4` C++ lifetime/publication implementation byte-for-byte. In particular, ordinary single-pass production still uses one pending newest `FixedDsecSnapshot`, immediately transfers completed prior snapshots into unchanged `whole.radial_zones`, and reports the existing `V0682334_*` O(1) telemetry.
+- Fix the host parser bug that converted a legitimate `V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=0` into sentinel `999`: `int(candidate_perf.get(..., 999) or 999)` treated numeric zero as false. `.33.5` uses an explicit `None`/missing check so zero remains zero.
+- Add regression coverage proving zero-valued integer telemetry survives parsing and missing markers still map to the requested sentinel. Keep the `.32` exact science/FITS baseline, Fe/C5 RSS objectives, and performance gates unchanged.
+- Keep the deferred `0.6.82.34` correctness scope unchanged: N VI six missing `xo01_detail` rows; Cr II binary32-min-subnormal `xo01_detal2`; O IV extra / Mg II missing `xo01_detal3`; source-local `cemab/cabab/opakab/tauc`; Si VI / Ni VI public RRC ownership; exact HEATT two-plane `1e-49` gating and duplicate-overwrite semantics.
+
 ## 0.6.82.33.4 - O(1) accepted-boundary snapshot lifetime - 2026-08-21
 
 - Promote host-accepted `0.6.82.33.3` as the performance/lifetime starting point. Fe and C5 both passed exact science, normalized STEP, bit-exact FITS payload, RSS, and wall-performance gates against accepted `0.6.82.32`; the separate `--case` runs report suite-level `PARTIAL` only because the full three-case milestone set was not selected.
