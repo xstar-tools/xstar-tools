@@ -12782,6 +12782,75 @@ std::vector<double> source_detail_global_projection(
             write_aliases(packed, pre_mapback[packed]);
         }
     }
+
+    // 0.6.82.30.8.15 publication-only fstepr ownership repair.
+    //
+    // The compact row alias topology intentionally represents shared
+    // continuum/next-ground ownership, but it is not a complete inventory of
+    // every source detail role.  In particular, source autoionizing/doubly
+    // excited roles may have a valid fstepr npilev identity without appearing
+    // in row_global_level_aliases.  That left the N VI local levels 50..55
+    // (global 839..844 in the broad qualification model) at structural zero in
+    // the retained detail surface even though their solved pre-mapback values
+    // are above the literal fstepr 1.d-34 publication floor.
+    //
+    // Reattach any such missing detail role through immutable native row
+    // metadata, not by element-specific global numbers.  Restrict the fallback
+    // to the retained active full-row window and preserve the 12.3.18 terminal
+    // inactive-row suppression exactly.  This surface is consumed only by
+    // xo01_detail/SAVD publication and never feeds solver, rates, transport, or
+    // the post-mapback global xilevg science state.
+    using DetailRoleKeyV068230815 =
+        std::tuple<int,std::string,std::string,double>;
+    struct DetailRoleOwnerV068230815 {
+        std::size_t packed_row = 0u;
+        int full_row = 0;
+    };
+    std::map<DetailRoleKeyV068230815, DetailRoleOwnerV068230815>
+        detail_role_owner_v068230815;
+    for (const auto& rm : data.program->row_metadata) {
+        if (rm.element_index <= 0 || rm.row <= 0) continue;
+        std::size_t packed = 0u;
+        bool found_element = false;
+        for (const auto& element : data.program->element_metadata) {
+            if (element.element_index != rm.element_index) continue;
+            packed = static_cast<std::size_t>(element.row_offset + rm.row - 1);
+            found_element = true;
+            break;
+        }
+        if (!found_element || packed >= pre_mapback.size()) continue;
+        detail_role_owner_v068230815.emplace(
+            DetailRoleKeyV068230815{
+                rm.element_index, rm.ion_label, rm.level_label, rm.energy_ev},
+            DetailRoleOwnerV068230815{packed, rm.row});
+    }
+    std::map<int,int> element_index_by_z_v068230815;
+    for (const auto& element : data.program->element_metadata) {
+        element_index_by_z_v068230815[element.atomic_number] = element.element_index;
+    }
+    for (const auto& detail : data.program->detail_level_identities) {
+        if (detail.global_index <= 0 ||
+            static_cast<std::size_t>(detail.global_index) > dense.size()) continue;
+        const std::size_t global0 = static_cast<std::size_t>(detail.global_index - 1);
+        if (dense[global0] != 0.0) continue;
+        const auto element_it = element_index_by_z_v068230815.find(detail.atomic_number);
+        if (element_it == element_index_by_z_v068230815.end()) continue;
+        const auto owner_it = detail_role_owner_v068230815.find(
+            DetailRoleKeyV068230815{
+                element_it->second, detail.ion_label, detail.level_label,
+                detail.excitation_ev});
+        if (owner_it == detail_role_owner_v068230815.end()) continue;
+        const auto window_it = windows.find(detail.atomic_number);
+        if (window_it == windows.end()) continue;
+        const auto& window = window_it->second;
+        const int full_row = owner_it->second.full_row;
+        if (full_row < window[2] || full_row > window[3]) continue;
+        if (window[1] < detail.atomic_number && full_row == window[3]) continue;
+        const std::size_t packed = owner_it->second.packed_row;
+        if (packed >= pre_mapback.size()) continue;
+        const double value = pre_mapback[packed];
+        if (std::isfinite(value) && value != 0.0) dense[global0] = value;
+    }
     return dense;
 }
 
@@ -14804,10 +14873,28 @@ void advance_atomic_luminosities(
         ? local_boundary.cemab.size() / 2u : 0u;
     std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
     if (data.program) {
-        for (const auto& record : data.program->records) {
-            if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
-            const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
-            if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
+        // 0.6.82.30.8.15 publication-only writespectra4 ownership repair.
+        // setptrs owns the final RRC luminosity inventory through npcon/npconi2,
+        // represented by source_rrc_identities.  The executable record list is
+        // broader: several records can reference the same continuum slot and a
+        // rate-7 executable record does not necessarily own that slot in the
+        // source publication chain.  Building this gate from all executable
+        // records created ten spurious Si VI public RRC rows and suppressed the
+        // source-owned Ni VI continuum 144628.  Accumulate elumab only for the
+        // literal source publication slots.  This changes product bookkeeping
+        // only; cemab, rates, transport, and spectrum arithmetic are untouched.
+        if (!data.program->source_rrc_identities.empty()) {
+            for (const auto& identity : data.program->source_rrc_identities) {
+                if (identity.rate_type != 7 || identity.continuum_index <= 0) continue;
+                const std::size_t slot = static_cast<std::size_t>(identity.continuum_index);
+                if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
+            }
+        } else {
+            for (const auto& record : data.program->records) {
+                if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
+                const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
+                if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
+            }
         }
     }
     for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {

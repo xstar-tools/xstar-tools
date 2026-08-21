@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.30.8.15 - final publication-inventory closure candidate - 2026-08-21
+
+- Freeze host-accepted `0.6.82.30.8.14` as the broad multi-element science baseline: `multi_element_xi1_ne1e12` ACCEPTed STEP structure/science, `ntotit` 0 mismatches, material, and spectrum against canonical FORTRAN XSTAR 2.59g.  Record the accepted source hashes in `qualification/multi_element_science_freeze_0_6_82_30_8_14/`.
+- Make `.30.8.15` publication-only.  Keep the `.30.8.14` Type-70 source-context repair, `.30.8.12` Type-50/56 source-zero repair, rate kernels, level solver, controller trajectory, transport, spectrum arithmetic, science revision `0.6.48.12.3.45.3.3.8`, comparator thresholds, and ABI identifiers `60487 / 6048110 / 60488` frozen.
+- Repair `xo01_detail.fits` source-role projection generically: if a literal `fstepr` detail identity is not represented by compact row aliases, recover its solved pre-mapback value through immutable row metadata while respecting the accepted active-stage window and inactive-terminal suppression.  This restores the six source-owned N VI doubly excited roles (globals 839-844) without element-specific publication code.
+- Repair `xo01_detal3.fits` inventory ownership by distinguishing compact retained RRC arrays from one-based source `npconi2` arrays before applying literal `fstepr3` `cemab/cabab/opakab` activity tests.  This targets the spurious negative-threshold O IV rows and the missing Mg II continuum 7063 identity without recomputing any RRC science value.
+- Repair `xout_rrc1.fits` source ownership: accumulate/publish RRC luminosity only through the exact `source_rrc_identities` rate-type-7 chain corresponding to canonical `npcon/npconi2`, and remove the non-source positive-threshold publication surrogate.  This targets the ten Si VI extras (10329-10333, 10339-10343) and restores Ni VI 144628 when its source `elumab` exceeds the canonical floor.
+- Keep `xo01_detal2.fits` Cr II/III physically-zero omissions as a documented structural exception: C++ extras are forbidden; FORTRAN-only rows are accepted only when emissivity/opacity are exactly zero and residual `|tau| <= 1e-35`.
+- Add `compare_multi_element_product_inventory_0_6_82_30_8_15.py` and focused release tests.  Product inventory is a separate final gate; it does not replace or weaken the frozen science comparator.
+
 ## 0.6.82.30.8.14 - Al XII Type-70 next-ion source-context parity repair - 2026-08-20
 
 - Treat diagnostic-only `0.6.82.30.8.13` as evidence, not as a production-science base; carry forward the accepted `.30.8.12` Type-50/56 source-zero repair unchanged.

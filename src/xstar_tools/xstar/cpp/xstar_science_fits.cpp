@@ -8987,6 +8987,34 @@ double rrc_workspace_value_v0682279(
         ? values[canonical_compact_index] : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Read one plane of a retained RRC workspace without confusing the
+// compact identity ordinal with FORTRAN's one-based npconi2 source slot.
+// Reference context: fstepr3.f90/rstepr3.f90 publication ownership; this is a
+// publication-addressing helper and does not alter any rate or transport state.
+// XSTAR-FUNCTION-COMMENT-END
+double rrc_two_plane_workspace_value_v068230815(
+    const std::vector<double>& values,
+    std::size_t source_index_one_based,
+    std::size_t canonical_compact_index,
+    std::size_t canonical_identity_count,
+    std::size_t plane) {
+    if (values.empty() || plane > 1u) return 0.0;
+    // 0.6.82.22 compacts completed radial snapshots into exact
+    // program.rrc_identities order.  In that representation the physical
+    // npconi2 source slot must never be used as an array offset.
+    if (canonical_identity_count > 0u &&
+        values.size() == 2u * canonical_identity_count) {
+        const std::size_t at = plane * canonical_identity_count + canonical_compact_index;
+        return at < values.size() ? values[at] : 0.0;
+    }
+    if (values.size() < 2u || values.size() % 2u != 0u) return 0.0;
+    const std::size_t stride = values.size() / 2u;
+    const std::size_t at = plane * stride + source_index_one_based;
+    return source_index_one_based < stride && at < values.size()
+        ? values[at] : 0.0;
+}
+
 struct RrcBridgeArrays {
     std::vector<double> rrc_indices;
     std::vector<double> cemab;
@@ -9048,14 +9076,17 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         detail_inventory && !state.source_rrc_identities.empty()
             ? state.source_rrc_identities : state.rrc_identities;
     out.reserve(detail_rrc_identities_v06822710.size());
-    // Canonical compact RRC address: derive it from the SAME identity domain
-    // that owns this publication.  Compatibility/detail filtering happens
-    // after this map is formed and therefore cannot shift later owners.
-    std::map<std::int32_t,std::size_t> canonical_rrc_compact_v06822710;
-    for (std::size_t i_v06822710 = 0; i_v06822710 < detail_rrc_identities_v06822710.size(); ++i_v06822710) {
-        const auto ci_v06822710 = detail_rrc_identities_v06822710[i_v06822710].continuum_index;
-        if (ci_v06822710 > 0 && !canonical_rrc_compact_v06822710.count(ci_v06822710)) {
-            canonical_rrc_compact_v06822710[ci_v06822710] = i_v06822710;
+    // Publication identity order and retained-workspace compact order are
+    // deliberately different domains.  fstepr3 publication walks
+    // source_rrc_identities, while 0.6.82.22 compacts completed snapshots in
+    // program.rrc_identities order.  Build the retained map explicitly; using
+    // the publication ordinal to address the retained compact array is the
+    // .8.14 defect that shifted/synthesized the O IV and Mg II inventory rows.
+    std::map<std::int32_t,std::size_t> retained_rrc_compact_v068230815;
+    for (std::size_t i_v068230815 = 0; i_v068230815 < state.rrc_identities.size(); ++i_v068230815) {
+        const auto ci_v068230815 = state.rrc_identities[i_v068230815].continuum_index;
+        if (ci_v068230815 > 0 && !retained_rrc_compact_v068230815.count(ci_v068230815)) {
+            retained_rrc_compact_v068230815[ci_v068230815] = i_v068230815;
         }
     }
     for (std::size_t identity_ordinal = 0; identity_ordinal < detail_rrc_identities_v06822710.size(); ++identity_ordinal) {
@@ -9078,9 +9109,9 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
             if (!detail_inventory &&
                 !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
         }
-        const auto canonical_it_v06822710 = canonical_rrc_compact_v06822710.find(id.continuum_index);
-        const std::size_t canonical_compact_v06822710 = canonical_it_v06822710 == canonical_rrc_compact_v06822710.end()
-            ? identity_ordinal : canonical_it_v06822710->second;
+        const auto retained_it_v068230815 = retained_rrc_compact_v068230815.find(id.continuum_index);
+        const std::size_t retained_compact_v068230815 = retained_it_v068230815 == retained_rrc_compact_v068230815.end()
+            ? std::numeric_limits<std::size_t>::max() : retained_it_v068230815->second;
         const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);
         const std::size_t source_slot_v06822710 = static_cast<std::size_t>(id.continuum_index);
         if (ci >= n || source_slot_v06822710 >= n) continue;
@@ -9102,11 +9133,11 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         // arrays.  Their address is the compact oracle RRC inventory ordinal,
         // while elumab/tauc bridge arrays retain the large continuum-index plane.
         row.absorption = rrc_workspace_value_v0682279(
-            ws.cabab, source_slot_v06822710, canonical_compact_v06822710,
-            detail_rrc_identities_v06822710.size());
+            ws.cabab, source_slot_v06822710, retained_compact_v068230815,
+            state.rrc_identities.size());
         row.opacity = rrc_workspace_value_v0682279(
-            ws.opakab, source_slot_v06822710, canonical_compact_v06822710,
-            detail_rrc_identities_v06822710.size());
+            ws.opakab, source_slot_v06822710, retained_compact_v068230815,
+            state.rrc_identities.size());
         // v17.25.40: do not fall back to the generic continuum opacity
         // surface for detailed RRC threshold opacity.  That surface is ordered
         // by continuum-bin/energy, not by the public RRC detail row, and it
@@ -9140,28 +9171,32 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         }
         bool keep_row = detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0;
         if (detail_inventory && !reference_mg11_product_state(state)) {
-            // v0.6.48.12.3.2 / literal fstepr3.f90: inventory activity is
-            // owned by the local cemab/cabab/opakab slot.  The retained
-            // per-HDU/public bridge can include cumulative values and is a
-            // value-refinement surface, not the authority for whether the row
-            // exists.  Prefer direct native source slots whenever available.
-            double signal_emis_in = 0.0;
-            double signal_emis_out = 0.0;
-            double signal_absorption = 0.0;
-            double signal_opacity = 0.0;
-            bool have_local_source_slot = false;
-            if (ws.cemab.size() >= 2u && ws.cemab.size() % 2u == 0u) {
-                const std::size_t stride = ws.cemab.size() / 2u;
-                const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
-                if (slot < stride) {
-                    signal_emis_in = ws.cemab[slot];
-                    signal_emis_out = ws.cemab[stride + slot];
-                    if (slot < ws.cabab.size()) signal_absorption = ws.cabab[slot];
-                    if (slot < ws.opakab.size()) signal_opacity = ws.opakab[slot];
-                    have_local_source_slot = true;
-                }
-            }
-            if (!have_local_source_slot) {
+            // 0.6.82.30.8.15 / literal fstepr3.f90: inventory activity is
+            // owned by cemab(1/2,kkkl), cabab(kkkl), and opakab(kkkl), where
+            // kkkl=npconi2(ml).  Intermediate C++ radial snapshots are memory-
+            // compacted into program.rrc_identities order, while terminal/source
+            // snapshots remain one-based source-slot arrays.  The old test
+            // treated any compact array whose length happened to exceed kkkl
+            // as source-indexed, publishing ~45 spurious O IV negative-edge
+            // rows and dropping the Mg II continuum 7063 row.  Decode the
+            // retained representation explicitly before applying the source
+            // 1.e-36 gate.  No RRC rate/value is recomputed here.
+            const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
+            double signal_emis_in = rrc_two_plane_workspace_value_v068230815(
+                ws.cemab, slot, retained_compact_v068230815,
+                state.rrc_identities.size(), 0u);
+            double signal_emis_out = rrc_two_plane_workspace_value_v068230815(
+                ws.cemab, slot, retained_compact_v068230815,
+                state.rrc_identities.size(), 1u);
+            double signal_absorption = rrc_workspace_value_v0682279(
+                ws.cabab, slot, retained_compact_v068230815,
+                state.rrc_identities.size());
+            double signal_opacity = rrc_workspace_value_v0682279(
+                ws.opakab, slot, retained_compact_v068230815,
+                state.rrc_identities.size());
+            const bool have_retained_source_activity =
+                !ws.cemab.empty() || !ws.cabab.empty() || !ws.opakab.empty();
+            if (!have_retained_source_activity) {
                 const auto found_rrc = rrc_bridge.index_map.find(id.continuum_index);
                 if (found_rrc != rrc_bridge.index_map.end() &&
                     rrc_bridge.cemab.size() == 2u * rrc_bridge.count) {
@@ -10843,14 +10878,15 @@ void write_public_rrc(const std::filesystem::path& path,
         if (identity.continuum_index <= 0) continue;
         // Literal writespectra4 ownership is the source rate-type-7 chain,
         // not the terminal active-stage-filtered/padded FITS identity surface.
-        // Keep the positive-threshold RRC rule already qualified for STEP
-        // Option 19 in 12.3.42.1.3.  This simultaneously removes the 45 O IV
-        // non-physical rows and allows late Ca source stages (including the
-        // missing Ca XX / Ca XIII identities) to publish when their source
-        // elumab workspace is active.
+        // 0.6.82.30.8.15: writespectra4 has no independent threshold-sign
+        // inventory gate.  Source identity is owned by the npcon/rate-7 chain
+        // and row eligibility is owned only by elumab(1/2,kkkl) > floor.
+        // The earlier positive-threshold filter compensated for a detail-RRC
+        // compact/source-addressing bug; that bug is now fixed at fstepr3
+        // ownership instead, so do not let edge metadata suppress a legitimate
+        // source-owned public row such as Ni VI continuum 144628.
         if (have_exact_source_rrcs && identity.rate_type != 7) continue;
         if (!have_exact_source_rrcs && identity.rate_type != 0 && identity.rate_type != 7) continue;
-        if (!(identity.threshold_ev > 0.0)) continue;
         const int z = element_z_from_ion_label(identity.ion_label);
         const ElementMeta* element = nullptr;
         for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
