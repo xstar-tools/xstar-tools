@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.82.33.4 - O(1) accepted-boundary snapshot lifetime - 2026-08-21
+
+- Promote host-accepted `0.6.82.33.3` as the performance/lifetime starting point. Fe and C5 both passed exact science, normalized STEP, bit-exact FITS payload, RSS, and wall-performance gates against accepted `0.6.82.32`; the separate `--case` runs report suite-level `PARTIAL` only because the full three-case milestone set was not selected.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, ABI identifiers `60487 / 6048110 / 60488`, the `.33` incremental SAVD/STEP architecture, the `.33.2` terminal-stage detal2 provenance correction, and the `.33.3` bulk-FITS flush ordering frozen.
+- Eliminate the ordinary single-pass whole-run `finals` history. Retain only one pending newest accepted `FixedDsecSnapshot`; when the next accepted boundary exists, compact the previous pending snapshot with the already-qualified `.22` RRC compactor and immediately transfer it into `whole.radial_zones`.
+- Transfer the newest/terminal pre-transport snapshot at radial-loop exit without compacting it, matching the accepted `.33.3` terminal ownership exactly. Replace count-only `finals.size()` uses with an explicit accepted-boundary counter on this optimized path.
+- Preserve multipass, reference-trajectory, reference-diagnostic, and full-trajectory diagnostic modes on the historical retained `finals` path. Leave `whole.radial_zones` fully retained in `.33.4`; reducing that second ~6.25 GiB C5 owner is intentionally deferred to the next lifetime revision.
+- Add `V0682334_FINAL_TRANSFER_MODE`, accepted-boundary count, retained-final current/peak count and bytes/capacity, and `V0682334_FINAL_SNAPSHOTS_O1`. The host gate requires ordinary single-pass candidates to report `IMMEDIATE_SINGLE_PASS_PRODUCTION`, `V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=0`, peak retained-final count <=1, and `V0682334_FINAL_SNAPSHOTS_O1=ACCEPT`.
+- Tighten the routine C5 memory objective to candidate RSS <=30% of a fresh same-host accepted `.32` run, while retaining Fe <=1.03x and keeping the expensive broad model explicit/milestone-only.
+
+### Deferred `0.6.82.34` publication correctness closure
+
+After the `.31-.33` performance-lifetime restructuring is stable, close the previously deferred publication discrepancies without mixing them into `.33.4`: N VI six missing `xo01_detail` rows; Cr II `xo01_detal2` binary32-min-subnormal behavior; O IV extra / Mg II missing `xo01_detal3` RRC membership; source-local `cemab/cabab/opakab/tauc` detail values; Si VI / Ni VI public RRC ownership; and exact HEATT two-plane `1e-49` source gating plus duplicate overwrite semantics. `0.6.82.34` remains correctness-first, with performance changes only when incidental and science-neutral.
+
 ## 0.6.82.33.3 - terminal detal2 bulk-FITS ownership hotfix - 2026-08-21
 
 - Revise host-rejected `0.6.82.33.2` as `0.6.82.33.3`; keep accepted `0.6.82.32` as the exact C++ science/FITS baseline and keep science revision `0.6.48.12.3.45.3.3.8` plus ABI identifiers `60487 / 6048110 / 60488` frozen.
