@@ -1134,20 +1134,35 @@ struct BulkColumnSegmentV06823088 {
     std::vector<T> values;
 };
 
+// 0.6.82.32: detail writers use small dense one-based FITS column numbers.
+// The 30.8.8 buffer used std::map for every scalar cell, which adds a tree
+// lookup tens of millions of times in broad detail products.  Keep exactly
+// the same contiguous per-column staging and flush semantics, but address the
+// segment by column ordinal and retain an active-column list for cheap flushes.
+template <typename T>
+struct DenseBulkColumnsV068232 {
+    std::vector<BulkColumnSegmentV06823088<T>> segments;
+    std::vector<int> active_columns;
+};
+
 struct BulkFitsBufferV06823088 {
     fitsfile* owner = nullptr;
-    std::map<int,BulkColumnSegmentV06823088<float>> floats;
-    std::map<int,BulkColumnSegmentV06823088<int>> ints;
-    std::map<int,BulkColumnSegmentV06823088<long long>> longlongs;
-    std::map<int,BulkColumnSegmentV06823088<short>> shorts;
-    std::map<int,BulkColumnSegmentV06823088<std::string>> strings;
+    DenseBulkColumnsV068232<float> floats;
+    DenseBulkColumnsV068232<int> ints;
+    DenseBulkColumnsV068232<long long> longlongs;
+    DenseBulkColumnsV068232<short> shorts;
+    DenseBulkColumnsV068232<std::string> strings;
 };
 
 struct BulkFitsPerfV06823088 {
     std::uint64_t scalar_cells_buffered = 0;
     std::uint64_t column_write_calls = 0;
     std::uint64_t flushes = 0;
+    double write_seconds = 0.0;
 };
+
+thread_local double g_fits_checksum_seconds_v068232 = 0.0;
+thread_local double g_detail_line_identity_seconds_v068232 = 0.0;
 
 thread_local BulkFitsBufferV06823088 g_bulk_fits_buffer_v06823088;
 thread_local BulkFitsPerfV06823088 g_bulk_fits_perf_v06823088;
@@ -1159,17 +1174,17 @@ bool bulk_fits_enabled_v06823088() {
 }
 
 bool bulk_fits_buffer_empty_v06823088() {
-    return g_bulk_fits_buffer_v06823088.floats.empty() &&
-        g_bulk_fits_buffer_v06823088.ints.empty() &&
-        g_bulk_fits_buffer_v06823088.longlongs.empty() &&
-        g_bulk_fits_buffer_v06823088.shorts.empty() &&
-        g_bulk_fits_buffer_v06823088.strings.empty();
+    return g_bulk_fits_buffer_v06823088.floats.active_columns.empty() &&
+        g_bulk_fits_buffer_v06823088.ints.active_columns.empty() &&
+        g_bulk_fits_buffer_v06823088.longlongs.active_columns.empty() &&
+        g_bulk_fits_buffer_v06823088.shorts.active_columns.empty() &&
+        g_bulk_fits_buffer_v06823088.strings.active_columns.empty();
 }
 
 template <typename T>
 void append_bulk_value_v06823088(
     fitsfile* fptr,
-    std::map<int,BulkColumnSegmentV06823088<T>>& columns,
+    DenseBulkColumnsV068232<T>& columns,
     int col, long row, const T& value);
 
 void flush_bulk_fits_v06823088(fitsfile* fptr) {
@@ -1181,19 +1196,24 @@ void flush_bulk_fits_v06823088(fitsfile* fptr) {
     if (pending.owner != fptr) {
         throw std::runtime_error("0.6.82.30.8.8 bulk FITS owner changed before flush");
     }
+    const auto flush_started_v068232 = std::chrono::steady_clock::now();
     int status = 0;
-    for (auto& kv : pending.floats) {
-        auto& seg = kv.second;
+    auto ordered_columns_v068232 = [](auto& columns) -> const std::vector<int>& {
+        std::sort(columns.active_columns.begin(), columns.active_columns.end());
+        return columns.active_columns;
+    };
+    for (const int col : ordered_columns_v068232(pending.floats)) {
+        auto& seg = pending.floats.segments[static_cast<std::size_t>(col)];
         if (seg.values.empty()) continue;
-        fits_write_col(fptr, TFLOAT, kv.first, seg.first_row, 1,
+        fits_write_col(fptr, TFLOAT, col, seg.first_row, 1,
                        static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
         check_fits(status, "0.6.82.30.8.8 bulk float column");
         ++g_bulk_fits_perf_v06823088.column_write_calls;
     }
-    for (auto& kv : pending.ints) {
-        auto& seg = kv.second;
+    for (const int col : ordered_columns_v068232(pending.ints)) {
+        auto& seg = pending.ints.segments[static_cast<std::size_t>(col)];
         if (seg.values.empty()) continue;
-        fits_write_col(fptr, TINT, kv.first, seg.first_row, 1,
+        fits_write_col(fptr, TINT, col, seg.first_row, 1,
                        static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
         if (status != 0) {
             status = 0;
@@ -1203,68 +1223,83 @@ void flush_bulk_fits_v06823088(fitsfile* fptr) {
             std::vector<char*> ptrs;
             ptrs.reserve(text.size());
             for (auto& value : text) ptrs.push_back(value.data());
-            fits_write_col(fptr, TSTRING, kv.first, seg.first_row, 1,
+            fits_write_col(fptr, TSTRING, col, seg.first_row, 1,
                            static_cast<LONGLONG>(ptrs.size()), ptrs.data(), &status);
         }
         check_fits(status, "0.6.82.30.8.8 bulk int column");
         ++g_bulk_fits_perf_v06823088.column_write_calls;
     }
-    for (auto& kv : pending.longlongs) {
-        auto& seg = kv.second;
+    for (const int col : ordered_columns_v068232(pending.longlongs)) {
+        auto& seg = pending.longlongs.segments[static_cast<std::size_t>(col)];
         if (seg.values.empty()) continue;
-        fits_write_col(fptr, TLONGLONG, kv.first, seg.first_row, 1,
+        fits_write_col(fptr, TLONGLONG, col, seg.first_row, 1,
                        static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
         check_fits(status, "0.6.82.30.8.8 bulk longlong column");
         ++g_bulk_fits_perf_v06823088.column_write_calls;
     }
-    for (auto& kv : pending.shorts) {
-        auto& seg = kv.second;
+    for (const int col : ordered_columns_v068232(pending.shorts)) {
+        auto& seg = pending.shorts.segments[static_cast<std::size_t>(col)];
         if (seg.values.empty()) continue;
-        fits_write_col(fptr, TSHORT, kv.first, seg.first_row, 1,
+        fits_write_col(fptr, TSHORT, col, seg.first_row, 1,
                        static_cast<LONGLONG>(seg.values.size()), seg.values.data(), &status);
         check_fits(status, "0.6.82.30.8.8 bulk short column");
         ++g_bulk_fits_perf_v06823088.column_write_calls;
     }
-    for (auto& kv : pending.strings) {
-        auto& seg = kv.second;
+    for (const int col : ordered_columns_v068232(pending.strings)) {
+        auto& seg = pending.strings.segments[static_cast<std::size_t>(col)];
         if (seg.values.empty()) continue;
         std::vector<char*> ptrs;
         ptrs.reserve(seg.values.size());
         for (auto& value : seg.values) ptrs.push_back(value.data());
-        fits_write_col(fptr, TSTRING, kv.first, seg.first_row, 1,
+        fits_write_col(fptr, TSTRING, col, seg.first_row, 1,
                        static_cast<LONGLONG>(ptrs.size()), ptrs.data(), &status);
         check_fits(status, "0.6.82.30.8.8 bulk string column");
         ++g_bulk_fits_perf_v06823088.column_write_calls;
     }
-    pending.floats.clear();
-    pending.ints.clear();
-    pending.longlongs.clear();
-    pending.shorts.clear();
-    pending.strings.clear();
+    auto clear_columns_v068232 = [](auto& columns) {
+        for (const int col : columns.active_columns) {
+            auto& seg = columns.segments[static_cast<std::size_t>(col)];
+            seg.values.clear();
+            seg.first_row = 0;
+        }
+        columns.active_columns.clear();
+    };
+    clear_columns_v068232(pending.floats);
+    clear_columns_v068232(pending.ints);
+    clear_columns_v068232(pending.longlongs);
+    clear_columns_v068232(pending.shorts);
+    clear_columns_v068232(pending.strings);
     ++g_bulk_fits_perf_v06823088.flushes;
+    g_bulk_fits_perf_v06823088.write_seconds += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - flush_started_v068232).count();
 }
 
 template <typename T>
 void append_bulk_value_v06823088(
     fitsfile* fptr,
-    std::map<int,BulkColumnSegmentV06823088<T>>& columns,
+    DenseBulkColumnsV068232<T>& columns,
     int col, long row, const T& value) {
     auto& pending = g_bulk_fits_buffer_v06823088;
     if (pending.owner && pending.owner != fptr && !bulk_fits_buffer_empty_v06823088()) {
         throw std::runtime_error("0.6.82.30.8.8 bulk FITS owner mismatch");
     }
+    if (col <= 0) throw std::runtime_error("0.6.82.32 invalid FITS column ordinal");
     pending.owner = fptr;
-    auto& seg = columns[col];
+    const std::size_t slot = static_cast<std::size_t>(col);
+    if (columns.segments.size() <= slot) columns.segments.resize(slot + 1u);
+    auto& seg = columns.segments[slot];
     if (seg.values.empty()) {
         seg.first_row = row;
+        columns.active_columns.push_back(col);
     } else if (row != seg.first_row + static_cast<long>(seg.values.size())) {
-        // This writer normally publishes every column in strictly increasing
-        // row order.  Preserve unusual sparse/overwrite behavior by flushing
-        // the current contiguous segments before starting the next one.
+        // Preserve the exact 30.8.8 sparse/overwrite fallback: publish every
+        // pending contiguous segment before restarting this one.
         flush_bulk_fits_v06823088(fptr);
-        auto& restarted = columns[col];
+        if (columns.segments.size() <= slot) columns.segments.resize(slot + 1u);
+        auto& restarted = columns.segments[slot];
         restarted.first_row = row;
         restarted.values.push_back(value);
+        columns.active_columns.push_back(col);
         ++g_bulk_fits_perf_v06823088.scalar_cells_buffered;
         return;
     }
@@ -1277,6 +1312,8 @@ void reset_bulk_fits_perf_v06823088() {
         throw std::runtime_error("0.6.82.30.8.8 bulk FITS reset with pending cells");
     }
     g_bulk_fits_perf_v06823088 = {};
+    g_fits_checksum_seconds_v068232 = 0.0;
+    g_detail_line_identity_seconds_v068232 = 0.0;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -1289,6 +1326,7 @@ void close_fits(fitsfile* fptr) {
     int hdu = 1;
     fits_get_num_hdus(fptr, &hdu, &status);
     check_fits(status, "fits_get_num_hdus");
+    const auto checksum_started_v068232 = std::chrono::steady_clock::now();
     for (int i = 1; i <= hdu; ++i) {
         int type = 0;
         fits_movabs_hdu(fptr, i, &type, &status);
@@ -1296,6 +1334,8 @@ void close_fits(fitsfile* fptr) {
         fits_write_chksum(fptr, &status);
         check_fits(status, "fits_write_chksum");
     }
+    g_fits_checksum_seconds_v068232 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - checksum_started_v068232).count();
     fits_close_file(fptr, &status);
     check_fits(status, "fits_close_file");
 }
@@ -8730,7 +8770,10 @@ void write_line_detail(const std::filesystem::path& path,
     // depth, which changed option-23 ordering and terminal public depths.
     std::map<long long,double> cumulative_line_tau_in;
     double previous_line_depth_cm = 0.0;
+    const auto identity_started_v068232 = std::chrono::steady_clock::now();
     const auto line_identity_lookup_v06823088 = build_line_identity_lookup_v06823088(state);
+    g_detail_line_identity_seconds_v068232 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - identity_started_v068232).count();
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
@@ -11099,7 +11142,11 @@ Result write_historical_science_products(
     const auto rows = read_rows(state, program_dir);
     double detail_population_seconds_v06823089 = 0.0;
     double detail_line_seconds_v06823089 = 0.0;
+    double detail_line_fits_write_seconds_v068232 = 0.0;
+    double detail_line_checksum_seconds_v068232 = 0.0;
     double detail_rrc_seconds_v06823089 = 0.0;
+    double detail_rrc_fits_write_seconds_v068232 = 0.0;
+    double detail_rrc_checksum_seconds_v068232 = 0.0;
     double detail_spectrum_seconds_v06823089 = 0.0;
     double public_lines_seconds_v06823089 = 0.0;
     double public_rrc_seconds_v06823089 = 0.0;
@@ -11110,6 +11157,20 @@ Result write_historical_science_products(
         fn();
         accumulator += std::chrono::duration<double>(
             std::chrono::steady_clock::now() - started).count();
+    };
+    auto timed_detail_v068232 = [](
+        double& accumulator, double& fits_write_accumulator,
+        double& checksum_accumulator, auto&& fn) {
+        const double fits_before = g_bulk_fits_perf_v06823088.write_seconds;
+        const double checksum_before = g_fits_checksum_seconds_v068232;
+        const auto started = std::chrono::steady_clock::now();
+        fn();
+        accumulator += std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - started).count();
+        fits_write_accumulator += std::max(0.0,
+            g_bulk_fits_perf_v06823088.write_seconds - fits_before);
+        checksum_accumulator += std::max(0.0,
+            g_fits_checksum_seconds_v068232 - checksum_before);
     };
 
     // Source contract: xstar.f90 opens and writes fstepr/fstepr2/fstepr3/
@@ -11149,8 +11210,8 @@ Result write_historical_science_products(
                         "xo" + (pass_v0682272 < 10 ? std::string("0") : std::string()) +
                         std::to_string(pass_v0682272) + "_";
                     timed_publication_v06823089(detail_population_seconds_v06823089, [&] { write_population_detail(output_dir / (prefix_v0682272 + "detail.fits"), state, elements, rows); });
-                    timed_publication_v06823089(detail_line_seconds_v06823089, [&] { write_line_detail(output_dir / (prefix_v0682272 + "detal2.fits"), state, elements, rows); });
-                    timed_publication_v06823089(detail_rrc_seconds_v06823089, [&] { write_rrc_detail(output_dir / (prefix_v0682272 + "detal3.fits"), state, elements, rows); });
+                    timed_detail_v068232(detail_line_seconds_v06823089, detail_line_fits_write_seconds_v068232, detail_line_checksum_seconds_v068232, [&] { write_line_detail(output_dir / (prefix_v0682272 + "detal2.fits"), state, elements, rows); });
+                    timed_detail_v068232(detail_rrc_seconds_v06823089, detail_rrc_fits_write_seconds_v068232, detail_rrc_checksum_seconds_v068232, [&] { write_rrc_detail(output_dir / (prefix_v0682272 + "detal3.fits"), state, elements, rows); });
                     timed_publication_v06823089(detail_spectrum_seconds_v06823089, [&] { write_spectrum_detail(output_dir / (prefix_v0682272 + "detal4.fits"), state); });
                     detail_filenames_v0682272.insert(detail_filenames_v0682272.end(), {
                         prefix_v0682272 + "detail.fits", prefix_v0682272 + "detal2.fits",
@@ -11168,8 +11229,8 @@ Result write_historical_science_products(
             state.product_metadata_path = final_product_metadata_path_v0682274;
         } else {
             timed_publication_v06823089(detail_population_seconds_v06823089, [&] { write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows); });
-            timed_publication_v06823089(detail_line_seconds_v06823089, [&] { write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows); });
-            timed_publication_v06823089(detail_rrc_seconds_v06823089, [&] { write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows); });
+            timed_detail_v068232(detail_line_seconds_v06823089, detail_line_fits_write_seconds_v068232, detail_line_checksum_seconds_v068232, [&] { write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows); });
+            timed_detail_v068232(detail_rrc_seconds_v06823089, detail_rrc_fits_write_seconds_v068232, detail_rrc_checksum_seconds_v068232, [&] { write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows); });
             timed_publication_v06823089(detail_spectrum_seconds_v06823089, [&] { write_spectrum_detail(output_dir / "xo01_detal4.fits", state); });
             detail_filenames_v0682272 = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"};
         }
@@ -11211,7 +11272,18 @@ Result write_historical_science_products(
     result.generalized_product_reduction_qualified = false;
     result.detail_population_seconds = detail_population_seconds_v06823089;
     result.detail_line_seconds = detail_line_seconds_v06823089;
+    result.detail_line_identity_seconds = g_detail_line_identity_seconds_v068232;
+    result.detail_line_fits_write_seconds = detail_line_fits_write_seconds_v068232;
+    result.detail_line_checksum_seconds = detail_line_checksum_seconds_v068232;
+    result.detail_line_cpu_staging_seconds = std::max(0.0,
+        detail_line_seconds_v06823089 - result.detail_line_identity_seconds -
+        result.detail_line_fits_write_seconds - result.detail_line_checksum_seconds);
     result.detail_rrc_seconds = detail_rrc_seconds_v06823089;
+    result.detail_rrc_fits_write_seconds = detail_rrc_fits_write_seconds_v068232;
+    result.detail_rrc_checksum_seconds = detail_rrc_checksum_seconds_v068232;
+    result.detail_rrc_cpu_staging_seconds = std::max(0.0,
+        detail_rrc_seconds_v06823089 - result.detail_rrc_fits_write_seconds -
+        result.detail_rrc_checksum_seconds);
     result.detail_spectrum_seconds = detail_spectrum_seconds_v06823089;
     result.public_lines_seconds = public_lines_seconds_v06823089;
     result.public_rrc_seconds = public_rrc_seconds_v06823089;
@@ -11229,6 +11301,8 @@ Result write_historical_science_products(
                   << "V06823088_BULK_FITS_SCALAR_CELLS=" << g_bulk_fits_perf_v06823088.scalar_cells_buffered << "\n"
                   << "V06823088_BULK_FITS_COLUMN_WRITES=" << g_bulk_fits_perf_v06823088.column_write_calls << "\n"
                   << "V06823088_BULK_FITS_FLUSHES=" << g_bulk_fits_perf_v06823088.flushes << "\n"
+                  << "V068232_BULK_FITS_WRITE_SECONDS=" << g_bulk_fits_perf_v06823088.write_seconds << "\n"
+                  << "V068232_FITS_CHECKSUM_SECONDS=" << g_fits_checksum_seconds_v068232 << "\n"
                   << "V06823089_PUBLIC_LINES_RETAINED_FAST_PATH=" << (g_public_lines_fast_path_v06823089 ? "YES" : "NO") << "\n";
     }
     return result;

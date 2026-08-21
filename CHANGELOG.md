@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.32 - prepared-record, Type-50/profile, and detail-publication hot paths - 2026-08-21
+
+- Base the performance-only revision on the host-accepted `0.6.82.31` foundation and carry forward the same three mandatory anchors: C5 `xi=-3,cfrac=0,emult=0.25`, `multi_element_xi1_ne1e12`, and the Fe reference. Science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487 / 6048110 / 60488` remain frozen.
+- Cache only the immutable first Type-50 profile-bin geometry (`nbinc`/`ml1`) by exact source position, line-energy bits, energy-grid identity, and grid length. Preserve the accepted Type-50 profile arithmetic, Voigt evaluation, legal-span logic, source traversal, and accumulation order.
+- Remove the normal-path materialization of a combined thermal-contribution vector; consume the existing source-order ranges directly and retain the historical stable-sort branch unchanged for the cases that require it.
+- Replace ordered-map lookup in the bulk FITS cell-staging layer with dense column-indexed segments plus an explicit active-column list. Preserve the same typed contiguous segments, ascending-column flush order, sparse/overwrite fallback, row/HDU order, REAL(4) conversion boundary, keywords, and checksums.
+- Add coarse detail-line/detail-RRC attribution for identity preparation, CPU staging, CFITSIO writes, and checksum/HDU finalization so the host run can separate serialization CPU cost from actual FITS I/O.
+- Strengthen the same-host `.31 -> .32` gate: require accepted material/STEP/spectrum comparison, exact public spectrum and normalized STEP invariance, matching FITS inventory, bit-exact raw HDU payloads for every common FITS product, and per-anchor peak-RSS protection while measuring traversal, Type-50, publication, and new detail attribution counters.
+- Do not optimize or alter the already-cheap detail-population/detail-spectrum/public line/public RRC/public continuum/public spectrum products beyond shared staging infrastructure. Do not carry deferred `.30.8.15/.8.16` publication-inventory experiments into this release.
+
 ## 0.6.82.31 - shared fixed-state/controller performance foundation - 2026-08-21
 
 - Formally close `0.6.82.30` on the host-accepted `0.6.82.30.8.14` science baseline.  The remaining `.30.8.15` publication-inventory discrepancies are documented and deferred until after the `.31-.33` performance campaign; none are carried into this release.

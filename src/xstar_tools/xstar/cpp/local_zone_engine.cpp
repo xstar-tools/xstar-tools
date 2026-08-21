@@ -1999,10 +1999,13 @@ public:
     }
 
     CanonicalThermalLedgerBuild finish(
-        const std::vector<xstar_element_contribution_v1>& committed_contributions
+        const std::vector<xstar_element_contribution_v1>& committed_contributions,
+        const std::vector<xstar_element_contribution_v1>& thermal_only_contributions
     ) const {
         CanonicalThermalLedgerBuild out;
-        out.terms.reserve(committed_contributions.size() * 2u);
+        const std::size_t total_contributions =
+            committed_contributions.size() + thermal_only_contributions.size();
+        out.terms.reserve(total_contributions * 2u);
         std::set<Identity> consumed;
         std::set<std::pair<std::int64_t, std::string>> type99_rows_matched;
         std::set<std::pair<std::int64_t, std::string>> primary_rows_matched;
@@ -2059,16 +2062,7 @@ public:
         // synchronized with the rates actually consumed by the element solve,
         // while element-specific preservation rules (notably Mg Type-50) remain
         // encoded in the corrected contribution itself.
-        std::vector<xstar_element_contribution_v1> ordered_contributions = committed_contributions;
-        if (native_sequence1_source_order) {
-            std::stable_sort(
-                ordered_contributions.begin(), ordered_contributions.end(),
-                [](const auto& left, const auto& right) {
-                    return std::tie(left.ion_stage, left.rate_type, left.source_position, left.record) <
-                        std::tie(right.ion_stage, right.rate_type, right.source_position, right.record);
-                });
-        }
-        for (const auto& contribution : ordered_contributions) {
+        const auto consume_contribution = [&](const auto& contribution) {
             const Identity identity = identity_of(contribution);
             const auto it = candidates_.find(identity);
             if (it == candidates_.end()) {
@@ -2081,6 +2075,28 @@ public:
             }
             commit_term(it->second.forward);
             commit_term(it->second.reverse);
+        };
+        if (native_sequence1_source_order) {
+            // 0.6.82.32: materialize one combined stream only for the legacy
+            // source-order branch that explicitly stable-sorts it.  Normal
+            // production already owns two source-ordered ranges, so consuming
+            // those ranges directly removes a full contribution-vector copy.
+            std::vector<xstar_element_contribution_v1> ordered_contributions;
+            ordered_contributions.reserve(total_contributions);
+            ordered_contributions.insert(ordered_contributions.end(),
+                committed_contributions.begin(), committed_contributions.end());
+            ordered_contributions.insert(ordered_contributions.end(),
+                thermal_only_contributions.begin(), thermal_only_contributions.end());
+            std::stable_sort(
+                ordered_contributions.begin(), ordered_contributions.end(),
+                [](const auto& left, const auto& right) {
+                    return std::tie(left.ion_stage, left.rate_type, left.source_position, left.record) <
+                        std::tie(right.ion_stage, right.rate_type, right.source_position, right.record);
+                });
+            for (const auto& contribution : ordered_contributions) consume_contribution(contribution);
+        } else {
+            for (const auto& contribution : committed_contributions) consume_contribution(contribution);
+            for (const auto& contribution : thermal_only_contributions) consume_contribution(contribution);
         }
 
         if (type99_state_.enabled && element_.element_z == 12 &&
@@ -3328,7 +3344,6 @@ struct FixedStatePersistentScratchV068231 {
     std::vector<xstar_element_contribution_v1> contributions;
     std::vector<xstar_element_contribution_v1> thermal_only_contributions;
     std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
-    std::vector<xstar_element_contribution_v1> thermal_domain_contributions;
     std::vector<xstar_spectral_contribution_v1> spectral_contributions;
     std::vector<double> all_populations;
     std::vector<double> thermal_population_stream;
@@ -3366,7 +3381,6 @@ struct FixedStatePersistentScratchV068231 {
         XSTAR_CAP_BYTES_V068231(contributions);
         XSTAR_CAP_BYTES_V068231(thermal_only_contributions);
         XSTAR_CAP_BYTES_V068231(type95_self_loop_candidates);
-        XSTAR_CAP_BYTES_V068231(thermal_domain_contributions);
         XSTAR_CAP_BYTES_V068231(spectral_contributions);
         XSTAR_CAP_BYTES_V068231(all_populations);
         XSTAR_CAP_BYTES_V068231(thermal_population_stream);
@@ -13181,27 +13195,17 @@ int run_impl(
         }
 
         // v0.6.48.7.46.21.8: capture canonical Thermal coefficients only
-        // after matrix closure and source-order correction.  The prior early
-        // capture froze stale pre-closure He Type-50 ans3/ans4 values and
-        // bypassed the accepted non-Type-53 cooling reconstruction.
-        auto& thermal_domain_contributions =
-            ctx.scratch_v068231.thermal_domain_contributions;
-        thermal_domain_contributions.clear();
-        const std::size_t thermal_domain_size_v068231 =
-            contributions.size() + thermal_only_contributions.size();
-        if (thermal_domain_contributions.capacity() < thermal_domain_size_v068231) {
-            thermal_domain_contributions.reserve(thermal_domain_size_v068231);
+        // after matrix closure and source-order correction.  0.6.82.32 keeps
+        // the two already source-ordered contribution ranges separate instead
+        // of copying both into a temporary combined vector on every solve.
+        for (const auto& contribution : contributions) {
+            canonical_thermal_builder.append_matrix_committed(contribution);
         }
-        thermal_domain_contributions.insert(
-            thermal_domain_contributions.end(), contributions.begin(), contributions.end());
-        thermal_domain_contributions.insert(
-            thermal_domain_contributions.end(),
-            thermal_only_contributions.begin(), thermal_only_contributions.end());
-        for (const auto& contribution : thermal_domain_contributions) {
+        for (const auto& contribution : thermal_only_contributions) {
             canonical_thermal_builder.append_matrix_committed(contribution);
         }
         const auto canonical_thermal_ledger =
-            canonical_thermal_builder.finish(thermal_domain_contributions);
+            canonical_thermal_builder.finish(contributions, thermal_only_contributions);
         perf_foundation_v068231.contribution_list_seconds +=
             elapsed(contribution_list_started_v068231);
         stats.contributions_constructed += contributions.size();

@@ -34,7 +34,14 @@ struct Result {
     bool generalized_product_reduction_qualified = false;
     double detail_population_seconds = 0.0;
     double detail_line_seconds = 0.0;
+    double detail_line_identity_seconds = 0.0;
+    double detail_line_cpu_staging_seconds = 0.0;
+    double detail_line_fits_write_seconds = 0.0;
+    double detail_line_checksum_seconds = 0.0;
     double detail_rrc_seconds = 0.0;
+    double detail_rrc_cpu_staging_seconds = 0.0;
+    double detail_rrc_fits_write_seconds = 0.0;
+    double detail_rrc_checksum_seconds = 0.0;
     double detail_spectrum_seconds = 0.0;
     double public_lines_seconds = 0.0;
     double public_rrc_seconds = 0.0;

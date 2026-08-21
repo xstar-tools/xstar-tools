@@ -1637,6 +1637,7 @@ static void decompose_cursor_profile(
 static int apply_line_profile_optimized(
     double optpp,
     double line_energy_ev,
+    int ml1_hint_v068232,
     double vturb_km_s,
     double temperature_1e4k,
     double atomic_mass_amu,
@@ -1689,8 +1690,11 @@ static int apply_line_profile_optimized(
     const bool use_voigt = aasmall > xstar_constants::kLegacyLinopacWingVoigtThreshold;
     const bool use_small_a_voigt = use_voigt && aasmall <= source_real_literal(0.2);
 
-    int ml1 = nbinc(line_energy_ev, epi, n);
-    ml1 = std::max(2, std::min(n - 1, ml1));
+    int ml1 = ml1_hint_v068232;
+    if (ml1 < 2 || ml1 > n - 1) {
+        ml1 = nbinc(line_energy_ev, epi, n);
+        ml1 = std::max(2, std::min(n - 1, ml1));
+    }
     const double e00 = epi[ml1 - 1];
     const double deleepi = source_sub(epi[ml1], epi[ml1 - 1]);
     int ncut = static_cast<int>(deleepi / dele);
@@ -1958,12 +1962,76 @@ static int apply_line_profile_optimized(
     return 0;
 }
 
+static bool use_optimized_standalone_v064896() {
+    static const bool enabled = [] {
+        const char* native_sequence = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        const bool standalone_native = native_sequence && *native_sequence;
+        const char* forced = std::getenv("XSTAR_V064896_FORCE_LEGACY_TYPE50");
+        const bool force_legacy = forced && *forced && std::strcmp(forced, "0") != 0 &&
+            std::strcmp(forced, "false") != 0 && std::strcmp(forced, "FALSE") != 0;
+        if (standalone_native && !env_truthy("XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS")) {
+            std::fputs(force_legacy
+                ? "V064896_TYPE50_MODE=LEGACY_0951_FORCED\n"
+                : "V064896_TYPE50_MODE=OPTIMIZED_STANDALONE\n", stdout);
+            std::fflush(stdout);
+        }
+        if (force_legacy) return false;
+        return standalone_native;
+    }();
+    return enabled;
+}
+
 extern "C" {
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute opacity apply line profile for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
+// 0.6.82.32 internal prepared-geometry helpers.  The public v1 ABI remains
+// unchanged.  These helpers cache only the immutable first nbinc result; all
+// profile values, temporary bounds, Voigt arithmetic, rebin order, and public
+// accumulation remain in apply_line_profile_optimized exactly as before.
+int xstar_opacity_prepare_line_geometry_v068232(
+    double line_energy_ev, const double* epi, int ncn2, int* ml1_out) {
+    if (!epi || !ml1_out || ncn2 < 3 || !std::isfinite(line_energy_ev)) return 4;
+    int ml1 = nbinc(line_energy_ev, epi, ncn2);
+    ml1 = std::max(2, std::min(ncn2 - 1, ml1));
+    *ml1_out = ml1;
+    return 0;
+}
+
+int xstar_opacity_apply_line_profile_prepared_v068232(
+    double optpp,
+    double line_energy_ev,
+    int ml1_hint,
+    double vturb_km_s,
+    double temperature_1e4k,
+    double atomic_mass_amu,
+    double natural_width_ev,
+    const double* seed_profiles,
+    int seed_radius,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* updated_bins,
+    double* opacity_seconds,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    g_last_profile_vectorized_v064812324 = 0;
+    if (!use_optimized_standalone_v064896()) {
+        return apply_line_profile_legacy(
+            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
+            rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+    }
+    return apply_line_profile_optimized(
+        optpp, line_energy_ev, ml1_hint, vturb_km_s, temperature_1e4k,
+        atomic_mass_amu, natural_width_ev, seed_profiles, seed_radius, epi,
+        ncn2, opakc, rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+}
+
 int xstar_opacity_apply_line_profile_v1(
     double optpp,
     double line_energy_ev,
@@ -1983,34 +2051,14 @@ int xstar_opacity_apply_line_profile_v1(
     std::size_t errbuf_size
 ) {
     g_last_profile_vectorized_v064812324 = 0;
-    // Same executable, same ABI: set once before process start to force the
-    // exact 0.6.48.9.5.1 Type-50 implementation for blocking A/B runs.
-    static const bool use_optimized_standalone_v064896 = [] {
-        const char* native_sequence = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
-        const bool standalone_native = native_sequence && *native_sequence;
-        const char* forced = std::getenv("XSTAR_V064896_FORCE_LEGACY_TYPE50");
-        const bool force_legacy = forced && *forced && std::strcmp(forced, "0") != 0 &&
-            std::strcmp(forced, "false") != 0 && std::strcmp(forced, "FALSE") != 0;
-        if (standalone_native && !env_truthy("XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS")) {
-            std::fputs(force_legacy
-                ? "V064896_TYPE50_MODE=LEGACY_0951_FORCED\n"
-                : "V064896_TYPE50_MODE=OPTIMIZED_STANDALONE\n", stdout);
-            std::fflush(stdout);
-        }
-        if (force_legacy) return false;
-        // XSTAR_NATIVE_SOURCE_SEQUENCE is owned by the standalone native
-        // controller.  Python source-port/C++-backend calls do not set it, so
-        // 9.6 changes only the requested standalone-C++ Type-50 path.
-        return standalone_native;
-    }();
-    if (!use_optimized_standalone_v064896) {
+    if (!use_optimized_standalone_v064896()) {
         return apply_line_profile_legacy(
             optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
             natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
             rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
     }
     return apply_line_profile_optimized(
-        optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+        optpp, line_energy_ev, -1, vturb_km_s, temperature_1e4k, atomic_mass_amu,
         natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
         rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
 }

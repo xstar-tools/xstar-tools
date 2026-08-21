@@ -27,6 +27,7 @@
 #include <fstream>
 #include <iomanip>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -575,6 +576,15 @@ extern "C" int xstar_opacity_apply_line_profile_v1(
     std::size_t errbuf_size
 );
 
+extern "C" int xstar_opacity_prepare_line_geometry_v068232(
+    double line_energy_ev, const double* epi, int ncn2, int* ml1_out);
+extern "C" int xstar_opacity_apply_line_profile_prepared_v068232(
+    double optpp, double line_energy_ev, int ml1_hint, double vturb_km_s,
+    double temperature_1e4k, double atomic_mass_amu, double natural_width_ev,
+    const double* seed_profiles, int seed_radius, const double* epi, int ncn2,
+    double* opakc, double* rccemis, long long* updated_bins,
+    double* opacity_seconds, char* errbuf, std::size_t errbuf_size);
+
 extern "C" int xstar_opacity_apply_line_profile_experimental_v064812326(
     double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
     double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
@@ -645,8 +655,17 @@ extern "C" void xstar_opacity_type50_perf_snapshot_v064812332(
     std::uint64_t* tmpe_blocks, std::uint64_t* tmpe_points);
 
 
+struct Type50GeometryCacheEntryV068232 {
+    bool valid = false;
+    std::uint64_t line_energy_bits = 0u;
+    const double* epi = nullptr;
+    std::size_t energy_count = 0u;
+    int ml1 = 0;
+};
+
 struct xstar_spectral_context {
     xstar_spectral_stats_v1 cumulative{};
+    std::vector<Type50GeometryCacheEntryV068232> type50_geometry_by_source;
 };
 
 namespace {
@@ -654,20 +673,77 @@ namespace {
 thread_local xstar_spectral_perf_v064892 g_spectral_perf_v064892{};
 thread_local std::uint64_t g_type50_vectorized_profiles_v064812324 = 0u;
 thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
+thread_local std::uint64_t g_type50_geometry_cache_hits_v068232 = 0u;
+thread_local std::uint64_t g_type50_geometry_cache_misses_v068232 = 0u;
+thread_local std::uint64_t g_type50_geometry_cache_uncached_v068232 = 0u;
+thread_local std::uint64_t g_type50_geometry_cache_peak_bytes_v068232 = 0u;
+thread_local double g_type50_geometry_cache_build_seconds_v068232 = 0.0;
+
+std::uint64_t double_bits_v068232(double value) {
+    std::uint64_t bits = 0u;
+    static_assert(sizeof(bits) == sizeof(value));
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+int prepared_type50_ml1_v068232(
+    xstar_spectral_context* context, std::uint64_t source_position,
+    double line_energy_ev, const double* epi, std::size_t energy_count) {
+    if (!context || source_position == 0u || !epi || energy_count < 3u) {
+        ++g_type50_geometry_cache_uncached_v068232;
+        return -1;
+    }
+    const std::size_t slot = static_cast<std::size_t>(source_position);
+    if (context->type50_geometry_by_source.size() <= slot) {
+        context->type50_geometry_by_source.resize(slot + 1u);
+        g_type50_geometry_cache_peak_bytes_v068232 = std::max<std::uint64_t>(
+            g_type50_geometry_cache_peak_bytes_v068232,
+            static_cast<std::uint64_t>(context->type50_geometry_by_source.capacity() *
+                sizeof(Type50GeometryCacheEntryV068232)));
+    }
+    auto& entry = context->type50_geometry_by_source[slot];
+    const std::uint64_t line_bits = double_bits_v068232(line_energy_ev);
+    if (entry.valid && entry.line_energy_bits == line_bits && entry.epi == epi &&
+        entry.energy_count == energy_count) {
+        ++g_type50_geometry_cache_hits_v068232;
+        return entry.ml1;
+    }
+    const auto started = std::chrono::steady_clock::now();
+    int ml1 = -1;
+    const int rc = xstar_opacity_prepare_line_geometry_v068232(
+        line_energy_ev, epi, static_cast<int>(energy_count), &ml1);
+    g_type50_geometry_cache_build_seconds_v068232 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - started).count();
+    if (rc != 0) {
+        ++g_type50_geometry_cache_uncached_v068232;
+        return -1;
+    }
+    entry.valid = true;
+    entry.line_energy_bits = line_bits;
+    entry.epi = epi;
+    entry.energy_count = energy_count;
+    entry.ml1 = ml1;
+    ++g_type50_geometry_cache_misses_v068232;
+    return ml1;
+}
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Apply line profile dispatch to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
 static int apply_line_profile_dispatch(
+    xstar_spectral_context* context, std::uint64_t source_position,
     double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
     double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
     int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
     long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size) {
-    // 12.3.28: production Type-50 selection lives entirely inside
-    // xstar_opacity_apply_line_profile_v1.  Retired 12.3.26/12.3.27
-    // experiment dispatches are not part of the normal emissivity path.
-    return xstar_opacity_apply_line_profile_v1(
-        optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+    // 0.6.82.32 caches only the immutable first nbinc(line_energy, epi) result.
+    // The opacity kernel retains the complete accepted profile arithmetic and
+    // accumulation order and falls back to its historical public v1 path for
+    // non-standalone modes.
+    const int ml1_hint = prepared_type50_ml1_v068232(
+        context, source_position, line_energy_ev, epi, static_cast<std::size_t>(ncn2));
+    return xstar_opacity_apply_line_profile_prepared_v068232(
+        optpp, line_energy_ev, ml1_hint, vturb_km_s, temperature_1e4k, atomic_mass_amu,
         natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
         updated_bins, opacity_seconds, errbuf, errbuf_size);
 }
@@ -881,6 +957,11 @@ void xstar_spectral_type50_phase_perf_reset_v064812326(void) {
 // XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_reset_v064812327(void) {
     xstar_opacity_type50_perf_reset_v064812327();
+    g_type50_geometry_cache_hits_v068232 = 0u;
+    g_type50_geometry_cache_misses_v068232 = 0u;
+    g_type50_geometry_cache_uncached_v068232 = 0u;
+    g_type50_geometry_cache_peak_bytes_v068232 = 0u;
+    g_type50_geometry_cache_build_seconds_v068232 = 0.0;
 }
 
 
@@ -1024,6 +1105,16 @@ void xstar_spectral_type50_perf_snapshot_v064812327(
         ncut_histogram, ncut_histogram_len, gaussian_points, small_a_core_points,
         small_a_farwing_points, large_a_points, inline_avx2_profiles,
         inline_avx2_blocks, inline_avx2_points, inline_scalar_points);
+    const std::uint64_t misses = g_type50_geometry_cache_misses_v068232;
+    const std::uint64_t hits = g_type50_geometry_cache_hits_v068232;
+    if (schedule_profiles) *schedule_profiles = hits + misses;
+    if (cache_hits) *cache_hits = hits;
+    if (cache_misses) *cache_misses = misses;
+    if (cache_uncached) *cache_uncached = g_type50_geometry_cache_uncached_v068232;
+    if (distinct_cached_keys) *distinct_cached_keys = misses;
+    if (cache_bytes) *cache_bytes = g_type50_geometry_cache_peak_bytes_v068232;
+    if (cached_events) *cached_events = hits;
+    if (schedule_build_seconds) *schedule_build_seconds = g_type50_geometry_cache_build_seconds_v068232;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -1280,7 +1371,7 @@ int xstar_spectral_apply_contributions_v1(
                             workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                             opacity_error, sizeof(opacity_error))
                         : apply_line_profile_dispatch(
-                            c.opakab * c.abundance_lower * c.hydrogen_density,
+                            context, c.source_position, c.opakab * c.abundance_lower * c.hydrogen_density,
                             c.line_energy_eV, c.turbulent_velocity_km_s,
                             c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                             seed, seed_radius, workspace->epi_eV,
@@ -1388,7 +1479,7 @@ int xstar_spectral_apply_contributions_v1(
                     workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                     opacity_error, sizeof(opacity_error))
                 : apply_line_profile_dispatch(
-                    opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
+                    context, c.source_position, opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
                     c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                     seed, seed_radius, workspace->epi_eV, static_cast<int>(workspace->energy_count),
                     workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
