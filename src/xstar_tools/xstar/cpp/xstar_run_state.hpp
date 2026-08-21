@@ -418,6 +418,26 @@ struct AbundanceRadialRowState {
     bool terminal_row = false;
 };
 
+// 0.6.82.33.2: compact provenance for detal2 cells whose published value
+// depends on the deferred whole-run terminal ion-stage gate.  Incremental
+// SAVD publication writes the source-workspace base value immediately and
+// records only diagnostic refinements that must be applied after the terminal
+// publication state exists.  This preserves the accepted .32 payload without
+// retaining the full SAVD history.
+struct IncrementalDetal2TerminalPatchStateV0682332 {
+    std::size_t pass_index = 0;
+    std::size_t hdu_number = 0;
+    std::size_t row_number = 0;
+    std::int32_t element_z = 0;
+    std::int32_t ion_stage = 0;
+    bool emis_inward_from_diagnostic = false;
+    bool emis_outward_from_diagnostic = false;
+    bool opacity_from_diagnostic = false;
+    double diagnostic_emis_inward = 0.0;
+    double diagnostic_emis_outward = 0.0;
+    double diagnostic_opacity = 0.0;
+};
+
 struct RadialZoneState {
     std::size_t zone_index = 0;
     std::size_t pass_index = 0;
@@ -495,6 +515,11 @@ struct WholeRunAccumulatedState {
     // the canonical radial event and released immediately rather than retained
     // for whole-run publication.
     bool incremental_detail_products_complete_v068233 = false;
+    // 0.6.82.33.2: bounded patch ledger for the one detail-line dependency
+    // that is not knowable at the live SAVD event: the final terminal
+    // ion-stage activity gate used by the accepted .32 detal2 writer.
+    std::vector<IncrementalDetal2TerminalPatchStateV0682332>
+        incremental_detal2_terminal_patches_v0682332;
     bool continuum_depths_derived_from_native_opacity = false;
     bool exact_source_metadata_retained = false;
     bool exact_source_workspaces_retained = false;
@@ -555,6 +580,11 @@ struct ProductWritingState {
     // the canonical radial event and released immediately rather than retained
     // for whole-run publication.
     bool incremental_detail_products_complete_v068233 = false;
+    // 0.6.82.33.2: bounded patch ledger for the one detail-line dependency
+    // that is not knowable at the live SAVD event: the final terminal
+    // ion-stage activity gate used by the accepted .32 detal2 writer.
+    std::vector<IncrementalDetal2TerminalPatchStateV0682332>
+        incremental_detal2_terminal_patches_v0682332;
     bool continuum_depths_derived_from_native_opacity = false;
     bool exact_source_metadata_retained = false;
     bool exact_source_workspaces_retained = false;

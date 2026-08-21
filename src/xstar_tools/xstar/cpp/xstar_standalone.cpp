@@ -297,6 +297,17 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t radial_rss_peak_bytes_v068233 = 0u;
     std::vector<std::uint64_t> radial_rss_samples_bytes_v068233;
     std::uint64_t saved_shells_streamed_v068233 = 0u;
+    // 0.6.82.33.2: explicit accounting for the full accepted-boundary
+    // families exposed by the .33.1 C5 RSS staircase. Diagnostic only.
+    std::uint64_t final_snapshots_current_bytes_v0682332 = 0u;
+    std::uint64_t final_snapshots_peak_bytes_v0682332 = 0u;
+    std::uint64_t final_snapshots_current_capacity_bytes_v0682332 = 0u;
+    std::uint64_t final_snapshots_peak_capacity_bytes_v0682332 = 0u;
+    std::uint64_t radial_zones_current_bytes_v0682332 = 0u;
+    std::uint64_t radial_zones_peak_bytes_v0682332 = 0u;
+    std::uint64_t radial_zones_current_capacity_bytes_v0682332 = 0u;
+    std::uint64_t radial_zones_peak_capacity_bytes_v0682332 = 0u;
+    std::uint64_t detal2_terminal_patch_rows_v0682332 = 0u;
     std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
     xstar_local_zone_internal::PerformanceFoundationV068231 foundation_v068231{};
 };
@@ -2932,6 +2943,114 @@ MemoryBytesV068233 snapshot_memory_v068233(const FixedDsecSnapshot& s) {
     add_map_vector_memory_v068233(out, s.source_recombination_rates);
     add_map_payload_memory_v068233(out, s.source_detail_active_windows);
     return out;
+}
+
+MemoryBytesV068233 final_snapshots_memory_v0682332(
+    const std::vector<FixedDsecSnapshot>& snapshots) {
+    MemoryBytesV068233 out;
+    out.logical = static_cast<std::uint64_t>(snapshots.size()) * sizeof(FixedDsecSnapshot);
+    out.capacity = static_cast<std::uint64_t>(snapshots.capacity()) * sizeof(FixedDsecSnapshot);
+    for (const auto& snapshot : snapshots) {
+        const auto one = snapshot_memory_v068233(snapshot);
+        out.logical += one.logical >= sizeof(FixedDsecSnapshot) ? one.logical - sizeof(FixedDsecSnapshot) : 0u;
+        out.capacity += one.capacity >= sizeof(FixedDsecSnapshot) ? one.capacity - sizeof(FixedDsecSnapshot) : 0u;
+    }
+    return out;
+}
+
+MemoryBytesV068233 fixed_evaluation_memory_v0682332(
+    const xstar_run_state::FixedEvaluationState& e) {
+    MemoryBytesV068233 out;
+    out.logical = sizeof(xstar_run_state::FixedEvaluationState) + e.kind.size();
+    out.capacity = sizeof(xstar_run_state::FixedEvaluationState) + e.kind.capacity();
+#define XSTAR_ADD_EVAL_VECTOR_V0682332(name) add_vector_memory_v068233(out, e.name)
+    XSTAR_ADD_EVAL_VECTOR_V0682332(source_global_xilevg);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(source_global_rnisg);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(source_global_bilevg);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(source_detail_pre_mapback_populations);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(source_detail_global_xilevg);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(populations);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(radiation_energy_ev);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(radiation_flux);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(continuum_tau_in);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(continuum_tau_out);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(continuum_spectrum);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(spectrum);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(opacity);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(record_product_diagnostics);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(continuum_product_diagnostics);
+    XSTAR_ADD_EVAL_VECTOR_V0682332(element_thermal_products);
+#undef XSTAR_ADD_EVAL_VECTOR_V0682332
+    add_map_payload_memory_v068233(out, e.source_global_gammag);
+    add_map_payload_memory_v068233(out, e.source_global_alphag);
+    add_map_payload_memory_v068233(out, e.source_global_igammamaxg);
+    add_map_payload_memory_v068233(out, e.source_global_ialphamaxg);
+    add_map_vector_memory_v068233(out, e.source_ion_stage_fractions);
+    add_map_vector_memory_v068233(out, e.source_ionization_rates);
+    add_map_vector_memory_v068233(out, e.source_recombination_rates);
+    add_map_payload_memory_v068233(out, e.source_detail_active_windows);
+    const auto& w = e.source_workspace;
+#define XSTAR_ADD_WS_VECTOR_V0682332(name) add_vector_memory_v068233(out, w.name)
+    XSTAR_ADD_WS_VECTOR_V0682332(lte_populations);
+    XSTAR_ADD_WS_VECTOR_V0682332(rcem);
+    XSTAR_ADD_WS_VECTOR_V0682332(oplin);
+    XSTAR_ADD_WS_VECTOR_V0682332(tau0);
+    XSTAR_ADD_WS_VECTOR_V0682332(elum);
+    XSTAR_ADD_WS_VECTOR_V0682332(cemab);
+    XSTAR_ADD_WS_VECTOR_V0682332(cabab);
+    XSTAR_ADD_WS_VECTOR_V0682332(opakab);
+    XSTAR_ADD_WS_VECTOR_V0682332(tauc);
+    XSTAR_ADD_WS_VECTOR_V0682332(elumab);
+    XSTAR_ADD_WS_VECTOR_V0682332(zrems);
+    XSTAR_ADD_WS_VECTOR_V0682332(opakc);
+    XSTAR_ADD_WS_VECTOR_V0682332(opakcont);
+    XSTAR_ADD_WS_VECTOR_V0682332(flinel);
+    XSTAR_ADD_WS_VECTOR_V0682332(rccemis);
+    XSTAR_ADD_WS_VECTOR_V0682332(pprint4_opakc);
+    XSTAR_ADD_WS_VECTOR_V0682332(pprint4_rccemis);
+    XSTAR_ADD_WS_VECTOR_V0682332(pprint4_brcems);
+    XSTAR_ADD_WS_VECTOR_V0682332(pprint4_flinel);
+    XSTAR_ADD_WS_VECTOR_V0682332(dpthc);
+    XSTAR_ADD_WS_VECTOR_V0682332(dpthcont);
+    XSTAR_ADD_WS_VECTOR_V0682332(zremsz);
+    XSTAR_ADD_WS_VECTOR_V0682332(line_profile_workspace);
+#undef XSTAR_ADD_WS_VECTOR_V0682332
+    return out;
+}
+
+MemoryBytesV068233 radial_zones_memory_v0682332(
+    const std::vector<xstar_run_state::RadialZoneState>& zones) {
+    MemoryBytesV068233 out;
+    out.logical = static_cast<std::uint64_t>(zones.size()) * sizeof(xstar_run_state::RadialZoneState);
+    out.capacity = static_cast<std::uint64_t>(zones.capacity()) * sizeof(xstar_run_state::RadialZoneState);
+    for (const auto& zone : zones) {
+        out.logical += zone.boundary_provenance.size() + zone.accepted_controller.acceptance_reason.size();
+        out.capacity += zone.boundary_provenance.capacity() + zone.accepted_controller.acceptance_reason.capacity();
+        const auto eval = fixed_evaluation_memory_v0682332(zone.accepted_controller.evaluation);
+        out.logical += eval.logical >= sizeof(xstar_run_state::FixedEvaluationState) ? eval.logical - sizeof(xstar_run_state::FixedEvaluationState) : 0u;
+        out.capacity += eval.capacity >= sizeof(xstar_run_state::FixedEvaluationState) ? eval.capacity - sizeof(xstar_run_state::FixedEvaluationState) : 0u;
+    }
+    return out;
+}
+
+void update_final_snapshots_memory_v0682332(const std::vector<FixedDsecSnapshot>& snapshots) {
+    if (!g_performance_v064890) return;
+    const auto bytes = final_snapshots_memory_v0682332(snapshots);
+    auto& perf = *g_performance_v064890;
+    perf.final_snapshots_current_bytes_v0682332 = bytes.logical;
+    perf.final_snapshots_current_capacity_bytes_v0682332 = bytes.capacity;
+    perf.final_snapshots_peak_bytes_v0682332 = std::max(perf.final_snapshots_peak_bytes_v0682332, bytes.logical);
+    perf.final_snapshots_peak_capacity_bytes_v0682332 = std::max(perf.final_snapshots_peak_capacity_bytes_v0682332, bytes.capacity);
+}
+
+void update_radial_zones_memory_v0682332(const std::vector<xstar_run_state::RadialZoneState>& zones) {
+    if (!g_performance_v064890) return;
+    const auto bytes = radial_zones_memory_v0682332(zones);
+    auto& perf = *g_performance_v064890;
+    perf.radial_zones_current_bytes_v0682332 = bytes.logical;
+    perf.radial_zones_current_capacity_bytes_v0682332 = bytes.capacity;
+    perf.radial_zones_peak_bytes_v0682332 = std::max(perf.radial_zones_peak_bytes_v0682332, bytes.logical);
+    perf.radial_zones_peak_capacity_bytes_v0682332 = std::max(perf.radial_zones_peak_capacity_bytes_v0682332, bytes.capacity);
 }
 
 MemoryBytesV068233 program_memory_v068233(const xstar_atdb_runtime::ProgramStorage& p, bool sidecars) {
@@ -18317,6 +18436,8 @@ void stream_saved_shell_detail_v068233(
         g_performance_v064890->detail_rows_streamed_v068233 += result.detail_rows;
         g_performance_v064890->detal2_rows_streamed_v068233 += result.detal2_rows;
         g_performance_v064890->detal3_rows_streamed_v068233 += result.detal3_rows;
+        g_performance_v064890->detal2_terminal_patch_rows_v0682332 +=
+            result.detal2_terminal_patches_v0682332.size();
         // detal4 has one row per native continuum bin.
         g_performance_v064890->detal4_rows_streamed_v068233 +=
             stream_state.radial_zones.front().accepted_controller.evaluation.radiation_energy_ev.size();
@@ -18327,6 +18448,10 @@ void stream_saved_shell_detail_v068233(
             g_performance_v064890->radial_rss_peak_bytes_v068233, rss);
         g_performance_v064890->radial_rss_samples_bytes_v068233.push_back(rss);
     }
+    stream_state.incremental_detal2_terminal_patches_v0682332.insert(
+        stream_state.incremental_detal2_terminal_patches_v0682332.end(),
+        result.detal2_terminal_patches_v0682332.begin(),
+        result.detal2_terminal_patches_v0682332.end());
     // Release the per-zone converted writer state immediately.  Capacity is
     // intentionally not retained because canonical FORTRAN reuses the SAVD
     // arrays rather than accumulating historical C++ evaluation objects.
@@ -19736,6 +19861,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 data.snapshots.push_back(pretransport_boundary_v82_patch520145);
             }
             finals.push_back(std::move(pretransport_boundary_v82_patch520145));
+            update_final_snapshots_memory_v0682332(finals);
             // 0.6.82.22 memory scaling: once a later accepted boundary exists,
             // the previous boundary is immutable publication state.  Compact
             // only its sparse RRC source-address planes; never compact the
@@ -19750,6 +19876,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     g_performance_v064890->compacted_rrc_values_before += counts_v068222.first;
                     g_performance_v064890->compacted_rrc_values_after += counts_v068222.second;
                 }
+                update_final_snapshots_memory_v0682332(finals);
             }
             const double zone_seconds_v0648110 = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - shared_zone_started_v0648110).count();
@@ -19912,6 +20039,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         if (incremental_detail_stream_v068233) {
             whole.multipass_detail_radial_zones.clear();
             whole.incremental_detail_products_complete_v068233 = true;
+            whole.incremental_detal2_terminal_patches_v0682332 =
+                std::move(incremental_detail_state_v068233->incremental_detal2_terminal_patches_v0682332);
             whole.native_detail_state_retained = true;
         }
 
@@ -20239,6 +20368,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             abundance.terminal_row = ordinal == radial_event_count;
             whole.radial_zones.push_back(std::move(zone));
             whole.abundance_radial_rows.push_back(std::move(abundance));
+            update_radial_zones_memory_v0682332(whole.radial_zones);
         };
         for (std::size_t i = 0; i < finals.size(); ++i) {
             const std::size_t ntotit = i < actual_dsec_ntotit.size() ? actual_dsec_ntotit[i] : 0u;
@@ -20251,6 +20381,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // of every accepted boundary.
             if (!data.reference_trajectory_mode && !data.reference_diagnostics_enabled) {
                 finals[i] = FixedDsecSnapshot{};
+                update_final_snapshots_memory_v0682332(finals);
             }
         }
         // Source saves a distinct terminal row after the last radial transfer.
@@ -20294,6 +20425,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 whole.radial_zones.front().accepted_controller.evaluation);
         }
         retain_controller_owned_product_workspaces(whole, options.parameters_path);
+        update_radial_zones_memory_v0682332(whole.radial_zones);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
         // used for the native zrtmp/line/RRC trapezoidal reductions.
@@ -21120,6 +21252,15 @@ void emit_controller_performance_instrumentation(
             << "V068233_RSS_RADIAL_EVENT_SAMPLES=" << perf.radial_rss_samples_bytes_v068233.size() << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_CURRENT_BYTES=" << perf.final_snapshots_current_bytes_v0682332 << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=" << perf.final_snapshots_peak_bytes_v0682332 << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_CURRENT_CAPACITY_BYTES=" << perf.final_snapshots_current_capacity_bytes_v0682332 << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_PEAK_CAPACITY_BYTES=" << perf.final_snapshots_peak_capacity_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_CURRENT_BYTES=" << perf.radial_zones_current_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_PEAK_BYTES=" << perf.radial_zones_peak_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_CURRENT_CAPACITY_BYTES=" << perf.radial_zones_current_capacity_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_PEAK_CAPACITY_BYTES=" << perf.radial_zones_peak_capacity_bytes_v0682332 << "\n"
+            << "V0682332_DETAL2_TERMINAL_PATCH_ROWS=" << perf.detal2_terminal_patch_rows_v0682332 << "\n"
             << "V068231_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"
             << "V068222_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"
             << "V068222_PERF_RRC_VALUES_BEFORE=" << perf.compacted_rrc_values_before << "\n"
@@ -21145,7 +21286,16 @@ void emit_controller_performance_instrumentation(
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
             << "V068233_RADIAL_RSS_LAST_BYTES=" << perf.radial_rss_last_bytes_v068233 << "\n"
             << "V068233_RADIAL_RSS_PEAK_BYTES=" << perf.radial_rss_peak_bytes_v068233 << "\n"
-            << "V068233_RADIAL_RSS_SAMPLE_COUNT=" << perf.radial_rss_samples_bytes_v068233.size() << "\n";
+            << "V068233_RADIAL_RSS_SAMPLE_COUNT=" << perf.radial_rss_samples_bytes_v068233.size() << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_CURRENT_BYTES=" << perf.final_snapshots_current_bytes_v0682332 << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=" << perf.final_snapshots_peak_bytes_v0682332 << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_CURRENT_CAPACITY_BYTES=" << perf.final_snapshots_current_capacity_bytes_v0682332 << "\n"
+            << "V0682332_FINAL_SNAPSHOTS_PEAK_CAPACITY_BYTES=" << perf.final_snapshots_peak_capacity_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_CURRENT_BYTES=" << perf.radial_zones_current_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_PEAK_BYTES=" << perf.radial_zones_peak_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_CURRENT_CAPACITY_BYTES=" << perf.radial_zones_current_capacity_bytes_v0682332 << "\n"
+            << "V0682332_RADIAL_ZONES_PEAK_CAPACITY_BYTES=" << perf.radial_zones_peak_capacity_bytes_v0682332 << "\n"
+            << "V0682332_DETAL2_TERMINAL_PATCH_ROWS=" << perf.detal2_terminal_patch_rows_v0682332 << "\n";
         out << "V068233_RADIAL_RSS_SAMPLES_BYTES=";
         for (std::size_t i = 0; i < perf.radial_rss_samples_bytes_v068233.size(); ++i) {
             if (i) out << ';';

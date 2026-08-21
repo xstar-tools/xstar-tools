@@ -38,12 +38,18 @@ struct IncrementalDetailResultV068233 {
     std::uint64_t detail_rows = 0u;
     std::uint64_t detal2_rows = 0u;
     std::uint64_t detal3_rows = 0u;
+    std::vector<xstar_run_state::IncrementalDetal2TerminalPatchStateV0682332>
+        detal2_terminal_patches_v0682332;
 };
 
 IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& one_zone_state,
     std::size_t pass_index);
+
+std::uint64_t finalize_incremental_detal2_terminal_gate_v0682332(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& final_state);
 
 struct Result {
     std::size_t files_written = 0;

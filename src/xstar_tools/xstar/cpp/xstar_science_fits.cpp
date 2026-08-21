@@ -1164,6 +1164,8 @@ struct BulkFitsPerfV06823088 {
 
 thread_local double g_fits_checksum_seconds_v068232 = 0.0;
 thread_local double g_detail_line_identity_seconds_v068232 = 0.0;
+thread_local std::vector<xstar_run_state::IncrementalDetal2TerminalPatchStateV0682332>*
+    g_incremental_detal2_terminal_patches_v0682332 = nullptr;
 
 thread_local BulkFitsBufferV06823088 g_bulk_fits_buffer_v06823088;
 thread_local BulkFitsPerfV06823088 g_bulk_fits_perf_v06823088;
@@ -8500,7 +8502,8 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ElementMeta>& elements,
     const std::vector<RowMeta>& rows,
-    std::size_t sequence) {
+    std::size_t sequence,
+    bool apply_terminal_stage_gate = true) {
     std::map<long long,LineRow> out;
     std::vector<RecordDiag> records;
     try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
@@ -8561,7 +8564,10 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
         const long long public_line_index = resolve_detail_line_index(r);
         if (public_line_index <= 0 || (mg_anchor && !oracle_detail_line_inventory(public_line_index))) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
+        if (!element) continue;
+        if (apply_terminal_stage_gate &&
+            !active_product_element_stage(
+                state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
         const double upper = population_for(evaluation, elements, r.element_index, r.upper_row);
         const double density = r.density_scale > 0.0 ? r.density_scale : 1.0;
@@ -8832,7 +8838,12 @@ void write_line_detail(const std::filesystem::path& path,
                 if (key > 0 && !pw_line_by_index.count(key)) pw_line_by_index[key] = pi;
             }
         }
-        const auto diagnostic_lines = diagnostic_line_rows_by_index(state, evaluation, elements, rows, zone.accepted_controller.accepted_sequence);
+        const bool defer_terminal_gate_v0682332 =
+            g_incremental_detal2_terminal_patches_v0682332 != nullptr;
+        const auto diagnostic_lines = diagnostic_line_rows_by_index(
+            state, evaluation, elements, rows,
+            zone.accepted_controller.accepted_sequence,
+            !defer_terminal_gate_v0682332);
         auto lines = source_line_rows_from_identities(state, evaluation, elements, rows, physical_density_cm3_for_output_zone(state, z), physical_luminosity_scale_1e38_for_output_zone(state, z), true, hdu_number);
         std::map<long long,LineRow> native_lines_by_record;
         for (const auto& line : lines) native_lines_by_record[line.record] = line;
@@ -8846,13 +8857,34 @@ void write_line_detail(const std::filesystem::path& path,
             for (std::size_t i = 0; i < lines.size(); ++i) {
                 LineRow r = lines[i];
                 const auto found_diag = diagnostic_lines.find(r.record);
-                if (found_diag != diagnostic_lines.end()) r = merged_line_row(r, &found_diag->second);
+                bool diagnostic_emis_in_v0682332 = false;
+                bool diagnostic_emis_out_v0682332 = false;
+                bool diagnostic_opacity_v0682332 = false;
+                if (found_diag != diagnostic_lines.end()) {
+                    // .32 applies active_product_element_stage() to the
+                    // Type-50 diagnostic refinement only after the terminal
+                    // writer state exists.  Live SAVD publication cannot know
+                    // that final gate yet.  Record exactly the cells whose
+                    // value is supplied only by the diagnostic refinement so
+                    // they can be reverted to the base (zero) value later if
+                    // the terminal stage proves inactive.
+                    diagnostic_emis_in_v0682332 =
+                        r.emis_in == 0.0 && found_diag->second.emis_in != 0.0;
+                    diagnostic_emis_out_v0682332 =
+                        r.emis_out == 0.0 && found_diag->second.emis_out != 0.0;
+                    diagnostic_opacity_v0682332 =
+                        r.opacity == 0.0 && found_diag->second.opacity != 0.0;
+                    r = merged_line_row(r, &found_diag->second);
+                }
                 const auto* id = line_identity_from_lookup_v06823088(line_identity_lookup_v06823088, r.record);
                 const auto found_pw = pw_line_by_index.find(r.record);
                 if (state.backend.find("native") == std::string::npos && found_pw != pw_line_by_index.end()) {
                     const std::size_t pi = found_pw->second;
                     r.emis_in = finite_or_zero(pw_line_emis_in[pi]); r.emis_out = finite_or_zero(pw_line_emis_out[pi]);
                     r.opacity = finite_or_zero(pw_line_opacity[pi]); r.tau_in = finite_or_zero(pw_line_tau_in[pi]); r.tau_out = finite_or_zero(pw_line_tau_out[pi]);
+                    diagnostic_emis_in_v0682332 = false;
+                    diagnostic_emis_out_v0682332 = false;
+                    diagnostic_opacity_v0682332 = false;
                 }
                 const long row = static_cast<long>(i + 1);
                 write_longlong(fptr, 1, row, r.record);
@@ -8862,6 +8894,26 @@ void write_line_detail(const std::filesystem::path& path,
                 write_string(fptr, 5, row, id ? id->upper_level : "unknown");
                 write_real4(fptr, 6, row, finite_or_zero(r.emis_in)); write_real4(fptr, 7, row, finite_or_zero(r.emis_out));
                 write_real4(fptr, 8, row, finite_or_zero(r.opacity)); write_real4(fptr, 9, row, finite_or_zero(r.tau_in)); write_real4(fptr, 10, row, finite_or_zero(r.tau_out));
+                if (g_incremental_detal2_terminal_patches_v0682332 &&
+                    found_diag != diagnostic_lines.end() &&
+                    (diagnostic_emis_in_v0682332 || diagnostic_emis_out_v0682332 || diagnostic_opacity_v0682332)) {
+                    xstar_run_state::IncrementalDetal2TerminalPatchStateV0682332 patch;
+                    patch.pass_index = zone.pass_index;
+                    // one-zone incremental files always write their radial
+                    // extension as HDU 3; after append, source zone N resides
+                    // at absolute HDU N+2 in the persistent pass file.
+                    patch.hdu_number = zone.zone_index + 2u;
+                    patch.row_number = static_cast<std::size_t>(row);
+                    patch.element_z = found_diag->second.z;
+                    patch.ion_stage = found_diag->second.stage;
+                    patch.emis_inward_from_diagnostic = diagnostic_emis_in_v0682332;
+                    patch.emis_outward_from_diagnostic = diagnostic_emis_out_v0682332;
+                    patch.opacity_from_diagnostic = diagnostic_opacity_v0682332;
+                    patch.diagnostic_emis_inward = finite_or_zero(r.emis_in);
+                    patch.diagnostic_emis_outward = finite_or_zero(r.emis_out);
+                    patch.diagnostic_opacity = finite_or_zero(r.opacity);
+                    g_incremental_detal2_terminal_patches_v0682332->push_back(std::move(patch));
+                }
             }
             continue;
         }
@@ -11248,9 +11300,22 @@ IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
         result.detail_population_seconds, nullptr, &result.detail_rows);
 
     const double line_identity_before = g_detail_line_identity_seconds_v068232;
-    result.detail_line_checksum_seconds += publish_one("detal2",
-        [&](const auto& path) { write_line_detail(path, one_zone_state, elements, rows); },
-        result.detail_line_seconds, &result.detail_line_fits_write_seconds, &result.detal2_rows);
+    {
+        struct ScopedDetal2TerminalPatchCaptureV0682332 {
+            std::vector<xstar_run_state::IncrementalDetal2TerminalPatchStateV0682332>* previous = nullptr;
+            explicit ScopedDetal2TerminalPatchCaptureV0682332(
+                std::vector<xstar_run_state::IncrementalDetal2TerminalPatchStateV0682332>* target)
+                : previous(g_incremental_detal2_terminal_patches_v0682332) {
+                g_incremental_detal2_terminal_patches_v0682332 = target;
+            }
+            ~ScopedDetal2TerminalPatchCaptureV0682332() {
+                g_incremental_detal2_terminal_patches_v0682332 = previous;
+            }
+        } patch_capture_v0682332(&result.detal2_terminal_patches_v0682332);
+        result.detail_line_checksum_seconds += publish_one("detal2",
+            [&](const auto& path) { write_line_detail(path, one_zone_state, elements, rows); },
+            result.detail_line_seconds, &result.detail_line_fits_write_seconds, &result.detal2_rows);
+    }
     result.detail_line_identity_seconds = std::max(0.0,
         g_detail_line_identity_seconds_v068232 - line_identity_before);
     result.detail_line_cpu_staging_seconds = std::max(0.0,
@@ -11268,6 +11333,61 @@ IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
         [&](const auto& path) { write_spectrum_detail(path, one_zone_state); },
         result.detail_spectrum_seconds, nullptr, nullptr);
     return result;
+}
+
+std::uint64_t finalize_incremental_detal2_terminal_gate_v0682332(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& final_state) {
+    if (final_state.incremental_detal2_terminal_patches_v0682332.empty()) return 0u;
+    const auto elements = read_elements(final_state, std::filesystem::path{});
+    const auto rows = read_rows(final_state, std::filesystem::path{});
+    using Patch = xstar_run_state::IncrementalDetal2TerminalPatchStateV0682332;
+    std::map<std::pair<std::size_t,std::size_t>, std::vector<const Patch*>> grouped;
+    for (const auto& patch : final_state.incremental_detal2_terminal_patches_v0682332) {
+        const ElementMeta* element = nullptr;
+        for (const auto& candidate : elements) {
+            if (candidate.element_z == patch.element_z) { element = &candidate; break; }
+        }
+        if (!element) {
+            throw std::runtime_error("0.6.82.33.2 detal2 terminal patch references unknown element");
+        }
+        if (active_product_element_stage(
+                final_state, elements, rows, patch.element_z, patch.ion_stage, element->abundance)) {
+            continue;
+        }
+        grouped[{patch.pass_index, patch.hdu_number}].push_back(&patch);
+    }
+    std::uint64_t cells_patched = 0u;
+    for (const auto& item : grouped) {
+        const auto pass_index = item.first.first;
+        const auto hdu_number = item.first.second;
+        const std::string prefix = "xo" + (pass_index < 10u ? std::string("0") : std::string()) +
+            std::to_string(pass_index) + "_";
+        const auto path = output_dir / (prefix + "detal2.fits");
+        fitsfile* fptr = nullptr;
+        int status = 0;
+        fits_open_file(&fptr, path.string().c_str(), READWRITE, &status);
+        check_fits(status, "0.6.82.33.2 open incremental detal2 terminal patch file");
+        int hdu_type = 0;
+        fits_movabs_hdu(fptr, static_cast<int>(hdu_number), &hdu_type, &status);
+        check_fits(status, "0.6.82.33.2 select incremental detal2 terminal patch HDU");
+        if (hdu_type != BINARY_TBL) {
+            int close_status = 0; fits_close_file(fptr, &close_status);
+            throw std::runtime_error("0.6.82.33.2 detal2 terminal patch target is not a binary table");
+        }
+        for (const Patch* patch : item.second) {
+            const long row = static_cast<long>(patch->row_number);
+            if (patch->emis_inward_from_diagnostic) { write_real4(fptr, 6, row, 0.0); ++cells_patched; }
+            if (patch->emis_outward_from_diagnostic) { write_real4(fptr, 7, row, 0.0); ++cells_patched; }
+            if (patch->opacity_from_diagnostic) { write_real4(fptr, 8, row, 0.0); ++cells_patched; }
+        }
+        fits_write_chksum(fptr, &status);
+        check_fits(status, "0.6.82.33.2 checksum incremental detal2 terminal patch HDU");
+        int close_status = 0;
+        fits_close_file(fptr, &close_status);
+        check_fits(close_status, "0.6.82.33.2 close incremental detal2 terminal patch file");
+    }
+    return cells_patched;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -11351,6 +11471,11 @@ Result write_historical_science_products(
     const bool write_detail_products = (lwrite > 0) || (npass > 1);
     std::vector<std::string> detail_filenames_v0682272;
     if (write_detail_products && state.incremental_detail_products_complete_v068233) {
+        // 0.6.82.33.2: .32's deferred detal2 writer filters diagnostic-only
+        // Type-50 refinements through the terminal active-stage state.  Apply
+        // that same gate now that the terminal state exists, without retaining
+        // historical SAVD evaluations or rebuilding any detail HDU.
+        (void)finalize_incremental_detal2_terminal_gate_v0682332(output_dir, state);
         // 0.6.82.33: npass=1 detail HDUs were already appended at the literal
         // SAVD boundary while the source workspaces were live.  Do not rebuild
         // them from retained whole-run state at final publication.

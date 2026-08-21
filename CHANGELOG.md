@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.33.2 - first-SAVD detal2 terminal-stage parity and residual radial-memory ownership - 2026-08-21
+
+- Revise host-rejected `0.6.82.33.1` as `0.6.82.33.2`; keep accepted `0.6.82.32` as the exact C++ science/FITS comparison baseline and keep science revision `0.6.48.12.3.45.3.3.8` plus ABI identifiers `60487 / 6048110 / 60488` frozen.
+- Preserve the successful `.33.1` single-pass incremental STEP/detail architecture and its C5 memory reduction. Do not reintroduce whole-run SAVD detail retention.
+- Repair the only observed `.33.1` C5 FITS mismatch generically: live `detal2` publication may temporarily use Type-50 diagnostic refinements before the terminal active-ion-stage state exists, while accepted `.32` applies that terminal-stage gate at deferred final publication. Record only cells whose value came exclusively from that diagnostic refinement, then at finalization zero only those recorded cells whose ion stage is terminal-inactive. No element, ion, line-index, or C5-specific hardcode is used.
+- Keep source-owned/nonzero base cells, opacity/tau ownership, row membership/order, HDU order, REAL(4) conversion points, and later radial HDUs unchanged. The exact raw FITS payload gate against `.32` remains mandatory.
+- Add lower-bound logical/capacity telemetry for the two residual radial-history owners identified after `.33.1`: accumulated accepted `FixedDsecSnapshot` entries in `finals`, and transferred full `whole.radial_zones` / `FixedEvaluationState` entries. This revision measures those owners but does not remove them.
+- Add `V0682332_FINAL_SNAPSHOTS_*`, `V0682332_RADIAL_ZONES_*`, and `V0682332_DETAL2_TERMINAL_PATCH_ROWS` markers and carry them through the host runner.
+- Keep Fe as the first host gate and C5 as the second memory/FITS gate. Broad multi-element remains an explicit milestone/final gate and should not be run until Fe/C5 exactness is restored.
+
 ## 0.6.82.33.1 - host-return fix for incremental production silence and live STEP context - 2026-08-21
 
 - Revise rejected `0.6.82.33` as `0.6.82.33.1`; keep accepted `0.6.82.32` as the comparison baseline and keep science revision `0.6.48.12.3.45.3.3.8` plus ABI identifiers `60487 / 6048110 / 60488` frozen.
