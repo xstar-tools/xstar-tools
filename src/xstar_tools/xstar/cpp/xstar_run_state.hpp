@@ -438,6 +438,72 @@ struct IncrementalDetal2TerminalPatchStateV0682332 {
     double diagnostic_opacity = 0.0;
 };
 
+// 0.6.82.33.6: production-only compact retained radial state.  Once the
+// source SAVD detail HDUs for a completed nonterminal zone have been streamed,
+// the whole-run owner no longer needs the dense line/RRC/detail workspaces.
+// Keep only the continuum/thermal surfaces still consumed by final STEP and
+// product projection.  Diagnostic/reference/multipass paths never use this
+// record and continue retaining the full RadialZoneState.
+struct CompactSourceWorkspaceStateV0682336 {
+    std::vector<double> rccemis;
+    std::vector<double> zrems;
+    std::vector<double> opakc;
+    std::vector<double> opakcont;
+    std::vector<double> dpthc;
+    std::vector<double> dpthcont;
+    std::vector<double> zremsz;
+    std::size_t native_line_count = 0;
+    std::size_t native_continuum_count = 0;
+    bool continuum_workspace_exact = false;
+    bool accumulated_output_workspace_exact = false;
+};
+
+struct CompactFixedEvaluationStateV0682336 {
+    std::string kind;
+    std::size_t sequence = 0;
+    std::size_t call_index = 0;
+    std::size_t evaluation_index = 0;
+    double temperature_t4 = 0.0;
+    double hydrogen_density_cm3 = 0.0;
+    double electron_fraction_input = 0.0;
+    double computed_electron_fraction = 0.0;
+    double charge_residual = 0.0;
+    double hmctot = 0.0;
+    double total_heating = 0.0;
+    double total_cooling = 0.0;
+    std::vector<double> radiation_energy_ev;
+    std::vector<double> radiation_flux;
+    std::vector<double> continuum_tau_in;
+    std::vector<double> continuum_tau_out;
+    std::vector<double> continuum_spectrum;
+    std::vector<double> spectrum;
+    std::vector<double> opacity;
+    CompactSourceWorkspaceStateV0682336 source_workspace;
+};
+
+struct CompactRadialZoneStateV0682336 {
+    std::size_t zone_index = 0;
+    std::size_t pass_index = 0;
+    double radius_cm = 0.0;
+    double outer_radius_cm = 0.0;
+    double delta_radius_cm = 0.0;
+    double density_cm3 = 0.0;
+    double pressure_dyn_cm2 = 0.0;
+    double ionization_parameter = 0.0;
+    double log_ionization_parameter = 0.0;
+    double column_density_cm2 = 0.0;
+    double temperature_t4 = 0.0;
+    double electron_fraction = 0.0;
+    std::size_t dsec_ntotit = 0;
+    bool provisional_from_controller = false;
+    bool accepted_boundary_exact = false;
+    std::string boundary_provenance;
+    std::size_t accepted_call_index = 0;
+    std::size_t accepted_sequence = 0;
+    std::string acceptance_reason;
+    CompactFixedEvaluationStateV0682336 evaluation;
+};
+
 struct RadialZoneState {
     std::size_t zone_index = 0;
     std::size_t pass_index = 0;
@@ -456,6 +522,11 @@ struct RadialZoneState {
     std::size_t dsec_ntotit = 0;
     bool provisional_from_controller = false;
     bool accepted_boundary_exact = false;
+    // 0.6.82.33.6: true only for a completed nonterminal ordinary-production
+    // zone materialized from CompactRadialZoneStateV0682336.  Its streamed
+    // detail workspaces are intentionally absent; continuum/STEP surfaces
+    // remain exact.
+    bool compact_retained_v0682336 = false;
     std::string boundary_provenance;
     AcceptedControllerState accepted_controller;
 };
@@ -515,6 +586,10 @@ struct WholeRunAccumulatedState {
     // the canonical radial event and released immediately rather than retained
     // for whole-run publication.
     bool incremental_detail_products_complete_v068233 = false;
+    // 0.6.82.33.6: ordinary single-pass production retained completed
+    // nonterminal zones in compact form after their SAVD detail products were
+    // streamed.  This is a publication-lifetime marker only.
+    bool compact_radial_retention_v0682336 = false;
     // 0.6.82.33.2: bounded patch ledger for the one detail-line dependency
     // that is not knowable at the live SAVD event: the final terminal
     // ion-stage activity gate used by the accepted .32 detal2 writer.
@@ -580,6 +655,9 @@ struct ProductWritingState {
     // the canonical radial event and released immediately rather than retained
     // for whole-run publication.
     bool incremental_detail_products_complete_v068233 = false;
+    // 0.6.82.33.6 compact historical radial-zone retention marker copied
+    // from WholeRunAccumulatedState.
+    bool compact_radial_retention_v0682336 = false;
     // 0.6.82.33.2: bounded patch ledger for the one detail-line dependency
     // that is not knowable at the live SAVD event: the final terminal
     // ion-stage activity gate used by the accepted .32 detal2 writer.

@@ -576,7 +576,16 @@ void prepare_native_product_state(
 
     state.exact_source_workspaces_retained = std::all_of(
         state.radial_zones.begin(), state.radial_zones.end(), [](const RadialZoneState& zone) {
-            return zone.accepted_controller.evaluation.source_workspace.complete();
+            const auto& ws = zone.accepted_controller.evaluation.source_workspace;
+            if (zone.compact_retained_v0682336) {
+                // 0.6.82.33.6: completed nonterminal production zones have
+                // already published their SAVD detail state.  Their surviving
+                // exact contract is the continuum/STEP surface, not the
+                // released dense line/RRC/detail workspace.
+                return ws.continuum_workspace_exact &&
+                    ws.accumulated_output_workspace_exact;
+            }
+            return ws.complete();
         });
     state.exact_accepted_radial_boundaries_retained = std::all_of(
         state.radial_zones.begin(), state.radial_zones.end(), [](const RadialZoneState& zone) {
@@ -650,6 +659,8 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.native_detail_state_retained = state.native_detail_state_retained;
     product.incremental_detail_products_complete_v068233 =
         state.incremental_detail_products_complete_v068233;
+    product.compact_radial_retention_v0682336 =
+        state.compact_radial_retention_v0682336;
     product.incremental_detal2_terminal_patches_v0682332 =
         state.incremental_detal2_terminal_patches_v0682332;
     product.continuum_depths_derived_from_native_opacity =
@@ -706,6 +717,8 @@ ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state
     product.native_detail_state_retained = state.native_detail_state_retained;
     product.incremental_detail_products_complete_v068233 =
         state.incremental_detail_products_complete_v068233;
+    product.compact_radial_retention_v0682336 =
+        state.compact_radial_retention_v0682336;
     product.incremental_detal2_terminal_patches_v0682332 =
         std::move(state.incremental_detal2_terminal_patches_v0682332);
     product.continuum_depths_derived_from_native_opacity = state.continuum_depths_derived_from_native_opacity;

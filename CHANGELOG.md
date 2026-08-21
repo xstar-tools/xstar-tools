@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.33.6 - compact completed radial-zone retention - 2026-08-21
+
+- Build on host-accepted `0.6.82.33.5`: Fe and C5 both retain exact science, normalized STEP, bit-exact FITS payload, RSS, lifetime, and performance acceptance against accepted `0.6.82.32`; C5 peak RSS ratio is `0.287734` with the legacy `finals` history eliminated.
+- Keep the `.33.5` O(1) pending `FixedDsecSnapshot` mechanism frozen. Ordinary single-pass production still owns at most one newest pending full snapshot and reports zero legacy `V0682332_FINAL_SNAPSHOTS_PEAK_BYTES`.
+- After a SAVD boundary has been superseded and its detail FITS HDUs have already been streamed, retain only the radial/thermal scalars and continuum/STEP surfaces required by later product projection. Release dense historical line/RRC/detail/global/population state instead of transferring a ~45 MB full `RadialZoneState` per C5 shell.
+- Keep the newest physical boundary and terminal post-transport boundary full. Preserve the historical full radial-zone path for multipass, reference trajectories, reference diagnostics, and full-trajectory diagnostics.
+- Prevent `retain_controller_owned_product_workspaces()` from silently reconstructing released dense line/RRC arrays for compact historical zones. Full terminal zones continue using the frozen cumulative source-workspace ownership path.
+- Add `V0682336_COMPACT_RADIAL_*`, `V0682336_FULL_RADIAL_ZONES_*`, and `V0682336_COMPACT_RETENTION_GATE`. The gate requires legacy finals peak zero, pending-final peak count <=1, full radial-zone peak count <=2, and exactly `accepted_boundaries-1` compact historical zones.
+- Do not change line/RRC publication, terminal `detal2` patching, transport/controller arithmetic, spectral mathematics, REAL(4) conversion points, science revision `0.6.48.12.3.45.3.3.8`, or ABIs `60487 / 6048110 / 60488`.
+- Keep the deferred `0.6.82.34` correctness scope unchanged: N VI six missing `xo01_detail` rows; Cr II binary32-min-subnormal `xo01_detal2`; O IV extra / Mg II missing `xo01_detal3`; source-local `cemab/cabab/opakab/tauc`; Si VI / Ni VI public RRC ownership; exact HEATT two-plane `1e-49` gating and duplicate-overwrite semantics.
+
 ## 0.6.82.33.5 - zero-preserving lifetime qualification hotfix - 2026-08-21
 
 - Revise host-tested `0.6.82.33.4` as `0.6.82.33.5` under the no-version-reuse rule. The Fe host run showed exact science, normalized STEP, bit-exact FITS payload, RSS, memory, and performance acceptance; the only rejection was the lifetime gate in the Python host harness.
