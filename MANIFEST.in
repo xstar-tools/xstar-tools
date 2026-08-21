@@ -1037,3 +1037,8 @@ include xstar_tools_conversation_summary_through_0.6.82.30.8.9.md
 include multi_element_spectrum_source_zero_gates_0_6_82_30_8_12.md
 include tests/test_multi_element_spectrum_source_zero_gates_0_6_82_30_8_12.py
 include xstar_tools-0.6.82.30.8.12_host_validation.md
+
+# 0.6.82.30.8.14 Al XII Type-70 next-ion source-context parity repair.
+include multi_element_spectrum_type70_source_context_0_6_82_30_8_14.md
+include xstar_tools-0.6.82.30.8.14_host_validation.md
+include tests/test_type70_source_context_0_6_82_30_8_14.py

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.30.8.14 - Al XII Type-70 next-ion source-context parity repair - 2026-08-20
+
+- Treat diagnostic-only `0.6.82.30.8.13` as evidence, not as a production-science base; carry forward the accepted `.30.8.12` Type-50/56 source-zero repair unchanged.
+- Use the paired first-common-state Al trace to isolate the residual emitted-spectrum error to exactly two Type-70/rate-type-7 records (56218/56219).  The recombination coefficient (`ans2`) already matches canonical FORTRAN while the photoionization/heating channels differ by about 98%, ruling out `calt70`, the level solver, matrix arithmetic, and final spectrum publication as the primary cause.
+- Restore canonical Type-70 endpoint ownership: `IDAT(nidt-3)` is the final **level** in the next-ion block (`[-4]` in the zero-based packed integer payload); `IDAT(nidt-2)` (`[-3]`) is the final-ion identity and must never be used as a level offset.
+- Reconstruct the Type-70 physical source context exactly as `ucalc.f90` does: clamp the bound level with `min(IDAT(nidt-1),nlev-1)`, resolve excited destinations from the next ion's Type-13 energy/statistical weight, form the source threshold/statistical-weight ratio, call the source-equivalent `phint53hunt` integration path, and preserve the existing source global-hydrogen density gate.
+- Apply the corrected final-level slot to the Python fixed-program lowerer and pure-Python Type-70 evaluator so all public backends share the same record semantics.
+- Preserve controller ordering, matrix insertion order, solver arithmetic, transport, publication, science revision `0.6.48.12.3.45.3.3.8`, and ABI identifiers `60487 / 6048110 / 60488`.
+- Keep performance optimization deferred to `0.6.82.31-.33`; `.30.8.14` is a science-parity repair only.
+
 ## 0.6.82.30.8.13 - Al XII residual-spectrum first-state diagnostic - 2026-08-20
 
 - Treat `.30.8.12` as an improved but still host-rejected spectrum candidate: emitted NL1 falls from about `1.63e-4` to `5.54e-5` and max relative error from about `0.498` to `0.149`, while STEP structure/science, `ntotit`, and material remain accepted.

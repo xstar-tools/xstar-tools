@@ -8801,8 +8801,14 @@ EvaluatedRecord evaluate_record(
                 case 70:{
                     if(!r||!ints||record.int_count<5)throw std::runtime_error("type70 payload");
                     constexpr std::int64_t kType70SourceIonIdentityMagicV068213 = 227;
+                    const bool has_source_tail = record.int_count >= 2 &&
+                        ints[record.int_count-1] == kType70SourceIonIdentityMagicV068213;
+                    const std::size_t source_int_count = has_source_tail
+                        ? record.int_count - 2u : record.int_count;
+                    if (source_int_count < 5u) throw std::runtime_error("type70 source integer payload");
+
                     bool source_global_hydrogen_ion = false;
-                    if (record.int_count >= 2 && ints[record.int_count-1] == kType70SourceIonIdentityMagicV068213) {
+                    if (has_source_tail) {
                         source_global_hydrogen_ion = ints[record.int_count-2] == 1;
                     } else {
                         // Compatibility fallback for older synthetic programs
@@ -8812,24 +8818,109 @@ EvaluatedRecord evaluate_record(
                         // per-element record.ion_index here.
                         source_global_hydrogen_ion = element.element_z == 1 && record.ion_stage == 1;
                     }
-                    double threshold=delta_ev;double density=input.hydrogen_density_cm3;if(source_global_hydrogen_ion)density=std::min(density,1e8);
-                    auto cal=source_calt70_generic(r,record.real_count,ints,record.int_count,input.temperature_k,density,threshold/13.6);if(!cal.valid)break;
-                    std::vector<double> payload;payload.reserve(2*cal.e_ryd.size());for(std::size_t q=0;q<cal.e_ryd.size();++q){payload.push_back(cal.e_ryd[q]);payload.push_back(cal.xs_mb[q]*1e-18);}
-                    xstar_element_contribution_v1 ph{};Type53SourceShadow sh{};bool ok=evaluate_type53_source_integral(payload.data(),payload.size(),lower,upper,calc_hmc_input,threshold,1.0,nullptr,nullptr,static_cast<int>(record.record),false,false,ph,&sh,nullptr);
-                    if (!ok || !(ph.ans2 > 1e-48)) break;
-                    const double scale = cal.rec * cf_ne / ph.ans2;
-                    c.ans1 = ph.ans1 * scale;
-                    c.ans2 = cal.rec * cf_ne;
-                    c.ans3 = ph.ans3;
-                    c.ans4 = ph.ans4 * scale;
-                    c.ans5 = ph.ans5;
-                    c.ans6 = ph.ans6 * scale;
-                    out.bound_free_payload().type53_shadow = sh;
-                    out.generic_bound_free_offset_ryd_v0648120 = cal.e_ryd;
-                    out.generic_bound_free_sigma_cm2_v0648120.resize(cal.xs_mb.size());
-                    for (std::size_t q = 0; q < cal.xs_mb.size(); ++q) {
-                        out.generic_bound_free_sigma_cm2_v0648120[q] = cal.xs_mb[q] * 1e-18;
+
+                    // 0.6.82.30.8.14: literal ucalc.f90 label-70 ownership.
+                    // IDAT(nidt-1) is the current-ion bound/superlevel local
+                    // level.  IDAT(nidt-3) is the final *level* in the next-ion
+                    // block; IDAT(nidt-2) is the final ion identity and must not
+                    // be interpreted as a level offset.  For idest2>nlevp the
+                    // source explicitly reads the next ion's Type-13 energy and
+                    // statistical weight before calling calt70/phint53hunt.
+                    const int raw_source_bound_local = static_cast<int>(ints[source_int_count-2u]);
+                    const int source_final_level = static_cast<int>(ints[source_int_count-4u]);
+                    if (raw_source_bound_local <= 0 || source_final_level <= 0) break;
+
+                    const LteLevelData* source_bound = nullptr;
+                    const LteLevelData* source_terminal = nullptr;
+                    const LteLevelData* source_destination = nullptr;
+                    int current_nlev = 0;
+                    for (const auto& topo : program.lte_ion_topology) {
+                        if (topo.element_index == element.element_index &&
+                            topo.ion_stage == record.ion_stage && topo.nlev > 0) {
+                            current_nlev = topo.nlev;
+                            break;
+                        }
                     }
+                    // ucalc.f90: idest1=min(IDAT(nidt-1),nlev-1).  Keep the
+                    // source clamp here as well as in lowering because this
+                    // block reconstructs the physical Type-13 context rather
+                    // than reading the already-clamped compact row.
+                    const int source_bound_local = current_nlev > 1
+                        ? std::min(raw_source_bound_local, current_nlev - 1)
+                        : raw_source_bound_local;
+                    for (const auto& level : program.lte_levels) {
+                        if (level.element_index != element.element_index) continue;
+                        if (level.ion_stage == record.ion_stage) {
+                            if (level.local_level == source_bound_local) source_bound = &level;
+                            if (current_nlev > 0 && level.local_level == current_nlev) source_terminal = &level;
+                        }
+                        if (source_final_level > 1 && level.ion_stage == record.ion_stage + 1 &&
+                            level.local_level == source_final_level) {
+                            source_destination = &level;
+                        }
+                    }
+
+                    // Older direct/synthetic fixtures may not carry the complete
+                    // Type-13 LTE sidecar.  Keep their historical compact-row
+                    // fallback; native production must use the exact source data.
+                    double bound_energy = lower.energy_ev;
+                    double bound_g = lower.statistical_weight;
+                    double destination_energy = upper.energy_ev;
+                    double destination_g = upper.statistical_weight;
+                    if (source_bound) {
+                        bound_energy = source_bound->energy_ev;
+                        bound_g = source_bound->statistical_weight;
+                    }
+                    if (source_final_level > 1) {
+                        if (source_destination) {
+                            destination_energy = source_destination->energy_ev;
+                            destination_g = source_destination->statistical_weight;
+                        } else if (native_production_mode()) {
+                            throw std::runtime_error("source-faithful Type70 next-ion Type-13 destination missing");
+                        }
+                    } else if (source_terminal) {
+                        destination_energy = source_terminal->energy_ev;
+                        destination_g = source_terminal->statistical_weight;
+                    }
+                    if (!(bound_g > 0.0) || !(destination_g > 1.0e-24)) break;
+
+                    const double threshold = source_final_level > 1
+                        ? std::abs(bound_energy + destination_energy)
+                        : std::abs(bound_energy - destination_energy);
+                    if (!(threshold > 0.0)) break;
+                    const double swrat = bound_g / destination_g;
+
+                    double density=input.hydrogen_density_cm3;
+                    if(source_global_hydrogen_ion)density=std::min(density,1e8);
+                    auto cal=source_calt70_generic(
+                        r,record.real_count,ints,source_int_count,
+                        input.temperature_k,density,threshold/13.6);
+                    if(!cal.valid)break;
+                    std::vector<double> sigma_cm2(cal.xs_mb.size(),0.0);
+                    for (std::size_t q=0;q<cal.xs_mb.size();++q)
+                        sigma_cm2[q]=std::max(0.0,cal.xs_mb[q])*1e-18;
+
+                    const bool has_reduced = calc_hmc_input.dsec_radiation_energy_ev &&
+                        calc_hmc_input.dsec_bremsa && calc_hmc_input.dsec_radiation_bin_count>=3;
+                    const double* epi = has_reduced ? calc_hmc_input.dsec_radiation_energy_ev
+                        : calc_hmc_input.radiation_energy_ev;
+                    const double* bremsa = has_reduced ? calc_hmc_input.dsec_bremsa
+                        : calc_hmc_input.radiation_flux;
+                    const std::size_t ngrid = has_reduced ? calc_hmc_input.dsec_radiation_bin_count
+                        : calc_hmc_input.radiation_bin_count;
+                    const Type99PhintResult ph = evaluate_type99_phint53hunt(
+                        cal.e_ryd,sigma_cm2,threshold,input.temperature_k,cf_ne,
+                        swrat,epi,bremsa,ngrid,0.01);
+                    if (!ph.valid || !(ph.rrrt > 1e-48)) break;
+                    const double scale = cal.rec * cf_ne / ph.rrrt;
+                    c.ans1 = ph.pirt * scale;
+                    c.ans2 = cal.rec * cf_ne;
+                    c.ans3 = -ph.rrcl;
+                    c.ans4 = -ph.piht * scale;
+                    c.ans5 = -ph.rrcl2;
+                    c.ans6 = -ph.piht2 * scale;
+                    out.generic_bound_free_offset_ryd_v0648120 = cal.e_ryd;
+                    out.generic_bound_free_sigma_cm2_v0648120 = std::move(sigma_cm2);
                     out.spectral = record.continuum_index_one_based > 0;
                     out.bound_free_spectral = out.spectral;
                     out.continuum_index_one_based = record.continuum_index_one_based;

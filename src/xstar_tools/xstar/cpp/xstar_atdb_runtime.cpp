@@ -1318,8 +1318,16 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             // density and temperature grids plus recombination coefficients and a PI curve.
             case 70: {
                 need(ii.size()>=5,"short integer payload");
+                // Canonical ucalc.f90 label 70 owns the endpoints as
+                //   idest1 = IDAT(nidt-1)  -> ii[-2]
+                //   idest2 = nlev + IDAT(nidt-3) - 1 -> ii[-4]
+                // Appendix-A Type-70 layout places the final *level* in
+                // IDAT(nidt-3); ii[-3] is the final ion identity and must not
+                // be used as a level offset.  Using ii[-3] can still collapse
+                // to the same terminal matrix row while corrupting the
+                // photoionization threshold/statistical-weight context.
                 int id1=std::min<int>(ii[ii.size()-2],std::max(b.nlev-1,1));
-                int id2=std::max<int>(b.nlev+ii[ii.size()-3]-1,b.nlev);
+                int id2=std::max<int>(b.nlev+ii[ii.size()-4]-1,b.nlev);
                 set_pair(id1,id2);
                 // ucalc.f90's Type-70 high-density clamp is guarded by
                 // jkion.eq.1, where jkion is the global ATDB ion index.  The

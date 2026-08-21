@@ -1566,8 +1566,12 @@ def _lower_record(
         elif dt == 70:
             if len(raw_ints) < 5:
                 raise ValueError(f"type70 record {rec} has short integer payload")
+            # Canonical ucalc.f90 Type-70 endpoint ownership:
+            # IDAT(nidt-1) is the initial/superlevel local level while
+            # IDAT(nidt-3) is the final level in the next-ion block.
+            # raw_ints[-3] is the final ion identity, not a level offset.
             id1 = min(int(raw_ints[-2]), max(int(block.nlev) - 1, 1))
-            id2 = max(int(block.nlev) + int(raw_ints[-3]) - 1, int(block.nlev))
+            id2 = max(int(block.nlev) + int(raw_ints[-4]) - 1, int(block.nlev))
             set_source_pair(id1, id2)
             # ucalc.f90 caps density only for jkion==1, where jkion is the
             # global ATDB ion index, not the per-element compact ion counter.

@@ -2438,7 +2438,10 @@ class SourceFaithfulUCalc:
         from .ucalc_leaves import calt70
         from xstar_tools.rates_type53 import evaluate_phint53_exact
         if len(r.integers)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type70_short_record")
-        id1=min(int(r.integers[-2]),max(c.nlevp-1,1)); id2=max(c.nlevp+int(r.integers[-3])-1,c.nlevp)
+        # Literal ucalc.f90 label 70: idest2 uses IDAT(nidt-3), i.e.
+        # the fourth integer from the end.  The third-from-last integer is
+        # the final-ion identity in the Appendix-A Type-70 layout.
+        id1=min(int(r.integers[-2]),max(c.nlevp-1,1)); id2=max(c.nlevp+int(r.integers[-4])-1,c.nlevp)
         threshold=abs(c.levels.energy(id1)-c.levels.energy(c.nlevp)); dest_energy,dest_g=self._parent_destination_context(c,id2)
         if id2>c.nlevp: threshold=abs(c.levels.energy(id1)+dest_energy)
         gbound=c.levels.weight(id1); gdest=dest_g or c.levels.weight(c.nlevp)
