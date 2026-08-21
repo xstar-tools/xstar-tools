@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.33.3 - terminal detal2 bulk-FITS ownership hotfix - 2026-08-21
+
+- Revise host-rejected `0.6.82.33.2` as `0.6.82.33.3`; keep accepted `0.6.82.32` as the exact C++ science/FITS baseline and keep science revision `0.6.48.12.3.45.3.3.8` plus ABI identifiers `60487 / 6048110 / 60488` frozen.
+- Preserve the complete `.33.2` incremental SAVD architecture, terminal active-stage provenance ledger, first-SAVD `detal2` correction, and residual-memory telemetry unchanged.
+- Fix the C5 final-publication lifetime failure only: `.33.2` sparse terminal `detal2` corrections use the shared bulk-FITS staging layer through `write_real4()`, but the final contiguous segment could remain pending when `xo01_detal2.fits` was checksummed and closed. Explicitly flush that same FITS owner before checksum/close.
+- Add a regression that proves the finalizer orders the last sparse `write_real4()` calls before `flush_bulk_fits_v06823088()`, then checksum, then close. This specifically protects the C5 pattern that `.33.2` exposed while Fe happened to self-flush through sparse discontinuities.
+- Do not change terminal-stage eligibility, corrected values, row/HDU order, REAL(4) conversion points, controller/rate/solver/transport arithmetic, Type-50 mathematics, or memory lifetimes.
+- Re-run Fe first and C5 second against accepted `.32`; broad multi-element remains deferred until C5 exact FITS completion is restored.
+
 ## 0.6.82.33.2 - first-SAVD detal2 terminal-stage parity and residual radial-memory ownership - 2026-08-21
 
 - Revise host-rejected `0.6.82.33.1` as `0.6.82.33.2`; keep accepted `0.6.82.32` as the exact C++ science/FITS comparison baseline and keep science revision `0.6.48.12.3.45.3.3.8` plus ABI identifiers `60487 / 6048110 / 60488` frozen.

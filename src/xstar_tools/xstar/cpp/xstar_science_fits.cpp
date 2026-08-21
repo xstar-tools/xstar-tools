@@ -11381,11 +11381,18 @@ std::uint64_t finalize_incremental_detal2_terminal_gate_v0682332(
             if (patch->emis_outward_from_diagnostic) { write_real4(fptr, 7, row, 0.0); ++cells_patched; }
             if (patch->opacity_from_diagnostic) { write_real4(fptr, 8, row, 0.0); ++cells_patched; }
         }
+        // 0.6.82.33.3: write_real4() may leave the final contiguous sparse
+        // terminal-patch segment staged in the shared bulk-FITS buffer.  The
+        // target FITS handle must remain its owner until those cells are
+        // committed; otherwise the next product correctly rejects an owner
+        // change.  Flush before checksum/close without changing patch values,
+        // row order, or the 0.6.82.33.2 terminal-stage provenance rule.
+        if (bulk_fits_enabled_v06823088()) flush_bulk_fits_v06823088(fptr);
         fits_write_chksum(fptr, &status);
-        check_fits(status, "0.6.82.33.2 checksum incremental detal2 terminal patch HDU");
+        check_fits(status, "0.6.82.33.3 checksum incremental detal2 terminal patch HDU");
         int close_status = 0;
         fits_close_file(fptr, &close_status);
-        check_fits(close_status, "0.6.82.33.2 close incremental detal2 terminal patch file");
+        check_fits(close_status, "0.6.82.33.3 close incremental detal2 terminal patch file");
     }
     return cells_patched;
 }
