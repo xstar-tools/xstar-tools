@@ -464,8 +464,11 @@ def interp_type56_upsilon(logT_grid: Sequence[float], ups_grid: Sequence[float],
                     i = j
                     break
 
+    # Literal ucalc.f90 label 56 floors the lower interval ordinate only;
+    # the upper ordinate enters the difference unchanged, then cijpp is
+    # clipped nonnegative after interpolation/extrapolation.
     y0 = max(1.0e-48, ys[i])
-    y1 = max(1.0e-48, ys[i + 1])
+    y1 = ys[i + 1]
     value = (y1 - y0) * (x - xs[i]) / (xs[i + 1] - xs[i] + 1.0e-24) + y0
     return max(0.0, float(value))
 

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.30.8.12 - N VI Type-50/56 source-zero rate parity repair - 2026-08-20
+
+- Base this science repair on accepted `0.6.82.30.8.9`; do not carry forward rejected `.30.8.10` Type-71/77 orientation changes. `.30.8.11` remains diagnostic-only.
+- Use the paired first-common-state N VI trace to localize the spectrum rejection upstream of the solver: matrix dimensions/identities and initial populations match, while Type-50 and Type-56 coefficient values contain large C++-only nonzero rates.
+- Restore canonical Type-50/91 `ucalc.f90` semantics: an explicit stored source wavelength `elin<=1.d-34` exits with initialized zero answers before A-value, escape, pumping, opacity, or thermal evaluation. Do not synthesize `12398.4016/deltaE` when the source wavelength is explicitly zero.
+- Restore canonical Type-56 semantics: energy-degenerate endpoints with `deltaE<=1.d-16` exit with initialized zero answers before collision-strength interpolation; support the one-point table case and floor only the lower interpolation ordinate exactly as the source does.
+- Apply the same source-zero/interpolation semantics to pure Python Type-50/56 paths.
+- Preserve matrix record identity/topology, all nonzero Type-50/56 formulas, controller/solver/transport/publication behavior, science revision `0.6.48.12.3.45.3.3.8`, and ABI identifiers `60487 / 6048110 / 60488`.
+- Performance work remains deferred to `0.6.82.31-.33` after the final `.30` spectrum closure gate.
+
 ## 0.6.82.30.8.9 - retained public-line fast path and per-product publication timing - 2026-08-20
 
 - Preserve host-accepted `0.6.82.30.8.8` science, controller, and bulk-CFITSIO serialization unchanged; this revision is publication-only.

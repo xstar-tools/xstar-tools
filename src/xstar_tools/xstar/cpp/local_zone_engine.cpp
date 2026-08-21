@@ -4512,9 +4512,9 @@ Type51UpsilonEvaluation type51_upsilon(
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 56 apply here.
 // XSTAR-FUNCTION-COMMENT-END
 double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
-    if (!r || n < 4 || (n % 2) != 0 || !(temperature_k > 0.0)) return -1.0;
+    if (!r || n < 2 || (n % 2) != 0 || !(temperature_k > 0.0)) return -1.0;
     const std::size_t points = n / 2;
-    if (points < 2) return -1.0;
+    if (points == 1) return std::max(0.0, r[1]);
     const double x = std::log10(temperature_k);
     const bool ascending = r[points - 1] > r[0];
     std::size_t i = 0;
@@ -4535,8 +4535,10 @@ double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
             }
         }
     }
+    // Literal label 56 floors only the lower interval ordinate in the
+    // interpolation expression; the upper ordinate remains the source value.
     const double y0 = std::max(1.0e-48, r[points + i]);
-    const double y1 = std::max(1.0e-48, r[points + i + 1]);
+    const double y1 = r[points + i + 1];
     const double dx = r[i + 1] - r[i];
     const double value = (y1 - y0) * (x - r[i]) / (dx + 1.0e-24) + y0;
     return std::max(0.0, value);
@@ -7823,9 +7825,23 @@ EvaluatedRecord evaluate_record(
             if (!r || record.real_count < 2) throw std::runtime_error("radiative line payload requires A and oscillator strength");
             const double a = std::max(0.0, r[0]);
             const double oscillator = std::max(0.0, r[1]);
-            const double stored_wavelength_a = record.real_count >= 3 && std::isfinite(r[2]) && r[2] > 0.0
+            // 0.6.82.30.8.12: preserve the literal Type-50/91 source
+            // wavelength gate.  ucalc.f90 reads elin=abs(RDAT(1)) and exits
+            // before A-value, escape, pumping, opacity, or thermal work when
+            // elin<=1.d-34.  The lowered payload stores that source wavelength
+            // in r[2].  Earlier C++ replaced an explicit zero wavelength with
+            // 12398.4016/deltaE and therefore activated disabled/degenerate
+            // lines (311 N VI records in the multi-element closure trace).
+            // Only legacy/manual payloads that do not carry r[2] may derive a
+            // fallback wavelength from the endpoint energy.
+            const bool has_source_wavelength =
+                record.real_count >= 3 && std::isfinite(r[2]);
+            const double stored_wavelength_a = has_source_wavelength
                 ? std::abs(r[2])
                 : (delta_ev > 0.0 ? 12398.4016 / delta_ev : 0.0);
+            if (has_source_wavelength && stored_wavelength_a <= 1.0e-34) {
+                break;
+            }
             const bool has_dsec_covering =
                 (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
             const double cfrac = std::clamp(
@@ -8339,6 +8355,10 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION: {
+            // 0.6.82.30.8.12: literal ucalc.f90 label 56 exits with the
+            // initialized zero answers for degenerate endpoints before it
+            // interpolates the tabulated collision strength.
+            if (delta_ev <= 1.0e-16) break;
             const double ups = type56_upsilon(r, record.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type56 payload");
             if (!(lower.statistical_weight > 0.0) || !(upper.statistical_weight > 0.0)) {

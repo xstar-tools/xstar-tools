@@ -295,12 +295,22 @@ def evaluate_type50_ucalc_record(
         flinabs = 1.0
     bremsa = _finite_or_none(bremsa_nb1)
 
+    # 0.6.82.30.8.12: ucalc.f90 label 50 exits immediately when the
+    # stored source wavelength is zero/disabled (elin<=1.d-34).  Do not let
+    # A-value floors or endpoint-derived energies reactivate that record.
+    source_zero_wavelength = (
+        wavelength_a is not None and abs(float(wavelength_a)) <= 1.0e-34
+    )
+
     escaped_raw = None
     escaped = None
     xpx = _finite_or_none(hydrogen_density_cm3)
     density_floor = 1.0e-20 * xpx if xpx is not None else None
     density_floor_applied = False
-    if aij is not None and p1 is not None and p2 is not None:
+    if source_zero_wavelength:
+        escaped_raw = 0.0
+        escaped = 0.0
+    elif aij is not None and p1 is not None and p2 is not None:
         escaped_raw = aij * (p1 + p2)
         if density_floor is not None:
             escaped = max(escaped_raw, density_floor)
@@ -311,7 +321,11 @@ def evaluate_type50_ucalc_record(
     photo = None
     radiation_context_required = True
     photo_status = "not_evaluated"
-    if wavelength_a is not None and wavelength_a > high_wavelength_cutoff_A:
+    if source_zero_wavelength:
+        photo = 0.0
+        radiation_context_required = False
+        photo_status = "evaluated_zero_xstar_source_wavelength_gate"
+    elif wavelength_a is not None and wavelength_a > high_wavelength_cutoff_A:
         photo = 0.0
         radiation_context_required = False
         photo_status = "evaluated_zero_xstar_high_wavelength_sentinel"
@@ -362,10 +376,14 @@ def evaluate_type50_ucalc_record(
     decay_energy_source = "endpoint_energy_difference"
     ans3_cooling = None
     ans4_heating = None
-    if escaped is not None and decay_energy_ev is not None:
-        ans3_cooling = -escaped * decay_energy_ev * float(source_erg_per_eV)
-    if photo is not None and endpoint_energy is not None:
-        ans4_heating = -photo * endpoint_energy * float(source_erg_per_eV)
+    if source_zero_wavelength:
+        ans3_cooling = 0.0
+        ans4_heating = 0.0
+    else:
+        if escaped is not None and decay_energy_ev is not None:
+            ans3_cooling = -escaped * decay_energy_ev * float(source_erg_per_eV)
+        if photo is not None and endpoint_energy is not None:
+            ans4_heating = -photo * endpoint_energy * float(source_erg_per_eV)
 
     # Preserve the long-standing public evaluator contract: ``status`` reports
     # whether the population-rate pair ans1/ans2 can be evaluated.  The new
@@ -420,4 +438,5 @@ def evaluate_type50_ucalc_record(
         "source_formula": TYPE50_SOURCE_FORMULA,
         "source_light_speed_cm_s": XSTAR_C_LIGHT_CM_S,
         "source_high_wavelength_cutoff_A": high_wavelength_cutoff_A,
+        "source_zero_wavelength_gate": source_zero_wavelength,
     }

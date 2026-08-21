@@ -2789,6 +2789,20 @@ class SourceFaithfulUCalc:
     def _eval_collision_generic(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.collisions import evaluate_collision_row
         row, grid = self._collision_row(r,c)
+        de = float(row.get("delta_e_level_eV") or 0.0)
+        if r.data_type == 56 and de <= 1.0e-16:
+            return self._ctx_result(
+                r, s,
+                ans1=0.0, ans2=0.0, ans5=0.0, ans6=0.0,
+                idest1=int(row["lower_level"]),
+                idest2=int(row["upper_level"]),
+                diagnostics={
+                    "source_zero_behavior": "ucalc_label56_degenerate_energy_gate",
+                    "delta_e_level_eV": de,
+                    "source_gate_eV": 1.0e-16,
+                },
+                context_fields_used=("levels",),
+            )
         ev=evaluate_collision_row(row,c.temperature_k,grid,electron_density_cm3=c.electron_density_cm3)
         reason = str(
             ev.get("eval_diagnostic")
