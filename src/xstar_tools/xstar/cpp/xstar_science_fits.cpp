@@ -11108,6 +11108,27 @@ IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& one_zone_state,
     std::size_t pass_index) {
+    // 0.6.82.33.1: incremental SAVD publication is a true-production writer.
+    // The legacy detail serializers emit audit JSON sidecars when
+    // XSTAR_TRUE_PRODUCTION is absent; those diagnostics are forbidden public
+    // artifacts and caused .33 to fail after otherwise bit-exact streamed HDUs.
+    struct ScopedTrueProductionV0682331 {
+        bool had = false;
+        std::string previous;
+        ScopedTrueProductionV0682331() {
+            if (const char* value = std::getenv("XSTAR_TRUE_PRODUCTION")) {
+                had = true;
+                previous = value;
+            }
+            if (::setenv("XSTAR_TRUE_PRODUCTION", "1", 1) != 0) {
+                throw std::runtime_error("0.6.82.33.1 cannot enter incremental true-production publication");
+            }
+        }
+        ~ScopedTrueProductionV0682331() {
+            if (had) ::setenv("XSTAR_TRUE_PRODUCTION", previous.c_str(), 1);
+            else ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        }
+    } scoped_true_production_v0682331;
     if (one_zone_state.radial_zones.size() != 1u) {
         throw std::runtime_error("0.6.82.33 incremental detail append requires exactly one radial zone");
     }

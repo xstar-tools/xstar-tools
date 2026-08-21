@@ -26,6 +26,12 @@ struct Result {
     bool product_parity_qualified = false;
 };
 
+void initialize_live_step_log_v0682331(
+    const std::filesystem::path& path,
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t source_nry,
+    std::size_t output_nry);
+
 Result write_native_step_log(
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state);

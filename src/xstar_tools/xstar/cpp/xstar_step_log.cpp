@@ -2287,6 +2287,46 @@ void append_source_like_timing_footer(std::ofstream& out,
 
 } // namespace
 
+// 0.6.82.33.1: create the live STEP prefix at the same lifetime as native
+// xstar startup/input publication.  The final accepted serializer still
+// rewrites xout_step.log after publication; this prefix exists so a failed or
+// interrupted run preserves the canonical header/input context instead of an
+// orphaned pprint(17) fragment.
+void initialize_live_step_log_v0682331(
+    const std::filesystem::path& path,
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t source_nry,
+    std::size_t output_nry) {
+    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
+    std::ofstream out(path, std::ios::trunc);
+    if (!out) throw std::runtime_error("0.6.82.33.1 cannot initialize live xout_step.log");
+    out << std::setprecision(17);
+    out << " xstar_tools version " << state.release << "\n";
+    out << " nry= " << std::setw(11) << source_nry << std::setw(12) << output_nry << "\n";
+    out << " Loading Atomic Database...\n";
+    out << " Atomic Data Version: " << read_atomic_data_version(state.atomic_database_path) << "\n";
+    out << " in readtbl:\n";
+    out << " native readtbl pointer/reals/integers/characters counters: unavailable (not retained by native ATDB lowering)\n";
+    out << " native atomic line/rrc database totals: unavailable (not retained by native ATDB lowering)\n";
+    out << " done with setptrs\n";
+    append_native_input_parameters(out, state);
+    out << "\n running ...\n";
+    if (!state.legacy_pprint.ispcg2_passes.empty()) {
+        const auto& pass = state.legacy_pprint.ispcg2_passes.front();
+        const auto flags = out.flags();
+        const auto precision = out.precision();
+        out << std::defaultfloat << std::setprecision(17)
+            << " U(1-1.8),U(1.8-4):   " << pass.u_1_1p8
+            << "        " << pass.u_1p8_4 << "\n";
+        out << " Lbol=   " << std::scientific << std::setprecision(16)
+            << pass.lbol << "\n\n";
+        out.flags(flags);
+        out.precision(precision);
+    }
+    out.flush();
+    if (!out) throw std::runtime_error("0.6.82.33.1 live xout_step.log prefix flush failed");
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Write the native STEP diagnostic/publication log from the committed radial/product state using the accepted per-option publication semantics.
 // Reference context: XSTAR Manual ch5 (output/print controls) plus ss11.5-11.6 for the reported line/continuum/RRC quantities.

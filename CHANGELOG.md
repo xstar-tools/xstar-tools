@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.33.1 - host-return fix for incremental production silence and live STEP context - 2026-08-21
+
+- Revise rejected `0.6.82.33` as `0.6.82.33.1`; keep accepted `0.6.82.32` as the comparison baseline and keep science revision `0.6.48.12.3.45.3.3.8` plus ABI identifiers `60487 / 6048110 / 60488` frozen.
+- Preserve the `.33` single-pass source-SAVD incremental detail architecture. Host-captured `xo01_detail/detal2/detal3/detal4` HDU data payloads that existed before the `.33` rejection were bit-exact to accepted `.32`, so no detail science/row/HDU semantics are changed.
+- Enter `XSTAR_TRUE_PRODUCTION=1` only for the incremental one-zone detail serializer scope, restoring the prior environment afterward. This suppresses legacy `detal2/detal3` diagnostic audit JSON sidecars that are forbidden in file-silent production and caused `.33` to reject despite correct FITS payloads.
+- Initialize live `xout_step.log` with the canonical version/nry/ATDB/readtbl/input-parameter prologue plus the first-pass `U/Lbol` block before appending `pprint(17)` rows. The accepted final STEP serializer still rewrites the completed file after science publication, so all final print options and normalized text remain on the frozen `.32` path.
+- Add an opt-in `XSTAR_V0682331_PRESERVE_FAILURE_PRODUCTS=1` forensic mode. The `.33.1` host runner enables it only for the candidate so a failed host run preserves live STEP/FITS products instead of deleting the evidence; normal public production retains the established fail-clean behavior.
+- Keep Fe as the default host gate, C5 as the second memory-stress gate, and broad multi-element as an explicit milestone/final gate.
+
 ## 0.6.82.33 - canonical incremental publication and bounded radial memory - 2026-08-21
 
 - Base this performance/lifetime revision on host-accepted `0.6.82.32`; keep science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487 / 6048110 / 60488` frozen.

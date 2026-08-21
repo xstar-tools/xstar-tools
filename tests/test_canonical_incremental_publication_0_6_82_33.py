@@ -8,9 +8,9 @@ def text(rel: str) -> str:
 
 
 def test_version_and_frozen_fp_policy():
-    assert 'version = "0.6.82.33"' in text('pyproject.toml')
+    assert 'version = "0.6.82.33.1"' in text('pyproject.toml')
     makefile = text('src/xstar_tools/xstar/cpp/Makefile')
-    assert 'PACKAGE_VERSION ?= 0.6.82.33' in makefile
+    assert 'PACKAGE_VERSION ?= 0.6.82.33.1' in makefile
     assert 'rejects -ffast-math' in makefile
 
 
@@ -50,9 +50,9 @@ def test_memory_markers_present():
 
 
 def test_host_runner_is_fe_first_and_broad_explicit():
-    s = text('tools/qualification/run_canonical_incremental_publication_host_0_6_82_33.py')
+    s = text('tools/qualification/run_canonical_incremental_publication_host_0_6_82_33_1.py')
     assert 'args.case or ["fe_reference_ne1e8"]' in s
     assert '--milestone-all' in s
     assert 'BASELINE_VERSION = "0.6.82.32"' in s
-    assert 'CANDIDATE_VERSION = "0.6.82.33"' in s
+    assert 'CANDIDATE_VERSION = "0.6.82.33.1"' in s
     assert 'rss_ratio <= 0.80' in s

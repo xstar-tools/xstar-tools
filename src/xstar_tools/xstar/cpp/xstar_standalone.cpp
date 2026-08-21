@@ -3154,14 +3154,28 @@ void print_xstar_style_live_pprint_row_v0682271(
 // accepted .32 path.
 void append_live_step_row_v068233(
     const std::filesystem::path& path,
+    const xstar_run_state::ProductWritingState* live_product_state,
+    const xstar_run_state::WholeRunAccumulatedState& state,
+    std::size_t source_nry,
+    std::size_t output_nry,
     const xstar_run_state::LegacyPprintRadialRowState& r) {
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
     const bool empty = !std::filesystem::is_regular_file(path) ||
         std::filesystem::file_size(path) == 0u;
     static thread_local std::size_t last_pass_v068233 = 0u;
-    if (empty) last_pass_v068233 = 0u;
+    if (empty) {
+        last_pass_v068233 = 0u;
+        if (live_product_state) {
+            xstar_step_log::initialize_live_step_log_v0682331(
+                path, *live_product_state, source_nry, output_nry);
+        } else {
+            auto live_step_state_v0682331 = xstar_run_state::build_product_writing_state(state);
+            xstar_step_log::initialize_live_step_log_v0682331(
+                path, live_step_state_v0682331, source_nry, output_nry);
+        }
+    }
     std::ofstream out(path, std::ios::app);
-    if (!out) throw std::runtime_error("0.6.82.33 cannot append live xout_step.log");
+    if (!out) throw std::runtime_error("0.6.82.33.1 cannot append live xout_step.log");
     if (last_pass_v068233 != r.pass_index) {
         out << "pass number=" << std::setw(2) << r.pass_index << " "
             << (r.direction >= 0 ? 1 : -1) << "\n"
@@ -3188,7 +3202,7 @@ void append_live_step_row_v068233(
         << std::setw(7) << std::log10(std::max(r.reverse_reference_tau, 1.0e-10))
         << std::setw(3) << r.dsec_ntotit << "\n";
     out.flush();
-    if (!out) throw std::runtime_error("0.6.82.33 live xout_step.log flush failed");
+    if (!out) throw std::runtime_error("0.6.82.33.1 live xout_step.log flush failed");
     if (g_performance_v064890) {
         ++g_performance_v064890->step_rows_streamed_v068233;
         const auto rss_v068233 = current_rss_bytes_v068233();
@@ -19077,6 +19091,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             initialize_native_radial_pass_v068227(data, fixed, message);
             whole.legacy_pprint.ispcg2_passes.push_back(
                 source_ispcg2_pass_state_v0682274(data, kk_v068227));
+            if (incremental_detail_state_v068233) {
+                incremental_detail_state_v068233->legacy_pprint.ispcg2_passes =
+                    whole.legacy_pprint.ispcg2_passes;
+            }
             if (kk_v068227 > 1u) {
                 source_init_repeated_global_workspaces_v0682274(data);
             }
@@ -19425,6 +19443,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     data.cumulative_column_cm2, source_ntotit_v068227, false));
             append_live_step_row_v068233(
                 std::filesystem::path(options.output_dir) / "xout_step.log",
+                incremental_detail_state_v068233 ? &*incremental_detail_state_v068233 : nullptr,
+                whole,
+                pretransport_boundary_v82_patch520145.native_continuum_count,
+                pretransport_boundary_v82_patch520145.radiation_energy_ev.size(),
                 whole.legacy_pprint.radial_rows.back());
             if (effective_npass_v068227 > 1u && live_text_zone_progress_enabled()) {
                 print_xstar_style_live_pprint_row_v0682271(
@@ -19768,6 +19790,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     data.cumulative_column_cm2, source_ntotit_v068227, true));
             append_live_step_row_v068233(
                 std::filesystem::path(options.output_dir) / "xout_step.log",
+                incremental_detail_state_v068233 ? &*incremental_detail_state_v068233 : nullptr,
+                whole,
+                terminal_transport_boundary_v82_patch520144->native_continuum_count,
+                terminal_transport_boundary_v82_patch520144->radiation_energy_ev.size(),
                 whole.legacy_pprint.radial_rows.back());
             if (effective_npass_v068227 > 1u && live_text_zone_progress_enabled()) {
                 print_xstar_style_live_pprint_row_v0682271(
@@ -21803,7 +21829,15 @@ int command_run_standalone_production(const Options& options, const std::filesys
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
-        remove_native_products(output);
+        // 0.6.82.33.1 host-qualification forensics: retain partial STEP/FITS
+        // products on an explicitly requested failed run so the exact live
+        // incremental state can be inspected.  Normal public production keeps
+        // the established fail-clean behavior.
+        const char* preserve_failure_v0682331 =
+            std::getenv("XSTAR_V0682331_PRESERVE_FAILURE_PRODUCTS");
+        const bool preserve_failure_products_v0682331 = preserve_failure_v0682331 &&
+            std::string(preserve_failure_v0682331) == "1";
+        if (!preserve_failure_products_v0682331) remove_native_products(output);
         if (artifact_profile == "failure") {
             std::filesystem::create_directories(output / "standalone_diagnostics");
             std::ofstream failure(output / "standalone_diagnostics" / "failure.txt");
