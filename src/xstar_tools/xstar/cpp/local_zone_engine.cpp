@@ -43,6 +43,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -3313,6 +3314,107 @@ struct SourceContinuumThermalResult {
     std::vector<ContinuumWorkspaceDiagnostic> diagnostics;
 };
 
+// 0.6.82.31: context-owned scratch storage for the fixed-state/controller hot
+// path.  These containers preserve capacity between evaluations but never
+// preserve scientific values: every live vector is cleared or overwritten in
+// source order before use.  Keeping the storage here removes allocator churn
+// without changing rate arithmetic, traversal order, or solver semantics.
+struct FixedStatePersistentScratchV068231 {
+    std::vector<PreliminaryCachedRecordV064812337> preliminary_cache;
+    std::vector<const EvaluatedRecord*> preliminary_evaluated;
+    std::vector<const ProgramRecord*> preliminary_records;
+    std::vector<EvaluatedRecord> evaluated;
+    std::vector<const ProgramRecord*> evaluated_records;
+    std::vector<xstar_element_contribution_v1> contributions;
+    std::vector<xstar_element_contribution_v1> thermal_only_contributions;
+    std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
+    std::vector<xstar_element_contribution_v1> thermal_domain_contributions;
+    std::vector<xstar_spectral_contribution_v1> spectral_contributions;
+    std::vector<double> all_populations;
+    std::vector<double> thermal_population_stream;
+    std::vector<double> thermal_populations;
+    std::vector<double> incoming_leveltemp_backup;
+    std::vector<double> full_populations_pre_mapback;
+    std::vector<double> full_populations;
+    std::vector<double> continuum_shape;
+    std::vector<double> spectral_rcem;
+    std::vector<double> spectral_oplin;
+    std::vector<double> spectral_cemab;
+    std::vector<double> spectral_cabab;
+    std::vector<double> spectral_opakab;
+    std::vector<double> spectral_rccemis;
+    std::vector<double> spectral_line_profile_opacity;
+    std::vector<double> spectral_opakcont;
+    std::vector<double> spectral_fline;
+    std::vector<double> spectral_flinel;
+    std::vector<double> spectral_seeds;
+    ElementBuffers element_buffers;
+    SourceContinuumWorkspace reduced_continuum;
+    bool reduced_continuum_geometry_valid = false;
+    std::size_t reduced_continuum_full_count = 0u;
+    std::uint64_t reduced_continuum_energy_fingerprint = 0u;
+
+    std::uint64_t reserved_bytes() const {
+        std::uint64_t total = 0u;
+#define XSTAR_CAP_BYTES_V068231(v) \
+        total += static_cast<std::uint64_t>((v).capacity()) * sizeof(typename std::decay_t<decltype(v)>::value_type)
+        XSTAR_CAP_BYTES_V068231(preliminary_cache);
+        XSTAR_CAP_BYTES_V068231(preliminary_evaluated);
+        XSTAR_CAP_BYTES_V068231(preliminary_records);
+        XSTAR_CAP_BYTES_V068231(evaluated);
+        XSTAR_CAP_BYTES_V068231(evaluated_records);
+        XSTAR_CAP_BYTES_V068231(contributions);
+        XSTAR_CAP_BYTES_V068231(thermal_only_contributions);
+        XSTAR_CAP_BYTES_V068231(type95_self_loop_candidates);
+        XSTAR_CAP_BYTES_V068231(thermal_domain_contributions);
+        XSTAR_CAP_BYTES_V068231(spectral_contributions);
+        XSTAR_CAP_BYTES_V068231(all_populations);
+        XSTAR_CAP_BYTES_V068231(thermal_population_stream);
+        XSTAR_CAP_BYTES_V068231(thermal_populations);
+        XSTAR_CAP_BYTES_V068231(incoming_leveltemp_backup);
+        XSTAR_CAP_BYTES_V068231(full_populations_pre_mapback);
+        XSTAR_CAP_BYTES_V068231(full_populations);
+        XSTAR_CAP_BYTES_V068231(continuum_shape);
+        XSTAR_CAP_BYTES_V068231(spectral_rcem);
+        XSTAR_CAP_BYTES_V068231(spectral_oplin);
+        XSTAR_CAP_BYTES_V068231(spectral_cemab);
+        XSTAR_CAP_BYTES_V068231(spectral_cabab);
+        XSTAR_CAP_BYTES_V068231(spectral_opakab);
+        XSTAR_CAP_BYTES_V068231(spectral_rccemis);
+        XSTAR_CAP_BYTES_V068231(spectral_line_profile_opacity);
+        XSTAR_CAP_BYTES_V068231(spectral_opakcont);
+        XSTAR_CAP_BYTES_V068231(spectral_fline);
+        XSTAR_CAP_BYTES_V068231(spectral_flinel);
+        XSTAR_CAP_BYTES_V068231(spectral_seeds);
+        XSTAR_CAP_BYTES_V068231(reduced_continuum.epim);
+        XSTAR_CAP_BYTES_V068231(reduced_continuum.bremsam);
+        XSTAR_CAP_BYTES_V068231(reduced_continuum.bremsmap_index_one_based);
+        const auto add_double = [&](const std::vector<double>& v) {
+            total += static_cast<std::uint64_t>(v.capacity()) * sizeof(double);
+        };
+        const auto add_i32 = [&](const std::vector<int32_t>& v) {
+            total += static_cast<std::uint64_t>(v.capacity()) * sizeof(int32_t);
+        };
+        const auto add_i64 = [&](const std::vector<std::int64_t>& v) {
+            total += static_cast<std::uint64_t>(v.capacity()) * sizeof(std::int64_t);
+        };
+        add_i32(element_buffers.superlevels); add_i32(element_buffers.ions);
+        add_double(element_buffers.initial); add_double(element_buffers.populations);
+        add_double(element_buffers.outer); add_double(element_buffers.dense);
+        add_double(element_buffers.heat); add_double(element_buffers.heat2);
+        add_double(element_buffers.rhs); add_double(element_buffers.gamma);
+        add_double(element_buffers.alpha); add_double(element_buffers.fgamma);
+        add_double(element_buffers.falpha); add_i64(element_buffers.igamma);
+        add_i64(element_buffers.ialpha); add_double(element_buffers.ion_population);
+        add_double(element_buffers.ion_population_final); add_double(element_buffers.ionization);
+        add_double(element_buffers.recombination); add_double(element_buffers.ionization_components);
+        add_double(element_buffers.recombination_components); add_double(element_buffers.row_residual);
+        add_double(element_buffers.row_scale); add_double(element_buffers.relative_residual);
+#undef XSTAR_CAP_BYTES_V068231
+        return total;
+    }
+};
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement source hunt3 one based as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
@@ -3394,6 +3496,43 @@ SourceContinuumWorkspace build_source_continuum_workspace(
         out.bremsam[static_cast<std::size_t>(i)] = full_bremsa[static_cast<std::size_t>(mapped - 1)];
     }
     return out;
+}
+
+// 0.6.82.31: update the same 999-bin source workspace in place.  Geometry is
+// immutable for a fixed full energy grid; only live BREMSA values change
+// between controller evaluations.  The source huntf mapping and assignment
+// order are identical to build_source_continuum_workspace().
+void update_source_continuum_workspace_v068231(
+    SourceContinuumWorkspace& out,
+    const double* full_epi,
+    const double* full_bremsa,
+    std::size_t full_count,
+    bool rebuild_geometry
+) {
+    if (!full_epi || !full_bremsa || full_count < 4) {
+        throw std::runtime_error("source continuum workspace requires complete full-resolution radiation arrays");
+    }
+    constexpr int reduced_count = 999;
+    if (rebuild_geometry || out.epim.size() != static_cast<std::size_t>(reduced_count) ||
+        out.bremsmap_index_one_based.size() != static_cast<std::size_t>(reduced_count)) {
+        out.epim = xstar_source_real_energy_grid::build(static_cast<std::size_t>(reduced_count));
+        out.bremsmap_index_one_based.resize(static_cast<std::size_t>(reduced_count));
+        const std::size_t full_tail = static_cast<std::size_t>(std::max(2, static_cast<int>(full_count / 50)));
+        const std::size_t full_log_count = full_count - full_tail;
+        if (full_log_count < 3) {
+            throw std::runtime_error("source continuum full grid has an invalid logarithmic domain");
+        }
+        for (int i = 0; i < reduced_count; ++i) {
+            out.bremsmap_index_one_based[static_cast<std::size_t>(i)] =
+                source_huntf_one_based(full_epi, full_log_count, out.epim[static_cast<std::size_t>(i)]);
+        }
+    }
+    out.bremsam.resize(static_cast<std::size_t>(reduced_count));
+    for (int i = 0; i < reduced_count; ++i) {
+        const int mapped = out.bremsmap_index_one_based[static_cast<std::size_t>(i)];
+        out.bremsam[static_cast<std::size_t>(i)] =
+            full_bremsa[static_cast<std::size_t>(mapped - 1)];
+    }
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -3580,6 +3719,12 @@ SourceContinuumThermalResult source_continuum_thermal(
 
 struct xstar_fixed_state_context_impl {
     Program program;
+    // 0.6.82.31: persistent allocation/workspace foundation.  This storage is
+    // private to the native context and is reset logically (clear/fill) for
+    // every evaluation; only capacity and immutable reduced-grid geometry are
+    // retained between calls.
+    FixedStatePersistentScratchV068231 scratch_v068231;
+    xstar_local_zone_internal::PerformanceFoundationV068231 perf_foundation_v068231{};
     // v0.6.48.9.4: immutable linked-record traversal is validated once when
     // the context is created and stored as contiguous record indices.  The
     // source order is unchanged; repeated DSEC evaluations no longer rebuild
@@ -10069,11 +10214,18 @@ ActiveElementView make_active_element_view(
     if (start <= 0 || end < start || end > full.normalization_row) throw std::runtime_error("invalid preliminary ion-stage compact window");
     view.full_row_start = start;
     view.full_row_end = end;
-    view.element = full;
-    view.element.rows.clear();
+    // 0.6.82.31: do not copy the complete immutable decoded row inventory only
+    // to discard it.  Copy scalar metadata and materialize exactly the active
+    // rows below, preserving their source order and values.
+    view.element.element_index = full.element_index;
+    view.element.element_z = full.element_z;
+    view.element.abundance = full.abundance;
+    view.element.record_head = full.record_head;
+    view.element.record_count = full.record_count;
     view.element.n_rows = end - start + 1;
     view.element.n_ions = view.max_stage - view.min_stage + 1;
     view.element.normalization_row = view.element.n_rows;
+    view.element.rows.reserve(static_cast<std::size_t>(view.element.n_rows));
     std::map<int,int> superlevel_map;
     int next_superlevel = 0;
     for (const auto& source : full.rows) {
@@ -10126,11 +10278,15 @@ ActiveElementView make_source_compact_element_view(
     }
     view.full_row_start = start;
     view.full_row_end = end;
-    view.element = full;
-    view.element.rows.clear();
+    view.element.element_index = full.element_index;
+    view.element.element_z = full.element_z;
+    view.element.abundance = full.abundance;
+    view.element.record_head = full.record_head;
+    view.element.record_count = full.record_count;
     view.element.n_rows = static_cast<int>(source_rows.size());
     view.element.n_ions = view.max_stage - view.min_stage + 1;
     view.element.normalization_row = view.element.n_rows;
+    view.element.rows.reserve(source_rows.size());
     std::map<int, int> superlevel_map;
     int next_superlevel = 0;
     for (std::size_t i = 0; i < source_rows.size(); ++i) {
@@ -10247,8 +10403,15 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
 // Purpose: Build buffers from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_input_v1* runtime_input = nullptr, bool preserve_initial_seed = false) {
-    ElementBuffers b;
+void prepare_buffers(
+    ElementBuffers& b,
+    const ElementProgram& e,
+    const xstar_fixed_state_input_v1* runtime_input = nullptr,
+    bool preserve_initial_seed = false) {
+    b.runtime_seed_loaded = false;
+    b.runtime_seed_renormalized = false;
+    b.runtime_seed_sum_before_policy = 0.0;
+    b.runtime_seed_sum_after_policy = 0.0;
     const bool native_sequence1_source_seed =
         environment_flag("XSTAR_NATIVE_SEQUENCE1_SOURCE_FAITHFUL_POPULATION_SEED") &&
         environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") == 1;
@@ -10260,6 +10423,30 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.ion_population.resize(ni); b.ion_population_final.resize(ni); b.ionization.resize(ni); b.recombination.resize(ni);
     b.ionization_components.resize(3 * ni); b.recombination_components.resize(3 * ni);
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
+    // resize() preserves existing values when capacity is reused.  The legacy
+    // per-evaluation construction value-initialized these solver workspaces,
+    // so explicitly restore that exact zero state without reallocating.
+    std::fill(b.populations.begin(), b.populations.end(), 0.0);
+    std::fill(b.outer.begin(), b.outer.end(), 0.0);
+    std::fill(b.dense.begin(), b.dense.end(), 0.0);
+    std::fill(b.heat.begin(), b.heat.end(), 0.0);
+    std::fill(b.heat2.begin(), b.heat2.end(), 0.0);
+    std::fill(b.rhs.begin(), b.rhs.end(), 0.0);
+    std::fill(b.gamma.begin(), b.gamma.end(), 0.0);
+    std::fill(b.alpha.begin(), b.alpha.end(), 0.0);
+    std::fill(b.fgamma.begin(), b.fgamma.end(), 0.0);
+    std::fill(b.falpha.begin(), b.falpha.end(), 0.0);
+    std::fill(b.igamma.begin(), b.igamma.end(), 0);
+    std::fill(b.ialpha.begin(), b.ialpha.end(), 0);
+    std::fill(b.ion_population.begin(), b.ion_population.end(), 0.0);
+    std::fill(b.ion_population_final.begin(), b.ion_population_final.end(), 0.0);
+    std::fill(b.ionization.begin(), b.ionization.end(), 0.0);
+    std::fill(b.recombination.begin(), b.recombination.end(), 0.0);
+    std::fill(b.ionization_components.begin(), b.ionization_components.end(), 0.0);
+    std::fill(b.recombination_components.begin(), b.recombination_components.end(), 0.0);
+    std::fill(b.row_residual.begin(), b.row_residual.end(), 0.0);
+    std::fill(b.row_scale.begin(), b.row_scale.end(), 0.0);
+    std::fill(b.relative_residual.begin(), b.relative_residual.end(), 0.0);
     // v0.6.48.12.3.25: source calc_hmc_element never renormalizes the
     // selected global xilevg slice before msolvelucy, regardless of element.
     // Track whether this compact seed came from the runtime/global source
@@ -10301,7 +10488,6 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
         }
     }
     for (double value : b.initial) b.runtime_seed_sum_after_policy += value;
-    return b;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -11905,6 +12091,8 @@ int run_impl(
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     ctx.last_helium_source_insertion_order = helium_source_insertion_order;
     const auto total_start = clock_type::now();
+    auto& perf_foundation_v068231 = ctx.perf_foundation_v068231;
+    ++perf_foundation_v068231.fixed_calls;
     stats.calls += 1;
     stats.status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
         XSTAR_FIXED_STATE_STATUS_LINKED_TRAVERSAL |
@@ -11974,10 +12162,14 @@ int run_impl(
     double computed_electron_fraction = 0.0;
     std::array<double,4> computed_element_totals{{0.0,0.0,0.0,0.0}};
     std::array<double,4> committed_element_totals{{0.0,0.0,0.0,0.0}};
-    std::vector<double> all_populations;
-    std::vector<double> thermal_population_stream;
+    auto& all_populations = ctx.scratch_v068231.all_populations;
+    auto& thermal_population_stream = ctx.scratch_v068231.thermal_population_stream;
+    all_populations.clear();
+    thermal_population_stream.clear();
     std::size_t fixed_full_population_offset = 0;
-    std::vector<xstar_spectral_contribution_v1> spectral;
+    auto& spectral = ctx.scratch_v068231.spectral_contributions;
+    if (spectral.capacity() > 0u) ++perf_foundation_v068231.spectral_workspace_reuses;
+    spectral.clear();
     // v0.6.48.12.3.21 diagnostic-only Type-50 source-gate accounting.
     // These counters observe the literal calc_emisab_ion endpoint gate; they
     // do not alter record evaluation, line selection, or profile execution.
@@ -12127,7 +12319,8 @@ int run_impl(
     // calc_emisab_all receives the source reduced epim/bremsam workspace.
     // Build it once per controller evaluation and share it with all Type-53
     // records instead of reconstructing the 999-bin map per atomic record.
-    std::optional<SourceContinuumWorkspace> type53_calc_emisab_workspace_v82_patch5181;
+    const auto bound_free_workspace_started_v068231 = clock_type::now();
+    SourceContinuumWorkspace* type53_calc_emisab_workspace_v82_patch5181 = nullptr;
     {
         const bool has_full_dsec = input.dsec_radiation_energy_ev && input.dsec_bremsa &&
             input.dsec_radiation_bin_count >= 4;
@@ -12135,22 +12328,39 @@ int run_impl(
         const double* full_bremsa = has_full_dsec ? input.dsec_bremsa : input.radiation_flux;
         const std::size_t full_count = has_full_dsec ? input.dsec_radiation_bin_count : input.radiation_bin_count;
         if (full_epi && full_bremsa && full_count >= 4) {
-            type53_calc_emisab_workspace_v82_patch5181 = build_source_continuum_workspace(
-                full_epi, full_bremsa, full_count);
+            auto& scratch = ctx.scratch_v068231;
+            const std::uint64_t energy_fingerprint = has_full_dsec
+                ? ctx.last_input_dsec_radiation_fingerprint
+                : ctx.last_input_radiation_fingerprint;
+            const bool rebuild_geometry = !scratch.reduced_continuum_geometry_valid ||
+                scratch.reduced_continuum_full_count != full_count ||
+                scratch.reduced_continuum_energy_fingerprint != energy_fingerprint;
+            update_source_continuum_workspace_v068231(
+                scratch.reduced_continuum, full_epi, full_bremsa, full_count, rebuild_geometry);
+            if (rebuild_geometry) {
+                ++perf_foundation_v068231.reduced_continuum_geometry_builds;
+                scratch.reduced_continuum_geometry_valid = true;
+                scratch.reduced_continuum_full_count = full_count;
+                scratch.reduced_continuum_energy_fingerprint = energy_fingerprint;
+            } else {
+                ++perf_foundation_v068231.reduced_continuum_geometry_reuses;
+            }
+            ++perf_foundation_v068231.reduced_continuum_live_updates;
+            type53_calc_emisab_workspace_v82_patch5181 = &scratch.reduced_continuum;
         }
     }
     RateEvaluationContextV064894 rate_context_v064894 =
         make_rate_evaluation_context(
             input,
-            type53_calc_emisab_workspace_v82_patch5181
-                ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
+            type53_calc_emisab_workspace_v82_patch5181);
     rate_context_v064894.bound_free_cache = &ctx.bound_free_prepared_v064895;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
 
     write_type49_identical_state_probe(
         ctx, input,
-        type53_calc_emisab_workspace_v82_patch5181
-            ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
+        type53_calc_emisab_workspace_v82_patch5181);
+    perf_foundation_v068231.bound_free_workspace_seconds +=
+        elapsed(bound_free_workspace_started_v068231);
 
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
@@ -12172,8 +12382,19 @@ int run_impl(
         traversal_audit_v064812340.baseline_metadata_scan_records =
             residual_audit_v064812339.full_record_count * 3u;
         residual_audit_v064812339.full_element_row_copy_bytes = element.rows.capacity() * sizeof(ElementRow);
-        const std::vector<double> incoming_source_leveltemp_energy_v06481231 =
-            ctx.source_leveltemp_energy_workspace_v06481231;
+        const auto level_population_scratch_started_v068231 = clock_type::now();
+        auto& incoming_source_leveltemp_energy_v06481231 =
+            ctx.scratch_v068231.incoming_leveltemp_backup;
+        if (incoming_source_leveltemp_energy_v06481231.capacity() >=
+            ctx.source_leveltemp_energy_workspace_v06481231.size() &&
+            incoming_source_leveltemp_energy_v06481231.capacity() > 0u) {
+            ++perf_foundation_v068231.leveltemp_backup_reuses;
+        }
+        incoming_source_leveltemp_energy_v06481231.assign(
+            ctx.source_leveltemp_energy_workspace_v06481231.begin(),
+            ctx.source_leveltemp_energy_workspace_v06481231.end());
+        perf_foundation_v068231.level_population_scratch_seconds +=
+            elapsed(level_population_scratch_started_v068231);
         const auto& traversal_order_v064894 =
             ctx.traversal_record_indices_v064894[element_slot_v064894];
         ++stats.elements_attempted;
@@ -12189,9 +12410,11 @@ int run_impl(
         // those pass-1 records in source order and reuse them in pass 2 with a
         // monotonic ordinal cursor.  No record eligibility or arithmetic changes.
         const auto sparse_cache_pass12_started_v064812337 = clock_type::now();
+        const auto preliminary_cache_started_v068231 = clock_type::now();
         const double sparse_cache_rate_before_v064812337 = stats.rate_seconds;
         double sparse_cache_allocation_seconds_v064812337 = 0.0;
-        std::vector<PreliminaryCachedRecordV064812337> preliminary_cache_v064812337;
+        auto& preliminary_cache_v064812337 = ctx.scratch_v068231.preliminary_cache;
+        preliminary_cache_v064812337.clear();
 
         const auto evaluate_source_record = [&](const ProgramRecord& record) {
             const auto rate_start = clock_type::now();
@@ -12215,6 +12438,14 @@ int run_impl(
             ctx.preliminary_type7_legacy_compat_v06481171
                 ? traversal_selection_v064812340.preliminary_ordinals_legacy
                 : traversal_selection_v064812340.preliminary_ordinals_source;
+        if (preliminary_cache_v064812337.capacity() < preliminary_ordinals_v064812340.size()) {
+            const auto allocation_started_v064812337 = clock_type::now();
+            preliminary_cache_v064812337.reserve(preliminary_ordinals_v064812340.size());
+            sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
+            ++perf_foundation_v068231.preliminary_cache_capacity_growths;
+        } else if (preliminary_cache_v064812337.capacity() > 0u) {
+            ++perf_foundation_v068231.preliminary_cache_capacity_reuses;
+        }
         // Preserve the public traversal counters exactly while avoiding a
         // repeated metadata walk over every lowered record.  The linked order
         // was already validated at context construction and the static
@@ -12245,12 +12476,16 @@ int run_impl(
             throw std::runtime_error("prepared traversal count differs from declared record_count");
         }
 
-        std::vector<const EvaluatedRecord*> preliminary_evaluated_v064812315;
-        std::vector<const ProgramRecord*> preliminary_records_v064812315;
+        auto& preliminary_evaluated_v064812315 = ctx.scratch_v068231.preliminary_evaluated;
+        auto& preliminary_records_v064812315 = ctx.scratch_v068231.preliminary_records;
+        preliminary_evaluated_v064812315.clear();
+        preliminary_records_v064812315.clear();
         {
             const auto allocation_started_v064812337 = clock_type::now();
-            preliminary_evaluated_v064812315.reserve(preliminary_cache_v064812337.size());
-            preliminary_records_v064812315.reserve(preliminary_cache_v064812337.size());
+            if (preliminary_evaluated_v064812315.capacity() < preliminary_cache_v064812337.size())
+                preliminary_evaluated_v064812315.reserve(preliminary_cache_v064812337.size());
+            if (preliminary_records_v064812315.capacity() < preliminary_cache_v064812337.size())
+                preliminary_records_v064812315.reserve(preliminary_cache_v064812337.size());
             sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
         }
         for (const auto& cached_v064812337 : preliminary_cache_v064812337) {
@@ -12259,6 +12494,10 @@ int run_impl(
             preliminary_records_v064812315.push_back(
                 &ctx.program.records[static_cast<std::size_t>(index)]);
         }
+        perf_foundation_v068231.preliminary_cache_seconds += std::max(
+            0.0,
+            elapsed(preliminary_cache_started_v068231) -
+                (stats.rate_seconds - sparse_cache_rate_before_v064812337));
 
         const auto preliminary_balance_started_v064812339 = clock_type::now();
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
@@ -12375,6 +12614,9 @@ int run_impl(
                 ? traversal_order_v064894.size()
                 : active_pass2_ordinals_v064812340->size();
         residual_audit_v064812339.active_pass2_count_seconds = elapsed(active_pass2_count_started_v064812339);
+        perf_foundation_v068231.record_preparation_seconds +=
+            residual_audit_v064812339.active_view_seconds +
+            residual_audit_v064812339.active_pass2_count_seconds;
         traversal_audit_v064812340.preliminary_record_count = preliminary_ordinals_v064812340.size();
         traversal_audit_v064812340.active_pass2_count = active_pass2_count_v064812337;
         traversal_audit_v064812340.pass2_cache_hit = active_pass2_window_cache_hit_v064812340;
@@ -12387,13 +12629,24 @@ int run_impl(
             preliminary_ordinals_v064812340.size() + active_pass2_count_v064812337 +
             traversal_audit_v064812340.pass2_cache_build_full_scan_records;
 
-        std::vector<EvaluatedRecord> evaluated;
-        std::vector<const ProgramRecord*> evaluated_records;
+        const auto evaluated_record_started_v068231 = clock_type::now();
+        const double evaluated_rate_before_v068231 = stats.rate_seconds;
+        auto& evaluated = ctx.scratch_v068231.evaluated;
+        auto& evaluated_records = ctx.scratch_v068231.evaluated_records;
+        evaluated.clear();
+        evaluated_records.clear();
         {
             const auto allocation_started_v064812337 = clock_type::now();
-            evaluated.reserve(active_pass2_count_v064812337);
-            evaluated_records.reserve(active_pass2_count_v064812337);
+            const bool evaluated_growth_v068231 =
+                evaluated.capacity() < active_pass2_count_v064812337 ||
+                evaluated_records.capacity() < active_pass2_count_v064812337;
+            if (evaluated.capacity() < active_pass2_count_v064812337)
+                evaluated.reserve(active_pass2_count_v064812337);
+            if (evaluated_records.capacity() < active_pass2_count_v064812337)
+                evaluated_records.reserve(active_pass2_count_v064812337);
             sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
+            if (evaluated_growth_v068231) ++perf_foundation_v068231.evaluated_capacity_growths;
+            else if (active_pass2_count_v064812337 > 0u) ++perf_foundation_v068231.evaluated_capacity_reuses;
         }
         std::size_t preliminary_cursor_v064812337 = 0u;
         const auto evaluate_pass2_ordinal = [&](std::size_t ordinal) {
@@ -12437,6 +12690,10 @@ int run_impl(
                 evaluate_pass2_ordinal(ordinal);
             }
         }
+        perf_foundation_v068231.evaluated_record_seconds += std::max(
+            0.0,
+            elapsed(evaluated_record_started_v068231) -
+                (stats.rate_seconds - evaluated_rate_before_v068231));
         SparsePreliminaryCacheAuditV064812337 sparse_cache_audit_v064812337;
         sparse_cache_audit_v064812337.element_z = element.element_z;
         sparse_cache_audit_v064812337.active_min_stage = active.min_stage;
@@ -12680,10 +12937,19 @@ int run_impl(
             }
         }
 
-        std::vector<xstar_element_contribution_v1> contributions;
-        contributions.reserve(evaluated.size());
-        std::vector<xstar_element_contribution_v1> thermal_only_contributions;
-        std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
+        const auto contribution_list_started_v068231 = clock_type::now();
+        auto& contributions = ctx.scratch_v068231.contributions;
+        auto& thermal_only_contributions = ctx.scratch_v068231.thermal_only_contributions;
+        auto& type95_self_loop_candidates = ctx.scratch_v068231.type95_self_loop_candidates;
+        contributions.clear();
+        thermal_only_contributions.clear();
+        type95_self_loop_candidates.clear();
+        if (contributions.capacity() < evaluated.size()) {
+            contributions.reserve(evaluated.size());
+            ++perf_foundation_v068231.contribution_capacity_growths;
+        } else if (contributions.capacity() > 0u) {
+            ++perf_foundation_v068231.contribution_capacity_reuses;
+        }
         using Type95StreamIdentity = std::tuple<std::int64_t,int,int,int>;
         struct Type95StreamEvent { Type95StreamIdentity identity; bool candidate = false; };
         std::vector<Type95StreamEvent> type95_source_stream_order;
@@ -12918,7 +13184,16 @@ int run_impl(
         // after matrix closure and source-order correction.  The prior early
         // capture froze stale pre-closure He Type-50 ans3/ans4 values and
         // bypassed the accepted non-Type-53 cooling reconstruction.
-        std::vector<xstar_element_contribution_v1> thermal_domain_contributions = contributions;
+        auto& thermal_domain_contributions =
+            ctx.scratch_v068231.thermal_domain_contributions;
+        thermal_domain_contributions.clear();
+        const std::size_t thermal_domain_size_v068231 =
+            contributions.size() + thermal_only_contributions.size();
+        if (thermal_domain_contributions.capacity() < thermal_domain_size_v068231) {
+            thermal_domain_contributions.reserve(thermal_domain_size_v068231);
+        }
+        thermal_domain_contributions.insert(
+            thermal_domain_contributions.end(), contributions.begin(), contributions.end());
         thermal_domain_contributions.insert(
             thermal_domain_contributions.end(),
             thermal_only_contributions.begin(), thermal_only_contributions.end());
@@ -12927,11 +13202,17 @@ int run_impl(
         }
         const auto canonical_thermal_ledger =
             canonical_thermal_builder.finish(thermal_domain_contributions);
+        perf_foundation_v068231.contribution_list_seconds +=
+            elapsed(contribution_list_started_v068231);
         stats.contributions_constructed += contributions.size();
         residual_audit_v064812339.post_pass2_prebuffer_seconds = elapsed(post_pass2_prebuffer_started_v064812339);
         const auto buffer_allocation_started_v064812339 = clock_type::now();
-        ElementBuffers buffers = make_buffers(active.element, &input, source_compact_basis_seed);
+        auto& buffers = ctx.scratch_v068231.element_buffers;
+        if (buffers.dense.capacity() > 0u) ++perf_foundation_v068231.element_buffer_reuses;
+        prepare_buffers(buffers, active.element, &input, source_compact_basis_seed);
         residual_audit_v064812339.buffer_allocation_seconds = elapsed(buffer_allocation_started_v064812339);
+        perf_foundation_v068231.matrix_workspace_seconds +=
+            residual_audit_v064812339.buffer_allocation_seconds;
         residual_audit_v064812339.active_buffer_matrix_bytes =
             (buffers.dense.capacity() + buffers.heat.capacity() + buffers.heat2.capacity()) * sizeof(double);
         residual_audit_v064812339.active_buffer_nonmatrix_bytes =
@@ -12943,6 +13224,7 @@ int run_impl(
              buffers.row_residual.capacity() + buffers.row_scale.capacity() + buffers.relative_residual.capacity()) * sizeof(double) +
             (buffers.superlevels.capacity() + buffers.ions.capacity()) * sizeof(int32_t) +
             (buffers.igamma.capacity() + buffers.ialpha.capacity()) * sizeof(std::int64_t);
+        const auto element_input_started_v068231 = clock_type::now();
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
@@ -12968,6 +13250,8 @@ int run_impl(
         ein.initial_populations = buffers.initial.data();
         xstar_element_output_v1 eout{};
         bind_output(eout, buffers, active.element.element_z);
+        perf_foundation_v068231.element_input_seconds +=
+            elapsed(element_input_started_v068231);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
         const auto element_start = clock_type::now();
         std::uint64_t element_consumed_thermal_ledger_fingerprint = 0;
@@ -13058,7 +13342,11 @@ int run_impl(
         // separate.  heatf/hmctot consumes only the primary httot/cltot pair;
         // secondary totals remain diagnostic state and must not be folded into
         // the controller residual.
-        std::vector<double> thermal_populations = buffers.populations;
+        const auto thermal_population_scratch_started_v068231 = clock_type::now();
+        auto& thermal_populations = ctx.scratch_v068231.thermal_populations;
+        thermal_populations.assign(buffers.populations.begin(), buffers.populations.end());
+        perf_foundation_v068231.level_population_scratch_seconds +=
+            elapsed(thermal_population_scratch_started_v068231);
         bool element_thermal_compact_closure_applied = false;
         if (thermal_compact_population_closure_data.has_value() &&
             thermal_compact_population_closure_data->rows_by_element_z.count(element.element_z) != 0u) {
@@ -13264,7 +13552,11 @@ int run_impl(
         }
 
         const auto full_population_mapback_started_v064812339 = clock_type::now();
-        std::vector<double> full_populations_pre_mapback(static_cast<std::size_t>(element.n_rows), 0.0);
+        const auto retained_array_started_v068231 = clock_type::now();
+        auto& full_populations_pre_mapback =
+            ctx.scratch_v068231.full_populations_pre_mapback;
+        full_populations_pre_mapback.assign(
+            static_cast<std::size_t>(element.n_rows), 0.0);
         for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
             const int full_row = active.full_row_start + static_cast<int>(row);
             full_populations_pre_mapback[static_cast<std::size_t>(full_row - 1)] = buffers.populations[row];
@@ -13273,7 +13565,9 @@ int run_impl(
             ctx.last_detail_pre_mapback_populations_v064812318.end(),
             full_populations_pre_mapback.begin(), full_populations_pre_mapback.end());
 
-        std::vector<double> full_populations = full_populations_pre_mapback;
+        auto& full_populations = ctx.scratch_v068231.full_populations;
+        full_populations.assign(
+            full_populations_pre_mapback.begin(), full_populations_pre_mapback.end());
         if (active.max_stage < element.element_z && active.full_row_end >= 1 &&
             static_cast<std::size_t>(active.full_row_end) <= full_populations.size()) {
             // Source calc_hmc_element subsequently visits the next inactive ion
@@ -13284,6 +13578,8 @@ int run_impl(
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
+        perf_foundation_v068231.retained_array_seconds +=
+            elapsed(retained_array_started_v068231);
         residual_audit_v064812339.full_population_shadow_bytes =
             (full_populations_pre_mapback.capacity() + full_populations.capacity()) * sizeof(double);
         residual_audit_v064812339.full_population_mapback_seconds = elapsed(full_population_mapback_started_v064812339);
@@ -14087,7 +14383,8 @@ int run_impl(
         output.continuum_cooling = ctx.last_continuum_compton_cooling + clbrems;
         const double kt_ev = kBoltzmannEvK * input.temperature_k;
         double shape_sum = 0.0;
-        std::vector<double> shape(input.radiation_bin_count, 0.0);
+        auto& shape = ctx.scratch_v068231.continuum_shape;
+        shape.assign(input.radiation_bin_count, 0.0);
         for (std::size_t k = 0; k < input.radiation_bin_count; ++k) {
             const double e = input.radiation_energy_ev[k];
             shape[k] = limited_exp(-e / std::max(kt_ev, 1.0e-300));
@@ -14135,12 +14432,25 @@ int run_impl(
         const std::size_t line_capacity = std::max<std::size_t>(ctx.program.native_line_count, 1u) + 1u;
         const std::size_t continuum_slot_capacity = std::max<std::size_t>(ctx.program.native_continuum_count, 1u) + 1u;
         const std::size_t continuum_capacity = input.radiation_bin_count;
-        std::vector<double> rcem(2 * line_capacity, 0.0);
-        std::vector<double> oplin(line_capacity, 0.0);
-        std::vector<double> cemab(2 * continuum_slot_capacity, 0.0);
-        std::vector<double> cabab(continuum_slot_capacity, 0.0);
-        std::vector<double> opakab(continuum_slot_capacity, 0.0);
-        std::vector<double> rccemis(2 * continuum_capacity, 0.0);
+        const auto spectral_workspace_started_v068231 = clock_type::now();
+        auto& rcem = ctx.scratch_v068231.spectral_rcem;
+        auto& oplin = ctx.scratch_v068231.spectral_oplin;
+        auto& cemab = ctx.scratch_v068231.spectral_cemab;
+        auto& cabab = ctx.scratch_v068231.spectral_cabab;
+        auto& opakab = ctx.scratch_v068231.spectral_opakab;
+        auto& rccemis = ctx.scratch_v068231.spectral_rccemis;
+        auto& line_profile_opacity = ctx.scratch_v068231.spectral_line_profile_opacity;
+        auto& opakcont = ctx.scratch_v068231.spectral_opakcont;
+        auto& fline = ctx.scratch_v068231.spectral_fline;
+        auto& flinel = ctx.scratch_v068231.spectral_flinel;
+        auto& seeds = ctx.scratch_v068231.spectral_seeds;
+        if (rcem.capacity() > 0u) ++perf_foundation_v068231.spectral_workspace_reuses;
+        rcem.assign(2 * line_capacity, 0.0);
+        oplin.assign(line_capacity, 0.0);
+        cemab.assign(2 * continuum_slot_capacity, 0.0);
+        cabab.assign(continuum_slot_capacity, 0.0);
+        opakab.assign(continuum_slot_capacity, 0.0);
+        rccemis.assign(2 * continuum_capacity, 0.0);
         // Literal ucalc.f90 Type-76 has already accumulated into rccemis before
         // calc_emis returns.  This side effect survives the controller's
         // DEFER_PRODUCT_PROJECTION mode; only derived/selective projections
@@ -14153,16 +14463,16 @@ int run_impl(
         // binned in, while opakcont is the lines-excluded continuum surface.
         // Keep the profile in a separate construction buffer, then add it only
         // to opakc after the continuum contributions are complete.
-        std::vector<double> line_profile_opacity(continuum_capacity, 0.0);
+        line_profile_opacity.assign(continuum_capacity, 0.0);
         const double source_thomson = input.hydrogen_density_cm3 * input.electron_fraction_xee *
             kSigmaT * std::max(0.0, 1.0 - effective_spectral_covering_fraction(input));
-        std::vector<double> opakcont(continuum_capacity, source_thomson);
+        opakcont.assign(continuum_capacity, source_thomson);
         for (std::size_t k = 0; k < continuum_capacity; ++k) {
             output.opacity[k] += source_thomson;
             write_exact_absorption(k, "THOMSON", 0, 0, 0, 0, 0, 0, 0, 0, source_thomson);
         }
-        std::vector<double> fline(2 * line_capacity, 0.0);
-        std::vector<double> flinel(continuum_capacity, 0.0);
+        fline.assign(2 * line_capacity, 0.0);
+        flinel.assign(continuum_capacity, 0.0);
         xstar_spectral_workspace_v1 sw{};
         xstar_spectral_workspace_init_v1(&sw);
         sw.rcem = rcem.data(); sw.rcem_count = rcem.size();
@@ -14177,7 +14487,7 @@ int run_impl(
         sw.flinel = flinel.data(); sw.flinel_count = flinel.size();
         sw.epi_eV = input.radiation_energy_ev; sw.energy_count = continuum_capacity;
         constexpr std::size_t seed_stride=21;
-        std::vector<double> seeds(spectral.size()*seed_stride,0.0);
+        seeds.assign(spectral.size()*seed_stride,0.0);
         for (std::size_t i=0;i<spectral.size();++i) {
             seeds[i*seed_stride]=1.0/1.772;
             for (std::size_t d=1;d<=10;++d) {
@@ -14186,6 +14496,8 @@ int run_impl(
                 seeds[i*seed_stride+2*d]=value;
             }
         }
+        perf_foundation_v068231.spectral_workspace_seconds +=
+            elapsed(spectral_workspace_started_v068231);
         xstar_spectral_stats_v1 ss{};
         xstar_spectral_stats_init_v1(&ss);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
@@ -16466,6 +16778,7 @@ int run_impl(
         // Capture the exact source workspaces before the public-product
         // reduction mutates or combines any of them.  The optional sidecar
         // preserves the original xstar_fixed_state_output_v1 ABI layout.
+        const auto retained_workspace_copy_started_v068231 = clock_type::now();
         if (source_workspaces) {
             if (source_workspaces->struct_size < sizeof(*source_workspaces) ||
                 source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
@@ -16522,6 +16835,8 @@ int run_impl(
                           ? "exact sparse source workspaces retained; derived product projection deferred"
                           : "exact committed source workspaces retained");
         }
+        perf_foundation_v068231.retained_array_seconds +=
+            elapsed(retained_workspace_copy_started_v068231);
 
         if (!defer_product_projection) {
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
@@ -16537,21 +16852,22 @@ int run_impl(
             }
         }
 
-        // v0.6.48.9.4 accepted-boundary snapshot reuse.  Transfer ownership
-        // of the already-computed sparse workspaces into the persistent
-        // context only after all evaluation consumers above have finished.
-        // Moving these local vectors is O(1); it does not add another
-        // record/rate/spectral pass and preserves their exact binary64 bytes.
-        ctx.last_source_rcem_v064894 = std::move(rcem);
-        ctx.last_source_oplin_v064894 = std::move(oplin);
-        ctx.last_source_cemab_v064894 = std::move(cemab);
-        ctx.last_source_cabab_v064894 = std::move(cabab);
-        ctx.last_source_opakab_v064894 = std::move(opakab);
-        ctx.last_source_rccemis_v064894 = std::move(rccemis);
+        const auto retained_snapshot_started_v068231 = clock_type::now();
+        // v0.6.48.9.4 accepted-boundary snapshot reuse.  0.6.82.31 keeps the
+        // construction buffers context-owned as well: swap the completed live
+        // values into the retained source snapshot so the scratch side receives
+        // the previous snapshot's capacity for the next evaluation.  This is
+        // still O(1) and preserves the exact bytes/order of the accepted state.
+        ctx.last_source_rcem_v064894.swap(rcem);
+        ctx.last_source_oplin_v064894.swap(oplin);
+        ctx.last_source_cemab_v064894.swap(cemab);
+        ctx.last_source_cabab_v064894.swap(cabab);
+        ctx.last_source_opakab_v064894.swap(opakab);
+        ctx.last_source_rccemis_v064894.swap(rccemis);
         ctx.last_source_opakc_v064894 = std::move(opakc_exact);
-        ctx.last_source_opakcont_v064894 = std::move(opakcont);
-        ctx.last_source_fline_v064894 = std::move(fline);
-        ctx.last_source_flinel_v064894 = std::move(flinel);
+        ctx.last_source_opakcont_v064894.swap(opakcont);
+        ctx.last_source_fline_v064894.swap(fline);
+        ctx.last_source_flinel_v064894.swap(flinel);
         ctx.last_source_pprint4_flinel_v068229331 = std::move(pprint4_flinel_v068229334);
         ctx.last_source_elum_v064894 = std::move(elum);
         ctx.last_source_line_profile_workspace_v064894 = std::move(profiled);
@@ -16568,6 +16884,8 @@ int run_impl(
                 ? XSTAR_FIXED_EXACT_WORKSPACE_NONE
                 : XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS);
         ctx.last_source_workspaces_valid_v064894 = true;
+        perf_foundation_v068231.retained_array_seconds +=
+            elapsed(retained_snapshot_started_v068231);
         stats.spectral_contributions += ss.contributions_committed;
     }
     stats.spectral_seconds += elapsed(spectral_start);
@@ -16681,6 +16999,11 @@ int run_impl(
     copy_text(output.message, sizeof(output.message), "native fixed-state raw program evaluated");
     ++ctx.state_generation;
     stats.state_generation = ctx.state_generation;
+    perf_foundation_v068231.persistent_reserved_bytes =
+        ctx.scratch_v068231.reserved_bytes();
+    perf_foundation_v068231.persistent_peak_reserved_bytes = std::max(
+        perf_foundation_v068231.persistent_peak_reserved_bytes,
+        perf_foundation_v068231.persistent_reserved_bytes);
     stats.total_seconds += elapsed(total_start);
     copy_text(stats.message, sizeof(stats.message), "native fixed-state raw program evaluated");
     return 0;
@@ -16743,6 +17066,14 @@ void capture_publication_state_v0682292(
     out.free_free_heating = context->last_htfreef;
     out.option4_flinel = context->last_source_pprint4_flinel_v068229331;
     out.brems_cooling = context->last_clbrems;
+}
+
+void capture_performance_foundation_v068231(
+    const xstar_fixed_state_context* context,
+    PerformanceFoundationV068231& out) {
+    out = PerformanceFoundationV068231{};
+    if (!context) return;
+    out = context->perf_foundation_v068231;
 }
 
 } // namespace xstar_local_zone_internal

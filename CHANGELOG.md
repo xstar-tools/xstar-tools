@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.31 - shared fixed-state/controller performance foundation - 2026-08-21
+
+- Formally close `0.6.82.30` on the host-accepted `0.6.82.30.8.14` science baseline.  The remaining `.30.8.15` publication-inventory discrepancies are documented and deferred until after the `.31-.33` performance campaign; none are carried into this release.
+- Add coarse fixed-state attribution for record preparation, preliminary-cache handling, evaluated-record storage, contribution-list construction, element-input construction, matrix workspace reset/build, retained-array capture/copy, spectral workspace preparation, level/population scratch preparation, and bound-free workspace preparation.  The historical `V068222_PERF_ALL_FIXED_*` counters remain unchanged for same-host baseline comparison.
+- Add process peak-RSS reporting plus persistent-scratch reserved/peak-reserved byte counters so low-`xi` and broad multi-element memory can be tracked independently.
+- Reuse context-owned capacity for preliminary/evaluated record streams, record-pointer arrays, contribution ledgers, element matrix/population buffers, spectral construction buffers, population scratch, and the Type-99 `leveltemp` backup instead of rebuilding equivalent vectors on every fixed-state evaluation.  Explicit zero-fills preserve the value-initialized solver workspace semantics of the prior implementation.
+- Reuse the 999-bin Type-53/calc-emisab reduced-continuum geometry: precompute `epim` and full-to-reduced `bremsmap` for an unchanged energy grid and update only live `bremsam`.  Keep the accepted Type-74 reduction path unchanged because its source-threshold helper is not literally identical.
+- Avoid copying the complete immutable decoded element-row inventory before constructing an active compact view; copy scalar metadata and materialize only the selected rows in the same source order.
+- Keep rate formulas, Type-50/profile mathematics, matrix/solver arithmetic, controller decisions, record order, FITS output logic, science revision `0.6.48.12.3.45.3.3.8`, and ABI identifiers `60487 / 6048110 / 60488` frozen.
+- Add a same-host `.30.8.14 -> .31` benchmark runner with three mandatory anchors: C5 `xi=-3,cfrac=0,emult=0.25`, `multi_element_xi1_ne1e12`, and the Fe reference.  Candidate-vs-baseline science requires accepted material/STEP/spectrum comparison plus exact public-spectrum and parsed-STEP invariance.
+
 ## 0.6.82.30.8.15 - final publication-inventory closure candidate - 2026-08-21
 
 - Freeze host-accepted `0.6.82.30.8.14` as the broad multi-element science baseline: `multi_element_xi1_ne1e12` ACCEPTed STEP structure/science, `ntotit` 0 mismatches, material, and spectrum against canonical FORTRAN XSTAR 2.59g.  Record the accepted source hashes in `qualification/multi_element_science_freeze_0_6_82_30_8_14/`.

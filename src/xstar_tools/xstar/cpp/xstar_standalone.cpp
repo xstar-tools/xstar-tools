@@ -48,6 +48,9 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
 
 extern "C" int xstar_emissivity_build_binemis_profile(
     int ncn2, int nbtpp, int ncols, int n_line_slots, int n_lum_lines,
@@ -263,6 +266,7 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t compacted_rrc_values_before = 0u;
     std::uint64_t compacted_rrc_values_after = 0u;
     std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
+    xstar_local_zone_internal::PerformanceFoundationV068231 foundation_v068231{};
 };
 
 thread_local PerformanceInstrumentationV064890* g_performance_v064890 = nullptr;
@@ -273,6 +277,22 @@ thread_local PerformanceInstrumentationV064890* g_performance_v064890 = nullptr;
 // XSTAR-FUNCTION-COMMENT-END
 inline double performance_elapsed_seconds(const std::chrono::steady_clock::time_point& started) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+}
+
+std::uint64_t peak_rss_bytes_v068231() {
+#if defined(__unix__) || defined(__APPLE__)
+    struct rusage usage{};
+    if (::getrusage(RUSAGE_SELF, &usage) != 0) return 0u;
+#if defined(__APPLE__)
+    return usage.ru_maxrss > 0 ? static_cast<std::uint64_t>(usage.ru_maxrss) : 0u;
+#else
+    return usage.ru_maxrss > 0
+        ? static_cast<std::uint64_t>(usage.ru_maxrss) * 1024u
+        : 0u;
+#endif
+#else
+    return 0u;
+#endif
 }
 
 
@@ -12782,75 +12802,6 @@ std::vector<double> source_detail_global_projection(
             write_aliases(packed, pre_mapback[packed]);
         }
     }
-
-    // 0.6.82.30.8.15 publication-only fstepr ownership repair.
-    //
-    // The compact row alias topology intentionally represents shared
-    // continuum/next-ground ownership, but it is not a complete inventory of
-    // every source detail role.  In particular, source autoionizing/doubly
-    // excited roles may have a valid fstepr npilev identity without appearing
-    // in row_global_level_aliases.  That left the N VI local levels 50..55
-    // (global 839..844 in the broad qualification model) at structural zero in
-    // the retained detail surface even though their solved pre-mapback values
-    // are above the literal fstepr 1.d-34 publication floor.
-    //
-    // Reattach any such missing detail role through immutable native row
-    // metadata, not by element-specific global numbers.  Restrict the fallback
-    // to the retained active full-row window and preserve the 12.3.18 terminal
-    // inactive-row suppression exactly.  This surface is consumed only by
-    // xo01_detail/SAVD publication and never feeds solver, rates, transport, or
-    // the post-mapback global xilevg science state.
-    using DetailRoleKeyV068230815 =
-        std::tuple<int,std::string,std::string,double>;
-    struct DetailRoleOwnerV068230815 {
-        std::size_t packed_row = 0u;
-        int full_row = 0;
-    };
-    std::map<DetailRoleKeyV068230815, DetailRoleOwnerV068230815>
-        detail_role_owner_v068230815;
-    for (const auto& rm : data.program->row_metadata) {
-        if (rm.element_index <= 0 || rm.row <= 0) continue;
-        std::size_t packed = 0u;
-        bool found_element = false;
-        for (const auto& element : data.program->element_metadata) {
-            if (element.element_index != rm.element_index) continue;
-            packed = static_cast<std::size_t>(element.row_offset + rm.row - 1);
-            found_element = true;
-            break;
-        }
-        if (!found_element || packed >= pre_mapback.size()) continue;
-        detail_role_owner_v068230815.emplace(
-            DetailRoleKeyV068230815{
-                rm.element_index, rm.ion_label, rm.level_label, rm.energy_ev},
-            DetailRoleOwnerV068230815{packed, rm.row});
-    }
-    std::map<int,int> element_index_by_z_v068230815;
-    for (const auto& element : data.program->element_metadata) {
-        element_index_by_z_v068230815[element.atomic_number] = element.element_index;
-    }
-    for (const auto& detail : data.program->detail_level_identities) {
-        if (detail.global_index <= 0 ||
-            static_cast<std::size_t>(detail.global_index) > dense.size()) continue;
-        const std::size_t global0 = static_cast<std::size_t>(detail.global_index - 1);
-        if (dense[global0] != 0.0) continue;
-        const auto element_it = element_index_by_z_v068230815.find(detail.atomic_number);
-        if (element_it == element_index_by_z_v068230815.end()) continue;
-        const auto owner_it = detail_role_owner_v068230815.find(
-            DetailRoleKeyV068230815{
-                element_it->second, detail.ion_label, detail.level_label,
-                detail.excitation_ev});
-        if (owner_it == detail_role_owner_v068230815.end()) continue;
-        const auto window_it = windows.find(detail.atomic_number);
-        if (window_it == windows.end()) continue;
-        const auto& window = window_it->second;
-        const int full_row = owner_it->second.full_row;
-        if (full_row < window[2] || full_row > window[3]) continue;
-        if (window[1] < detail.atomic_number && full_row == window[3]) continue;
-        const std::size_t packed = owner_it->second.packed_row;
-        if (packed >= pre_mapback.size()) continue;
-        const double value = pre_mapback[packed];
-        if (std::isfinite(value) && value != 0.0) dense[global0] = value;
-    }
     return dense;
 }
 
@@ -14873,28 +14824,10 @@ void advance_atomic_luminosities(
         ? local_boundary.cemab.size() / 2u : 0u;
     std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
     if (data.program) {
-        // 0.6.82.30.8.15 publication-only writespectra4 ownership repair.
-        // setptrs owns the final RRC luminosity inventory through npcon/npconi2,
-        // represented by source_rrc_identities.  The executable record list is
-        // broader: several records can reference the same continuum slot and a
-        // rate-7 executable record does not necessarily own that slot in the
-        // source publication chain.  Building this gate from all executable
-        // records created ten spurious Si VI public RRC rows and suppressed the
-        // source-owned Ni VI continuum 144628.  Accumulate elumab only for the
-        // literal source publication slots.  This changes product bookkeeping
-        // only; cemab, rates, transport, and spectrum arithmetic are untouched.
-        if (!data.program->source_rrc_identities.empty()) {
-            for (const auto& identity : data.program->source_rrc_identities) {
-                if (identity.rate_type != 7 || identity.continuum_index <= 0) continue;
-                const std::size_t slot = static_cast<std::size_t>(identity.continuum_index);
-                if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
-            }
-        } else {
-            for (const auto& record : data.program->records) {
-                if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
-                const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
-                if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
-            }
+        for (const auto& record : data.program->records) {
+            if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
+            const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
+            if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
         }
     }
     for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
@@ -20277,6 +20210,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         } else {
             g_bound_free_perf_v064895_valid = false;
         }
+        if (g_performance_v064890) {
+            xstar_local_zone_internal::capture_performance_foundation_v068231(
+                fixed, g_performance_v064890->foundation_v068231);
+        }
         xstar_thermal_context_destroy(thermal);
         xstar_fixed_state_context_destroy(fixed);
         return product;
@@ -20687,6 +20624,35 @@ void emit_controller_performance_instrumentation(
             << "V068222_PERF_ALL_FIXED_CONTINUUM_SECONDS=" << perf.all_fixed_continuum_seconds << "\n"
             << "V068222_PERF_ALL_FIXED_SPECTRAL_SECONDS=" << perf.all_fixed_spectral_seconds << "\n"
             << "V068222_PERF_ALL_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
+            << "V068231_PERF_FIXED_CALLS=" << perf.foundation_v068231.fixed_calls << "\n"
+            << "V068231_PERF_RECORD_PREPARATION_SECONDS=" << perf.foundation_v068231.record_preparation_seconds << "\n"
+            << "V068231_PERF_PRELIMINARY_CACHE_SECONDS=" << perf.foundation_v068231.preliminary_cache_seconds << "\n"
+            << "V068231_PERF_EVALUATED_RECORD_SECONDS=" << perf.foundation_v068231.evaluated_record_seconds << "\n"
+            << "V068231_PERF_CONTRIBUTION_LIST_SECONDS=" << perf.foundation_v068231.contribution_list_seconds << "\n"
+            << "V068231_PERF_ELEMENT_INPUT_SECONDS=" << perf.foundation_v068231.element_input_seconds << "\n"
+            << "V068231_PERF_MATRIX_WORKSPACE_SECONDS=" << perf.foundation_v068231.matrix_workspace_seconds << "\n"
+            << "V068231_PERF_RETAINED_ARRAY_SECONDS=" << perf.foundation_v068231.retained_array_seconds << "\n"
+            << "V068231_PERF_SPECTRAL_WORKSPACE_SECONDS=" << perf.foundation_v068231.spectral_workspace_seconds << "\n"
+            << "V068231_PERF_LEVEL_POPULATION_SCRATCH_SECONDS=" << perf.foundation_v068231.level_population_scratch_seconds << "\n"
+            << "V068231_PERF_BOUND_FREE_WORKSPACE_SECONDS=" << perf.foundation_v068231.bound_free_workspace_seconds << "\n"
+            << "V068231_PERF_PRELIMINARY_CACHE_CAPACITY_GROWTHS=" << perf.foundation_v068231.preliminary_cache_capacity_growths << "\n"
+            << "V068231_PERF_PRELIMINARY_CACHE_CAPACITY_REUSES=" << perf.foundation_v068231.preliminary_cache_capacity_reuses << "\n"
+            << "V068231_PERF_EVALUATED_CAPACITY_GROWTHS=" << perf.foundation_v068231.evaluated_capacity_growths << "\n"
+            << "V068231_PERF_EVALUATED_CAPACITY_REUSES=" << perf.foundation_v068231.evaluated_capacity_reuses << "\n"
+            << "V068231_PERF_CONTRIBUTION_CAPACITY_GROWTHS=" << perf.foundation_v068231.contribution_capacity_growths << "\n"
+            << "V068231_PERF_CONTRIBUTION_CAPACITY_REUSES=" << perf.foundation_v068231.contribution_capacity_reuses << "\n"
+            << "V068231_PERF_ELEMENT_BUFFER_REUSES=" << perf.foundation_v068231.element_buffer_reuses << "\n"
+            << "V068231_PERF_LEVELTEMP_BACKUP_REUSES=" << perf.foundation_v068231.leveltemp_backup_reuses << "\n"
+            << "V068231_PERF_REDUCED_CONTINUUM_GEOMETRY_BUILDS=" << perf.foundation_v068231.reduced_continuum_geometry_builds << "\n"
+            << "V068231_PERF_REDUCED_CONTINUUM_GEOMETRY_REUSES=" << perf.foundation_v068231.reduced_continuum_geometry_reuses << "\n"
+            << "V068231_PERF_REDUCED_CONTINUUM_LIVE_UPDATES=" << perf.foundation_v068231.reduced_continuum_live_updates << "\n"
+            << "V068231_PERF_SPECTRAL_WORKSPACE_REUSES=" << perf.foundation_v068231.spectral_workspace_reuses << "\n"
+            << "V068231_PERF_PERSISTENT_RESERVED_BYTES=" << perf.foundation_v068231.persistent_reserved_bytes << "\n"
+            << "V068231_PERF_PERSISTENT_PEAK_RESERVED_BYTES=" << perf.foundation_v068231.persistent_peak_reserved_bytes << "\n";
+        const std::uint64_t peak_rss_v068231 = peak_rss_bytes_v068231();
+        out << "V068231_PERF_PEAK_RSS_BYTES=" << peak_rss_v068231 << "\n"
+            << "V068231_PERF_PEAK_RSS_MIB=" << (static_cast<double>(peak_rss_v068231) / (1024.0 * 1024.0)) << "\n"
+            << "V068231_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"
             << "V068222_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"
             << "V068222_PERF_RRC_VALUES_BEFORE=" << perf.compacted_rrc_values_before << "\n"
             << "V068222_PERF_RRC_VALUES_AFTER=" << perf.compacted_rrc_values_after << "\n"

@@ -4,6 +4,7 @@
 
 #include "xstar_local_zone_engine.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <tuple>
@@ -32,6 +33,41 @@ struct PublicationStateV0682292 {
 void capture_publication_state_v0682292(
     const xstar_fixed_state_context* context,
     PublicationStateV0682292& out);
+
+// 0.6.82.31: private performance-only fixed-state/controller attribution.
+// This deliberately stays outside the public C ABI so the accepted 6048110 /
+// 60488 interfaces remain frozen. Every field is observational only.
+struct PerformanceFoundationV068231 {
+    std::uint64_t fixed_calls = 0u;
+    double record_preparation_seconds = 0.0;
+    double preliminary_cache_seconds = 0.0;
+    double evaluated_record_seconds = 0.0;
+    double contribution_list_seconds = 0.0;
+    double element_input_seconds = 0.0;
+    double matrix_workspace_seconds = 0.0;
+    double retained_array_seconds = 0.0;
+    double spectral_workspace_seconds = 0.0;
+    double level_population_scratch_seconds = 0.0;
+    double bound_free_workspace_seconds = 0.0;
+    std::uint64_t preliminary_cache_capacity_growths = 0u;
+    std::uint64_t preliminary_cache_capacity_reuses = 0u;
+    std::uint64_t evaluated_capacity_growths = 0u;
+    std::uint64_t evaluated_capacity_reuses = 0u;
+    std::uint64_t contribution_capacity_growths = 0u;
+    std::uint64_t contribution_capacity_reuses = 0u;
+    std::uint64_t element_buffer_reuses = 0u;
+    std::uint64_t leveltemp_backup_reuses = 0u;
+    std::uint64_t reduced_continuum_geometry_builds = 0u;
+    std::uint64_t reduced_continuum_geometry_reuses = 0u;
+    std::uint64_t reduced_continuum_live_updates = 0u;
+    std::uint64_t spectral_workspace_reuses = 0u;
+    std::uint64_t persistent_reserved_bytes = 0u;
+    std::uint64_t persistent_peak_reserved_bytes = 0u;
+};
+
+void capture_performance_foundation_v068231(
+    const xstar_fixed_state_context* context,
+    PerformanceFoundationV068231& out);
 
 } // namespace xstar_local_zone_internal
 

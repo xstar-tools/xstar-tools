@@ -1042,9 +1042,3 @@ include xstar_tools-0.6.82.30.8.12_host_validation.md
 include multi_element_spectrum_type70_source_context_0_6_82_30_8_14.md
 include xstar_tools-0.6.82.30.8.14_host_validation.md
 include tests/test_type70_source_context_0_6_82_30_8_14.py
-include publication_inventory_closure_0_6_82_30_8_15.md
-include xstar_tools-0.6.82.30.8.15_host_validation.md
-include tests/test_publication_inventory_0_6_82_30_8_15.py
-include tools/qualification/compare_multi_element_product_inventory_0_6_82_30_8_15.py
-include qualification/multi_element_science_freeze_0_6_82_30_8_14/multi_element_science_freeze_0_6_82_30_8_14.json
-include qualification/publication_inventory_0_6_82_30_8_15/publication_inventory_contract_0_6_82_30_8_15.json
