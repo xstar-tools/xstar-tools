@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.33.8 - fixed native public line-luminosity accumulator - 2026-08-21
+
+- Revise host-rejected `0.6.82.33.7` under the no-version-reuse rule. Fe fully accepted `.33.7`, and C5 retained the intended memory/lifetime behavior (`RSS_RATIO=0.079678`, `FINAL_SNAPSHOT_LIFETIME=ACCEPT`, `COMPACT_RADIAL_RETENTION=ACCEPT`) but exact science/FITS failed only in `xout_lines1.fits` and downstream `xout_spect1.fits`.
+- Preserve the `.33.5` O(1) pending full-snapshot owner and the `.33.6/.33.7` compact historical radial records. Do not restore per-zone dense `rcem`, `oplin`, `tau0`, `elum`, populations, global-rate maps, or detail diagnostics.
+- Add one whole-run native two-plane line-luminosity ledger for compact single-pass production. When a pending physical zone is superseded and the next cumulative depth is known, accumulate its still-live local `rcem` using the exact historical `reconstruct_public_line_luminosity()` arithmetic/order: `max(0, old + local * delrl * fpr2)`.
+- Mirror the historical reconstruction index semantics exactly: radial zone 0 is excluded; completed zones from index 1 onward are accumulated at supersession; the final still-full physical shell is accumulated against the terminal post-transport cumulative depth.
+- Make `reconstruct_public_line_luminosity()` consume the exact ledger only when the compact-production owner is marked exact. `select_public_lines()` therefore keeps identical identity/ranking logic, and `build_writer_time_binemis()` uses the same exact owner even if the cumulative vector is numerically all zero. Legacy reconstruction remains unchanged for reference/diagnostic/multipass/noncompact modes.
+- Add `V0682338_LINE_LUMINOSITY_*` telemetry and a mandatory host gate requiring fixed-native mode, exact marker, native two-plane shape, `accepted_boundaries-1` accumulated shells, and O(line-workspace) bytes independent of zone count.
+- Keep exact `.32` raw FITS-HDU payload comparison mandatory for every product, explicitly including `xout_lines1.fits` and `xout_spect1.fits`; retain the C5 RSS objective `<=0.20` of same-host `.32`.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, and the deferred `0.6.82.34` correctness backlog unchanged.
+
 ## 0.6.82.33.7 - compact radial abundance-publication hotfix - 2026-08-21
 
 - Revise host-rejected `0.6.82.33.6` under the no-version-reuse rule. Fe proved the compact lifetime mechanism itself works (`FINAL_SNAPSHOT_LIFETIME=ACCEPT`, `COMPACT_RADIAL_RETENTION=ACCEPT`, RSS ratio `0.859747`), but exact science/FITS failed only in deferred `xout_abund1.fits`.

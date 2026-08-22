@@ -335,6 +335,15 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t full_radial_zones_peak_count_v0682336 = 0u;
     std::uint64_t full_radial_zones_peak_bytes_v0682336 = 0u;
     std::uint64_t full_radial_zones_peak_capacity_bytes_v0682336 = 0u;
+    // 0.6.82.33.8: fixed-size whole-run cumulative native line-luminosity
+    // owner used after historical rcem workspaces are released.
+    bool line_luminosity_accumulator_enabled_v0682338 = false;
+    bool line_luminosity_accumulator_exact_v0682338 = false;
+    std::uint64_t line_luminosity_stride_v0682338 = 0u;
+    std::uint64_t line_luminosity_shells_v0682338 = 0u;
+    std::uint64_t line_luminosity_values_v0682338 = 0u;
+    std::uint64_t line_luminosity_bytes_v0682338 = 0u;
+    std::uint64_t line_luminosity_capacity_bytes_v0682338 = 0u;
     std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
     xstar_local_zone_internal::PerformanceFoundationV068231 foundation_v068231{};
 };
@@ -7696,6 +7705,28 @@ std::vector<double> reconstruct_public_line_luminosity(
         }
     }
 
+    // 0.6.82.33.8: compact single-pass production releases historical rcem
+    // workspaces after each SAVD event.  The exact HEATT update is therefore
+    // retained once in a fixed-size native elum-shape ledger while each local
+    // rcem owner is still alive.  Keep the pre-existing density.dat/radexp<-99
+    // cumulative-elum owner above unchanged; all other noncompact/reference/
+    // diagnostic/multipass modes continue through the historical reconstruction.
+    if (product.compact_radial_retention_v0682336 &&
+        product.public_line_luminosity_exact_v0682338) {
+        const std::size_t stride = product.public_line_luminosity_stride_v0682338;
+        const auto& ledger = product.public_line_luminosity_v0682338;
+        if (stride == 0u && ledger.empty()) return out;
+        if (stride == 0u || ledger.size() != 2u * stride) {
+            throw std::runtime_error(
+                "0.6.82.33.8 exact public line-luminosity ledger has invalid shape");
+        }
+        for (std::size_t i = 0; i < line_indices.size(); ++i) {
+            const auto line_index = static_cast<long long>(std::llround(line_indices[i]));
+            out[i] = native_line_plane(ledger, stride, plane, line_index);
+        }
+        return out;
+    }
+
     // Literal heatt/trnfrn ownership for lines is
     //   elum(ll,j) = max(0, elumo(ll,j) + rcem(ll,j)*delrl*fpr2)
     //   elumo(ll,j) = elum(ll,j)
@@ -8022,6 +8053,7 @@ bool build_writer_time_binemis(
     const auto reconstructed_elum_out = reconstruct_public_line_luminosity(
         product, all_line_indices, 1u);
     const bool reconstructed_elum_ready =
+        product.public_line_luminosity_exact_v0682338 ||
         vector_has_nonzero(reconstructed_elum_in) || vector_has_nonzero(reconstructed_elum_out);
     std::vector<double> wavelength(line_count, 0.0), mass(line_count, 1.0),
         natural_rate(line_count, 0.0), auger_width(line_count, 0.0), auger_rate(line_count, 0.0);
@@ -19506,6 +19538,63 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             compact_radial_zones_v0682336.reserve(
                 static_cast<std::size_t>(std::max(params.nsteps, 4)));
         }
+        std::vector<double> public_line_luminosity_v0682338;
+        std::size_t public_line_luminosity_stride_v0682338 = 0u;
+        std::size_t public_line_luminosity_shells_v0682338 = 0u;
+        bool public_line_luminosity_exact_v0682338 = compact_radial_retention_v0682336;
+        if (g_performance_v064890) {
+            g_performance_v064890->line_luminosity_accumulator_enabled_v0682338 =
+                compact_radial_retention_v0682336;
+        }
+        auto accumulate_public_line_luminosity_v0682338 = [&](
+                const FixedDsecSnapshot& snapshot, std::size_t radial_zero_index,
+                double radius_cm, double current_depth_cm, double next_depth_cm) {
+            if (!compact_radial_retention_v0682336 || radial_zero_index == 0u) return;
+            // Historical reconstruction visits every physical radial index
+            // [1..terminal_local] but simply contributes zero for invalid
+            // geometry/workspace rows. Count the visited shell before applying
+            // those same source guards so telemetry/order remain identical.
+            ++public_line_luminosity_shells_v0682338;
+            const double delrl = next_depth_cm - current_depth_cm;
+            const auto& rcem = snapshot.rcem;
+            if (!(delrl > 0.0) || !std::isfinite(delrl) ||
+                !(radius_cm > 0.0) || !std::isfinite(radius_cm) ||
+                rcem.size() < 2u || rcem.size() % 2u != 0u) {
+                return;
+            }
+            const std::size_t stride = rcem.size() / 2u;
+            if (public_line_luminosity_v0682338.empty()) {
+                public_line_luminosity_stride_v0682338 = stride;
+                public_line_luminosity_v0682338.assign(2u * stride, 0.0);
+            } else if (stride != public_line_luminosity_stride_v0682338) {
+                throw std::runtime_error(
+                    "0.6.82.33.8 native line-luminosity stride changed during compact production");
+            }
+            const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor *
+                std::pow(radius_cm * 1.0e-19, 2.0);
+            const double shell_scale = delrl * fpr2;
+            for (std::size_t plane = 0u; plane < 2u; ++plane) {
+                const std::size_t base = plane * stride;
+                for (std::size_t slot = 0u; slot < stride; ++slot) {
+                    const std::size_t at = base + slot;
+                    const double local = std::isfinite(rcem[at]) ? rcem[at] : 0.0;
+                    public_line_luminosity_v0682338[at] = std::max(
+                        0.0, public_line_luminosity_v0682338[at] + local * shell_scale);
+                }
+            }
+            if (g_performance_v064890) {
+                auto& perf = *g_performance_v064890;
+                perf.line_luminosity_stride_v0682338 = stride;
+                perf.line_luminosity_shells_v0682338 =
+                    public_line_luminosity_shells_v0682338;
+                perf.line_luminosity_values_v0682338 =
+                    public_line_luminosity_v0682338.size();
+                perf.line_luminosity_bytes_v0682338 =
+                    public_line_luminosity_v0682338.size() * sizeof(double);
+                perf.line_luminosity_capacity_bytes_v0682338 =
+                    public_line_luminosity_v0682338.capacity() * sizeof(double);
+            }
+        };
         auto append_zone_v0682334 = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
                                         double source_radius, double source_depth, double source_column,
                                         std::size_t dsec_ntotit, bool terminal_row,
@@ -20323,6 +20412,17 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                         g_performance_v064890->compacted_rrc_values_after += counts_v068222.second;
                     }
                     if (compact_radial_retention_v0682336) {
+                        // The retained-product reconstruction integrates radial
+                        // zones [1..terminal_local], deliberately skipping zone
+                        // zero.  At this supersession point the newer accepted
+                        // boundary owns the exact next cumulative depth.
+                        const std::size_t completed_zero_index_v0682338 =
+                            accepted_boundary_count_v0682334 - 2u;
+                        accumulate_public_line_luminosity_v0682338(
+                            completed, completed_zero_index_v0682338,
+                            pending_final_radius_cm_v0682334,
+                            pending_final_depth_cm_v0682334,
+                            source_boundary_depth_cm.back());
                         append_compact_zone_v0682336(
                             completed, "qualification_free_native_call_final_pretransport",
                             pending_final_radius_cm_v0682334, pending_final_depth_cm_v0682334,
@@ -20810,6 +20910,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (!pending_final_snapshot_v0682334.has_value()) {
                 throw std::runtime_error("0.6.82.33.4 missing terminal pending accepted boundary");
             }
+            if (compact_radial_retention_v0682336) {
+                const std::size_t final_zero_index_v0682338 =
+                    accepted_boundary_count_v0682334 - 1u;
+                accumulate_public_line_luminosity_v0682338(
+                    *pending_final_snapshot_v0682334, final_zero_index_v0682338,
+                    pending_final_radius_cm_v0682334, pending_final_depth_cm_v0682334,
+                    data.cumulative_depth_cm);
+            }
             // The newest/terminal pre-transport boundary was not compacted in
             // .33.3; transfer it byte-for-byte in the same full form.
             append_zone_v0682334(
@@ -20867,6 +20975,42 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             !whole.radial_zones.empty()) {
             whole.fixed_evaluations.push_back(
                 whole.radial_zones.front().accepted_controller.evaluation);
+        }
+        if (compact_radial_retention_v0682336) {
+            const std::size_t expected_shells_v0682338 =
+                accepted_boundary_count_v0682334 > 0u
+                    ? accepted_boundary_count_v0682334 - 1u : 0u;
+            const bool ledger_shape_exact_v0682338 = expected_shells_v0682338 == 0u
+                ? (public_line_luminosity_stride_v0682338 == 0u &&
+                   public_line_luminosity_v0682338.empty())
+                : (public_line_luminosity_stride_v0682338 > 0u &&
+                   public_line_luminosity_v0682338.size() ==
+                       2u * public_line_luminosity_stride_v0682338);
+            public_line_luminosity_exact_v0682338 =
+                public_line_luminosity_exact_v0682338 &&
+                public_line_luminosity_shells_v0682338 == expected_shells_v0682338 &&
+                ledger_shape_exact_v0682338;
+            whole.public_line_luminosity_v0682338 =
+                std::move(public_line_luminosity_v0682338);
+            whole.public_line_luminosity_stride_v0682338 =
+                public_line_luminosity_stride_v0682338;
+            whole.public_line_luminosity_exact_v0682338 =
+                public_line_luminosity_exact_v0682338;
+            if (g_performance_v064890) {
+                auto& perf = *g_performance_v064890;
+                perf.line_luminosity_accumulator_exact_v0682338 =
+                    public_line_luminosity_exact_v0682338;
+                perf.line_luminosity_stride_v0682338 =
+                    public_line_luminosity_stride_v0682338;
+                perf.line_luminosity_shells_v0682338 =
+                    public_line_luminosity_shells_v0682338;
+                perf.line_luminosity_values_v0682338 =
+                    whole.public_line_luminosity_v0682338.size();
+                perf.line_luminosity_bytes_v0682338 =
+                    whole.public_line_luminosity_v0682338.size() * sizeof(double);
+                perf.line_luminosity_capacity_bytes_v0682338 =
+                    whole.public_line_luminosity_v0682338.capacity() * sizeof(double);
+            }
         }
         retain_controller_owned_product_workspaces(whole, options.parameters_path);
         update_radial_zones_memory_v0682332(whole.radial_zones);
@@ -21755,6 +21899,35 @@ void emit_controller_performance_instrumentation(
                             perf.accepted_boundaries_v0682334 &&
                         perf.compact_radial_zones_materialized_v0682336 ==
                             perf.compact_radial_zones_peak_count_v0682336)
+                            ? "ACCEPT" : "REJECT")
+                    : "NOT_APPLICABLE") << "\n"
+            << "V0682338_LINE_LUMINOSITY_MODE="
+            << (perf.line_luminosity_accumulator_enabled_v0682338
+                    ? "FIXED_NATIVE_ELUM_ACCUMULATOR" : "LEGACY_RADIAL_RECONSTRUCTION") << "\n"
+            << "V0682338_LINE_LUMINOSITY_STRIDE="
+            << perf.line_luminosity_stride_v0682338 << "\n"
+            << "V0682338_LINE_LUMINOSITY_SHELLS_ACCUMULATED="
+            << perf.line_luminosity_shells_v0682338 << "\n"
+            << "V0682338_LINE_LUMINOSITY_VALUES="
+            << perf.line_luminosity_values_v0682338 << "\n"
+            << "V0682338_LINE_LUMINOSITY_BYTES="
+            << perf.line_luminosity_bytes_v0682338 << "\n"
+            << "V0682338_LINE_LUMINOSITY_CAPACITY_BYTES="
+            << perf.line_luminosity_capacity_bytes_v0682338 << "\n"
+            << "V0682338_LINE_LUMINOSITY_GATE="
+            << (perf.line_luminosity_accumulator_enabled_v0682338
+                    ? ((perf.line_luminosity_accumulator_exact_v0682338 &&
+                        perf.line_luminosity_stride_v0682338 > 0u &&
+                        perf.line_luminosity_values_v0682338 ==
+                            2u * perf.line_luminosity_stride_v0682338 &&
+                        perf.line_luminosity_bytes_v0682338 ==
+                            8u * perf.line_luminosity_values_v0682338 &&
+                        perf.line_luminosity_capacity_bytes_v0682338 >=
+                            perf.line_luminosity_bytes_v0682338 &&
+                        perf.line_luminosity_capacity_bytes_v0682338 <=
+                            2u * perf.line_luminosity_bytes_v0682338 &&
+                        perf.line_luminosity_shells_v0682338 + 1u ==
+                            perf.accepted_boundaries_v0682334)
                             ? "ACCEPT" : "REJECT")
                     : "NOT_APPLICABLE") << "\n"
             << "V068231_PERF_RRC_COMPACTED_ZONES=" << perf.compacted_rrc_zones << "\n"

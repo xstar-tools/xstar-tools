@@ -661,6 +661,11 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
         state.incremental_detail_products_complete_v068233;
     product.compact_radial_retention_v0682336 =
         state.compact_radial_retention_v0682336;
+    product.public_line_luminosity_v0682338 = state.public_line_luminosity_v0682338;
+    product.public_line_luminosity_stride_v0682338 =
+        state.public_line_luminosity_stride_v0682338;
+    product.public_line_luminosity_exact_v0682338 =
+        state.public_line_luminosity_exact_v0682338;
     product.incremental_detal2_terminal_patches_v0682332 =
         state.incremental_detal2_terminal_patches_v0682332;
     product.continuum_depths_derived_from_native_opacity =
@@ -719,6 +724,12 @@ ProductWritingState build_product_writing_state(WholeRunAccumulatedState&& state
         state.incremental_detail_products_complete_v068233;
     product.compact_radial_retention_v0682336 =
         state.compact_radial_retention_v0682336;
+    product.public_line_luminosity_v0682338 =
+        std::move(state.public_line_luminosity_v0682338);
+    product.public_line_luminosity_stride_v0682338 =
+        state.public_line_luminosity_stride_v0682338;
+    product.public_line_luminosity_exact_v0682338 =
+        state.public_line_luminosity_exact_v0682338;
     product.incremental_detal2_terminal_patches_v0682332 =
         std::move(state.incremental_detal2_terminal_patches_v0682332);
     product.continuum_depths_derived_from_native_opacity = state.continuum_depths_derived_from_native_opacity;

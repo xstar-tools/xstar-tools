@@ -607,6 +607,13 @@ struct WholeRunAccumulatedState {
     // nonterminal zones in compact form after their SAVD detail products were
     // streamed.  This is a publication-lifetime marker only.
     bool compact_radial_retention_v0682336 = false;
+    // 0.6.82.33.8: ordinary compact single-pass production no longer retains
+    // historical dense rcem arrays, but final public line/spectrum publication
+    // still needs the exact cumulative HEATT line luminosity. Retain one native
+    // two-plane elum-shape ledger, independent of radial-zone count.
+    std::vector<double> public_line_luminosity_v0682338;
+    std::size_t public_line_luminosity_stride_v0682338 = 0;
+    bool public_line_luminosity_exact_v0682338 = false;
     // 0.6.82.33.2: bounded patch ledger for the one detail-line dependency
     // that is not knowable at the live SAVD event: the final terminal
     // ion-stage activity gate used by the accepted .32 detal2 writer.
@@ -675,6 +682,13 @@ struct ProductWritingState {
     // 0.6.82.33.6 compact historical radial-zone retention marker copied
     // from WholeRunAccumulatedState.
     bool compact_radial_retention_v0682336 = false;
+    // 0.6.82.33.8: ordinary compact single-pass production no longer retains
+    // historical dense rcem arrays, but final public line/spectrum publication
+    // still needs the exact cumulative HEATT line luminosity. Retain one native
+    // two-plane elum-shape ledger, independent of radial-zone count.
+    std::vector<double> public_line_luminosity_v0682338;
+    std::size_t public_line_luminosity_stride_v0682338 = 0;
+    bool public_line_luminosity_exact_v0682338 = false;
     // 0.6.82.33.2: bounded patch ledger for the one detail-line dependency
     // that is not knowable at the live SAVD event: the final terminal
     // ion-stage activity gate used by the accepted .32 detal2 writer.
