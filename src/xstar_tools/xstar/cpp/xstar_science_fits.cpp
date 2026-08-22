@@ -8532,7 +8532,8 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     const std::vector<ElementMeta>& elements,
     const std::vector<RowMeta>& rows,
     std::size_t sequence,
-    bool apply_terminal_stage_gate = true) {
+    bool apply_terminal_stage_gate = true,
+    const std::vector<const xstar_run_state::LineIdentityState*>* line_identity_lookup_v068236 = nullptr) {
     std::map<long long,LineRow> out;
     std::vector<RecordDiag> records;
     try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
@@ -8551,8 +8552,13 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     std::vector<bool> consumed_live(state.line_identities.size(), false);
     auto resolve_detail_line_index = [&](const RecordDiag& r) -> long long {
         if (r.type50_line_index_one_based > 0) {
-            if (mg_anchor ? oracle_detail_line_inventory(r.type50_line_index_one_based)
-                          : line_identity_by_index(state, r.type50_line_index_one_based) != nullptr) {
+            const bool direct_identity_present_v068236 = mg_anchor
+                ? oracle_detail_line_inventory(r.type50_line_index_one_based)
+                : (line_identity_lookup_v068236
+                    ? line_identity_from_lookup_v06823088(
+                          *line_identity_lookup_v068236, r.type50_line_index_one_based) != nullptr
+                    : line_identity_by_index(state, r.type50_line_index_one_based) != nullptr);
+            if (direct_identity_present_v068236) {
                 ++g_detail_line_staging_audit_v0682352.direct_index_hits;
                 return r.type50_line_index_one_based;
             }
@@ -8881,7 +8887,8 @@ void write_line_detail(const std::filesystem::path& path,
         const auto diagnostic_lines = diagnostic_line_rows_by_index(
             state, evaluation, elements, rows,
             zone.accepted_controller.accepted_sequence,
-            !defer_terminal_gate_v0682332);
+            !defer_terminal_gate_v0682332,
+            &line_identity_lookup_v06823088);
         g_detail_line_staging_audit_v0682352.diagnostic_seconds +=
             std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - diagnostic_started_v0682352).count();

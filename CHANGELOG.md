@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.36 - O(1) direct line-identity validation for detailed-line publication - 2026-08-22
+
+- Promote the completed `0.6.82.35.3` work/memory localization into the first optimization revision. The Fe reference run kept science ACCEPT while measuring C++/FORTRAN wall ratio `1.701753` and RSS ratio `1.821742`; scientific work structure was exact at the solver/iteration level.
+- Localize `xo01_detal2` CPU staging: `30.777812 s` of the `31.869255 s` staging time was spent in diagnostic-line construction. All `320385` Type-50 rows used direct public line indices, with `0` fallback resolutions and `0` fallback identity comparisons.
+- Remove the accidental O(Nline) validation on every direct Type-50 line index. `write_line_detail()` already builds a sparse line-index lookup; pass that lookup into `diagnostic_line_rows_by_index()` and use it for O(1) identity-presence checks. The fallback matcher is unchanged for incomplete/non-production states.
+- Do not change line identity, row eligibility, rate evaluation, solver/controller/transport arithmetic, source ordering, REAL(4) conversion points, FITS schema, or publication thresholds. This is a publication traversal optimization only.
+- Add `V068236_DETAIL_LINE_DIRECT_IDENTITY_MODE=PREBUILT_O1_LOOKUP` and a focused host qualification that reuses the accepted `.35.3` Fe archive, requires exact science against its canonical FORTRAN output, preserves detailed-line inventory/counts, and measures staging/total-speed improvement without rerunning FORTRAN.
+- Keep the `.35.3` memory finding open for later `.36/.37`: Fe persistent C++ scratch is about `813.7 MB`, dominated by `552.9 MB` element-solver workspace; radial RSS peaks near `4.33 GB` while glibc reports about `1.83 GB` allocated heap at that phase.
+- Preserve science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, and strict-FP behavior.
+
 ## 0.6.82.35.3 - portable glibc allocator telemetry hotfix - 2026-08-22
 
 - Host-build hotfix for the measurement-only 0.6.82.35.2 allocator snapshots.

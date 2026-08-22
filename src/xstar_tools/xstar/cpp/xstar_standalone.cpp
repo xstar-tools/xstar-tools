@@ -21871,6 +21871,7 @@ void emit_controller_performance_instrumentation(
             << "V0682352_DETAIL_LINE_FALLBACK_IDENTITY_COMPARISONS=" << perf.detail_line_fallback_identity_comparisons_v0682352 << "\n"
             << "V0682352_DETAIL_LINE_SOURCE_IDENTITIES_SCANNED=" << perf.detail_line_source_identities_scanned_v0682352 << "\n"
             << "V0682352_DETAIL_LINE_SOURCE_ROWS_RETAINED=" << perf.detail_line_source_rows_retained_v0682352 << "\n"
+            << "V068236_DETAIL_LINE_DIRECT_IDENTITY_MODE=PREBUILT_O1_LOOKUP\n"
             << "DETAIL_RRC_SECONDS=" << perf.detail_rrc_seconds << "\n"
             << "V068232_DETAIL_RRC_CPU_STAGING_SECONDS=" << perf.detail_rrc_cpu_staging_seconds << "\n"
             << "V068232_DETAIL_RRC_FITS_WRITE_SECONDS=" << perf.detail_rrc_fits_write_seconds << "\n"
