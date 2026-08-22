@@ -13483,46 +13483,6 @@ std::vector<double> source_detail_global_projection(
             write_aliases(packed, pre_mapback[packed]);
         }
     }
-
-    // 0.6.82.34.1: fstepr publishes literal source npilev roles.  The public
-    // `upper_index` is the source Type-13 encounter ordinal; it must not be
-    // reinterpreted through role_to_row / a packed-local-id alias.  Resolve
-    // the physical ion through immutable LTE topology and project that source
-    // ordinal directly into the solved pre-mapback element row basis.  This is
-    // publication-only: solver rows, controller state, and UNSAVD ownership
-    // remain unchanged.
-    for (const auto& identity : data.program->detail_level_identities) {
-        if (identity.global_index <= 0 ||
-            static_cast<std::size_t>(identity.global_index) > dense.size() ||
-            identity.atomic_number <= 0 || identity.ion_stage <= 0 ||
-            identity.upper_index <= 0) continue;
-        const auto found = windows.find(identity.atomic_number);
-        if (found == windows.end()) continue;
-        const auto& window = found->second;
-        if (identity.ion_stage < window[0] || identity.ion_stage > window[1]) continue;
-
-        const auto element_it = std::find_if(
-            data.program->element_metadata.begin(), data.program->element_metadata.end(),
-            [&](const auto& element) { return element.atomic_number == identity.atomic_number; });
-        if (element_it == data.program->element_metadata.end()) continue;
-
-        const auto topo_it = std::find_if(
-            data.program->lte_ion_topology.begin(), data.program->lte_ion_topology.end(),
-            [&](const auto& topo) {
-                return topo.element_index == element_it->element_index &&
-                    topo.ion_stage == identity.ion_stage;
-            });
-        if (topo_it == data.program->lte_ion_topology.end()) continue;
-        if (identity.upper_index > topo_it->nlev) continue;
-
-        const int full_row = topo_it->start_row + identity.upper_index - 1;
-        if (full_row < window[2] || full_row > window[3]) continue;
-        if (window[1] < identity.atomic_number && full_row == window[3]) continue;
-        const std::size_t packed = static_cast<std::size_t>(
-            element_it->row_offset + full_row - 1);
-        if (packed >= pre_mapback.size()) continue;
-        dense[static_cast<std::size_t>(identity.global_index - 1)] = pre_mapback[packed];
-    }
     return dense;
 }
 
@@ -15543,50 +15503,28 @@ void advance_atomic_luminosities(
     }
     const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u
         ? local_boundary.cemab.size() / 2u : 0u;
-    // 0.6.82.34 / literal heatt.f90 ownership:
-    //   ml=npfi(7,jkk) -> kkkl=npconi2(ml)
-    // and every matching source record computes from the unchanged prior-shell
-    // elumabo.  A duplicate source mapping therefore overwrites/recomputes the
-    // same slot; it does NOT accumulate on the value written by the preceding
-    // duplicate.  Keep one prior copy and traverse the retained literal source
-    // rate-7 identities in source order.  This also avoids restricting HEATT
-    // publication to the executable-data-type subset of program->records.
-    const std::vector<double> prior_rrc_luminosity_v068234 = data.rrc_luminosity;
-    const auto apply_rrc_source_slot_v068234 = [&](std::size_t source_slot) {
-        if (source_slot == 0u || source_slot >= continuum_stride) return;
+    std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
+    if (data.program) {
+        for (const auto& record : data.program->records) {
+            if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
+            const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
+            if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
+        }
+    }
+    for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
+        if (!rate7_rrc_slot[source_slot]) continue;
         const double inward = source_slot < cemab_stride
             ? finite_or(local_boundary.cemab[source_slot], 0.0) : 0.0;
         const std::size_t outward_at = cemab_stride + source_slot;
         const double outward = outward_at < local_boundary.cemab.size()
             ? finite_or(local_boundary.cemab[outward_at], 0.0) : 0.0;
-        // Exact source gate is per plane, not a sum/average threshold.
         if (!(inward > xstar_constants::kLegacyHeattRrcCemabActivityFloor ||
-              outward > xstar_constants::kLegacyHeattRrcCemabActivityFloor)) return;
+              outward > xstar_constants::kLegacyHeattRrcCemabActivityFloor)) continue;
         const double increment = 0.5 * (inward + outward) * delta_radius_cm * fpr2;
         data.rrc_luminosity[source_slot] = std::max(0.0,
-            prior_rrc_luminosity_v068234[source_slot] + increment);
+            data.rrc_luminosity[source_slot] + increment);
         data.rrc_luminosity[continuum_stride + source_slot] = std::max(0.0,
-            prior_rrc_luminosity_v068234[continuum_stride + source_slot] + increment);
-    };
-    if (data.program && !data.program->source_rrc_identities.empty()) {
-        for (const auto& identity : data.program->source_rrc_identities) {
-            if (identity.rate_type != 7 || identity.continuum_index <= 0) continue;
-            apply_rrc_source_slot_v068234(static_cast<std::size_t>(identity.continuum_index));
-        }
-    } else {
-        // Legacy/synthetic fallback for callers without source publication
-        // metadata.  Production standalone runs always use the branch above.
-        std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
-        if (data.program) {
-            for (const auto& record : data.program->records) {
-                if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
-                const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
-                if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
-            }
-        }
-        for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
-            if (rate7_rrc_slot[source_slot]) apply_rrc_source_slot_v068234(source_slot);
-        }
+            data.rrc_luminosity[continuum_stride + source_slot] + increment);
     }
     local_boundary.elumab = data.rrc_luminosity;
 }
@@ -18649,35 +18587,13 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     out.snapshot = source;
 
     // fstepr.f90 writes only source level roles with xilev > 1.d-34.
-    // 0.6.82.34.1: publication membership must use the source-role projection,
-    // not the alias-collapsed controller/global surface.  UNSAVD restoration
-    // below deliberately continues to read source_global_xilevg, so this
-    // correction cannot feed publication-only reconstruction back into science.
-    const auto& detail_xilev_v0682341 = !source.source_detail_global_xilevg.empty()
-        ? source.source_detail_global_xilevg : source.source_global_xilevg;
-    std::vector<std::uint8_t> level_seen_v0682273(detail_xilev_v0682341.size(), 0u);
+    // Determine membership before TFLOAT rounding, exactly as the source does.
+    std::vector<std::uint8_t> level_seen_v0682273(source.source_global_xilevg.size(), 0u);
     for (const auto& id_v0682273 : program.detail_level_identities) {
         if (id_v0682273.global_index <= 0) continue;
         const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.global_index - 1);
-        if (slot_v0682273 >= detail_xilev_v0682341.size() || level_seen_v0682273[slot_v0682273]) continue;
-        const bool keep_detail_v0682341 = detail_xilev_v0682341[slot_v0682273] > 1.0e-34;
-        if (const char* diag_v0682341 = std::getenv("XSTAR_NVI_DETAIL_DIAG")) {
-            if (*diag_v0682341 && std::string(diag_v0682341) != "0" &&
-                id_v0682273.atomic_number == 7 && id_v0682273.ion_label == "n_vi" &&
-                id_v0682273.upper_index >= 45 && id_v0682273.upper_index <= 58) {
-                const double ordinary_v0682341 = slot_v0682273 < source.source_global_xilevg.size()
-                    ? source.source_global_xilevg[slot_v0682273] : 0.0;
-                std::cerr << std::setprecision(17)
-                          << "V0682341_NVI_SAVD"
-                          << " sequence=" << source.sequence
-                          << " upper=" << id_v0682273.upper_index
-                          << " global=" << id_v0682273.global_index
-                          << " detail=" << detail_xilev_v0682341[slot_v0682273]
-                          << " ordinary=" << ordinary_v0682341
-                          << " keep=" << (keep_detail_v0682341 ? 1 : 0) << "\n";
-            }
-        }
-        if (keep_detail_v0682341) {
+        if (slot_v0682273 >= source.source_global_xilevg.size() || level_seen_v0682273[slot_v0682273]) continue;
+        if (source.source_global_xilevg[slot_v0682273] > 1.0e-34) {
             out.saved_level_slots_v0682273.push_back(slot_v0682273);
             level_seen_v0682273[slot_v0682273] = 1u;
         }

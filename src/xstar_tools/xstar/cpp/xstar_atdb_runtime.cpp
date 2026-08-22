@@ -1798,93 +1798,61 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         // identities.  Retain a dedicated source-role identity inventory for
         // xo01_detail.fits, using setptrs npilev addresses for every element.
         for (const auto& detail_block : l.blocks) {
-            // 0.6.82.34.1: literal setptrs/fstepr ownership is the npilev
-            // source-encounter ordinal, not the packed Type-13 local id.  Walk
-            // npilev itself and recover labels/energies from the exact source
-            // record.  A packed-local lookup can legally alias a later source
-            // record and was the reason the N VI roles 50--55 were skipped.
-            for (std::size_t source_ordinal = 1; source_ordinal < d.npilev.size(); ++source_ordinal) {
-                if (detail_block.ion_index <= 0 ||
-                    static_cast<std::size_t>(detail_block.ion_index) >= d.npilev[source_ordinal].size()) continue;
-                const int detail_global =
-                    d.npilev[source_ordinal][static_cast<std::size_t>(detail_block.ion_index)];
-                if (detail_global <= 0 ||
-                    static_cast<std::size_t>(detail_global) >= d.level_record_by_global.size()) continue;
-                const int source_record =
-                    d.level_record_by_global[static_cast<std::size_t>(detail_global)];
-                if (source_record <= 0) continue;
-                const auto rv = db.reals(source_record);
-                const auto iv = db.ints(source_record);
-                if (rv.size() < 2 || iv.size() < 2) {
-                    throw std::runtime_error("source Type-13 detail role has short payload");
+            for (int local = 1; local <= detail_block.nlev; ++local) {
+                const auto* detail_level = find_level(l, detail_block.ion_index, local);
+                if (!detail_level) continue;
+                int detail_global = d.level_global_by_record[detail_level->record];
+                if (local > 0 && static_cast<std::size_t>(local) < d.npilev.size() &&
+                    detail_block.ion_index > 0 &&
+                    static_cast<std::size_t>(detail_block.ion_index) < d.npilev[static_cast<std::size_t>(local)].size()) {
+                    const int source_global =
+                        d.npilev[static_cast<std::size_t>(local)][static_cast<std::size_t>(detail_block.ion_index)];
+                    if (source_global > 0) detail_global = source_global;
                 }
-                const int packed_local = db.local_level(source_record);
-
+                if (detail_global <= 0) continue;
                 xstar_run_state::LevelIdentityState detail_id;
                 detail_id.global_index = detail_global;
                 detail_id.ion_index = z;
-                detail_id.excitation_ev = rv[0];
+                detail_id.excitation_ev = detail_level->energy;
                 detail_id.ion_label = normalized_ion_label(detail_block);
                 detail_id.atomic_number = z;
-                detail_id.ion_stage = static_cast<std::int16_t>(detail_block.ion_stage);
-                detail_id.level_label = db.chars(source_record);
-                detail_id.upper_index = static_cast<std::int16_t>(source_ordinal);
-                // Provenance only.  The publication population projection below
-                // uses source ordinal + immutable ion topology, not this alias.
-                const auto detail_row = l.role_to_row.find({detail_block.ion_index, packed_local});
-                if (detail_row != l.role_to_row.end()) {
-                    detail_id.population_row_one_based = detail_row->second;
-                }
-                if (const char* diag = std::getenv("XSTAR_NVI_DETAIL_DIAG")) {
-                    if (*diag && std::string(diag) != "0" && z == 7 &&
-                        detail_id.ion_label == "n_vi" &&
-                        detail_id.upper_index >= 45 && detail_id.upper_index <= 58) {
-                        std::cerr << "V0682341_NVI_ATDB_ROLE"
-                                  << " upper=" << detail_id.upper_index
-                                  << " global=" << detail_id.global_index
-                                  << " source_record=" << source_record
-                                  << " packed_local=" << packed_local
-                                  << " population_row=" << detail_id.population_row_one_based
-                                  << " label=" << detail_id.level_label << "\n";
-                    }
-                }
+                detail_id.level_label = detail_level->label;
+                detail_id.upper_index = static_cast<std::int16_t>(local);
                 out.detail_level_identities.push_back(std::move(detail_id));
             }
         }
-        // 0.6.82.34: fstepr3/heatt/writespectra4 do not scan the flattened
-        // npcon inventory.  They walk each ion's literal rate-type-7 npfi
-        // chain and then obtain kkkl from npconi2(ml).  Retain exactly that
-        // ownership/order so source-only rows (for example Ni VI 144628) are
-        // not lost and unrelated flattened-continuum aliases cannot leak into
-        // Si VI public RRC output.  This remains publication metadata only;
-        // no record is inserted into the executable fixed-state program.
-        for (const auto& source_block : l.blocks) {
-            const int source_ion = source_block.ion_index;
-            if (source_ion <= 0 || source_ion > d.n_ions ||
-                static_cast<std::size_t>(source_ion) >= d.npfi[7].size()) continue;
-            const int parent = d.ion_records[source_ion];
-            int rec = d.npfi[7][source_ion];
-            int guard = 0;
-            while (rec > 0 && rec < static_cast<int>(d.npar.size()) && d.npar[rec] == parent) {
-                const auto& h = db.header(rec);
-                if (h.rate_type != 7) break;
-                const int continuum_index = d.npconi2[static_cast<std::size_t>(rec)];
-                if (continuum_index <= 0 || static_cast<std::size_t>(continuum_index) >= d.npcon.size()) {
-                    rec = d.npnxt[rec];
-                    if (++guard > static_cast<int>(db.record_count())) throw std::runtime_error("ATDB source RRC chain cycle");
-                    continue;
-                }
+        // 0.6.48.12.3.43.1.1.1: source RRC publication ownership follows
+        // setptrs.f90's one-based continuum pointer table directly:
+        //     npcon(jkkl) = ml
+        // writespectra4 then publishes the rate-type-7 members of that table.
+        // Do not reconstruct this surface through d.npfi: 43.1.1 showed that
+        // the per-ion reconstruction can omit a source continuum identity
+        // (Ca XIII continuum 23595) even though the canonical npcon ordinal
+        // exists.  This scan is publication metadata only; it never inserts a
+        // record into records_by_z and therefore cannot change rate/matrix
+        // execution.
+        for (std::size_t continuum_index = 1; continuum_index < d.npcon.size(); ++continuum_index) {
+            const int rec = d.npcon[continuum_index];
+            if (rec <= 0 || rec >= static_cast<int>(d.npar.size())) continue;
+            const auto& h = db.header(rec);
+            if (h.rate_type != 7) continue;
+            const int parent = d.npar[static_cast<std::size_t>(rec)];
+            const auto ion_it = ion_record_to_index.find(parent);
+            if (ion_it == ion_record_to_index.end()) continue;
+            const int source_ion = ion_it->second;
+            if (source_ion <= 0 || source_ion > d.n_ions || d.ion_element_z[source_ion] != z) continue;
             const auto iv = db.ints(rec);
             const int local = iv.size() >= 2 ? static_cast<int>(iv[iv.size()-2]) : 1;
             const int upper_seed = iv.size() >= 4 ? static_cast<int>(iv[iv.size()-4]) : 0;
             const auto* lv = find_level(l, source_ion, local);
+            const auto& source_block = block_for(l, source_ion);
             int source_global = 0;
             if (local > 0 && static_cast<std::size_t>(local) < d.npilev.size() &&
                 static_cast<std::size_t>(source_ion) < d.npilev[static_cast<std::size_t>(local)].size()) {
                 source_global = d.npilev[static_cast<std::size_t>(local)][static_cast<std::size_t>(source_ion)];
             }
             xstar_run_state::RrcIdentityState id;
-            id.continuum_index = continuum_index;
+            id.continuum_index = static_cast<int>(continuum_index);
             id.level_global_index = source_global > 0 ? source_global :
                 (lv ? d.level_global_by_record[lv->record] : 0);
             const double source_threshold = lv ? (lv->ionpot - lv->energy) : 0.0;
@@ -1896,14 +1864,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
             id.upper_local_index = upper_seed > 0 ? source_block.nlev + upper_seed - 1 : 0;
             id.rate_type = h.rate_type;
             id.source_record = rec;
-            id.atomic_number = static_cast<std::int16_t>(z);
-            id.ion_stage = static_cast<std::int16_t>(source_block.ion_stage);
             out.source_rrc_identities.push_back(std::move(id));
-                const int next = d.npnxt[rec];
-                if (next == rec) throw std::runtime_error("ATDB source RRC record self-cycle");
-                rec = next;
-                if (++guard > static_cast<int>(db.record_count())) throw std::runtime_error("ATDB source RRC chain cycle");
-            }
         }
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
@@ -1981,9 +1942,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
     std::sort(out.source_rate_identities.begin(),out.source_rate_identities.end(),[](const auto&a,const auto&b){return a.source_record<b.source_record;});
     std::sort(out.line_identities.begin(),out.line_identities.end(),[](const auto&a,const auto&b){return a.line_index<b.line_index;});
     std::sort(out.rrc_identities.begin(),out.rrc_identities.end(),[](const auto&a,const auto&b){return a.continuum_index<b.continuum_index;});
-    // Preserve literal source traversal for HEATT duplicate-overwrite
-    // semantics.  Element/ion blocks are already visited in source order and
-    // each npfi(7,ion) chain is traversed through npnxt above.
+    std::sort(out.source_rrc_identities.begin(),out.source_rrc_identities.end(),[](const auto&a,const auto&b){return a.continuum_index<b.continuum_index;});
     return out;
 }
 

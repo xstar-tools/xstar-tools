@@ -13232,12 +13232,8 @@ int run_impl(
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
-        const char* nvi_detail_diag_env_v0682342 = std::getenv("XSTAR_NVI_DETAIL_DIAG");
-        const bool nvi_solve_lifetime_diag_v0682342 =
-            nvi_detail_diag_env_v0682342 && *nvi_detail_diag_env_v0682342 &&
-            std::string(nvi_detail_diag_env_v0682342) != "0" && element.element_z == 7;
         const bool capture_element_solve_response = all_element_solve_response || all_element_solve_system ||
-            (helium_solve_response && element.element_z == 2) || nvi_solve_lifetime_diag_v0682342;
+            (helium_solve_response && element.element_z == 2);
         if (capture_element_solve_response) {
             ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY;
         }
@@ -13748,49 +13744,6 @@ int run_impl(
             element_diagnostic.solver_status_flags = eout.status_flags;
             element_diagnostic.outer_iterations = eout.outer_iterations;
             element_diagnostic.fixed_point_iterations = eout.fixed_point_iterations;
-        }
-        // 0.6.82.34.2 qualification-only N VI solve-lifetime trace.  The
-        // .34.1 host return proved literal source-role ownership but also
-        // proved that the final pre-mapback population is not the value seen
-        // by canonical fstepr for N VI source roles 50--55.  Report the
-        // already-computed solver stage surfaces so the publication owner can
-        // be selected from evidence rather than by weakening the 1e-34 gate.
-        // This block is observational only and never mutates solver/product state.
-        if (nvi_solve_lifetime_diag_v0682342 && element_diagnostic.solve_response_captured &&
-            element_diagnostic.solve_stage_trace_captured) {
-            const auto topo_it_v0682342 = std::find_if(
-                ctx.program.lte_ion_topology.begin(), ctx.program.lte_ion_topology.end(),
-                [&](const auto& topo) {
-                    return topo.element_index == element_diagnostic.element_index && topo.ion_stage == 6;
-                });
-            if (topo_it_v0682342 != ctx.program.lte_ion_topology.end()) {
-                for (int upper_v0682342 = 45; upper_v0682342 <= 58; ++upper_v0682342) {
-                    if (upper_v0682342 > topo_it_v0682342->nlev) continue;
-                    const int full_row_v0682342 = topo_it_v0682342->start_row + upper_v0682342 - 1;
-                    if (full_row_v0682342 < element_diagnostic.active.full_row_start ||
-                        full_row_v0682342 > element_diagnostic.active.full_row_end) continue;
-                    const std::size_t index_v0682342 = static_cast<std::size_t>(
-                        full_row_v0682342 - element_diagnostic.active.full_row_start);
-                    const auto get_v0682342 = [&](const std::vector<double>& values) {
-                        return index_v0682342 < values.size() ? values[index_v0682342] : 0.0;
-                    };
-                    std::cerr << std::setprecision(17)
-                              << "V0682342_NVI_SOLVE_STAGE"
-                              << " sequence=" << environment_data_type("XSTAR_NATIVE_SOURCE_SEQUENCE")
-                              << " upper=" << upper_v0682342
-                              << " full_row=" << full_row_v0682342
-                              << " active_row=" << (index_v0682342 + 1u)
-                              << " initial=" << get_v0682342(element_diagnostic.active_initial_populations)
-                              << " outer_start=" << get_v0682342(element_diagnostic.active_final_outer_start_populations)
-                              << " after_condensed=" << get_v0682342(element_diagnostic.final_population_after_condensed)
-                              << " fixed_before=" << get_v0682342(element_diagnostic.final_fixed_point_population_before)
-                              << " fixed_after=" << get_v0682342(element_diagnostic.final_fixed_point_population_after)
-                              << " final=" << get_v0682342(element_diagnostic.active_final_populations)
-                              << " outer_iterations=" << element_diagnostic.final_outer_iteration
-                              << " fixed_iterations=" << element_diagnostic.final_fixed_iterations
-                              << "\n";
-                }
-            }
         }
         write_c_call1_compact_solve_attribution(ctx.program, element_diagnostic);
         ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.35 - FORTRAN/C++ work and memory equivalence audit foundation - 2026-08-22
+
+- Start the `.35` performance/memory campaign from the accepted `0.6.82.33.8` source/lifetime architecture; do not promote the host-rejected/forensic `.34`, `.34.1`, or `.34.2` publication experiments.
+- Archive the `.34` findings in `deferred_publication_findings_0_6_82_34.md`. The N VI six-row discrepancy is now known to originate upstream of publication: source identities/compact rows are correct, but the C++ solver keeps the affected microstates at ~1e-52 to ~1e-310 at every sampled lifetime while FORTRAN publishes ~1e-33 to ~1e-31. Public science remained accepted, so no threshold weakening, hard-coded N VI rows, or FORTRAN-value substitution is promoted.
+- Record that extreme tiny-state differences may plausibly involve historical math-function/constants/evaluation-order behavior (including constants documented in `src/xstar_tools/xstar/cpp/constants.def`), but defer that forensic work unless later evidence shows material scientific significance.
+- Add `work_memory_equivalence_audit_0_6_82_35.md` with the `.35` measurement contract: compare fixed-state/record/rate/Type50/matrix/iteration/transport work and explain the C++ RSS gap by owner/category before optimizing.
+- Add `tools/qualification/run_work_memory_equivalence_host_0_6_82_35.py`. It defaults to Fe, makes C5 opt-in, requires explicit `--allow-broad` for the expensive broad model, runs canonical FORTRAN and C++ on the same host, collects `/usr/bin/time -v` wall/RSS, verifies public science, and captures existing detailed C++ work/memory telemetry. Comparable FORTRAN work counters are deliberately reported as pending rather than inferred from runtime.
+- Add `tools/qualification/check_work_memory_equivalence_0_6_82_35.py` and preserve the post-`.40` XSTAR2XSPEC/grid/MHD roadmap in `future_development_after_0_6_82_40.md`.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, strict-FP requirements, `.33.8` O(1) publication lifetime architecture, and C++-first qualification policy unchanged.
+
 ## 0.6.82.34.2 - N VI publication-time population lifetime forensic - 2026-08-22
 
 - Revise host-rejected `0.6.82.34.1`; H+He+N science remains ACCEPT, but the same six N VI `xo01_detail` roles 50--55 remain absent.
