@@ -9,7 +9,7 @@
 - Make `reconstruct_public_line_luminosity()` consume the exact ledger only when the compact-production owner is marked exact. `select_public_lines()` therefore keeps identical identity/ranking logic, and `build_writer_time_binemis()` uses the same exact owner even if the cumulative vector is numerically all zero. Legacy reconstruction remains unchanged for reference/diagnostic/multipass/noncompact modes.
 - Add `V0682338_LINE_LUMINOSITY_*` telemetry and a mandatory host gate requiring fixed-native mode, exact marker, native two-plane shape, `accepted_boundaries-1` accumulated shells, and O(line-workspace) bytes independent of zone count.
 - Keep exact `.32` raw FITS-HDU payload comparison mandatory for every product, explicitly including `xout_lines1.fits` and `xout_spect1.fits`; retain the C5 RSS objective `<=0.20` of same-host `.32`.
-- Keep science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, and the deferred `0.6.82.34` correctness backlog unchanged.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, and ABIs `60487 / 6048110 / 60488`.
 
 ## 0.6.82.33.7 - compact radial abundance-publication hotfix - 2026-08-21
 
@@ -18,7 +18,7 @@
 - Retain only the small deferred abundance-publication surfaces in compact historical zones: source `xii` ion-stage fractions, per-element thermal rows, H/He/Mg thermal fallback scalars, continuum Compton/free-free/brems totals, and the native-thermal ownership flag. These restore ABUNDANCES/COLUMNS/HEATING/COOLING without reintroducing populations, dense line/RRC arrays, global rate maps, or detail diagnostics.
 - Host forensic showed the `.33.6` first historical Fe row alone lost ion fractions and thermal components while the full terminal physical row remained exact; `xo01_detail`, `xo01_detal2`, `xo01_detal3`, and `xo01_detal4` remained bit-exact.
 - Keep the `.33.6` compact-retention telemetry namespace (`V0682336_*`) for direct before/after host comparison; `.33.7` changes the package/qualification result namespace only.
-- Keep science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, and the deferred `0.6.82.34` publication-correctness backlog unchanged.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, and ABIs `60487 / 6048110 / 60488`.
 
 ## 0.6.82.33.6 - compact completed radial-zone retention - 2026-08-21
 
@@ -29,7 +29,7 @@
 - Prevent `retain_controller_owned_product_workspaces()` from silently reconstructing released dense line/RRC arrays for compact historical zones. Full terminal zones continue using the frozen cumulative source-workspace ownership path.
 - Add `V0682336_COMPACT_RADIAL_*`, `V0682336_FULL_RADIAL_ZONES_*`, and `V0682336_COMPACT_RETENTION_GATE`. The gate requires legacy finals peak zero, pending-final peak count <=1, full radial-zone peak count <=2, and exactly `accepted_boundaries-1` compact historical zones.
 - Do not change line/RRC publication, terminal `detal2` patching, transport/controller arithmetic, spectral mathematics, REAL(4) conversion points, science revision `0.6.48.12.3.45.3.3.8`, or ABIs `60487 / 6048110 / 60488`.
-- Keep the deferred `0.6.82.34` correctness scope unchanged: N VI six missing `xo01_detail` rows; Cr II binary32-min-subnormal `xo01_detal2`; O IV extra / Mg II missing `xo01_detal3`; source-local `cemab/cabab/opakab/tauc`; Si VI / Ni VI public RRC ownership; exact HEATT two-plane `1e-49` gating and duplicate-overwrite semantics.
+- Keep the deferred `.82.34` correctness scope unchanged: N VI six missing `xo01_detail` rows; Cr II binary32-min-subnormal `xo01_detal2`; O IV extra / Mg II missing `xo01_detal3`; source-local `cemab/cabab/opakab/tauc`; Si VI / Ni VI public RRC ownership; exact HEATT two-plane `1e-49` gating and duplicate-overwrite semantics.
 
 ## 0.6.82.33.5 - zero-preserving lifetime qualification hotfix - 2026-08-21
 
@@ -37,7 +37,7 @@
 - Preserve the complete `.33.4` C++ lifetime/publication implementation byte-for-byte. In particular, ordinary single-pass production still uses one pending newest `FixedDsecSnapshot`, immediately transfers completed prior snapshots into unchanged `whole.radial_zones`, and reports the existing `V0682334_*` O(1) telemetry.
 - Fix the host parser bug that converted a legitimate `V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=0` into sentinel `999`: `int(candidate_perf.get(..., 999) or 999)` treated numeric zero as false. `.33.5` uses an explicit `None`/missing check so zero remains zero.
 - Add regression coverage proving zero-valued integer telemetry survives parsing and missing markers still map to the requested sentinel. Keep the `.32` exact science/FITS baseline, Fe/C5 RSS objectives, and performance gates unchanged.
-- Keep the deferred `0.6.82.34` correctness scope unchanged: N VI six missing `xo01_detail` rows; Cr II binary32-min-subnormal `xo01_detal2`; O IV extra / Mg II missing `xo01_detal3`; source-local `cemab/cabab/opakab/tauc`; Si VI / Ni VI public RRC ownership; exact HEATT two-plane `1e-49` gating and duplicate-overwrite semantics.
+- Keep the deferred `.82.34` correctness scope unchanged: N VI six missing `xo01_detail` rows; Cr II binary32-min-subnormal `xo01_detal2`; O IV extra / Mg II missing `xo01_detal3`; source-local `cemab/cabab/opakab/tauc`; Si VI / Ni VI public RRC ownership; exact HEATT two-plane `1e-49` gating and duplicate-overwrite semantics.
 
 ## 0.6.82.33.4 - O(1) accepted-boundary snapshot lifetime - 2026-08-21
 
@@ -49,9 +49,9 @@
 - Add `V0682334_FINAL_TRANSFER_MODE`, accepted-boundary count, retained-final current/peak count and bytes/capacity, and `V0682334_FINAL_SNAPSHOTS_O1`. The host gate requires ordinary single-pass candidates to report `IMMEDIATE_SINGLE_PASS_PRODUCTION`, `V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=0`, peak retained-final count <=1, and `V0682334_FINAL_SNAPSHOTS_O1=ACCEPT`.
 - Tighten the routine C5 memory objective to candidate RSS <=30% of a fresh same-host accepted `.32` run, while retaining Fe <=1.03x and keeping the expensive broad model explicit/milestone-only.
 
-### Deferred `0.6.82.34` publication correctness closure
+### Deferred `.82.34` publication correctness closure
 
-After the `.31-.33` performance-lifetime restructuring is stable, close the previously deferred publication discrepancies without mixing them into `.33.4`: N VI six missing `xo01_detail` rows; Cr II `xo01_detal2` binary32-min-subnormal behavior; O IV extra / Mg II missing `xo01_detal3` RRC membership; source-local `cemab/cabab/opakab/tauc` detail values; Si VI / Ni VI public RRC ownership; and exact HEATT two-plane `1e-49` source gating plus duplicate overwrite semantics. `0.6.82.34` remains correctness-first, with performance changes only when incidental and science-neutral.
+After the `.31-.33` performance-lifetime restructuring is stable, close the previously deferred publication discrepancies without mixing them into `.33.4`: N VI six missing `xo01_detail` rows; Cr II `xo01_detal2` binary32-min-subnormal behavior; O IV extra / Mg II missing `xo01_detal3` RRC membership; source-local `cemab/cabab/opakab/tauc` detail values; Si VI / Ni VI public RRC ownership; and exact HEATT two-plane `1e-49` source gating plus duplicate overwrite semantics. `.82.34` remains correctness-first, with performance changes only when incidental and science-neutral.
 
 ## 0.6.82.33.3 - terminal detal2 bulk-FITS ownership hotfix - 2026-08-21
 
