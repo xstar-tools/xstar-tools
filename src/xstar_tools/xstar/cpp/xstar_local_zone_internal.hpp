@@ -63,6 +63,17 @@ struct PerformanceFoundationV068231 {
     std::uint64_t spectral_workspace_reuses = 0u;
     std::uint64_t persistent_reserved_bytes = 0u;
     std::uint64_t persistent_peak_reserved_bytes = 0u;
+    // 0.6.82.35.1: observation-only element/matrix work counters.
+    std::uint64_t element_solve_calls = 0u;
+    std::uint64_t matrix_rows_sum = 0u;
+    std::uint64_t matrix_rows_max = 0u;
+    std::uint64_t matrix_terms_sum = 0u;
+    std::uint64_t matrix_terms_max = 0u;
+    std::uint64_t matrix_superlevels_sum = 0u;
+    std::uint64_t matrix_superlevels_max = 0u;
+    std::uint64_t population_outer_iterations = 0u;
+    std::uint64_t population_fixed_iterations = 0u;
+    std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 
 void capture_performance_foundation_v068231(

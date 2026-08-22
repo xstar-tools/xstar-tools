@@ -12436,6 +12436,9 @@ int run_impl(
                 EvaluatedRecord item = evaluate_record(
                     ctx.program, element, record, input, rate_context_v064894);
                 ++stats.records_evaluated;
+                if (record.data_type >= 0 && record.data_type < static_cast<int>(perf_foundation_v068231.evaluated_records_by_type.size())) {
+                    ++perf_foundation_v068231.evaluated_records_by_type[static_cast<std::size_t>(record.data_type)];
+                }
                 if (record.data_type == 56) ++stats.type56_records_evaluated;
                 stats.rate_seconds += elapsed(rate_start);
                 return item;
@@ -13268,6 +13271,21 @@ int run_impl(
         stats.element_seconds += residual_element_solve_seconds_v064812339;
         residual_audit_v064812339.element_solve_seconds = residual_element_solve_seconds_v064812339;
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
+        ++perf_foundation_v068231.element_solve_calls;
+        perf_foundation_v068231.matrix_rows_sum += static_cast<std::uint64_t>(std::max(active.element.n_rows, 0));
+        perf_foundation_v068231.matrix_rows_max = std::max(
+            perf_foundation_v068231.matrix_rows_max,
+            static_cast<std::uint64_t>(std::max(active.element.n_rows, 0)));
+        perf_foundation_v068231.matrix_terms_sum += static_cast<std::uint64_t>(contributions.size());
+        perf_foundation_v068231.matrix_terms_max = std::max(
+            perf_foundation_v068231.matrix_terms_max,
+            static_cast<std::uint64_t>(contributions.size()));
+        perf_foundation_v068231.matrix_superlevels_sum += static_cast<std::uint64_t>(std::max(active.element.n_superlevels, 0));
+        perf_foundation_v068231.matrix_superlevels_max = std::max(
+            perf_foundation_v068231.matrix_superlevels_max,
+            static_cast<std::uint64_t>(std::max(active.element.n_superlevels, 0)));
+        perf_foundation_v068231.population_outer_iterations += static_cast<std::uint64_t>(std::max(eout.outer_iterations, 0));
+        perf_foundation_v068231.population_fixed_iterations += static_cast<std::uint64_t>(std::max(eout.fixed_point_iterations, 0));
         if (element_consumed_thermal_ledger_fingerprint != canonical_thermal_ledger.fingerprint ||
             (eout.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER) == 0u) {
             throw std::runtime_error("element engine did not consume the canonical Thermal ledger");

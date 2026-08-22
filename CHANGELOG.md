@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.35.1 - canonical FORTRAN/C++ work-counter instrumentation - 2026-08-22
+
+- Revise host-measured `0.6.82.35` under the no-version-reuse rule. The same-host Fe baseline retained exact public science but measured C++/FORTRAN wall ratio `1.737314` and RSS ratio `1.821761` (`108.788731 s / 4,695,773,184 B` versus `62.618935 s / 2,577,600,512 B`).
+- Keep the scientific revision, solver formulas, accepted `.33.8` publication lifetime architecture, and public ABIs unchanged. `.35.1` is observation-only instrumentation.
+- Add `tools/qualification/fortran_work_counters_0682351.patch`, generated against the supplied canonical XSTAR 2.59g source. It counts `xstarcalc`/DSEC/HMC calls, actual `ucalc` rate evaluations by data type, Lucy/LU matrix solves and dimensions, population/controller iterations, transport/radial calls, continuum-bin work, detail rows, and top-level logical memory categories.
+- Add matching C++ counters for element solves, matrix rows/contribution terms/superlevels, population iterations, and actual evaluated records by data type. Existing fixed-state, Type50, spectral, bound-free, detail-publication, and memory telemetry remains unchanged.
+- Extend the host runner to require the instrumented FORTRAN build, capture `/usr/bin/time -v` major/minor faults and filesystem I/O, and write diagnostic C++/FORTRAN counter ratios. `.35.1` reports `MEASURED_COMPLETE_COUNTERS`; these ratios are measurement mappings, not parity acceptance gates.
+- Record a major memory-architecture observation from canonical FORTRAN source: XSTAR declares large reusable/sparsely touched arrays. `zrtmp(999,999999)` alone has about 7.44 GiB logical size while measured Fe process RSS is only about 2.40 GiB. The per-element HMC solver also owns roughly 1 GiB of reusable matrix/rate workspace. Therefore `.35` must distinguish logical/virtual allocation from physically touched resident pages and investigate whether C++ eagerly initializes/duplicates equivalent state.
+- Keep C5 opt-in and the expensive broad multi-element model milestone-only behind explicit `--allow-broad`.
+
 ## 0.6.82.35 - FORTRAN/C++ work and memory equivalence audit foundation - 2026-08-22
 
 - Start the `.35` performance/memory campaign from the accepted `0.6.82.33.8` source/lifetime architecture; do not promote the host-rejected/forensic `.34`, `.34.1`, or `.34.2` publication experiments.
