@@ -53,12 +53,17 @@ struct LevelIdentityState {
     double excitation_ev = 0.0;
     std::string ion_label;
     std::int16_t atomic_number = 0;
+    // 0.6.82.34.1: physical source ion stage is retained independently of
+    // ion_index (the public FITS column).  fstepr source-role ownership is
+    // resolved through the immutable LTE ion topology, not through a compact
+    // alias guessed from the public/global identity.
+    std::int16_t ion_stage = 0;
     std::string level_label;
     std::int16_t upper_index = 0;
-    // 0.6.82.34: source-role publication must be able to project the solved
-    // pre-mapback population through the literal (ion, local-level) role even
-    // when that role shares a compact row with the adjacent ion.  This is the
-    // one-based compact population row for that exact source role.
+    // Diagnostic/provenance only.  0.6.82.34 used this compact-row guess as
+    // the publication owner; that is source-wrong when Type-13 encounter
+    // ordinal and packed local identifiers diverge.  .34.1 no longer consumes
+    // this field for source-detail population projection.
     std::int32_t population_row_one_based = 0;
 };
 

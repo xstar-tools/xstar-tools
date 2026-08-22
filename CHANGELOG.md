@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.82.34.1 - N VI source-detail publication ownership hotfix - 2026-08-22
+
+- Revise rejected host-tested `0.6.82.34`; the focused H+He+N case retained accepted science/STEP behavior, but `xo01_detail.fits` omitted the same six FORTRAN N VI rows (global identities 839--844 / source upper roles 50--55) in all 11 radial HDUs.  The immediately following N VI roles 56--58 remained present, localizing the failure to source-detail ownership rather than the N VI solver trajectory.
+- Preserve frozen science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, strict floating-point policy, and all `.33.8` lifetime/memory architecture.
+- Fix the concrete ATDB lowering error: source detail traversal now walks literal `npilev(source_ordinal, ion)` and derives the public label/energy/global identity directly from that exact Type-13 source record.  The rejected `.34`/early `.34.1` path resolved the source global correctly and then re-looked it up through the packed-local level table; when a packed-local alias was owned by another Type-13 record, the record-identity check silently skipped a valid source role.  No N-specific/global-index production special case is introduced.
+- Retain the physical source ion stage in `detail_level_identities` and project each source `npilev` role through `lte_ion_topology -> start_row + upper_index - 1 -> element row_offset -> solved pre-mapback population`; `population_row_one_based` is retained only as diagnostic provenance.
+- Make SAVD/fstepr level-membership selection use the dedicated `source_detail_global_xilevg` publication projection.  UNSAVD/controller restoration continues to consume ordinary `source_global_xilevg`, so publication-only reconstruction cannot feed back into science.
+- Add `XSTAR_NVI_DETAIL_DIAG=1`, an observational qualification-only trace.  It reports N VI source roles 45--58 during ATDB lowering and reports `detail`, ordinary-global, and sparse-SAVD keep decisions at each boundary.  The flag is never read by solver, matrix, rates, controller, transport, or publication arithmetic.
+- Strengthen `.34.1` source/oracle validation to require literal `npilev` traversal, exact Type-13 source-record metadata, physical ion-stage topology projection, and the publication-only SAVD boundary.  Local result: 37/37 source/oracle checks ACCEPT, 9/9 focused tests pass, and strict C++17 frontend compilation passes for all changed translation units.
+- Continue the focused sequence one case at a time: rerun `n_detail` first; do not proceed to O/Mg/Si/Ni/Cr or the broad model until N accepts.
+- Scope the rejected `0.6.82.34` source-assertion pytest module to its exact historical package version so a normal `.34.1` test run does not report obsolete `.34` implementation expectations; `.34.1` has its own replacement regression module.
+
 ## 0.6.82.34 - deferred source-publication correctness closure - 2026-08-22
 
 - Close the `0.6.82.33` lifetime/performance-architecture series on `0.6.82.33.8`.  Fe and C5 are fully accepted; the broad 15-element `.33.8` model retains exact science, STEP, raw FITS payload, O(1) final-snapshot lifetime, compact radial retention, and fixed-size line-luminosity ownership while documenting the unresolved broad performance gate (`~7255 s` C++ and detail-line CPU staging regression) and the remaining memory gap (`~11.8 million kB` max RSS versus historical FORTRAN `~2.5 million kB`).  Do not reopen `.33.8` to chase that performance gate.

@@ -13484,27 +13484,40 @@ std::vector<double> source_detail_global_projection(
         }
     }
 
-    // 0.6.82.34: fstepr publishes literal source Type-13 roles, not only the
-    // compact row's preferred/global alias.  Some late source roles (the six
-    // N VI upper levels 50--55 are the broad-model witness) are valid npilev
-    // identities but are not represented by population_global_level_aliases.
-    // Project every retained detail identity through the exact compact row
-    // captured by the ATDB lowerer.  This is publication-only: solver rows and
-    // the pre-mapback solution are unchanged.
+    // 0.6.82.34.1: fstepr publishes literal source npilev roles.  The public
+    // `upper_index` is the source Type-13 encounter ordinal; it must not be
+    // reinterpreted through role_to_row / a packed-local-id alias.  Resolve
+    // the physical ion through immutable LTE topology and project that source
+    // ordinal directly into the solved pre-mapback element row basis.  This is
+    // publication-only: solver rows, controller state, and UNSAVD ownership
+    // remain unchanged.
     for (const auto& identity : data.program->detail_level_identities) {
         if (identity.global_index <= 0 ||
             static_cast<std::size_t>(identity.global_index) > dense.size() ||
-            identity.population_row_one_based <= 0) continue;
+            identity.atomic_number <= 0 || identity.ion_stage <= 0 ||
+            identity.upper_index <= 0) continue;
         const auto found = windows.find(identity.atomic_number);
         if (found == windows.end()) continue;
         const auto& window = found->second;
-        const int full_row = identity.population_row_one_based;
-        if (full_row < window[2] || full_row > window[3]) continue;
-        if (window[1] < identity.atomic_number && full_row == window[3]) continue;
+        if (identity.ion_stage < window[0] || identity.ion_stage > window[1]) continue;
+
         const auto element_it = std::find_if(
             data.program->element_metadata.begin(), data.program->element_metadata.end(),
             [&](const auto& element) { return element.atomic_number == identity.atomic_number; });
         if (element_it == data.program->element_metadata.end()) continue;
+
+        const auto topo_it = std::find_if(
+            data.program->lte_ion_topology.begin(), data.program->lte_ion_topology.end(),
+            [&](const auto& topo) {
+                return topo.element_index == element_it->element_index &&
+                    topo.ion_stage == identity.ion_stage;
+            });
+        if (topo_it == data.program->lte_ion_topology.end()) continue;
+        if (identity.upper_index > topo_it->nlev) continue;
+
+        const int full_row = topo_it->start_row + identity.upper_index - 1;
+        if (full_row < window[2] || full_row > window[3]) continue;
+        if (window[1] < identity.atomic_number && full_row == window[3]) continue;
         const std::size_t packed = static_cast<std::size_t>(
             element_it->row_offset + full_row - 1);
         if (packed >= pre_mapback.size()) continue;
@@ -18636,13 +18649,35 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     out.snapshot = source;
 
     // fstepr.f90 writes only source level roles with xilev > 1.d-34.
-    // Determine membership before TFLOAT rounding, exactly as the source does.
-    std::vector<std::uint8_t> level_seen_v0682273(source.source_global_xilevg.size(), 0u);
+    // 0.6.82.34.1: publication membership must use the source-role projection,
+    // not the alias-collapsed controller/global surface.  UNSAVD restoration
+    // below deliberately continues to read source_global_xilevg, so this
+    // correction cannot feed publication-only reconstruction back into science.
+    const auto& detail_xilev_v0682341 = !source.source_detail_global_xilevg.empty()
+        ? source.source_detail_global_xilevg : source.source_global_xilevg;
+    std::vector<std::uint8_t> level_seen_v0682273(detail_xilev_v0682341.size(), 0u);
     for (const auto& id_v0682273 : program.detail_level_identities) {
         if (id_v0682273.global_index <= 0) continue;
         const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.global_index - 1);
-        if (slot_v0682273 >= source.source_global_xilevg.size() || level_seen_v0682273[slot_v0682273]) continue;
-        if (source.source_global_xilevg[slot_v0682273] > 1.0e-34) {
+        if (slot_v0682273 >= detail_xilev_v0682341.size() || level_seen_v0682273[slot_v0682273]) continue;
+        const bool keep_detail_v0682341 = detail_xilev_v0682341[slot_v0682273] > 1.0e-34;
+        if (const char* diag_v0682341 = std::getenv("XSTAR_NVI_DETAIL_DIAG")) {
+            if (*diag_v0682341 && std::string(diag_v0682341) != "0" &&
+                id_v0682273.atomic_number == 7 && id_v0682273.ion_label == "n_vi" &&
+                id_v0682273.upper_index >= 45 && id_v0682273.upper_index <= 58) {
+                const double ordinary_v0682341 = slot_v0682273 < source.source_global_xilevg.size()
+                    ? source.source_global_xilevg[slot_v0682273] : 0.0;
+                std::cerr << std::setprecision(17)
+                          << "V0682341_NVI_SAVD"
+                          << " sequence=" << source.sequence
+                          << " upper=" << id_v0682273.upper_index
+                          << " global=" << id_v0682273.global_index
+                          << " detail=" << detail_xilev_v0682341[slot_v0682273]
+                          << " ordinary=" << ordinary_v0682341
+                          << " keep=" << (keep_detail_v0682341 ? 1 : 0) << "\n";
+            }
+        }
+        if (keep_detail_v0682341) {
             out.saved_level_slots_v0682273.push_back(slot_v0682273);
             level_seen_v0682273[slot_v0682273] = 1u;
         }

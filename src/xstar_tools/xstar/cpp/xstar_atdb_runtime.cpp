@@ -1798,29 +1798,55 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         // identities.  Retain a dedicated source-role identity inventory for
         // xo01_detail.fits, using setptrs npilev addresses for every element.
         for (const auto& detail_block : l.blocks) {
-            for (int local = 1; local <= detail_block.nlev; ++local) {
-                const auto* detail_level = find_level(l, detail_block.ion_index, local);
-                if (!detail_level) continue;
-                int detail_global = d.level_global_by_record[detail_level->record];
-                if (local > 0 && static_cast<std::size_t>(local) < d.npilev.size() &&
-                    detail_block.ion_index > 0 &&
-                    static_cast<std::size_t>(detail_block.ion_index) < d.npilev[static_cast<std::size_t>(local)].size()) {
-                    const int source_global =
-                        d.npilev[static_cast<std::size_t>(local)][static_cast<std::size_t>(detail_block.ion_index)];
-                    if (source_global > 0) detail_global = source_global;
+            // 0.6.82.34.1: literal setptrs/fstepr ownership is the npilev
+            // source-encounter ordinal, not the packed Type-13 local id.  Walk
+            // npilev itself and recover labels/energies from the exact source
+            // record.  A packed-local lookup can legally alias a later source
+            // record and was the reason the N VI roles 50--55 were skipped.
+            for (std::size_t source_ordinal = 1; source_ordinal < d.npilev.size(); ++source_ordinal) {
+                if (detail_block.ion_index <= 0 ||
+                    static_cast<std::size_t>(detail_block.ion_index) >= d.npilev[source_ordinal].size()) continue;
+                const int detail_global =
+                    d.npilev[source_ordinal][static_cast<std::size_t>(detail_block.ion_index)];
+                if (detail_global <= 0 ||
+                    static_cast<std::size_t>(detail_global) >= d.level_record_by_global.size()) continue;
+                const int source_record =
+                    d.level_record_by_global[static_cast<std::size_t>(detail_global)];
+                if (source_record <= 0) continue;
+                const auto rv = db.reals(source_record);
+                const auto iv = db.ints(source_record);
+                if (rv.size() < 2 || iv.size() < 2) {
+                    throw std::runtime_error("source Type-13 detail role has short payload");
                 }
-                if (detail_global <= 0) continue;
+                const int packed_local = db.local_level(source_record);
+
                 xstar_run_state::LevelIdentityState detail_id;
                 detail_id.global_index = detail_global;
                 detail_id.ion_index = z;
-                detail_id.excitation_ev = detail_level->energy;
+                detail_id.excitation_ev = rv[0];
                 detail_id.ion_label = normalized_ion_label(detail_block);
                 detail_id.atomic_number = z;
-                detail_id.level_label = detail_level->label;
-                detail_id.upper_index = static_cast<std::int16_t>(local);
-                const auto detail_row = l.role_to_row.find({detail_block.ion_index, local});
+                detail_id.ion_stage = static_cast<std::int16_t>(detail_block.ion_stage);
+                detail_id.level_label = db.chars(source_record);
+                detail_id.upper_index = static_cast<std::int16_t>(source_ordinal);
+                // Provenance only.  The publication population projection below
+                // uses source ordinal + immutable ion topology, not this alias.
+                const auto detail_row = l.role_to_row.find({detail_block.ion_index, packed_local});
                 if (detail_row != l.role_to_row.end()) {
                     detail_id.population_row_one_based = detail_row->second;
+                }
+                if (const char* diag = std::getenv("XSTAR_NVI_DETAIL_DIAG")) {
+                    if (*diag && std::string(diag) != "0" && z == 7 &&
+                        detail_id.ion_label == "n_vi" &&
+                        detail_id.upper_index >= 45 && detail_id.upper_index <= 58) {
+                        std::cerr << "V0682341_NVI_ATDB_ROLE"
+                                  << " upper=" << detail_id.upper_index
+                                  << " global=" << detail_id.global_index
+                                  << " source_record=" << source_record
+                                  << " packed_local=" << packed_local
+                                  << " population_row=" << detail_id.population_row_one_based
+                                  << " label=" << detail_id.level_label << "\n";
+                    }
                 }
                 out.detail_level_identities.push_back(std::move(detail_id));
             }

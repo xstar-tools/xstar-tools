@@ -5,16 +5,6 @@ import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-
-import re
-import pytest
-
-_CURRENT_VERSION_MATCH = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.MULTILINE)
-_CURRENT_VERSION = _CURRENT_VERSION_MATCH.group(1) if _CURRENT_VERSION_MATCH else ""
-pytestmark = pytest.mark.skipif(
-    _CURRENT_VERSION != "0.6.82.34",
-    reason="rejected 0.6.82.34 source-assertion suite; superseded by the version-specific 0.6.82.34.1 suite",
-)
 ORACLE = ROOT / "qualification/deferred_publication_correctness_0_6_82_34/oracle_targets_from_fortran_multi.json"
 
 
@@ -27,8 +17,8 @@ def oracle() -> dict:
 
 
 def test_version_and_frozen_science_ids():
-    assert 'version = "0.6.82.34"' in text("pyproject.toml")
-    assert "PACKAGE_VERSION ?= 0.6.82.34" in text("src/xstar_tools/xstar/cpp/Makefile")
+    assert 'version = "0.6.82.34.1"' in text("pyproject.toml")
+    assert "PACKAGE_VERSION ?= 0.6.82.34.1" in text("src/xstar_tools/xstar/cpp/Makefile")
     api = text("src/xstar_tools/xstar/cpp/xstar_api.h")
     assert "0.6.48.12.3.45.3.3.8" in api
     # Strict-FP policy remains explicit in the build; no fast-math may enter .34.
@@ -52,12 +42,21 @@ def test_detail_identity_retains_exact_source_population_row():
     h = text("src/xstar_tools/xstar/cpp/xstar_run_state.hpp")
     lower = text("src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp")
     standalone = text("src/xstar_tools/xstar/cpp/xstar_standalone.cpp")
-    assert "population_row_one_based" in h
-    assert "l.role_to_row.find({detail_block.ion_index, local})" in lower
-    assert "detail_id.population_row_one_based = detail_row->second" in lower
-    assert "for (const auto& identity : data.program->detail_level_identities)" in standalone
-    assert "identity.population_row_one_based" in standalone
-    assert "dense[static_cast<std::size_t>(identity.global_index - 1)] = pre_mapback[packed]" in standalone
+    assert "population_row_one_based" in h  # provenance only in .34.1
+    assert "for (std::size_t source_ordinal = 1; source_ordinal < d.npilev.size(); ++source_ordinal)" in lower
+    assert "d.level_record_by_global[static_cast<std::size_t>(detail_global)]" in lower
+    assert "detail_id.level_label = db.chars(source_record)" in lower
+    assert "detail_id.ion_stage = static_cast<std::int16_t>(detail_block.ion_stage)" in lower
+    projection = standalone[standalone.index("std::vector<double> source_detail_global_projection"):
+                            standalone.index("void commit_call2_to_call3_global_state")]
+    assert "data.program->lte_ion_topology.begin()" in projection
+    assert "topo_it->start_row + identity.upper_index - 1" in projection
+    assert "identity.population_row_one_based" not in projection
+    assert "dense[static_cast<std::size_t>(identity.global_index - 1)] = pre_mapback[packed]" in projection
+    saved = standalone[standalone.index("NativeSavedShellV068227 make_saved_shell_v068227"):
+                       standalone.index("xstar_run_state::RadialZoneState saved_shell_radial_zone_v068233")]
+    assert "source.source_detail_global_xilevg" in saved
+    assert "detail_xilev_v0682341" in saved
 
 
 def test_source_rrc_inventory_follows_literal_npfi7_chain():
