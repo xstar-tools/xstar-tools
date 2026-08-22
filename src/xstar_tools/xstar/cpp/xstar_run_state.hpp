@@ -55,6 +55,11 @@ struct LevelIdentityState {
     std::int16_t atomic_number = 0;
     std::string level_label;
     std::int16_t upper_index = 0;
+    // 0.6.82.34: source-role publication must be able to project the solved
+    // pre-mapback population through the literal (ion, local-level) role even
+    // when that role shares a compact row with the adjacent ion.  This is the
+    // one-based compact population row for that exact source role.
+    std::int32_t population_row_one_based = 0;
 };
 
 // `data_type` and `rate_type` retain the two independent atomic-database
@@ -122,6 +127,10 @@ struct RrcIdentityState {
     // Zero is reserved for legacy/synthetic metadata that predates this field.
     std::int32_t rate_type = 0;
     std::int64_t source_record = 0;
+    // 0.6.82.34: retain literal source ownership for HEATT/fstepr3/writespectra4
+    // without reparsing an ion label in the hot/controller path.
+    std::int16_t atomic_number = 0;
+    std::int16_t ion_stage = 0;
 };
 
 struct ExactSourceWorkspaceState {

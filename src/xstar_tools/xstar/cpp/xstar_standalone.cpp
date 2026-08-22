@@ -13483,6 +13483,33 @@ std::vector<double> source_detail_global_projection(
             write_aliases(packed, pre_mapback[packed]);
         }
     }
+
+    // 0.6.82.34: fstepr publishes literal source Type-13 roles, not only the
+    // compact row's preferred/global alias.  Some late source roles (the six
+    // N VI upper levels 50--55 are the broad-model witness) are valid npilev
+    // identities but are not represented by population_global_level_aliases.
+    // Project every retained detail identity through the exact compact row
+    // captured by the ATDB lowerer.  This is publication-only: solver rows and
+    // the pre-mapback solution are unchanged.
+    for (const auto& identity : data.program->detail_level_identities) {
+        if (identity.global_index <= 0 ||
+            static_cast<std::size_t>(identity.global_index) > dense.size() ||
+            identity.population_row_one_based <= 0) continue;
+        const auto found = windows.find(identity.atomic_number);
+        if (found == windows.end()) continue;
+        const auto& window = found->second;
+        const int full_row = identity.population_row_one_based;
+        if (full_row < window[2] || full_row > window[3]) continue;
+        if (window[1] < identity.atomic_number && full_row == window[3]) continue;
+        const auto element_it = std::find_if(
+            data.program->element_metadata.begin(), data.program->element_metadata.end(),
+            [&](const auto& element) { return element.atomic_number == identity.atomic_number; });
+        if (element_it == data.program->element_metadata.end()) continue;
+        const std::size_t packed = static_cast<std::size_t>(
+            element_it->row_offset + full_row - 1);
+        if (packed >= pre_mapback.size()) continue;
+        dense[static_cast<std::size_t>(identity.global_index - 1)] = pre_mapback[packed];
+    }
     return dense;
 }
 
@@ -15503,28 +15530,50 @@ void advance_atomic_luminosities(
     }
     const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u
         ? local_boundary.cemab.size() / 2u : 0u;
-    std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
-    if (data.program) {
-        for (const auto& record : data.program->records) {
-            if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
-            const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
-            if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
-        }
-    }
-    for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
-        if (!rate7_rrc_slot[source_slot]) continue;
+    // 0.6.82.34 / literal heatt.f90 ownership:
+    //   ml=npfi(7,jkk) -> kkkl=npconi2(ml)
+    // and every matching source record computes from the unchanged prior-shell
+    // elumabo.  A duplicate source mapping therefore overwrites/recomputes the
+    // same slot; it does NOT accumulate on the value written by the preceding
+    // duplicate.  Keep one prior copy and traverse the retained literal source
+    // rate-7 identities in source order.  This also avoids restricting HEATT
+    // publication to the executable-data-type subset of program->records.
+    const std::vector<double> prior_rrc_luminosity_v068234 = data.rrc_luminosity;
+    const auto apply_rrc_source_slot_v068234 = [&](std::size_t source_slot) {
+        if (source_slot == 0u || source_slot >= continuum_stride) return;
         const double inward = source_slot < cemab_stride
             ? finite_or(local_boundary.cemab[source_slot], 0.0) : 0.0;
         const std::size_t outward_at = cemab_stride + source_slot;
         const double outward = outward_at < local_boundary.cemab.size()
             ? finite_or(local_boundary.cemab[outward_at], 0.0) : 0.0;
+        // Exact source gate is per plane, not a sum/average threshold.
         if (!(inward > xstar_constants::kLegacyHeattRrcCemabActivityFloor ||
-              outward > xstar_constants::kLegacyHeattRrcCemabActivityFloor)) continue;
+              outward > xstar_constants::kLegacyHeattRrcCemabActivityFloor)) return;
         const double increment = 0.5 * (inward + outward) * delta_radius_cm * fpr2;
         data.rrc_luminosity[source_slot] = std::max(0.0,
-            data.rrc_luminosity[source_slot] + increment);
+            prior_rrc_luminosity_v068234[source_slot] + increment);
         data.rrc_luminosity[continuum_stride + source_slot] = std::max(0.0,
-            data.rrc_luminosity[continuum_stride + source_slot] + increment);
+            prior_rrc_luminosity_v068234[continuum_stride + source_slot] + increment);
+    };
+    if (data.program && !data.program->source_rrc_identities.empty()) {
+        for (const auto& identity : data.program->source_rrc_identities) {
+            if (identity.rate_type != 7 || identity.continuum_index <= 0) continue;
+            apply_rrc_source_slot_v068234(static_cast<std::size_t>(identity.continuum_index));
+        }
+    } else {
+        // Legacy/synthetic fallback for callers without source publication
+        // metadata.  Production standalone runs always use the branch above.
+        std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
+        if (data.program) {
+            for (const auto& record : data.program->records) {
+                if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
+                const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
+                if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
+            }
+        }
+        for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
+            if (rate7_rrc_slot[source_slot]) apply_rrc_source_slot_v068234(source_slot);
+        }
     }
     local_boundary.elumab = data.rrc_luminosity;
 }

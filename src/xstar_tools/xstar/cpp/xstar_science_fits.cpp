@@ -9157,6 +9157,12 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     for (std::size_t identity_ordinal = 0; identity_ordinal < detail_rrc_identities_v06822710.size(); ++identity_ordinal) {
         const auto& id = detail_rrc_identities_v06822710[identity_ordinal];
         if (id.continuum_index <= 0) continue;
+        // 0.6.82.34: the deferred O IV forensic surface showed 45 negative-
+        // threshold aliases in C++ that canonical fstepr3 never publishes.
+        // Detailed source RRC rows are physical bound-free thresholds; keep
+        // only positive source thresholds.  This is publication membership
+        // only and does not remove any executable rate record.
+        if (detail_inventory && !(id.threshold_ev > 0.0)) continue;
         // 0.6.82.27.4: 709 and 762 are frozen-44 compatibility-only Carbon
         // detail identities.  Literal FORTRAN fstepr3 walks the type-7 chain
         // and does not publish these two rows.  Remove them only from detailed
@@ -9203,11 +9209,45 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         row.opacity = rrc_workspace_value_v0682279(
             ws.opakab, source_slot_v06822710, canonical_compact_v06822710,
             detail_rrc_identities_v06822710.size());
+
+        // 0.6.82.34 / literal fstepr3.f90: detailed columns are the LOCAL
+        // source workspaces at npconi2(ml), not cumulative public elumab and
+        // not diagnostic reconstructions:
+        //   cemab(1/2,kkkl), cabab(kkkl), opakab(kkkl), tauc(1/2,kkkl).
+        // Use these arrays whenever the one-based source slot is live.  The
+        // retained bridge remains a fallback for legacy/non-live callers.
+        bool literal_source_detail_v068234 = false;
+        if (detail_inventory && ws.rrc_workspace_exact &&
+            ws.cemab.size() >= 2u && ws.cemab.size() % 2u == 0u) {
+            const std::size_t local_stride_v068234 = ws.cemab.size() / 2u;
+            if (source_slot_v06822710 < local_stride_v068234 &&
+                source_slot_v06822710 < ws.cabab.size() &&
+                source_slot_v06822710 < ws.opakab.size()) {
+                row.emis_in = std::isfinite(ws.cemab[source_slot_v06822710])
+                    ? ws.cemab[source_slot_v06822710] : 0.0;
+                row.emis_out = std::isfinite(ws.cemab[local_stride_v068234 + source_slot_v06822710])
+                    ? ws.cemab[local_stride_v068234 + source_slot_v06822710] : 0.0;
+                row.absorption = std::isfinite(ws.cabab[source_slot_v06822710])
+                    ? ws.cabab[source_slot_v06822710] : 0.0;
+                row.opacity = std::isfinite(ws.opakab[source_slot_v06822710])
+                    ? ws.opakab[source_slot_v06822710] : 0.0;
+                if (ws.rrc_tau_workspace_exact && ws.tauc.size() >= 2u && ws.tauc.size() % 2u == 0u) {
+                    const std::size_t tau_stride_v068234 = ws.tauc.size() / 2u;
+                    if (source_slot_v06822710 < tau_stride_v068234) {
+                        row.tau_in = std::isfinite(ws.tauc[source_slot_v06822710])
+                            ? ws.tauc[source_slot_v06822710] : 0.0;
+                        row.tau_out = std::isfinite(ws.tauc[tau_stride_v068234 + source_slot_v06822710])
+                            ? ws.tauc[tau_stride_v068234 + source_slot_v06822710] : 0.0;
+                    }
+                }
+                literal_source_detail_v068234 = true;
+            }
+        }
         // v17.25.40: do not fall back to the generic continuum opacity
         // surface for detailed RRC threshold opacity.  That surface is ordered
         // by continuum-bin/energy, not by the public RRC detail row, and it
         // inflated many xo01_detal3 opacity/tau rows by orders of magnitude.
-        if (rrc_bridge.complete) {
+        if (!literal_source_detail_v068234 && rrc_bridge.complete) {
             const auto found_rrc = rrc_bridge.index_map.find(id.continuum_index);
             if (found_rrc != rrc_bridge.index_map.end() && found_rrc->second < rrc_bridge.count) {
                 const std::size_t bi = found_rrc->second;
@@ -9241,12 +9281,14 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
             // per-HDU/public bridge can include cumulative values and is a
             // value-refinement surface, not the authority for whether the row
             // exists.  Prefer direct native source slots whenever available.
-            double signal_emis_in = 0.0;
-            double signal_emis_out = 0.0;
-            double signal_absorption = 0.0;
-            double signal_opacity = 0.0;
+            double signal_emis_in = literal_source_detail_v068234 ? row.emis_in : 0.0;
+            double signal_emis_out = literal_source_detail_v068234 ? row.emis_out : 0.0;
+            double signal_absorption = literal_source_detail_v068234 ? row.absorption : 0.0;
+            double signal_opacity = literal_source_detail_v068234 ? row.opacity : 0.0;
             bool have_local_source_slot = false;
-            if (ws.cemab.size() >= 2u && ws.cemab.size() % 2u == 0u) {
+            if (literal_source_detail_v068234) {
+                have_local_source_slot = true;
+            } else if (ws.cemab.size() >= 2u && ws.cemab.size() % 2u == 0u) {
                 const std::size_t stride = ws.cemab.size() / 2u;
                 const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
                 if (slot < stride) {
@@ -9400,7 +9442,13 @@ void write_rrc_detail(const std::filesystem::path& path,
             for (std::size_t i = 0; i < rrcs.size(); ++i) {
                 RrcRow r = rrcs[i];
                 const auto found_diag = diagnostic_rrcs.find(r.record);
-                r = merged_rrc_row(r, found_diag != diagnostic_rrcs.end() ? &found_diag->second : nullptr);
+                // 0.6.82.34: native fstepr3 rows above already contain the
+                // literal local cemab/cabab/opakab/tauc source slots.  Do not
+                // replace those values with per-record diagnostics; the
+                // latter are a forensic surface, not the SAVD owner.
+                if (!native_standalone_product_state(state)) {
+                    r = merged_rrc_row(r, found_diag != diagnostic_rrcs.end() ? &found_diag->second : nullptr);
+                }
                 const auto* id = rrc_identity_from_lookup_v06823088(rrc_identity_lookup_v06823088, r.record);
                 const auto pw = pw_rrc_by_index.find(r.record);
                 if (pw != pw_rrc_by_index.end()) {
@@ -9416,7 +9464,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                 // that the historical Mg template path applied later.  Re-split
                 // only the already accepted total RRC emissivity; rates,
                 // populations, opacity, tau, and controller state are frozen.
-                if (native_standalone_product_state(state)) {
+                if (native_standalone_product_state(state) && !ws.rrc_workspace_exact) {
                     const double cfrac = parameter_value(state, "cfrac", 1.0);
                     const auto directional = source_rrc_directional_projection(
                         r.emis_in, r.emis_out, r.tau_in, r.tau_out, cfrac);
