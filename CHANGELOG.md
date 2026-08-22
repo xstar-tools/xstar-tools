@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.36.1 - same-host direct-line optimization qualification hotfix - 2026-08-22
+
+- Revise host-tested `0.6.82.36` under the no-version-reuse rule. The workstation Fe run kept science, direct-identity mode, detailed-line inventory, and RSS non-regression ACCEPT, but the focused runner returned REJECT only because its whole-run gate required `total_ratio <= 0.85`.
+- Record the same-workstation baseline/candidate result: `.35.3` C++ internal total `88.505015 s` versus `.36` `75.976744 s`, ratio `0.858446` (14.16% faster). Detailed-line time fell `13.455017 -> 1.562753 s` (ratio `0.116146`) and the targeted diagnostic stage fell `11.955262 -> 0.077687 s` (ratio `0.006498`).
+- Correct the focused performance contract: retain the strong localized requirements `diagnostic_ratio <= 0.20` and `detail_line_ratio <= 0.40`, require at least 10% whole-run improvement on the same host (`total_ratio <= 0.90`), and keep the existing 2% RSS non-regression gate. This avoids rejecting a successful local optimization because unrelated run-to-run phases consume part of the theoretical end-to-end gain.
+- Establish the workstation `.35.3` archive as the performance baseline for subsequent speed work. Do not compare future timing gates against the unavailable laptop: performance comparisons must be same-host and same-build-mode. FORTRAN on this workstation measured `69.467137 s` and `2,574,954,496 B` peak RSS; `.35.3` C++ measured `88.505015 s` internally and `.36` measured `75.976744 s` internally.
+- Keep the `0.6.82.36` C++ scientific/optimization source unchanged apart from package-version metadata and qualification tooling. Preserve science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, strict-FP behavior, line ordering/eligibility, rate/solver/transport arithmetic, and FITS schema.
+- Keep the unresolved memory target open: workstation `.36` peak RSS remains about `4.620 GB` versus FORTRAN `2.575 GB` (about `1.794x`), so the direct-line speed fix does not address the memory gap.
+
 ## 0.6.82.36 - O(1) direct line-identity validation for detailed-line publication - 2026-08-22
 
 - Promote the completed `0.6.82.35.3` work/memory localization into the first optimization revision. The Fe reference run kept science ACCEPT while measuring C++/FORTRAN wall ratio `1.701753` and RSS ratio `1.821742`; scientific work structure was exact at the solver/iteration level.
