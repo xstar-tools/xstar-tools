@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.35.3 - portable glibc allocator telemetry hotfix - 2026-08-22
+
+- Host-build hotfix for the measurement-only 0.6.82.35.2 allocator snapshots.
+- Use `mallinfo2()` only on glibc >= 2.33 and fall back to `mallinfo()` on older glibc hosts.
+- Clamp overflowed signed `mallinfo()` fields to zero; allocator telemetry remains observational and never feeds science.
+- Preserve all 0.6.82.35.2 work/memory localization counters, accepted 0.6.82.33.8 science/lifetime architecture, strict-FP behavior, and frozen public ABIs.
+
 ## 0.6.82.35.2 - work-counter semantics correction and performance/memory localization - 2026-08-22
 
 - Preserve the accepted 0.6.82.33.8 scientific implementation; this revision is measurement-only.

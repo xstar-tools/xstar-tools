@@ -53,6 +53,7 @@
 #include <unistd.h>
 #endif
 #if defined(__GLIBC__)
+#include <features.h>
 #include <malloc.h>
 #endif
 
@@ -423,13 +424,31 @@ struct HeapSnapshotV0682352 {
     std::uint64_t fordblks = 0u;
 };
 
+[[maybe_unused]] std::uint64_t nonnegative_mallinfo_field_v0682353(long long value) {
+    return value > 0 ? static_cast<std::uint64_t>(value) : 0u;
+}
+
 HeapSnapshotV0682352 current_heap_snapshot_v0682352() {
     HeapSnapshotV0682352 out;
 #if defined(__GLIBC__)
+#if !defined(XSTAR_FORCE_LEGACY_MALLINFO) && defined(__GLIBC_PREREQ) && __GLIBC_PREREQ(2, 33)
     const auto mi = ::mallinfo2();
     out.uordblks = static_cast<std::uint64_t>(mi.uordblks);
     out.hblkhd = static_cast<std::uint64_t>(mi.hblkhd);
     out.fordblks = static_cast<std::uint64_t>(mi.fordblks);
+#else
+    // mallinfo2() was added in glibc 2.33.  Older HEASoft hosts (for
+    // example RHEL/CentOS 7-era systems) provide only mallinfo().  These
+    // allocator values are observation-only diagnostics; clamp an overflowed
+    // signed mallinfo field to zero rather than perturbing any science path.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    const auto mi = ::mallinfo();
+#pragma GCC diagnostic pop
+    out.uordblks = nonnegative_mallinfo_field_v0682353(mi.uordblks);
+    out.hblkhd = nonnegative_mallinfo_field_v0682353(mi.hblkhd);
+    out.fordblks = nonnegative_mallinfo_field_v0682353(mi.fordblks);
+#endif
 #endif
     return out;
 }
