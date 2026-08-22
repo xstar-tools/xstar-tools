@@ -4,15 +4,15 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def text(rel:str)->str: return (ROOT/rel).read_text()
 def load_runner():
- p=ROOT/'tools/qualification/run_canonical_incremental_publication_host_0_6_82_33_6.py'
- spec=importlib.util.spec_from_file_location('runner_0682336',p); assert spec and spec.loader
+ p=ROOT/'tools/qualification/run_canonical_incremental_publication_host_0_6_82_33_7.py'
+ spec=importlib.util.spec_from_file_location('runner_0682337',p); assert spec and spec.loader
  mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod); return mod
 
 def test_version_and_baseline():
- assert 'version = "0.6.82.33.6"' in text('pyproject.toml')
- assert 'PACKAGE_VERSION ?= 0.6.82.33.6' in text('src/xstar_tools/xstar/cpp/Makefile')
- r=text('tools/qualification/run_canonical_incremental_publication_host_0_6_82_33_6.py')
- assert 'BASELINE_VERSION = "0.6.82.32"' in r and 'CANDIDATE_VERSION = "0.6.82.33.6"' in r
+ assert 'version = "0.6.82.33.7"' in text('pyproject.toml')
+ assert 'PACKAGE_VERSION ?= 0.6.82.33.7' in text('src/xstar_tools/xstar/cpp/Makefile')
+ r=text('tools/qualification/run_canonical_incremental_publication_host_0_6_82_33_7.py')
+ assert 'BASELINE_VERSION = "0.6.82.32"' in r and 'CANDIDATE_VERSION = "0.6.82.33.7"' in r
 
 def test_zero_preserving_parser_retained():
  r=load_runner(); assert r.metric_int({'x':0},'x',999)==0; assert r.metric_int({},'x',999)==999
@@ -55,7 +55,7 @@ def test_terminal_two_full_zone_bound_and_compact_gate():
  assert 'V0682336_COMPACT_RETENTION_GATE=' in s
 
 def test_runner_requires_compact_gate_and_tighter_c5_memory():
- r=text('tools/qualification/run_canonical_incremental_publication_host_0_6_82_33_6.py')
+ r=text('tools/qualification/run_canonical_incremental_publication_host_0_6_82_33_7.py')
  assert 'compact_marker == "ACCEPT"' in r
  assert 'full_radial_peak_count <= 2' in r
  assert 'compact_materialized == max(accepted_boundaries - 1, 0)' in r
@@ -66,3 +66,24 @@ def test_deferred_034_scope_is_unchanged():
  c=text('CHANGELOG.md')
  for x in ('0.6.82.34','N VI','Cr II','O IV','Mg II','cemab/cabab/opakab/tauc','Si VI / Ni VI','1e-49'):
   assert x in c
+
+
+def test_compact_history_retains_deferred_abundance_publication_surfaces():
+ h=text('src/xstar_tools/xstar/cpp/xstar_run_state.hpp')
+ s=text('src/xstar_tools/xstar/cpp/xstar_standalone.cpp')
+ for token in ('source_ion_stage_fractions','element_thermal_products','hydrogen_heating','helium_heating','magnesium_heating','compton_heating','compton_cooling','brems_cooling','thermal_families_native'):
+  assert token in h
+ assert 'target.source_ion_stage_fractions = source.source_ion_stage_fractions;' in s
+ assert 'target.element_thermal_products = source.element_thermal_products;' in s
+ assert 'target.source_ion_stage_fractions = std::move(source.source_ion_stage_fractions);' in s
+ assert 'target.element_thermal_products = std::move(source.element_thermal_products);' in s
+ assert 'add_map_vector_memory_v068233(out, e.source_ion_stage_fractions);' in s
+ assert 'add_vector_memory_v068233(out, e.element_thermal_products);' in s
+
+def test_dense_detail_state_stays_dropped_in_compact_history():
+ h=text('src/xstar_tools/xstar/cpp/xstar_run_state.hpp')
+ start=h.index('struct CompactFixedEvaluationStateV0682336')
+ end=h.index('struct CompactRadialZoneStateV0682336')
+ block=h[start:end]
+ for forbidden in ('source_global_xilevg','source_global_bilevg','source_global_gammag','source_detail_pre_mapback_populations','populations','record_product_diagnostics'):
+  assert forbidden not in block

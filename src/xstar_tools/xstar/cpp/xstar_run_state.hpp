@@ -471,6 +471,23 @@ struct CompactFixedEvaluationStateV0682336 {
     double hmctot = 0.0;
     double total_heating = 0.0;
     double total_cooling = 0.0;
+    // 0.6.82.33.7: xout_abund1 is deferred whole-run publication, so
+    // historical compact zones must retain the tiny source xii and thermal
+    // surfaces consumed by ABUNDANCES/COLUMNS/HEATING/COOLING.  These are
+    // publication values only; dense line/RRC/detail workspaces stay dropped.
+    double hydrogen_heating = 0.0;
+    double hydrogen_cooling = 0.0;
+    double helium_heating = 0.0;
+    double helium_cooling = 0.0;
+    double magnesium_heating = 0.0;
+    double magnesium_cooling = 0.0;
+    double compton_heating = 0.0;
+    double compton_cooling = 0.0;
+    double free_free_heating = 0.0;
+    double brems_cooling = 0.0;
+    bool thermal_families_native = false;
+    std::map<int, std::vector<double>> source_ion_stage_fractions;
+    std::vector<ElementThermalProductState> element_thermal_products;
     std::vector<double> radiation_energy_ev;
     std::vector<double> radiation_flux;
     std::vector<double> continuum_tau_in;

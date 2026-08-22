@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.33.7 - compact radial abundance-publication hotfix - 2026-08-21
+
+- Revise host-rejected `0.6.82.33.6` under the no-version-reuse rule. Fe proved the compact lifetime mechanism itself works (`FINAL_SNAPSHOT_LIFETIME=ACCEPT`, `COMPACT_RADIAL_RETENTION=ACCEPT`, RSS ratio `0.859747`), but exact science/FITS failed only in deferred `xout_abund1.fits`.
+- Preserve the `.33.6` production-only compact radial architecture, the `.33.5` O(1) pending snapshot mechanism, incremental SAVD detail publication, terminal `detal2` patching, transport/controller arithmetic, and all four streamed detail FITS payloads unchanged.
+- Retain only the small deferred abundance-publication surfaces in compact historical zones: source `xii` ion-stage fractions, per-element thermal rows, H/He/Mg thermal fallback scalars, continuum Compton/free-free/brems totals, and the native-thermal ownership flag. These restore ABUNDANCES/COLUMNS/HEATING/COOLING without reintroducing populations, dense line/RRC arrays, global rate maps, or detail diagnostics.
+- Host forensic showed the `.33.6` first historical Fe row alone lost ion fractions and thermal components while the full terminal physical row remained exact; `xo01_detail`, `xo01_detal2`, `xo01_detal3`, and `xo01_detal4` remained bit-exact.
+- Keep the `.33.6` compact-retention telemetry namespace (`V0682336_*`) for direct before/after host comparison; `.33.7` changes the package/qualification result namespace only.
+- Keep science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, and the deferred `0.6.82.34` publication-correctness backlog unchanged.
+
 ## 0.6.82.33.6 - compact completed radial-zone retention - 2026-08-21
 
 - Build on host-accepted `0.6.82.33.5`: Fe and C5 both retain exact science, normalized STEP, bit-exact FITS payload, RSS, lifetime, and performance acceptance against accepted `0.6.82.32`; C5 peak RSS ratio is `0.287734` with the legacy `finals` history eliminated.

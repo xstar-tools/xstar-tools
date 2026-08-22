@@ -3076,6 +3076,19 @@ copy_compact_real_native_snapshot_v0682336(const FixedDsecSnapshot& source) {
     target.hmctot = source.hmctot;
     target.total_heating = source.total_heating;
     target.total_cooling = source.total_cooling;
+    target.hydrogen_heating = source.hydrogen_heating;
+    target.hydrogen_cooling = source.hydrogen_cooling;
+    target.helium_heating = source.helium_heating;
+    target.helium_cooling = source.helium_cooling;
+    target.magnesium_heating = source.magnesium_heating;
+    target.magnesium_cooling = source.magnesium_cooling;
+    target.compton_heating = source.compton_heating;
+    target.compton_cooling = source.compton_cooling;
+    target.free_free_heating = source.free_free_heating;
+    target.brems_cooling = source.brems_cooling;
+    target.thermal_families_native = source.thermal_families_native;
+    target.source_ion_stage_fractions = source.source_ion_stage_fractions;
+    target.element_thermal_products = source.element_thermal_products;
     target.radiation_energy_ev = source.radiation_energy_ev;
     target.radiation_flux = source.radiation_flux;
     target.continuum_tau_in = source.continuum_tau_in;
@@ -3141,6 +3154,19 @@ xstar_run_state::RadialZoneState materialize_compact_radial_zone_v0682336(
     target.hmctot = source.hmctot;
     target.total_heating = source.total_heating;
     target.total_cooling = source.total_cooling;
+    target.hydrogen_heating = source.hydrogen_heating;
+    target.hydrogen_cooling = source.hydrogen_cooling;
+    target.helium_heating = source.helium_heating;
+    target.helium_cooling = source.helium_cooling;
+    target.magnesium_heating = source.magnesium_heating;
+    target.magnesium_cooling = source.magnesium_cooling;
+    target.compton_heating = source.compton_heating;
+    target.compton_cooling = source.compton_cooling;
+    target.free_free_heating = source.free_free_heating;
+    target.brems_cooling = source.brems_cooling;
+    target.thermal_families_native = source.thermal_families_native;
+    target.source_ion_stage_fractions = std::move(source.source_ion_stage_fractions);
+    target.element_thermal_products = std::move(source.element_thermal_products);
     target.radiation_energy_ev = std::move(source.radiation_energy_ev);
     target.radiation_flux = std::move(source.radiation_flux);
     target.continuum_tau_in = std::move(source.continuum_tau_in);
@@ -3185,6 +3211,8 @@ MemoryBytesV068233 compact_radial_zones_memory_v0682336(
         out.capacity += zone.boundary_provenance.capacity() + zone.acceptance_reason.capacity() +
             zone.evaluation.kind.capacity();
         const auto& e = zone.evaluation;
+        add_map_vector_memory_v068233(out, e.source_ion_stage_fractions);
+        add_vector_memory_v068233(out, e.element_thermal_products);
 #define XSTAR_ADD_COMPACT_EVAL_VECTOR_V0682336(name) add_vector_memory_v068233(out, e.name)
         XSTAR_ADD_COMPACT_EVAL_VECTOR_V0682336(radiation_energy_ev);
         XSTAR_ADD_COMPACT_EVAL_VECTOR_V0682336(radiation_flux);
