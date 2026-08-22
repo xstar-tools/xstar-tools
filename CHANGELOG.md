@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.34.2 - N VI publication-time population lifetime forensic - 2026-08-22
+
+- Revise host-rejected `0.6.82.34.1`; H+He+N science remains ACCEPT, but the same six N VI `xo01_detail` roles 50--55 remain absent.
+- Preserve the canonical FORTRAN `fstepr` membership gate `xilev > 1e-34`; do not force rows into the product and do not hard-code N VI populations.
+- Record the decisive `.34.1` finding: literal ATDB/source-role lowering is now correct (globals 839--844 map to N VI upper roles 50--55), but the C++ final pre-mapback populations are about `1e-52` to `1e-310` while the corresponding FORTRAN SAVD populations are about `1e-33` to `1e-31`.  The remaining defect is therefore population lifetime/ownership upstream of FITS row selection, not identity inventory.
+- Add an `XSTAR_NVI_DETAIL_DIAG=1` observational solve-stage trace for N VI roles 45--58 reporting initial, final-outer-start, post-condensation, fixed-point-before, fixed-point-after, and final populations.  No solver, matrix, rate, controller, transport, or publication arithmetic consumes the trace.
+- Make the focused N runner capture one complete iteration-resolved trace at source sequence 30 / Z=7 under `diagnostics/n_detail/iteration_trace`; this provides every Lucy outer and fixed-point population for the first SAVD boundary without running the broad model.
+- Keep all `.34.1` publication/RRC changes and the `.33.8` O(1)/compact/line-ledger architecture unchanged.  Do not proceed to O/Mg/Si/Ni/Cr until the N population owner is identified and N accepts.
+
 ## 0.6.82.34.1 - N VI source-detail publication ownership hotfix - 2026-08-22
 
 - Revise rejected host-tested `0.6.82.34`; the focused H+He+N case retained accepted science/STEP behavior, but `xo01_detail.fits` omitted the same six FORTRAN N VI rows (global identities 839--844 / source upper roles 50--55) in all 11 radial HDUs.  The immediately following N VI roles 56--58 remained present, localizing the failure to source-detail ownership rather than the N VI solver trajectory.

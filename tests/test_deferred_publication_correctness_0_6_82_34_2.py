@@ -2,14 +2,9 @@ from __future__ import annotations
 
 import json
 import math
-import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-pytestmark = pytest.mark.skipif(
-    'version = "0.6.82.34.1"' not in (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
-    reason="historical 0.6.82.34.1 source-assertion suite; superseded by 0.6.82.34.2",
-)
 ORACLE = ROOT / "qualification/deferred_publication_correctness_0_6_82_34/oracle_targets_from_fortran_multi.json"
 
 
@@ -22,8 +17,8 @@ def oracle() -> dict:
 
 
 def test_version_and_frozen_science_ids():
-    assert 'version = "0.6.82.34.1"' in text("pyproject.toml")
-    assert "PACKAGE_VERSION ?= 0.6.82.34.1" in text("src/xstar_tools/xstar/cpp/Makefile")
+    assert 'version = "0.6.82.34.2"' in text("pyproject.toml")
+    assert "PACKAGE_VERSION ?= 0.6.82.34.2" in text("src/xstar_tools/xstar/cpp/Makefile")
     api = text("src/xstar_tools/xstar/cpp/xstar_api.h")
     assert "0.6.48.12.3.45.3.3.8" in api
     # Strict-FP policy remains explicit in the build; no fast-math may enter .34.
@@ -169,3 +164,31 @@ def test_0338_lifetime_architecture_remains_present():
     ):
         assert token in s
     assert "public_line_luminosity_v0682338" in h
+
+
+def test_nvi_solver_lifetime_diagnostic_is_observational_and_stage_complete():
+    local_zone = text("src/xstar_tools/xstar/cpp/local_zone_engine.cpp")
+    block = local_zone[local_zone.index("0.6.82.34.2 qualification-only N VI solve-lifetime trace"):
+                       local_zone.index("write_c_call1_compact_solve_attribution", local_zone.index("0.6.82.34.2 qualification-only N VI solve-lifetime trace"))]
+    assert "V0682342_NVI_SOLVE_STAGE" in block
+    assert "nvi_solve_lifetime_diag_v0682342" in local_zone
+    assert "|| nvi_solve_lifetime_diag_v0682342" in local_zone
+    for token in ("active_initial_populations", "active_final_outer_start_populations",
+                  "final_population_after_condensed", "final_fixed_point_population_before",
+                  "final_fixed_point_population_after", "active_final_populations"):
+        assert token in block
+    # No assignment to solver/population arrays is permitted inside the diagnostic block.
+    assert ".assign(" not in block
+    assert ".push_back(" not in block
+
+
+def test_nvi_focused_runner_captures_first_boundary_iteration_trace():
+    runner = text("tools/qualification/run_deferred_publication_focused_host_0_6_82_34_2.py")
+    assert 'XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE"] = "1"' in runner
+    assert 'XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS"] = "30:7"' in runner
+    assert '"diagnostics" / "n_detail" / "iteration_trace"' in runner
+    assert "DEFERRED_PUBLICATION_0682342_FOCUSED_RESULT" in runner
+    assert "DEFERRED_PUBLICATION_0682342_{name.upper()}" in runner
+    assert "_FORENSIC_TRACE=" in runner
+    assert "sequence_0030_element_07" in runner
+    assert 'f"{stem}_fixed_rows.csv"' in runner
