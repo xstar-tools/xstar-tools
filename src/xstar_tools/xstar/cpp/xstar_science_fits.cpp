@@ -1164,6 +1164,23 @@ struct BulkFitsPerfV06823088 {
 
 thread_local double g_fits_checksum_seconds_v068232 = 0.0;
 thread_local double g_detail_line_identity_seconds_v068232 = 0.0;
+
+struct DetailLineStagingAuditV0682352 {
+    double diagnostic_seconds = 0.0;
+    double source_rows_seconds = 0.0;
+    double activity_shadow_seconds = 0.0;
+    double native_map_seconds = 0.0;
+    std::uint64_t zones = 0u;
+    std::uint64_t diagnostic_records_loaded = 0u;
+    std::uint64_t type50_records_considered = 0u;
+    std::uint64_t direct_index_hits = 0u;
+    std::uint64_t fallback_resolutions = 0u;
+    std::uint64_t fallback_identity_comparisons = 0u;
+    std::uint64_t source_identities_scanned = 0u;
+    std::uint64_t source_rows_retained = 0u;
+};
+thread_local DetailLineStagingAuditV0682352 g_detail_line_staging_audit_v0682352;
+
 thread_local std::vector<xstar_run_state::IncrementalDetal2TerminalPatchStateV0682332>*
     g_incremental_detal2_terminal_patches_v0682332 = nullptr;
 
@@ -8412,9 +8429,15 @@ std::vector<LineRow> source_line_rows_from_identities(
     std::vector<LineRow> out;
     const auto workspace_index = line_workspace_index_by_line_index(state);
     const auto line_bridge = load_line_bridge_arrays(state, hdu_number);
-    const auto detail_activity_shadow = detail_order
-        ? source_detail_line_activity_shadow(state, evaluation, elements, density_cm3)
-        : std::vector<bool>{};
+    std::vector<bool> detail_activity_shadow;
+    if (detail_order) {
+        const auto shadow_started_v0682352 = std::chrono::steady_clock::now();
+        detail_activity_shadow = source_detail_line_activity_shadow(
+            state, evaluation, elements, density_cm3);
+        g_detail_line_staging_audit_v0682352.activity_shadow_seconds +=
+            std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - shadow_started_v0682352).count();
+    }
     if (reference_mg11_product_state(state)) {
         out.reserve(detail_order ? 2644u : kOraclePublicLineInventory.size());
         if (detail_order) {
@@ -8438,6 +8461,8 @@ std::vector<LineRow> source_line_rows_from_identities(
     // Generic source-order line inventory, filtered by the terminal active
     // ion-stage window.  Public ranking is applied later by writespectra2.
     out.reserve(state.line_identities.size());
+    g_detail_line_staging_audit_v0682352.source_identities_scanned +=
+        static_cast<std::uint64_t>(state.line_identities.size());
     for (const auto& id : state.line_identities) {
         const int z = element_z_from_ion_label(id.ion_label);
         const int stage = roman_stage_from_ion_label(id.ion_label);
@@ -8489,6 +8514,10 @@ std::vector<LineRow> source_line_rows_from_identities(
         }
         out.push_back(std::move(line));
     }
+    if (detail_order) {
+        g_detail_line_staging_audit_v0682352.source_rows_retained +=
+            static_cast<std::uint64_t>(out.size());
+    }
     return out;
 }
 
@@ -8507,6 +8536,8 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     std::map<long long,LineRow> out;
     std::vector<RecordDiag> records;
     try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
+    g_detail_line_staging_audit_v0682352.diagnostic_records_loaded +=
+        static_cast<std::uint64_t>(records.size());
 
     // Native true-controller diagnostics retain the complete Type-50 record
     // stream, but the legacy/public line-index field is zero in that CSV.
@@ -8522,9 +8553,11 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
         if (r.type50_line_index_one_based > 0) {
             if (mg_anchor ? oracle_detail_line_inventory(r.type50_line_index_one_based)
                           : line_identity_by_index(state, r.type50_line_index_one_based) != nullptr) {
+                ++g_detail_line_staging_audit_v0682352.direct_index_hits;
                 return r.type50_line_index_one_based;
             }
         }
+        ++g_detail_line_staging_audit_v0682352.fallback_resolutions;
         const double wavelength = r.type50_wavelength_a > 0.0 ? r.type50_wavelength_a :
             (r.line_energy_ev > 0.0 ? 12398.419843320026 / r.line_energy_ev : 0.0);
         if (!(wavelength > 0.0)) return 0;
@@ -8533,6 +8566,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
             std::size_t best = detail_labels.size();
             double best_delta = std::numeric_limits<double>::infinity();
             for (std::size_t i = 0; i < detail_labels.size(); ++i) {
+                ++g_detail_line_staging_audit_v0682352.fallback_identity_comparisons;
                 if (consumed_oracle[i]) continue;
                 const auto& label = detail_labels[i];
                 if (element_z_from_ion_label(label.ion) != r.element_z) continue;
@@ -8547,6 +8581,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
         std::size_t best = state.line_identities.size();
         double best_delta = std::numeric_limits<double>::infinity();
         for (std::size_t i = 0; i < state.line_identities.size(); ++i) {
+            ++g_detail_line_staging_audit_v0682352.fallback_identity_comparisons;
             if (consumed_live[i]) continue;
             const auto& id = state.line_identities[i];
             if (element_z_from_ion_label(id.ion_label) != r.element_z) continue;
@@ -8561,6 +8596,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
 
     for (const auto& r : records) {
         if (!r.spectral || !r.type50_valid || r.data_type != 50) continue;
+        ++g_detail_line_staging_audit_v0682352.type50_records_considered;
         const long long public_line_index = resolve_detail_line_index(r);
         if (public_line_index <= 0 || (mg_anchor && !oracle_detail_line_inventory(public_line_index))) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
@@ -8782,6 +8818,7 @@ void write_line_detail(const std::filesystem::path& path,
     g_detail_line_identity_seconds_v068232 += std::chrono::duration<double>(
         std::chrono::steady_clock::now() - identity_started_v068232).count();
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+        ++g_detail_line_staging_audit_v0682352.zones;
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const auto& evaluation = zone.accepted_controller.evaluation;
@@ -8840,13 +8877,29 @@ void write_line_detail(const std::filesystem::path& path,
         }
         const bool defer_terminal_gate_v0682332 =
             g_incremental_detal2_terminal_patches_v0682332 != nullptr;
+        const auto diagnostic_started_v0682352 = std::chrono::steady_clock::now();
         const auto diagnostic_lines = diagnostic_line_rows_by_index(
             state, evaluation, elements, rows,
             zone.accepted_controller.accepted_sequence,
             !defer_terminal_gate_v0682332);
-        auto lines = source_line_rows_from_identities(state, evaluation, elements, rows, physical_density_cm3_for_output_zone(state, z), physical_luminosity_scale_1e38_for_output_zone(state, z), true, hdu_number);
+        g_detail_line_staging_audit_v0682352.diagnostic_seconds +=
+            std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - diagnostic_started_v0682352).count();
+        const auto source_rows_started_v0682352 = std::chrono::steady_clock::now();
+        auto lines = source_line_rows_from_identities(
+            state, evaluation, elements, rows,
+            physical_density_cm3_for_output_zone(state, z),
+            physical_luminosity_scale_1e38_for_output_zone(state, z),
+            true, hdu_number);
+        g_detail_line_staging_audit_v0682352.source_rows_seconds +=
+            std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - source_rows_started_v0682352).count();
+        const auto native_map_started_v0682352 = std::chrono::steady_clock::now();
         std::map<long long,LineRow> native_lines_by_record;
         for (const auto& line : lines) native_lines_by_record[line.record] = line;
+        g_detail_line_staging_audit_v0682352.native_map_seconds +=
+            std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - native_map_started_v0682352).count();
 
         if (!reference_mg11_product_state(state)) {
             create_table(fptr, BINARY_TBL, static_cast<long>(lines.size()), "XSTAR_RADIAL",
@@ -11299,6 +11352,7 @@ IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
         [&](const auto& path) { write_population_detail(path, one_zone_state, elements, rows); },
         result.detail_population_seconds, nullptr, &result.detail_rows);
 
+    g_detail_line_staging_audit_v0682352 = DetailLineStagingAuditV0682352{};
     const double line_identity_before = g_detail_line_identity_seconds_v068232;
     {
         struct ScopedDetal2TerminalPatchCaptureV0682332 {
@@ -11321,6 +11375,18 @@ IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
     result.detail_line_cpu_staging_seconds = std::max(0.0,
         result.detail_line_seconds - result.detail_line_identity_seconds -
         result.detail_line_fits_write_seconds - result.detail_line_checksum_seconds);
+    result.detail_line_diagnostic_seconds = g_detail_line_staging_audit_v0682352.diagnostic_seconds;
+    result.detail_line_source_rows_seconds = g_detail_line_staging_audit_v0682352.source_rows_seconds;
+    result.detail_line_activity_shadow_seconds = g_detail_line_staging_audit_v0682352.activity_shadow_seconds;
+    result.detail_line_native_map_seconds = g_detail_line_staging_audit_v0682352.native_map_seconds;
+    result.detail_line_zones = g_detail_line_staging_audit_v0682352.zones;
+    result.detail_line_diagnostic_records_loaded = g_detail_line_staging_audit_v0682352.diagnostic_records_loaded;
+    result.detail_line_type50_records_considered = g_detail_line_staging_audit_v0682352.type50_records_considered;
+    result.detail_line_direct_index_hits = g_detail_line_staging_audit_v0682352.direct_index_hits;
+    result.detail_line_fallback_resolutions = g_detail_line_staging_audit_v0682352.fallback_resolutions;
+    result.detail_line_fallback_identity_comparisons = g_detail_line_staging_audit_v0682352.fallback_identity_comparisons;
+    result.detail_line_source_identities_scanned = g_detail_line_staging_audit_v0682352.source_identities_scanned;
+    result.detail_line_source_rows_retained = g_detail_line_staging_audit_v0682352.source_rows_retained;
 
     result.detail_rrc_checksum_seconds += publish_one("detal3",
         [&](const auto& path) { write_rrc_detail(path, one_zone_state, elements, rows); },
@@ -11432,6 +11498,7 @@ Result write_historical_science_products(
     std::filesystem::create_directories(output_dir);
     if (true_production_mode()) reset_bulk_fits_perf_v06823088();
     g_public_lines_fast_path_v06823089 = false;
+    g_detail_line_staging_audit_v0682352 = DetailLineStagingAuditV0682352{};
     const auto elements = read_elements(state, program_dir);
     const auto rows = read_rows(state, program_dir);
     double detail_population_seconds_v06823089 = 0.0;
@@ -11589,6 +11656,18 @@ Result write_historical_science_products(
     result.detail_line_cpu_staging_seconds = std::max(0.0,
         detail_line_seconds_v06823089 - result.detail_line_identity_seconds -
         result.detail_line_fits_write_seconds - result.detail_line_checksum_seconds);
+    result.detail_line_diagnostic_seconds = g_detail_line_staging_audit_v0682352.diagnostic_seconds;
+    result.detail_line_source_rows_seconds = g_detail_line_staging_audit_v0682352.source_rows_seconds;
+    result.detail_line_activity_shadow_seconds = g_detail_line_staging_audit_v0682352.activity_shadow_seconds;
+    result.detail_line_native_map_seconds = g_detail_line_staging_audit_v0682352.native_map_seconds;
+    result.detail_line_zones = g_detail_line_staging_audit_v0682352.zones;
+    result.detail_line_diagnostic_records_loaded = g_detail_line_staging_audit_v0682352.diagnostic_records_loaded;
+    result.detail_line_type50_records_considered = g_detail_line_staging_audit_v0682352.type50_records_considered;
+    result.detail_line_direct_index_hits = g_detail_line_staging_audit_v0682352.direct_index_hits;
+    result.detail_line_fallback_resolutions = g_detail_line_staging_audit_v0682352.fallback_resolutions;
+    result.detail_line_fallback_identity_comparisons = g_detail_line_staging_audit_v0682352.fallback_identity_comparisons;
+    result.detail_line_source_identities_scanned = g_detail_line_staging_audit_v0682352.source_identities_scanned;
+    result.detail_line_source_rows_retained = g_detail_line_staging_audit_v0682352.source_rows_retained;
     result.detail_rrc_seconds = detail_rrc_seconds_v06823089;
     result.detail_rrc_fits_write_seconds = detail_rrc_fits_write_seconds_v068232;
     result.detail_rrc_checksum_seconds = detail_rrc_checksum_seconds_v068232;

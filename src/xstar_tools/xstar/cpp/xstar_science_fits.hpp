@@ -29,6 +29,19 @@ struct IncrementalDetailResultV068233 {
     double detail_line_cpu_staging_seconds = 0.0;
     double detail_line_fits_write_seconds = 0.0;
     double detail_line_checksum_seconds = 0.0;
+    // 0.6.82.35.2: detailed-line staging localization; observation only.
+    double detail_line_diagnostic_seconds = 0.0;
+    double detail_line_source_rows_seconds = 0.0;
+    double detail_line_activity_shadow_seconds = 0.0;
+    double detail_line_native_map_seconds = 0.0;
+    std::uint64_t detail_line_zones = 0u;
+    std::uint64_t detail_line_diagnostic_records_loaded = 0u;
+    std::uint64_t detail_line_type50_records_considered = 0u;
+    std::uint64_t detail_line_direct_index_hits = 0u;
+    std::uint64_t detail_line_fallback_resolutions = 0u;
+    std::uint64_t detail_line_fallback_identity_comparisons = 0u;
+    std::uint64_t detail_line_source_identities_scanned = 0u;
+    std::uint64_t detail_line_source_rows_retained = 0u;
     double detail_rrc_seconds = 0.0;
     double detail_rrc_cpu_staging_seconds = 0.0;
     double detail_rrc_fits_write_seconds = 0.0;
@@ -68,6 +81,19 @@ struct Result {
     double detail_line_cpu_staging_seconds = 0.0;
     double detail_line_fits_write_seconds = 0.0;
     double detail_line_checksum_seconds = 0.0;
+    // 0.6.82.35.2: detailed-line staging localization; observation only.
+    double detail_line_diagnostic_seconds = 0.0;
+    double detail_line_source_rows_seconds = 0.0;
+    double detail_line_activity_shadow_seconds = 0.0;
+    double detail_line_native_map_seconds = 0.0;
+    std::uint64_t detail_line_zones = 0u;
+    std::uint64_t detail_line_diagnostic_records_loaded = 0u;
+    std::uint64_t detail_line_type50_records_considered = 0u;
+    std::uint64_t detail_line_direct_index_hits = 0u;
+    std::uint64_t detail_line_fallback_resolutions = 0u;
+    std::uint64_t detail_line_fallback_identity_comparisons = 0u;
+    std::uint64_t detail_line_source_identities_scanned = 0u;
+    std::uint64_t detail_line_source_rows_retained = 0u;
     double detail_rrc_seconds = 0.0;
     double detail_rrc_cpu_staging_seconds = 0.0;
     double detail_rrc_fits_write_seconds = 0.0;

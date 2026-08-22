@@ -52,6 +52,9 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #endif
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 
 extern "C" int xstar_emissivity_build_binemis_profile(
     int ncn2, int nbtpp, int ncols, int n_line_slots, int n_lum_lines,
@@ -245,6 +248,19 @@ struct PerformanceInstrumentationV064890 {
     double detail_line_cpu_staging_seconds = 0.0;
     double detail_line_fits_write_seconds = 0.0;
     double detail_line_checksum_seconds = 0.0;
+    // 0.6.82.35.2 detail-line staging localization.
+    double detail_line_diagnostic_seconds_v0682352 = 0.0;
+    double detail_line_source_rows_seconds_v0682352 = 0.0;
+    double detail_line_activity_shadow_seconds_v0682352 = 0.0;
+    double detail_line_native_map_seconds_v0682352 = 0.0;
+    std::uint64_t detail_line_zones_v0682352 = 0u;
+    std::uint64_t detail_line_diagnostic_records_loaded_v0682352 = 0u;
+    std::uint64_t detail_line_type50_records_considered_v0682352 = 0u;
+    std::uint64_t detail_line_direct_index_hits_v0682352 = 0u;
+    std::uint64_t detail_line_fallback_resolutions_v0682352 = 0u;
+    std::uint64_t detail_line_fallback_identity_comparisons_v0682352 = 0u;
+    std::uint64_t detail_line_source_identities_scanned_v0682352 = 0u;
+    std::uint64_t detail_line_source_rows_retained_v0682352 = 0u;
     double detail_rrc_seconds = 0.0;
     double detail_rrc_cpu_staging_seconds = 0.0;
     double detail_rrc_fits_write_seconds = 0.0;
@@ -296,6 +312,16 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t radial_rss_last_bytes_v068233 = 0u;
     std::uint64_t radial_rss_peak_bytes_v068233 = 0u;
     std::vector<std::uint64_t> radial_rss_samples_bytes_v068233;
+    // 0.6.82.35.2: glibc allocator snapshots paired with key RSS phases.
+    std::uint64_t heap_after_atdb_uordblks_v0682352 = 0u;
+    std::uint64_t heap_after_atdb_hblkhd_v0682352 = 0u;
+    std::uint64_t heap_radial_peak_uordblks_v0682352 = 0u;
+    std::uint64_t heap_radial_peak_hblkhd_v0682352 = 0u;
+    std::uint64_t heap_radial_peak_fordblks_v0682352 = 0u;
+    std::uint64_t heap_before_final_uordblks_v0682352 = 0u;
+    std::uint64_t heap_before_final_hblkhd_v0682352 = 0u;
+    std::uint64_t heap_after_final_uordblks_v0682352 = 0u;
+    std::uint64_t heap_after_final_hblkhd_v0682352 = 0u;
     std::uint64_t saved_shells_streamed_v068233 = 0u;
     // 0.6.82.33.2: explicit accounting for the full accepted-boundary
     // families exposed by the .33.1 C5 RSS staircase. Diagnostic only.
@@ -390,6 +416,23 @@ std::uint64_t current_rss_bytes_v068233() {
 }
 
 
+
+struct HeapSnapshotV0682352 {
+    std::uint64_t uordblks = 0u;
+    std::uint64_t hblkhd = 0u;
+    std::uint64_t fordblks = 0u;
+};
+
+HeapSnapshotV0682352 current_heap_snapshot_v0682352() {
+    HeapSnapshotV0682352 out;
+#if defined(__GLIBC__)
+    const auto mi = ::mallinfo2();
+    out.uordblks = static_cast<std::uint64_t>(mi.uordblks);
+    out.hblkhd = static_cast<std::uint64_t>(mi.hblkhd);
+    out.fordblks = static_cast<std::uint64_t>(mi.fordblks);
+#endif
+    return out;
+}
 
 // v82 patch 5.20.17.3.8 diagnostic sidecars.  These are strictly opt-in and
 // never feed controller or product state.
@@ -3602,8 +3645,13 @@ void append_live_step_row_v068233(
         ++g_performance_v064890->step_rows_streamed_v068233;
         const auto rss_v068233 = current_rss_bytes_v068233();
         g_performance_v064890->radial_rss_last_bytes_v068233 = rss_v068233;
-        g_performance_v064890->radial_rss_peak_bytes_v068233 = std::max(
-            g_performance_v064890->radial_rss_peak_bytes_v068233, rss_v068233);
+        if (rss_v068233 >= g_performance_v064890->radial_rss_peak_bytes_v068233) {
+            g_performance_v064890->radial_rss_peak_bytes_v068233 = rss_v068233;
+            const auto heap_v0682352 = current_heap_snapshot_v0682352();
+            g_performance_v064890->heap_radial_peak_uordblks_v0682352 = heap_v0682352.uordblks;
+            g_performance_v064890->heap_radial_peak_hblkhd_v0682352 = heap_v0682352.hblkhd;
+            g_performance_v064890->heap_radial_peak_fordblks_v0682352 = heap_v0682352.fordblks;
+        }
         g_performance_v064890->radial_rss_samples_bytes_v068233.push_back(rss_v068233);
     }
 }
@@ -18743,6 +18791,18 @@ void stream_saved_shell_detail_v068233(
         g_performance_v064890->detail_line_cpu_staging_seconds += result.detail_line_cpu_staging_seconds;
         g_performance_v064890->detail_line_fits_write_seconds += result.detail_line_fits_write_seconds;
         g_performance_v064890->detail_line_checksum_seconds += result.detail_line_checksum_seconds;
+        g_performance_v064890->detail_line_diagnostic_seconds_v0682352 += result.detail_line_diagnostic_seconds;
+        g_performance_v064890->detail_line_source_rows_seconds_v0682352 += result.detail_line_source_rows_seconds;
+        g_performance_v064890->detail_line_activity_shadow_seconds_v0682352 += result.detail_line_activity_shadow_seconds;
+        g_performance_v064890->detail_line_native_map_seconds_v0682352 += result.detail_line_native_map_seconds;
+        g_performance_v064890->detail_line_zones_v0682352 += result.detail_line_zones;
+        g_performance_v064890->detail_line_diagnostic_records_loaded_v0682352 += result.detail_line_diagnostic_records_loaded;
+        g_performance_v064890->detail_line_type50_records_considered_v0682352 += result.detail_line_type50_records_considered;
+        g_performance_v064890->detail_line_direct_index_hits_v0682352 += result.detail_line_direct_index_hits;
+        g_performance_v064890->detail_line_fallback_resolutions_v0682352 += result.detail_line_fallback_resolutions;
+        g_performance_v064890->detail_line_fallback_identity_comparisons_v0682352 += result.detail_line_fallback_identity_comparisons;
+        g_performance_v064890->detail_line_source_identities_scanned_v0682352 += result.detail_line_source_identities_scanned;
+        g_performance_v064890->detail_line_source_rows_retained_v0682352 += result.detail_line_source_rows_retained;
         g_performance_v064890->detail_rrc_seconds += result.detail_rrc_seconds;
         g_performance_v064890->detail_rrc_cpu_staging_seconds += result.detail_rrc_cpu_staging_seconds;
         g_performance_v064890->detail_rrc_fits_write_seconds += result.detail_rrc_fits_write_seconds;
@@ -18759,8 +18819,13 @@ void stream_saved_shell_detail_v068233(
         ++g_performance_v064890->saved_shells_streamed_v068233;
         const auto rss = current_rss_bytes_v068233();
         g_performance_v064890->radial_rss_last_bytes_v068233 = rss;
-        g_performance_v064890->radial_rss_peak_bytes_v068233 = std::max(
-            g_performance_v064890->radial_rss_peak_bytes_v068233, rss);
+        if (rss >= g_performance_v064890->radial_rss_peak_bytes_v068233) {
+            g_performance_v064890->radial_rss_peak_bytes_v068233 = rss;
+            const auto heap_v0682352 = current_heap_snapshot_v0682352();
+            g_performance_v064890->heap_radial_peak_uordblks_v0682352 = heap_v0682352.uordblks;
+            g_performance_v064890->heap_radial_peak_hblkhd_v0682352 = heap_v0682352.hblkhd;
+            g_performance_v064890->heap_radial_peak_fordblks_v0682352 = heap_v0682352.fordblks;
+        }
         g_performance_v064890->radial_rss_samples_bytes_v068233.push_back(rss);
     }
     stream_state.incremental_detal2_terminal_patches_v0682332.insert(
@@ -19514,6 +19579,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             g_performance_v064890->prepared_sidecar_logical_bytes_v068233 = sidecars_v068233.logical;
             g_performance_v064890->prepared_sidecar_capacity_bytes_v068233 = sidecars_v068233.capacity;
             g_performance_v064890->rss_after_atdb_bytes_v068233 = current_rss_bytes_v068233();
+            const auto heap_v0682352 = current_heap_snapshot_v0682352();
+            g_performance_v064890->heap_after_atdb_uordblks_v0682352 = heap_v0682352.uordblks;
+            g_performance_v064890->heap_after_atdb_hblkhd_v0682352 = heap_v0682352.hblkhd;
         }
         std::size_t source_numrec_v068227 = 2u;
         double current_radius_cm_v068227 = source_initial_radius_cm_v068226;
@@ -21772,6 +21840,18 @@ void emit_controller_performance_instrumentation(
             << "V068232_DETAIL_LINE_CPU_STAGING_SECONDS=" << perf.detail_line_cpu_staging_seconds << "\n"
             << "V068232_DETAIL_LINE_FITS_WRITE_SECONDS=" << perf.detail_line_fits_write_seconds << "\n"
             << "V068232_DETAIL_LINE_CHECKSUM_SECONDS=" << perf.detail_line_checksum_seconds << "\n"
+            << "V0682352_DETAIL_LINE_DIAGNOSTIC_SECONDS=" << perf.detail_line_diagnostic_seconds_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_SOURCE_ROWS_SECONDS=" << perf.detail_line_source_rows_seconds_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_ACTIVITY_SHADOW_SECONDS=" << perf.detail_line_activity_shadow_seconds_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_NATIVE_MAP_SECONDS=" << perf.detail_line_native_map_seconds_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_ZONES=" << perf.detail_line_zones_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_DIAGNOSTIC_RECORDS_LOADED=" << perf.detail_line_diagnostic_records_loaded_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_TYPE50_RECORDS_CONSIDERED=" << perf.detail_line_type50_records_considered_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_DIRECT_INDEX_HITS=" << perf.detail_line_direct_index_hits_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_FALLBACK_RESOLUTIONS=" << perf.detail_line_fallback_resolutions_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_FALLBACK_IDENTITY_COMPARISONS=" << perf.detail_line_fallback_identity_comparisons_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_SOURCE_IDENTITIES_SCANNED=" << perf.detail_line_source_identities_scanned_v0682352 << "\n"
+            << "V0682352_DETAIL_LINE_SOURCE_ROWS_RETAINED=" << perf.detail_line_source_rows_retained_v0682352 << "\n"
             << "DETAIL_RRC_SECONDS=" << perf.detail_rrc_seconds << "\n"
             << "V068232_DETAIL_RRC_CPU_STAGING_SECONDS=" << perf.detail_rrc_cpu_staging_seconds << "\n"
             << "V068232_DETAIL_RRC_FITS_WRITE_SECONDS=" << perf.detail_rrc_fits_write_seconds << "\n"
@@ -21819,6 +21899,12 @@ void emit_controller_performance_instrumentation(
             << "V068231_PERF_SPECTRAL_WORKSPACE_REUSES=" << perf.foundation_v068231.spectral_workspace_reuses << "\n"
             << "V068231_PERF_PERSISTENT_RESERVED_BYTES=" << perf.foundation_v068231.persistent_reserved_bytes << "\n"
             << "V068231_PERF_PERSISTENT_PEAK_RESERVED_BYTES=" << perf.foundation_v068231.persistent_peak_reserved_bytes << "\n"
+            << "V0682352_PERSISTENT_RECORD_CACHE_BYTES=" << perf.foundation_v068231.persistent_record_cache_bytes << "\n"
+            << "V0682352_PERSISTENT_CONTRIBUTION_BYTES=" << perf.foundation_v068231.persistent_contribution_bytes << "\n"
+            << "V0682352_PERSISTENT_POPULATION_BYTES=" << perf.foundation_v068231.persistent_population_bytes << "\n"
+            << "V0682352_PERSISTENT_SPECTRAL_BYTES=" << perf.foundation_v068231.persistent_spectral_bytes << "\n"
+            << "V0682352_PERSISTENT_ELEMENT_SOLVER_BYTES=" << perf.foundation_v068231.persistent_element_solver_bytes << "\n"
+            << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"
             << "V0682351_CPP_MATRIX_ROWS_MAX=" << perf.foundation_v068231.matrix_rows_max << "\n"
@@ -21860,6 +21946,15 @@ void emit_controller_performance_instrumentation(
             << "V068233_RSS_RADIAL_EVENT_SAMPLES=" << perf.radial_rss_samples_bytes_v068233.size() << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
+            << "V0682352_HEAP_AFTER_ATDB_UORDBLKS_BYTES=" << perf.heap_after_atdb_uordblks_v0682352 << "\n"
+            << "V0682352_HEAP_AFTER_ATDB_HBLKHD_BYTES=" << perf.heap_after_atdb_hblkhd_v0682352 << "\n"
+            << "V0682352_HEAP_RADIAL_PEAK_UORDBLKS_BYTES=" << perf.heap_radial_peak_uordblks_v0682352 << "\n"
+            << "V0682352_HEAP_RADIAL_PEAK_HBLKHD_BYTES=" << perf.heap_radial_peak_hblkhd_v0682352 << "\n"
+            << "V0682352_HEAP_RADIAL_PEAK_FORDBLKS_BYTES=" << perf.heap_radial_peak_fordblks_v0682352 << "\n"
+            << "V0682352_HEAP_BEFORE_FINAL_UORDBLKS_BYTES=" << perf.heap_before_final_uordblks_v0682352 << "\n"
+            << "V0682352_HEAP_BEFORE_FINAL_HBLKHD_BYTES=" << perf.heap_before_final_hblkhd_v0682352 << "\n"
+            << "V0682352_HEAP_AFTER_FINAL_UORDBLKS_BYTES=" << perf.heap_after_final_uordblks_v0682352 << "\n"
+            << "V0682352_HEAP_AFTER_FINAL_HBLKHD_BYTES=" << perf.heap_after_final_hblkhd_v0682352 << "\n"
             << "V0682332_FINAL_SNAPSHOTS_CURRENT_BYTES=" << perf.final_snapshots_current_bytes_v0682332 << "\n"
             << "V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=" << perf.final_snapshots_peak_bytes_v0682332 << "\n"
             << "V0682332_FINAL_SNAPSHOTS_CURRENT_CAPACITY_BYTES=" << perf.final_snapshots_current_capacity_bytes_v0682332 << "\n"
@@ -22519,6 +22614,11 @@ int command_run_standalone_production(const Options& options, const std::filesys
         }
         performance_v064890.rss_before_final_publication_bytes_v068233 =
             current_rss_bytes_v068233();
+        {
+            const auto heap_v0682352 = current_heap_snapshot_v0682352();
+            performance_v064890.heap_before_final_uordblks_v0682352 = heap_v0682352.uordblks;
+            performance_v064890.heap_before_final_hblkhd_v0682352 = heap_v0682352.hblkhd;
+        }
         std::cout << " final print:           1\n"
                   << " xstar: Prepping to write spectral data\n" << std::flush;
         ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
@@ -22533,6 +22633,18 @@ int command_run_standalone_production(const Options& options, const std::filesys
         performance_v064890.detail_line_cpu_staging_seconds += science.detail_line_cpu_staging_seconds;
         performance_v064890.detail_line_fits_write_seconds += science.detail_line_fits_write_seconds;
         performance_v064890.detail_line_checksum_seconds += science.detail_line_checksum_seconds;
+        performance_v064890.detail_line_diagnostic_seconds_v0682352 += science.detail_line_diagnostic_seconds;
+        performance_v064890.detail_line_source_rows_seconds_v0682352 += science.detail_line_source_rows_seconds;
+        performance_v064890.detail_line_activity_shadow_seconds_v0682352 += science.detail_line_activity_shadow_seconds;
+        performance_v064890.detail_line_native_map_seconds_v0682352 += science.detail_line_native_map_seconds;
+        performance_v064890.detail_line_zones_v0682352 += science.detail_line_zones;
+        performance_v064890.detail_line_diagnostic_records_loaded_v0682352 += science.detail_line_diagnostic_records_loaded;
+        performance_v064890.detail_line_type50_records_considered_v0682352 += science.detail_line_type50_records_considered;
+        performance_v064890.detail_line_direct_index_hits_v0682352 += science.detail_line_direct_index_hits;
+        performance_v064890.detail_line_fallback_resolutions_v0682352 += science.detail_line_fallback_resolutions;
+        performance_v064890.detail_line_fallback_identity_comparisons_v0682352 += science.detail_line_fallback_identity_comparisons;
+        performance_v064890.detail_line_source_identities_scanned_v0682352 += science.detail_line_source_identities_scanned;
+        performance_v064890.detail_line_source_rows_retained_v0682352 += science.detail_line_source_rows_retained;
         performance_v064890.detail_rrc_seconds += science.detail_rrc_seconds;
         performance_v064890.detail_rrc_cpu_staging_seconds += science.detail_rrc_cpu_staging_seconds;
         performance_v064890.detail_rrc_fits_write_seconds += science.detail_rrc_fits_write_seconds;
@@ -22558,6 +22670,11 @@ int command_run_standalone_production(const Options& options, const std::filesys
         performance_v064890.step_log_seconds += performance_elapsed_seconds(step_log_started_v064890);
         performance_v064890.publication_seconds += performance_elapsed_seconds(publication_started_v064890);
         performance_v064890.rss_after_finalization_bytes_v068233 = current_rss_bytes_v068233();
+        {
+            const auto heap_v0682352 = current_heap_snapshot_v0682352();
+            performance_v064890.heap_after_final_uordblks_v0682352 = heap_v0682352.uordblks;
+            performance_v064890.heap_after_final_hblkhd_v0682352 = heap_v0682352.hblkhd;
+        }
         std::cout << " xstar: Done writing spectral data\n";
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         const std::size_t fits_count = count_native_fits_products(output);

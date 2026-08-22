@@ -3427,6 +3427,49 @@ struct FixedStatePersistentScratchV068231 {
 #undef XSTAR_CAP_BYTES_V068231
         return total;
     }
+
+    std::array<std::uint64_t,6> reserved_breakdown_bytes_v0682352() const {
+        std::array<std::uint64_t,6> out{{0u,0u,0u,0u,0u,0u}};
+        auto add = [](std::uint64_t& dst, const auto& v) {
+            using T = typename std::decay_t<decltype(v)>::value_type;
+            dst += static_cast<std::uint64_t>(v.capacity()) * sizeof(T);
+        };
+        // 0: record/cache ownership.
+        add(out[0], preliminary_cache); add(out[0], preliminary_evaluated);
+        add(out[0], preliminary_records); add(out[0], evaluated);
+        add(out[0], evaluated_records);
+        // 1: scientific contribution lists.
+        add(out[1], contributions); add(out[1], thermal_only_contributions);
+        add(out[1], type95_self_loop_candidates); add(out[1], spectral_contributions);
+        // 2: full/population streams retained between evaluations.
+        add(out[2], all_populations); add(out[2], thermal_population_stream);
+        add(out[2], thermal_populations); add(out[2], incoming_leveltemp_backup);
+        add(out[2], full_populations_pre_mapback); add(out[2], full_populations);
+        // 3: spectral workspaces.
+        add(out[3], continuum_shape); add(out[3], spectral_rcem);
+        add(out[3], spectral_oplin); add(out[3], spectral_cemab);
+        add(out[3], spectral_cabab); add(out[3], spectral_opakab);
+        add(out[3], spectral_rccemis); add(out[3], spectral_line_profile_opacity);
+        add(out[3], spectral_opakcont); add(out[3], spectral_fline);
+        add(out[3], spectral_flinel); add(out[3], spectral_seeds);
+        // 4: per-element solver/matrix workspaces.
+        add(out[4], element_buffers.superlevels); add(out[4], element_buffers.ions);
+        add(out[4], element_buffers.initial); add(out[4], element_buffers.populations);
+        add(out[4], element_buffers.outer); add(out[4], element_buffers.dense);
+        add(out[4], element_buffers.heat); add(out[4], element_buffers.heat2);
+        add(out[4], element_buffers.rhs); add(out[4], element_buffers.gamma);
+        add(out[4], element_buffers.alpha); add(out[4], element_buffers.fgamma);
+        add(out[4], element_buffers.falpha); add(out[4], element_buffers.igamma);
+        add(out[4], element_buffers.ialpha); add(out[4], element_buffers.ion_population);
+        add(out[4], element_buffers.ion_population_final); add(out[4], element_buffers.ionization);
+        add(out[4], element_buffers.recombination); add(out[4], element_buffers.ionization_components);
+        add(out[4], element_buffers.recombination_components); add(out[4], element_buffers.row_residual);
+        add(out[4], element_buffers.row_scale); add(out[4], element_buffers.relative_residual);
+        // 5: reduced-continuum geometry.
+        add(out[5], reduced_continuum.epim); add(out[5], reduced_continuum.bremsam);
+        add(out[5], reduced_continuum.bremsmap_index_one_based);
+        return out;
+    }
 };
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -17026,6 +17069,14 @@ int run_impl(
     perf_foundation_v068231.persistent_peak_reserved_bytes = std::max(
         perf_foundation_v068231.persistent_peak_reserved_bytes,
         perf_foundation_v068231.persistent_reserved_bytes);
+    const auto scratch_breakdown_v0682352 =
+        ctx.scratch_v068231.reserved_breakdown_bytes_v0682352();
+    perf_foundation_v068231.persistent_record_cache_bytes = scratch_breakdown_v0682352[0];
+    perf_foundation_v068231.persistent_contribution_bytes = scratch_breakdown_v0682352[1];
+    perf_foundation_v068231.persistent_population_bytes = scratch_breakdown_v0682352[2];
+    perf_foundation_v068231.persistent_spectral_bytes = scratch_breakdown_v0682352[3];
+    perf_foundation_v068231.persistent_element_solver_bytes = scratch_breakdown_v0682352[4];
+    perf_foundation_v068231.persistent_continuum_bytes = scratch_breakdown_v0682352[5];
     stats.total_seconds += elapsed(total_start);
     copy_text(stats.message, sizeof(stats.message), "native fixed-state raw program evaluated");
     return 0;

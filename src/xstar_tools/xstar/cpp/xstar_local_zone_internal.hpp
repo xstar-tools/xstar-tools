@@ -63,6 +63,15 @@ struct PerformanceFoundationV068231 {
     std::uint64_t spectral_workspace_reuses = 0u;
     std::uint64_t persistent_reserved_bytes = 0u;
     std::uint64_t persistent_peak_reserved_bytes = 0u;
+    // 0.6.82.35.2: capacity-only ownership breakdown for the persistent
+    // fixed-state scratch. These categories are observational and sum to the
+    // same lower-bound capacity accounting as persistent_reserved_bytes.
+    std::uint64_t persistent_record_cache_bytes = 0u;
+    std::uint64_t persistent_contribution_bytes = 0u;
+    std::uint64_t persistent_population_bytes = 0u;
+    std::uint64_t persistent_spectral_bytes = 0u;
+    std::uint64_t persistent_element_solver_bytes = 0u;
+    std::uint64_t persistent_continuum_bytes = 0u;
     // 0.6.82.35.1: observation-only element/matrix work counters.
     std::uint64_t element_solve_calls = 0u;
     std::uint64_t matrix_rows_sum = 0u;

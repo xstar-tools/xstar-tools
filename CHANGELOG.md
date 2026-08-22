@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.35.2 - work-counter semantics correction and performance/memory localization - 2026-08-22
+
+- Preserve the accepted 0.6.82.33.8 scientific implementation; this revision is measurement-only.
+- Correct the .35.1 fixed-call comparison to use the C++ all-fixed foundation counter (17) against FORTRAN HMC_ALL (17), rather than the narrower legacy 16-call counter.
+- Stop interpreting C++ matrix-term entries versus FORTRAN NINDB as a parity ratio; compare matrix dimensions/solver iterations and retain the raw term counters as different-semantics diagnostics.
+- Add detailed xo01_detal2 staging telemetry to isolate diagnostic-record resolution, source-line projection, fallback identity scans, and retained-row counts.
+- Add persistent fixed-state scratch capacity breakdown (record/cache, contributions, populations, spectral, element-solver, continuum) and glibc heap/RSS snapshots at the radial peak.
+- Extend the host audit summary with corrected comparable ratios and localization markers.
+
 ## 0.6.82.35.1 - canonical FORTRAN/C++ work-counter instrumentation - 2026-08-22
 
 - Revise host-measured `0.6.82.35` under the no-version-reuse rule. The same-host Fe baseline retained exact public science but measured C++/FORTRAN wall ratio `1.737314` and RSS ratio `1.821761` (`108.788731 s / 4,695,773,184 B` versus `62.618935 s / 2,577,600,512 B`).
