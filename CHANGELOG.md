@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.36.4 - lazy native element-engine heating matrices - 2026-08-22
+
+- Close `0.6.82.36.3` on the workstation: Fe science/work structure/direct-line mode all ACCEPT; caller-side element-solver storage fell `552,884,400 -> 845,616 B`, persistent scratch fell `813,707,876 -> 261,669,092 B`, peak RSS fell `4,619,792,384 -> 3,515,383,808 B` (`0.760940x`), and internal total improved `76.290929 -> 73.762340 s`.
+- Continue the `.36` excess-storage phase inside the native element engine. Its persistent `Workspace` still allocated full `n x n` `heat` and `heat2` matrices for every element even though neither matrix is read by Lucy/fixed-point solving or by production thermal reduction; they are consumed only by explicit `XSTAR_ELEMENT_RETURN_MATRICES` diagnostics.
+- Make native `heat`/`heat2` matrices lazy. Ordinary production retains only the required dense rate matrix; explicit matrix-output diagnostics allocate, fill, and return the historical heating matrices unchanged. For Fe `n_max=4796`, this removes `2 * 4796^2 * 8 = 368,025,856 B` (~351 MiB) of persistent native-engine capacity.
+- Add `V0682364_ELEMENT_ENGINE_HEATING_MATRIX_MODE=LAZY_RETURN_MATRICES_ONLY` and focused same-host Fe qualification against accepted `.36.3`. Gate exact science/work structure, retained `.36/.36.3` policies, at least 15% reduction of the radial-peak mmap heap block, at least 8% peak-RSS reduction, and <=2% runtime regression.
+- Keep the essential native dense matrix unchanged in this revision. A later `.36.x` may make it lazy only after dense-rescue usage and accepted-boundary snapshot lifetimes are measured explicitly.
+- Scientific revision remains frozen at `0.6.48.12.3.45.3.3.8`; public ABIs `60487 / 6048110 / 60488` and strict-FP behavior remain unchanged.
+
 ## 0.6.82.36.3 - 2026-08-22
 
 - Correct the rejected 0.6.82.36.2 matrix-elision attempt: true production historically sets `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM=1`, which caused the new lazy-output condition to remain true and therefore left all three caller-side `n x n` diagnostic matrices allocated.

@@ -198,7 +198,7 @@ struct Workspace {
     std::vector<double> row_scale;
     std::vector<double> relative_residual;
 
-    bool ensure(int new_n, int new_nsp, int new_nion) {
+    bool ensure(int new_n, int new_nsp, int new_nion, bool return_heating_matrices) {
         const bool resized = new_n != n || new_nsp != nsp || new_nion != nion;
         n = new_n;
         nsp = new_nsp;
@@ -206,8 +206,18 @@ struct Workspace {
         const std::size_t nn = static_cast<std::size_t>(n) * static_cast<std::size_t>(n);
         const std::size_t ss = static_cast<std::size_t>(nsp) * static_cast<std::size_t>(nsp);
         dense.assign(nn, 0.0);
-        heat.assign(nn, 0.0);
-        heat2.assign(nn, 0.0);
+        // 0.6.82.36.4: heat/heat2 are output-only diagnostic matrices.
+        // Production thermal totals are reduced directly from the canonical
+        // term stream below; neither matrix participates in Lucy/fixed-point
+        // arithmetic. Keep their exact historical contents only when the API
+        // caller explicitly requests matrix outputs.
+        if (return_heating_matrices) {
+            heat.assign(nn, 0.0);
+            heat2.assign(nn, 0.0);
+        } else {
+            if (heat.capacity() != 0u) std::vector<double>().swap(heat);
+            if (heat2.capacity() != 0u) std::vector<double>().swap(heat2);
+        }
         rhs.assign(static_cast<std::size_t>(n), 0.0);
         x.resize(static_cast<std::size_t>(n));
         xo.resize(static_cast<std::size_t>(n));
@@ -880,22 +890,27 @@ int run_element_impl(
     }
 
     Workspace& w = context.workspace;
-    if (w.ensure(input.n_rows, input.n_superlevels, input.n_ions)) context.stats.workspace_resizes += 1;
+    const bool return_matrices = (input.flags & XSTAR_ELEMENT_RETURN_MATRICES) != 0u;
+    if (w.ensure(input.n_rows, input.n_superlevels, input.n_ions, return_matrices)) context.stats.workspace_resizes += 1;
     const int n = input.n_rows;
     const int nsp = input.n_superlevels;
     const int nion = input.n_ions;
 
     const auto assembly_t0 = clock_type::now();
     std::fill(w.dense.begin(), w.dense.end(), 0.0);
-    std::fill(w.heat.begin(), w.heat.end(), 0.0);
-    std::fill(w.heat2.begin(), w.heat2.end(), 0.0);
+    if (return_matrices) {
+        std::fill(w.heat.begin(), w.heat.end(), 0.0);
+        std::fill(w.heat2.begin(), w.heat2.end(), 0.0);
+    }
     std::fill(w.rhs.begin(), w.rhs.end(), 0.0);
     for (std::size_t i = 0; i < input.term_count; ++i) {
         const auto& term = input.terms[i];
         const std::size_t p = index2(term.row - 1, term.column - 1, n);
         w.dense[p] += term.aj1;
-        w.heat[p] += term.cj;
-        w.heat2[p] += term.cj2;
+        if (return_matrices) {
+            w.heat[p] += term.cj;
+            w.heat2[p] += term.cj2;
+        }
     }
     apply_matrix_construction_dense_closure(input, w.dense);
     w.rhs[static_cast<std::size_t>(input.normalization_row - 1)] = 1.0;

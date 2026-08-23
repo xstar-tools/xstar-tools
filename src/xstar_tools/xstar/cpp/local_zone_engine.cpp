@@ -13355,6 +13355,9 @@ int run_impl(
         residual_audit_v064812339.element_solve_seconds = residual_element_solve_seconds_v064812339;
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
         ++perf_foundation_v068231.element_solve_calls;
+        if ((eout.status_flags & XSTAR_ELEMENT_STATUS_DENSE_RESCUE_USED) != 0u) {
+            ++perf_foundation_v068231.dense_rescue_count_v0682364;
+        }
         perf_foundation_v068231.matrix_rows_sum += static_cast<std::uint64_t>(std::max(active.element.n_rows, 0));
         perf_foundation_v068231.matrix_rows_max = std::max(
             perf_foundation_v068231.matrix_rows_max,

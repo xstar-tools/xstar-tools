@@ -82,6 +82,9 @@ struct PerformanceFoundationV068231 {
     std::uint64_t matrix_superlevels_max = 0u;
     std::uint64_t population_outer_iterations = 0u;
     std::uint64_t population_fixed_iterations = 0u;
+    // 0.6.82.36.4: observation-only count used to qualify whether the
+    // remaining dense n*n matrix can later become rescue-on-demand.
+    std::uint64_t dense_rescue_count_v0682364 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 
