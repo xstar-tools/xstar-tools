@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.36.11 - compact native-production record-product ownership - 2026-08-23
+
+- Continue the open `.36` memory-scaling campaign after the cross-model `.36.10` host return: C5 remained in the Fe memory class, but `multi_element_xi1_ne1e12` still peaked at `10,353,270,784 B` versus `2,740,756,480 B` for accepted Fe `.36.9`, despite exact science and a substantial runtime improvement.
+- Remove a broad-model accepted-boundary amplification in ordinary `XSTAR_NATIVE_PRODUCTION`: publication no longer retains the full `NativeRecordDiagnostic` / `EvaluatedRecord` object graph for every evaluated record. Instead, the fixed-state engine retains only a compact publication-essential `xstar_fixed_record_product_diagnostic_v1` row plus one internal matrix-commit bit. Explicit/forced forensic modes retain the historical rich diagnostic representation.
+- Eliminate the getter's full rich-vector copy before `stable_sort`. Both compact production and rich forensic paths now preserve source-position ordering by sorting only a compact index vector when the retained rows are not already ordered.
+- Release compact native record-product capacity immediately after the standalone copies ABI rows and before conversion overlaps with later continuum/element publication staging. Deferred DSEC calls also release stale compact capacity and ordinary production releases any rich-vector capacity left by a previous forensic call.
+- Add `.36.11` owner telemetry for retained rich/compact record rows, legacy-rich equivalent bytes, transient pass-2 `EvaluatedRecord` capacity, bound-free sidecars and dynamic generic-BF vectors, element-diagnostic nested capacity, thermal-diagonal storage, `last_source_*` workspace capacity, ABI/snapshot row capacity, compact-row release bytes, and RSS/allocator checkpoints across accepted-boundary recomputation, extraction, conversion, heavy-state release, and zone publication.
+- Preserve frozen science revision `0.6.48.12.3.45.3.3.8`, strict floating-point/evaluation order, all `.36.1-.36.9` solver/matrix/lifetime policies, and public ABIs `60487 / 6048110 / 60488`. The `.36.11` host qualification is broad-only and uses a fresh same-workstation `.33.8` `multi_element_xi1_ne1e12` baseline followed by the `.36.11` broad candidate; Fe and C5 are excluded from this revision's gate. A completed `.36.10` broad run may be supplied only as an optional incremental comparison.
+- Keep the host-runner CLI consistent with `.36.10`: `prepare`, `baseline`, `candidate`, `compare`, and `run` accept `--case multi_element_xi1_ne1e12`; this is the only permitted `.36.11` case and is also the default when `--case` is omitted.
+
 ## 0.6.82.36.10 - cross-model memory-scaling qualification - 2026-08-23
 
 - Close the focused Fe lifetime qualification on the workstation: `0.6.82.36.9` reproduced exact science/work structure, peak RSS about `2,740,756,480 B` internally, and total time `71.950648 s`; the accepted-boundary lifetime gate is closed.

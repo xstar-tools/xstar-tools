@@ -322,6 +322,27 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t accepted_boundary_rss_after_recompute_peak_v0682367 = 0u;
     std::uint64_t final_boundary_last_iteration_copy_count_v0682367 = 0u;
     std::uint64_t final_boundary_last_iteration_copy_elided_count_v0682367 = 0u;
+    // 0.6.82.36.11: accepted-boundary/product-projection phase checkpoints.
+    std::uint64_t rss_before_accepted_boundary_recompute_peak_v06823611 = 0u;
+    std::uint64_t heap_before_accepted_boundary_uordblks_peak_v06823611 = 0u;
+    std::uint64_t heap_before_accepted_boundary_hblkhd_peak_v06823611 = 0u;
+    std::uint64_t heap_before_accepted_boundary_fordblks_peak_v06823611 = 0u;
+    std::uint64_t rss_after_fixed_state_recompute_peak_v06823611 = 0u;
+    std::uint64_t heap_after_fixed_state_uordblks_peak_v06823611 = 0u;
+    std::uint64_t heap_after_fixed_state_hblkhd_peak_v06823611 = 0u;
+    std::uint64_t heap_after_fixed_state_fordblks_peak_v06823611 = 0u;
+    std::uint64_t rss_after_record_rows_allocation_peak_v06823611 = 0u;
+    std::uint64_t rss_after_record_extraction_peak_v06823611 = 0u;
+    std::uint64_t rss_after_native_record_release_peak_v06823611 = 0u;
+    std::uint64_t rss_after_snapshot_record_conversion_peak_v06823611 = 0u;
+    std::uint64_t rss_after_record_rows_release_peak_v06823611 = 0u;
+    std::uint64_t rss_after_zone_publication_peak_v06823611 = 0u;
+    std::uint64_t heap_after_zone_publication_uordblks_peak_v06823611 = 0u;
+    std::uint64_t heap_after_zone_publication_hblkhd_peak_v06823611 = 0u;
+    std::uint64_t heap_after_zone_publication_fordblks_peak_v06823611 = 0u;
+    std::uint64_t abi_record_rows_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t snapshot_record_rows_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t native_compact_record_release_bytes_peak_v06823611 = 0u;
     // 0.6.82.35.2: glibc allocator snapshots paired with key RSS phases.
     std::uint64_t heap_after_atdb_uordblks_v0682352 = 0u;
     std::uint64_t heap_after_atdb_hblkhd_v0682352 = 0u;
@@ -15885,11 +15906,18 @@ void attach_native_product_diagnostics(
     }
 
     std::vector<xstar_fixed_record_product_diagnostic_v1> record_rows(counts.record_count);
-    std::vector<xstar_fixed_continuum_product_diagnostic_v1> continuum_rows(counts.continuum_count);
-    std::vector<xstar_fixed_element_product_diagnostic_v1> element_rows(counts.element_count);
     std::size_t record_count = 0;
     std::size_t continuum_count = 0;
     std::size_t element_count = 0;
+    if (g_performance_v064890) {
+        const auto bytes_v06823611 = static_cast<std::uint64_t>(record_rows.capacity()) *
+            sizeof(xstar_fixed_record_product_diagnostic_v1);
+        g_performance_v064890->abi_record_rows_capacity_bytes_peak_v06823611 = std::max(
+            g_performance_v064890->abi_record_rows_capacity_bytes_peak_v06823611, bytes_v06823611);
+        g_performance_v064890->rss_after_record_rows_allocation_peak_v06823611 = std::max(
+            g_performance_v064890->rss_after_record_rows_allocation_peak_v06823611,
+            current_rss_bytes_v068233());
+    }
 
     rc = xstar_fixed_state_get_last_record_product_diagnostics_v1(
         context, record_rows.empty() ? nullptr : record_rows.data(), record_rows.size(),
@@ -15897,17 +15925,24 @@ void attach_native_product_diagnostics(
     if (rc != 0 || record_count != record_rows.size()) {
         throw std::runtime_error(std::string("native record product-diagnostic query failed: ") + message.data());
     }
-    rc = xstar_fixed_state_get_last_continuum_product_diagnostics_v1(
-        context, continuum_rows.empty() ? nullptr : continuum_rows.data(), continuum_rows.size(),
-        &continuum_count, message.data(), message.size());
-    if (rc != 0 || continuum_count != continuum_rows.size()) {
-        throw std::runtime_error(std::string("native continuum product-diagnostic query failed: ") + message.data());
+    if (g_performance_v064890) {
+        g_performance_v064890->rss_after_record_extraction_peak_v06823611 = std::max(
+            g_performance_v064890->rss_after_record_extraction_peak_v06823611,
+            current_rss_bytes_v068233());
     }
-    rc = xstar_fixed_state_get_last_element_product_diagnostics_v1(
-        context, element_rows.empty() ? nullptr : element_rows.data(), element_rows.size(),
-        &element_count, message.data(), message.size());
-    if (rc != 0 || element_count != element_rows.size()) {
-        throw std::runtime_error(std::string("native element product-diagnostic query failed: ") + message.data());
+
+    // The ABI rows are now caller-owned. Release native compact production
+    // rows before constructing the second compact standalone representation.
+    // Explicit forensic rich diagnostics are deliberately untouched.
+    const auto released_native_v06823611 =
+        xstar_local_zone_internal::release_compact_record_products_v06823611(context);
+    if (g_performance_v064890) {
+        g_performance_v064890->native_compact_record_release_bytes_peak_v06823611 = std::max(
+            g_performance_v064890->native_compact_record_release_bytes_peak_v06823611,
+            released_native_v06823611);
+        g_performance_v064890->rss_after_native_record_release_peak_v06823611 = std::max(
+            g_performance_v064890->rss_after_native_record_release_peak_v06823611,
+            current_rss_bytes_v068233());
     }
 
     snapshot.record_product_diagnostics.clear();
@@ -15952,6 +15987,36 @@ void attach_native_product_diagnostics(
         out.type53_tau_in = row.type53_tau_in;
         out.type53_tau_out = row.type53_tau_out;
         snapshot.record_product_diagnostics.push_back(std::move(out));
+    }
+    if (g_performance_v064890) {
+        const auto bytes_v06823611 = static_cast<std::uint64_t>(snapshot.record_product_diagnostics.capacity()) *
+            sizeof(xstar_run_state::RecordProductDiagnosticState);
+        g_performance_v064890->snapshot_record_rows_capacity_bytes_peak_v06823611 = std::max(
+            g_performance_v064890->snapshot_record_rows_capacity_bytes_peak_v06823611, bytes_v06823611);
+        g_performance_v064890->rss_after_snapshot_record_conversion_peak_v06823611 = std::max(
+            g_performance_v064890->rss_after_snapshot_record_conversion_peak_v06823611,
+            current_rss_bytes_v068233());
+    }
+    std::vector<xstar_fixed_record_product_diagnostic_v1>().swap(record_rows);
+    if (g_performance_v064890) {
+        g_performance_v064890->rss_after_record_rows_release_peak_v06823611 = std::max(
+            g_performance_v064890->rss_after_record_rows_release_peak_v06823611,
+            current_rss_bytes_v068233());
+    }
+
+    std::vector<xstar_fixed_continuum_product_diagnostic_v1> continuum_rows(counts.continuum_count);
+    std::vector<xstar_fixed_element_product_diagnostic_v1> element_rows(counts.element_count);
+    rc = xstar_fixed_state_get_last_continuum_product_diagnostics_v1(
+        context, continuum_rows.empty() ? nullptr : continuum_rows.data(), continuum_rows.size(),
+        &continuum_count, message.data(), message.size());
+    if (rc != 0 || continuum_count != continuum_rows.size()) {
+        throw std::runtime_error(std::string("native continuum product-diagnostic query failed: ") + message.data());
+    }
+    rc = xstar_fixed_state_get_last_element_product_diagnostics_v1(
+        context, element_rows.empty() ? nullptr : element_rows.data(), element_rows.size(),
+        &element_count, message.data(), message.size());
+    if (rc != 0 || element_count != element_rows.size()) {
+        throw std::runtime_error(std::string("native element product-diagnostic query failed: ") + message.data());
     }
 
     snapshot.continuum_product_diagnostics.clear();
@@ -17488,6 +17553,18 @@ FixedDsecSnapshot evaluate_full_boundary(
         data.fixed_context, &input, &output, &source, &data.cumulative_stats,
         message.data(), message.size());
     if (rc != 0) throw std::runtime_error(std::string("accepted boundary evaluation failed: ") + message.data());
+    if (g_performance_v064890) {
+        const auto rss_v06823611 = current_rss_bytes_v068233();
+        const auto heap_v06823611 = current_heap_snapshot_v0682352();
+        g_performance_v064890->rss_after_fixed_state_recompute_peak_v06823611 = std::max(
+            g_performance_v064890->rss_after_fixed_state_recompute_peak_v06823611, rss_v06823611);
+        g_performance_v064890->heap_after_fixed_state_uordblks_peak_v06823611 = std::max(
+            g_performance_v064890->heap_after_fixed_state_uordblks_peak_v06823611, heap_v06823611.uordblks);
+        g_performance_v064890->heap_after_fixed_state_hblkhd_peak_v06823611 = std::max(
+            g_performance_v064890->heap_after_fixed_state_hblkhd_peak_v06823611, heap_v06823611.hblkhd);
+        g_performance_v064890->heap_after_fixed_state_fordblks_peak_v06823611 = std::max(
+            g_performance_v064890->heap_after_fixed_state_fordblks_peak_v06823611, heap_v06823611.fordblks);
+    }
     write_cpp_fixed_diagnostics(data, snapshot.sequence);
     snapshot.populations.resize(output.populations_count);
     capture_source_ion_stage_fractions(
@@ -17732,6 +17809,18 @@ FixedDsecSnapshot evaluate_accepted_boundary(
                     std::max(g_performance_v064890->accepted_boundary_rss_after_release_peak_v0682367,
                              current_rss_bytes_v068233());
             }
+        }
+        if (g_performance_v064890) {
+            const auto rss_v06823611 = current_rss_bytes_v068233();
+            const auto heap_v06823611 = current_heap_snapshot_v0682352();
+            g_performance_v064890->rss_before_accepted_boundary_recompute_peak_v06823611 = std::max(
+                g_performance_v064890->rss_before_accepted_boundary_recompute_peak_v06823611, rss_v06823611);
+            g_performance_v064890->heap_before_accepted_boundary_uordblks_peak_v06823611 = std::max(
+                g_performance_v064890->heap_before_accepted_boundary_uordblks_peak_v06823611, heap_v06823611.uordblks);
+            g_performance_v064890->heap_before_accepted_boundary_hblkhd_peak_v06823611 = std::max(
+                g_performance_v064890->heap_before_accepted_boundary_hblkhd_peak_v06823611, heap_v06823611.hblkhd);
+            g_performance_v064890->heap_before_accepted_boundary_fordblks_peak_v06823611 = std::max(
+                g_performance_v064890->heap_before_accepted_boundary_fordblks_peak_v06823611, heap_v06823611.fordblks);
         }
         auto recomputed_v0682367 = evaluate_full_boundary(
             data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
@@ -18893,6 +18982,18 @@ void stream_saved_shell_detail_v068233(
             stream_state.radial_zones.front().accepted_controller.evaluation.radiation_energy_ev.size();
         ++g_performance_v064890->saved_shells_streamed_v068233;
         const auto rss = current_rss_bytes_v068233();
+        const auto heap_after_zone_v06823611 = current_heap_snapshot_v0682352();
+        g_performance_v064890->rss_after_zone_publication_peak_v06823611 = std::max(
+            g_performance_v064890->rss_after_zone_publication_peak_v06823611, rss);
+        g_performance_v064890->heap_after_zone_publication_uordblks_peak_v06823611 = std::max(
+            g_performance_v064890->heap_after_zone_publication_uordblks_peak_v06823611,
+            heap_after_zone_v06823611.uordblks);
+        g_performance_v064890->heap_after_zone_publication_hblkhd_peak_v06823611 = std::max(
+            g_performance_v064890->heap_after_zone_publication_hblkhd_peak_v06823611,
+            heap_after_zone_v06823611.hblkhd);
+        g_performance_v064890->heap_after_zone_publication_fordblks_peak_v06823611 = std::max(
+            g_performance_v064890->heap_after_zone_publication_fordblks_peak_v06823611,
+            heap_after_zone_v06823611.fordblks);
         g_performance_v064890->radial_rss_last_bytes_v068233 = rss;
         if (rss >= g_performance_v064890->radial_rss_peak_bytes_v068233) {
             g_performance_v064890->radial_rss_peak_bytes_v068233 = rss;
@@ -21986,6 +22087,29 @@ void emit_controller_performance_instrumentation(
             << "V0682365_ELEMENT_ENGINE_DENSE_MATRIX_MODE=LAZY_DIAGNOSTIC_OR_RESCUE\n"
             << "V0682365_PRODUCTION_SOLVE_RESPONSE_POLICY=ELIDED_OUTPUT_DIAGNOSTICS\n"
             << "V0682366_PUBLICATION_ACTIVE_POPULATION_MODE=RETAIN_FINAL_ONLY\n"
+            << "V06823611_RECORD_PRODUCT_MODE=COMPACT_NATIVE_PRODUCTION_RICH_FORENSIC\n"
+            << "V06823611_RECORD_PRODUCT_SORT_MODE=SOURCE_INDEX_STABLE_SORT_NO_RICH_COPY\n"
+            << "V06823611_ABI_RECORD_PRODUCT_ROW_BYTES=" << sizeof(xstar_fixed_record_product_diagnostic_v1) << "\n"
+            << "V06823611_SNAPSHOT_RECORD_PRODUCT_ROW_BYTES=" << sizeof(xstar_run_state::RecordProductDiagnosticState) << "\n"
+            << "V06823611_RICH_RECORD_COUNT_PEAK=" << perf.foundation_v068231.rich_record_count_peak_v06823611 << "\n"
+            << "V06823611_COMPACT_RECORD_COUNT_PEAK=" << perf.foundation_v068231.compact_record_count_peak_v06823611 << "\n"
+            << "V06823611_RICH_RECORD_INLINE_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.rich_record_inline_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_COMPACT_RECORD_INLINE_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.compact_record_inline_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_LEGACY_RICH_INLINE_EQUIVALENT_BYTES_PEAK=" << perf.foundation_v068231.legacy_rich_inline_equivalent_bytes_peak_v06823611 << "\n"
+            << "V06823611_LEGACY_RICH_GETTER_COPY_EQUIVALENT_BYTES_PEAK=" << perf.foundation_v068231.legacy_rich_getter_copy_equivalent_bytes_peak_v06823611 << "\n"
+            << "V06823611_COMPACT_SORT_INDEX_UPPER_BOUND_BYTES_PEAK=" << perf.foundation_v068231.compact_sort_index_upper_bound_bytes_peak_v06823611 << "\n"
+            << "V06823611_RICH_BOUND_FREE_SIDECAR_COUNT_PEAK=" << perf.foundation_v068231.rich_bound_free_sidecar_count_peak_v06823611 << "\n"
+            << "V06823611_RICH_BOUND_FREE_SIDECAR_BYTES_PEAK=" << perf.foundation_v068231.rich_bound_free_sidecar_bytes_peak_v06823611 << "\n"
+            << "V06823611_RICH_GENERIC_BF_DYNAMIC_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.rich_generic_bound_free_dynamic_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_EVALUATED_RECORD_INLINE_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.evaluated_record_inline_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_EVALUATED_BOUND_FREE_SIDECAR_COUNT_PEAK=" << perf.foundation_v068231.evaluated_bound_free_sidecar_count_peak_v06823611 << "\n"
+            << "V06823611_EVALUATED_BOUND_FREE_SIDECAR_BYTES_PEAK=" << perf.foundation_v068231.evaluated_bound_free_sidecar_bytes_peak_v06823611 << "\n"
+            << "V06823611_EVALUATED_GENERIC_BF_DYNAMIC_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.evaluated_generic_bound_free_dynamic_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_ELEMENT_DIAGNOSTIC_INLINE_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.element_diagnostic_inline_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_ELEMENT_DIAGNOSTIC_NESTED_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.element_diagnostic_nested_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_THERMAL_DIAGONAL_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.thermal_diagonal_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_LAST_SOURCE_WORKSPACE_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.last_source_workspace_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_COMPACT_RECORD_RELEASE_BYTES_PEAK=" << perf.foundation_v068231.compact_record_release_bytes_peak_v06823611 << "\n"
             << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"
@@ -22039,6 +22163,26 @@ void emit_controller_performance_instrumentation(
             << "V0682367_RSS_AFTER_BOUNDARY_RECOMPUTE_PEAK=" << perf.accepted_boundary_rss_after_recompute_peak_v0682367 << "\n"
             << "V0682367_FINAL_BOUNDARY_COPY_COUNT=" << perf.final_boundary_last_iteration_copy_count_v0682367 << "\n"
             << "V0682367_FINAL_BOUNDARY_COPY_ELIDED_COUNT=" << perf.final_boundary_last_iteration_copy_elided_count_v0682367 << "\n"
+            << "V06823611_RSS_BEFORE_ACCEPTED_BOUNDARY_RECOMPUTE_PEAK=" << perf.rss_before_accepted_boundary_recompute_peak_v06823611 << "\n"
+            << "V06823611_HEAP_BEFORE_ACCEPTED_BOUNDARY_UORDBLKS_PEAK=" << perf.heap_before_accepted_boundary_uordblks_peak_v06823611 << "\n"
+            << "V06823611_HEAP_BEFORE_ACCEPTED_BOUNDARY_HBLKHD_PEAK=" << perf.heap_before_accepted_boundary_hblkhd_peak_v06823611 << "\n"
+            << "V06823611_HEAP_BEFORE_ACCEPTED_BOUNDARY_FORDBLKS_PEAK=" << perf.heap_before_accepted_boundary_fordblks_peak_v06823611 << "\n"
+            << "V06823611_RSS_AFTER_FIXED_STATE_RECOMPUTE_PEAK=" << perf.rss_after_fixed_state_recompute_peak_v06823611 << "\n"
+            << "V06823611_HEAP_AFTER_FIXED_STATE_UORDBLKS_PEAK=" << perf.heap_after_fixed_state_uordblks_peak_v06823611 << "\n"
+            << "V06823611_HEAP_AFTER_FIXED_STATE_HBLKHD_PEAK=" << perf.heap_after_fixed_state_hblkhd_peak_v06823611 << "\n"
+            << "V06823611_HEAP_AFTER_FIXED_STATE_FORDBLKS_PEAK=" << perf.heap_after_fixed_state_fordblks_peak_v06823611 << "\n"
+            << "V06823611_RSS_AFTER_RECORD_ROWS_ALLOCATION_PEAK=" << perf.rss_after_record_rows_allocation_peak_v06823611 << "\n"
+            << "V06823611_RSS_AFTER_RECORD_EXTRACTION_PEAK=" << perf.rss_after_record_extraction_peak_v06823611 << "\n"
+            << "V06823611_RSS_AFTER_NATIVE_RECORD_RELEASE_PEAK=" << perf.rss_after_native_record_release_peak_v06823611 << "\n"
+            << "V06823611_RSS_AFTER_SNAPSHOT_RECORD_CONVERSION_PEAK=" << perf.rss_after_snapshot_record_conversion_peak_v06823611 << "\n"
+            << "V06823611_RSS_AFTER_RECORD_ROWS_RELEASE_PEAK=" << perf.rss_after_record_rows_release_peak_v06823611 << "\n"
+            << "V06823611_RSS_AFTER_ZONE_PUBLICATION_PEAK=" << perf.rss_after_zone_publication_peak_v06823611 << "\n"
+            << "V06823611_HEAP_AFTER_ZONE_PUBLICATION_UORDBLKS_PEAK=" << perf.heap_after_zone_publication_uordblks_peak_v06823611 << "\n"
+            << "V06823611_HEAP_AFTER_ZONE_PUBLICATION_HBLKHD_PEAK=" << perf.heap_after_zone_publication_hblkhd_peak_v06823611 << "\n"
+            << "V06823611_HEAP_AFTER_ZONE_PUBLICATION_FORDBLKS_PEAK=" << perf.heap_after_zone_publication_fordblks_peak_v06823611 << "\n"
+            << "V06823611_ABI_RECORD_ROWS_CAPACITY_BYTES_PEAK=" << perf.abi_record_rows_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_SNAPSHOT_RECORD_ROWS_CAPACITY_BYTES_PEAK=" << perf.snapshot_record_rows_capacity_bytes_peak_v06823611 << "\n"
+            << "V06823611_NATIVE_COMPACT_RECORD_RELEASE_BYTES_PEAK=" << perf.native_compact_record_release_bytes_peak_v06823611 << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
             << "V0682352_HEAP_AFTER_ATDB_UORDBLKS_BYTES=" << perf.heap_after_atdb_uordblks_v0682352 << "\n"

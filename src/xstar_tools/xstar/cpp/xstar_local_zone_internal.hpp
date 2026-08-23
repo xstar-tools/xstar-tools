@@ -85,12 +85,41 @@ struct PerformanceFoundationV068231 {
     // 0.6.82.36.4: observation-only count used to qualify whether the
     // remaining dense n*n matrix can later become rescue-on-demand.
     std::uint64_t dense_rescue_count_v0682364 = 0u;
+    // 0.6.82.36.11: accepted-boundary record-product ownership telemetry.
+    // All values are observational lower-bound capacity accounting and do not
+    // participate in scientific or publication decisions.
+    std::uint64_t rich_record_count_peak_v06823611 = 0u;
+    std::uint64_t compact_record_count_peak_v06823611 = 0u;
+    std::uint64_t rich_record_inline_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t compact_record_inline_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t legacy_rich_inline_equivalent_bytes_peak_v06823611 = 0u;
+    std::uint64_t legacy_rich_getter_copy_equivalent_bytes_peak_v06823611 = 0u;
+    std::uint64_t compact_sort_index_upper_bound_bytes_peak_v06823611 = 0u;
+    std::uint64_t rich_bound_free_sidecar_count_peak_v06823611 = 0u;
+    std::uint64_t rich_bound_free_sidecar_bytes_peak_v06823611 = 0u;
+    std::uint64_t rich_generic_bound_free_dynamic_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t evaluated_record_inline_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t evaluated_bound_free_sidecar_count_peak_v06823611 = 0u;
+    std::uint64_t evaluated_bound_free_sidecar_bytes_peak_v06823611 = 0u;
+    std::uint64_t evaluated_generic_bound_free_dynamic_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t element_diagnostic_inline_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t element_diagnostic_nested_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t thermal_diagonal_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t last_source_workspace_capacity_bytes_peak_v06823611 = 0u;
+    std::uint64_t compact_record_release_bytes_peak_v06823611 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 
 void capture_performance_foundation_v068231(
     const xstar_fixed_state_context* context,
     PerformanceFoundationV068231& out);
+
+// 0.6.82.36.11: once the standalone has copied the compact production record
+// products into its accepted-boundary snapshot, no native fixed-state consumer
+// needs that retained vector. Release its capacity before later publication
+// staging so accepted-boundary ownership cannot overlap unnecessarily.
+std::uint64_t release_compact_record_products_v06823611(
+    xstar_fixed_state_context* context);
 
 } // namespace xstar_local_zone_internal
 

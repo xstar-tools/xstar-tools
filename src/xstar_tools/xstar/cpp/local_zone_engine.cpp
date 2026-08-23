@@ -39,6 +39,7 @@
 #include <memory>
 #include <map>
 #include <optional>
+#include <numeric>
 #include <sstream>
 #include <set>
 #include <stdexcept>
@@ -1876,6 +1877,81 @@ struct NativeRecordDiagnostic {
     bool matrix_committed = false;
 };
 
+// 0.6.82.36.11: ordinary native production needs only the compact record
+// product surface consumed by the standalone publication path.  Keep the
+// historical rich NativeRecordDiagnostic exclusively for explicit diagnostic
+// / forensic execution.  matrix_committed is retained out-of-band from the
+// frozen public ABI row solely so post-closure ans1..ans6 can be updated at
+// the same semantic point as the historical rich path.
+struct CompactProductionRecordDiagnosticV06823611 {
+    xstar_fixed_record_product_diagnostic_v1 row{};
+    bool matrix_committed = false;
+};
+
+static xstar_fixed_record_product_diagnostic_v1 make_record_product_row_v06823611(
+    int element_index,
+    int element_z,
+    const EvaluatedRecord& item) {
+    xstar_fixed_record_product_diagnostic_v1 out{};
+    const auto& c = item.contribution;
+    const auto& bf = item.bound_free_payload();
+    out.source_position = c.source_position;
+    out.record = c.record;
+    out.element_index = element_index;
+    out.element_z = element_z;
+    out.data_type = c.data_type;
+    out.rate_type = c.rate_type;
+    out.ion_stage = c.ion_stage;
+    out.lower_row = c.lower_row;
+    out.upper_row = c.upper_row;
+    out.spectral = item.spectral ? 1u : 0u;
+    out.ans[0] = c.ans1; out.ans[1] = c.ans2; out.ans[2] = c.ans3;
+    out.ans[3] = c.ans4; out.ans[4] = c.ans5; out.ans[5] = c.ans6;
+    out.line_energy_ev = item.line_energy_ev;
+    out.atomic_mass_amu = item.atomic_mass_amu;
+    out.density_scale = c.density_scale;
+    out.natural_width_ev = item.natural_width_ev;
+    out.opakab = item.opakab;
+    out.type50_valid = item.type50_shadow.valid ? 1u : 0u;
+    out.type50_line_index_one_based = item.type50_shadow.line_index_one_based;
+    out.type50_wavelength_a = item.type50_shadow.stored_wavelength_a;
+    out.type50_ptmp1 = item.type50_shadow.ptmp1;
+    out.type50_ptmp2 = item.type50_shadow.ptmp2;
+    out.type50_tau_in = item.type50_shadow.line_tau_in;
+    out.type50_tau_out = item.type50_shadow.line_tau_out;
+    out.type53_valid = bf.type53_shadow.valid ? 1u : 0u;
+    out.type49_valid = bf.type49_shadow.valid ? 1u : 0u;
+    out.type99_valid = item.type99_shadow.valid ? 1u : 0u;
+    if (bf.type49_shadow.valid) {
+        out.continuum_index_one_based = bf.type49_shadow.continuum_index_one_based;
+    } else if (bf.type53_shadow.valid) {
+        out.continuum_index_one_based = bf.type53_shadow.continuum_index_one_based;
+    } else if (item.type99_shadow.valid) {
+        out.continuum_index_one_based = item.type99_shadow.nbinc_threshold_one_based;
+    } else {
+        out.continuum_index_one_based = item.continuum_index_one_based;
+    }
+    out.type53_threshold_ev = bf.type53_shadow.threshold_ev;
+    out.type53_base_threshold_ev = bf.type53_shadow.base_threshold_ev;
+    out.type49_threshold_ev = bf.type49_shadow.threshold_ev;
+    out.type99_threshold_ev = item.type99_shadow.threshold_ev;
+    if (bf.type49_shadow.valid) {
+        out.threshold_abs_sigma_cm2 = bf.type49_shadow.threshold_cross_section_cm2;
+        out.threshold_stimulated_sigma_cm2 = bf.type49_shadow.threshold_stimulated_cross_section_cm2;
+    } else if (bf.type53_shadow.valid) {
+        out.threshold_abs_sigma_cm2 = bf.type53_shadow.threshold_cross_section_cm2;
+        out.threshold_stimulated_sigma_cm2 = bf.type53_shadow.threshold_stimulated_cross_section_cm2;
+    } else {
+        out.threshold_abs_sigma_cm2 = item.opakab;
+        out.threshold_stimulated_sigma_cm2 = 0.0;
+    }
+    out.type53_ptmp1 = bf.type53_shadow.ptmp1;
+    out.type53_ptmp2 = bf.type53_shadow.ptmp2;
+    out.type53_tau_in = bf.type53_shadow.tau_in;
+    out.type53_tau_out = bf.type53_shadow.tau_out;
+    return out;
+}
+
 struct PreliminaryRateAuditRowV0648117 {
     std::int64_t source_position = 0;
     std::int64_t record = 0;
@@ -2981,6 +3057,57 @@ struct NativeElementDiagnostic {
 };
 
 
+static std::uint64_t element_diagnostic_nested_capacity_bytes_v06823611(
+    const NativeElementDiagnostic& d) {
+    std::uint64_t bytes = 0u;
+    const auto add = [&](const auto& values) {
+        using Value = typename std::decay_t<decltype(values)>::value_type;
+        bytes += static_cast<std::uint64_t>(values.capacity()) * sizeof(Value);
+    };
+    add(d.preliminary.ionization);
+    add(d.preliminary.recombination);
+    add(d.preliminary.fractions);
+    add(d.preliminary.audit_rows_v0648117);
+    add(d.active.element.rows);
+    add(d.full_populations);
+    add(d.final_stage_fractions);
+    add(d.active_raw_global_level_indices);
+    add(d.active_raw_call_start_xilevg);
+    add(d.active_loaded_global_level_indices);
+    add(d.active_loaded_call_start_xilevg);
+    add(d.active_initial_populations);
+    add(d.active_final_outer_start_populations);
+    add(d.active_final_populations);
+    add(d.level_gamma);
+    add(d.level_alpha);
+    add(d.level_igammamax);
+    add(d.level_ialphamax);
+    add(d.final_superlevel_populations_before_solve);
+    add(d.final_condensed_matrix);
+    add(d.final_condensed_rhs);
+    add(d.final_first_lu_solution);
+    add(d.final_refinement_residual);
+    add(d.final_refinement_correction);
+    add(d.final_refined_superlevel_solution);
+    add(d.final_population_after_condensed);
+    add(d.final_fixed_point_population_before);
+    add(d.final_fixed_point_population_after);
+    add(d.thermal_compact_populations);
+    add(d.dense_matrix);
+    add(d.heating_matrix);
+    add(d.heating_matrix2);
+    add(d.rhs);
+    add(d.row_residual);
+    add(d.row_scale);
+    add(d.relative_row_residual);
+    add(d.active_ion_reconstruction);
+    add(d.committed_contributions);
+    add(d.canonical_thermal_terms);
+    bytes += static_cast<std::uint64_t>(d.solver_method.capacity());
+    return bytes;
+}
+
+
 // v0.6.48.11.8: diagnostic-only call-1 carbon compact-solve attribution.
 // This is intentionally downstream of the element solve and never mutates
 // populations, matrices, rates, active windows, opacity, or controller state.
@@ -3842,6 +3969,9 @@ struct xstar_fixed_state_context_impl {
     // continue to use the literal source endpoint rule introduced in 11.7.
     bool preliminary_type7_legacy_compat_v06481171 = false;
     std::vector<NativeRecordDiagnostic> last_record_diagnostics;
+    std::vector<CompactProductionRecordDiagnosticV06823611>
+        last_compact_record_product_diagnostics_v06823611;
+    bool last_record_product_compact_mode_v06823611 = false;
     std::vector<NativeElementDiagnostic> last_element_diagnostics;
     // v0.6.48.12.3.18: fstepr publication lifetime is distinct from the
     // post-mapback population view consumed by calc_emisab_all/calc_emis_all.
@@ -11936,7 +12066,33 @@ int run_impl(
     xstar_fixed_source_workspace_output_v1* source_workspaces = nullptr
 ) {
     validate_io(input, output);
-    ctx.last_record_diagnostics.clear();
+    const bool defer_product_projection =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
+    const bool native_production_v064897 = environment_flag("XSTAR_NATIVE_PRODUCTION");
+    const bool force_096_record_provenance_v064897 =
+        environment_flag("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
+    const bool compact_record_products_v06823611 =
+        native_production_v064897 && !force_096_record_provenance_v064897;
+    ctx.last_record_product_compact_mode_v06823611 = compact_record_products_v06823611;
+    if (compact_record_products_v06823611) {
+        // A prior explicit forensic call may have left a very large rich-vector
+        // capacity. Ordinary production never consumes it. Release it rather
+        // than carrying that capacity into the accepted-boundary/DSEC path.
+        std::vector<NativeRecordDiagnostic>().swap(ctx.last_record_diagnostics);
+        if (defer_product_projection) {
+            // The compact accepted-boundary product has already been copied to
+            // the standalone snapshot before a later DSEC call begins. DSEC
+            // itself publishes no record products, so retain no stale capacity.
+            std::vector<CompactProductionRecordDiagnosticV06823611>().swap(
+                ctx.last_compact_record_product_diagnostics_v06823611);
+        } else {
+            ctx.last_compact_record_product_diagnostics_v06823611.clear();
+        }
+    } else {
+        ctx.last_record_diagnostics.clear();
+        std::vector<CompactProductionRecordDiagnosticV06823611>().swap(
+            ctx.last_compact_record_product_diagnostics_v06823611);
+    }
     ctx.last_element_diagnostics.clear();
     ctx.last_detail_pre_mapback_populations_v064812318.clear();
     ctx.last_active_stage_windows_v064812318.clear();
@@ -12216,8 +12372,6 @@ int run_impl(
     ctx.last_continuum_epim_fingerprint = ctx.last_continuum_bremsam_fingerprint = ctx.last_continuum_bremsmap_fingerprint = 0;
     ctx.last_continuum_workspace_diagnostics.clear();
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
-    const bool defer_product_projection =
-        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
     const bool dsec_hmc_only_v06824 =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY) != 0u;
     // v0.6.48.9.7: the ordinary DSEC hot path never exposes record-product
@@ -12226,12 +12380,12 @@ int run_impl(
     // Avoid copying the full EvaluatedRecord shadow payload into the retained
     // diagnostic sidecar on those 54 deferred evaluations.  Keep general
     // library behavior unchanged and provide a same-source 9.6 fallback.
-    const bool native_production_v064897 = environment_flag("XSTAR_NATIVE_PRODUCTION");
-    const bool force_096_record_provenance_v064897 =
-        environment_flag("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
     const bool retain_record_provenance_v064897 =
-        !defer_product_projection || !native_production_v064897 ||
-        force_096_record_provenance_v064897;
+        !compact_record_products_v06823611 &&
+        (!defer_product_projection || !native_production_v064897 ||
+         force_096_record_provenance_v064897);
+    const bool retain_compact_record_products_v06823611 =
+        compact_record_products_v06823611 && !defer_product_projection;
     // 0.6.82.30.8.7: true-production DSEC consumes thermal/state outputs, not
     // the retained element-product diagnostic package.  Avoid deep-copying
     // contributions, populations and residual workspaces on those deferred
@@ -12789,6 +12943,44 @@ int run_impl(
             0.0,
             elapsed(evaluated_record_started_v068231) -
                 (stats.rate_seconds - evaluated_rate_before_v068231));
+        // 0.6.82.36.11: account separately for the transient pass-2
+        // EvaluatedRecord surface.  In compact production the retained rich
+        // diagnostic vector is intentionally empty, so without these counters
+        // a broad-model bound-free owner could otherwise disappear from the
+        // ownership report even while it remains live during evaluation.
+        perf_foundation_v068231.evaluated_record_inline_capacity_bytes_peak_v06823611 = std::max(
+            perf_foundation_v068231.evaluated_record_inline_capacity_bytes_peak_v06823611,
+            static_cast<std::uint64_t>(evaluated.capacity()) * sizeof(EvaluatedRecord));
+        {
+            std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*>
+                evaluated_sidecars_v06823611;
+            std::uint64_t evaluated_generic_bf_capacity_v06823611 = 0u;
+            for (const auto& evaluated_item_v06823611 : evaluated) {
+                if (evaluated_item_v06823611.bound_free_payload_v06823087) {
+                    evaluated_sidecars_v06823611.insert(
+                        evaluated_item_v06823611.bound_free_payload_v06823087.get());
+                }
+                evaluated_generic_bf_capacity_v06823611 +=
+                    static_cast<std::uint64_t>(
+                        evaluated_item_v06823611.generic_bound_free_offset_ryd_v0648120.capacity()) *
+                    sizeof(double);
+                evaluated_generic_bf_capacity_v06823611 +=
+                    static_cast<std::uint64_t>(
+                        evaluated_item_v06823611.generic_bound_free_sigma_cm2_v0648120.capacity()) *
+                    sizeof(double);
+            }
+            const std::uint64_t evaluated_sidecar_count_v06823611 =
+                static_cast<std::uint64_t>(evaluated_sidecars_v06823611.size());
+            perf_foundation_v068231.evaluated_bound_free_sidecar_count_peak_v06823611 = std::max(
+                perf_foundation_v068231.evaluated_bound_free_sidecar_count_peak_v06823611,
+                evaluated_sidecar_count_v06823611);
+            perf_foundation_v068231.evaluated_bound_free_sidecar_bytes_peak_v06823611 = std::max(
+                perf_foundation_v068231.evaluated_bound_free_sidecar_bytes_peak_v06823611,
+                evaluated_sidecar_count_v06823611 * sizeof(BoundFreeEvaluatedPayloadV06823087));
+            perf_foundation_v068231.evaluated_generic_bound_free_dynamic_capacity_bytes_peak_v06823611 = std::max(
+                perf_foundation_v068231.evaluated_generic_bound_free_dynamic_capacity_bytes_peak_v06823611,
+                evaluated_generic_bf_capacity_v06823611);
+        }
         SparsePreliminaryCacheAuditV064812337 sparse_cache_audit_v064812337;
         sparse_cache_audit_v064812337.element_z = element.element_z;
         sparse_cache_audit_v064812337.active_min_stage = active.min_stage;
@@ -13130,7 +13322,14 @@ int run_impl(
                     Type95StreamIdentity{original.record, original.data_type,
                         original.rate_type, original.ion_stage}, true});
             }
-            if (retain_record_provenance_v064897) {
+            if (retain_compact_record_products_v06823611) {
+                CompactProductionRecordDiagnosticV06823611 diagnostic;
+                diagnostic.row = make_record_product_row_v06823611(
+                    element.element_index, element.element_z, item);
+                diagnostic.matrix_committed = matrix_committed;
+                ctx.last_compact_record_product_diagnostics_v06823611.push_back(
+                    std::move(diagnostic));
+            } else if (retain_record_provenance_v064897) {
                 NativeRecordDiagnostic diagnostic;
                 diagnostic.element_index = element.element_index;
                 diagnostic.element_z = element.element_z;
@@ -13273,6 +13472,25 @@ int run_impl(
             answers.ans4 = committed->second->ans4;
             answers.ans5 = committed->second->ans5;
             answers.ans6 = committed->second->ans6;
+        }
+        for (auto& diagnostic : ctx.last_compact_record_product_diagnostics_v06823611) {
+            auto& answers = diagnostic.row;
+            if (answers.element_z != element.element_z || !diagnostic.matrix_committed) {
+                continue;
+            }
+            const DiagnosticIdentity key{
+                answers.record, answers.data_type, answers.rate_type, answers.ion_stage};
+            const auto committed = committed_by_identity.find(key);
+            if (committed == committed_by_identity.end()) {
+                diagnostic.matrix_committed = false;
+                continue;
+            }
+            answers.ans[0] = committed->second->ans1;
+            answers.ans[1] = committed->second->ans2;
+            answers.ans[2] = committed->second->ans3;
+            answers.ans[3] = committed->second->ans4;
+            answers.ans[4] = committed->second->ans5;
+            answers.ans[5] = committed->second->ans6;
         }
 
         // v0.6.48.7.46.21.8: capture canonical Thermal coefficients only
@@ -17137,6 +17355,110 @@ int run_impl(
     perf_foundation_v068231.persistent_spectral_bytes = scratch_breakdown_v0682352[3];
     perf_foundation_v068231.persistent_element_solver_bytes = scratch_breakdown_v0682352[4];
     perf_foundation_v068231.persistent_continuum_bytes = scratch_breakdown_v0682352[5];
+
+    // 0.6.82.36.11: make the broad accepted-boundary ownership visible.
+    // These counters intentionally observe capacity only and never feed back
+    // into source traversal, rate arithmetic, solver state, or publication.
+    const std::uint64_t rich_count_v06823611 =
+        static_cast<std::uint64_t>(ctx.last_record_diagnostics.size());
+    const std::uint64_t compact_count_v06823611 =
+        static_cast<std::uint64_t>(ctx.last_compact_record_product_diagnostics_v06823611.size());
+    const std::uint64_t rich_inline_v06823611 =
+        static_cast<std::uint64_t>(ctx.last_record_diagnostics.capacity()) *
+        sizeof(NativeRecordDiagnostic);
+    const std::uint64_t compact_inline_v06823611 =
+        static_cast<std::uint64_t>(ctx.last_compact_record_product_diagnostics_v06823611.capacity()) *
+        sizeof(CompactProductionRecordDiagnosticV06823611);
+    perf_foundation_v068231.rich_record_count_peak_v06823611 = std::max(
+        perf_foundation_v068231.rich_record_count_peak_v06823611, rich_count_v06823611);
+    perf_foundation_v068231.compact_record_count_peak_v06823611 = std::max(
+        perf_foundation_v068231.compact_record_count_peak_v06823611, compact_count_v06823611);
+    perf_foundation_v068231.rich_record_inline_capacity_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.rich_record_inline_capacity_bytes_peak_v06823611, rich_inline_v06823611);
+    perf_foundation_v068231.compact_record_inline_capacity_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.compact_record_inline_capacity_bytes_peak_v06823611, compact_inline_v06823611);
+    const std::uint64_t legacy_rich_equivalent_v06823611 =
+        compact_count_v06823611 * sizeof(NativeRecordDiagnostic);
+    perf_foundation_v068231.legacy_rich_inline_equivalent_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.legacy_rich_inline_equivalent_bytes_peak_v06823611,
+        legacy_rich_equivalent_v06823611);
+    perf_foundation_v068231.legacy_rich_getter_copy_equivalent_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.legacy_rich_getter_copy_equivalent_bytes_peak_v06823611,
+        legacy_rich_equivalent_v06823611);
+    perf_foundation_v068231.compact_sort_index_upper_bound_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.compact_sort_index_upper_bound_bytes_peak_v06823611,
+        compact_count_v06823611 * sizeof(std::size_t));
+
+    std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*> sidecars_v06823611;
+    std::uint64_t generic_bf_capacity_v06823611 = 0u;
+    for (const auto& diagnostic : ctx.last_record_diagnostics) {
+        const auto& item = diagnostic.evaluated;
+        if (item.bound_free_payload_v06823087) {
+            sidecars_v06823611.insert(item.bound_free_payload_v06823087.get());
+        }
+        generic_bf_capacity_v06823611 +=
+            static_cast<std::uint64_t>(item.generic_bound_free_offset_ryd_v0648120.capacity()) * sizeof(double);
+        generic_bf_capacity_v06823611 +=
+            static_cast<std::uint64_t>(item.generic_bound_free_sigma_cm2_v0648120.capacity()) * sizeof(double);
+    }
+    const std::uint64_t sidecar_count_v06823611 =
+        static_cast<std::uint64_t>(sidecars_v06823611.size());
+    const std::uint64_t sidecar_bytes_v06823611 =
+        sidecar_count_v06823611 * sizeof(BoundFreeEvaluatedPayloadV06823087);
+    perf_foundation_v068231.rich_bound_free_sidecar_count_peak_v06823611 = std::max(
+        perf_foundation_v068231.rich_bound_free_sidecar_count_peak_v06823611, sidecar_count_v06823611);
+    perf_foundation_v068231.rich_bound_free_sidecar_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.rich_bound_free_sidecar_bytes_peak_v06823611, sidecar_bytes_v06823611);
+    perf_foundation_v068231.rich_generic_bound_free_dynamic_capacity_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.rich_generic_bound_free_dynamic_capacity_bytes_peak_v06823611,
+        generic_bf_capacity_v06823611);
+
+    std::uint64_t element_nested_v06823611 = 0u;
+    for (const auto& diagnostic : ctx.last_element_diagnostics) {
+        element_nested_v06823611 +=
+            element_diagnostic_nested_capacity_bytes_v06823611(diagnostic);
+    }
+    const std::uint64_t element_inline_v06823611 =
+        static_cast<std::uint64_t>(ctx.last_element_diagnostics.capacity()) *
+        sizeof(NativeElementDiagnostic);
+    perf_foundation_v068231.element_diagnostic_inline_capacity_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.element_diagnostic_inline_capacity_bytes_peak_v06823611,
+        element_inline_v06823611);
+    perf_foundation_v068231.element_diagnostic_nested_capacity_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.element_diagnostic_nested_capacity_bytes_peak_v06823611,
+        element_nested_v06823611);
+    using ThermalDiagonalValueV06823611 =
+        typename std::decay_t<decltype(ctx.last_thermal_diagonal_diagnostics)>::value_type;
+    const std::uint64_t thermal_diagonal_v06823611 =
+        static_cast<std::uint64_t>(ctx.last_thermal_diagonal_diagnostics.capacity()) *
+        sizeof(ThermalDiagonalValueV06823611);
+    perf_foundation_v068231.thermal_diagonal_capacity_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.thermal_diagonal_capacity_bytes_peak_v06823611,
+        thermal_diagonal_v06823611);
+
+    const auto vector_capacity_bytes_v06823611 = [](const auto& values) -> std::uint64_t {
+        using Value = typename std::decay_t<decltype(values)>::value_type;
+        return static_cast<std::uint64_t>(values.capacity()) * sizeof(Value);
+    };
+    const std::uint64_t source_workspace_v06823611 =
+        vector_capacity_bytes_v06823611(ctx.last_source_lte_populations_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_rcem_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_oplin_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_cemab_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_cabab_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_opakab_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_rccemis_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_opakc_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_opakcont_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_fline_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_flinel_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_pprint4_flinel_v068229331) +
+        vector_capacity_bytes_v06823611(ctx.last_source_elum_v064894) +
+        vector_capacity_bytes_v06823611(ctx.last_source_line_profile_workspace_v064894);
+    perf_foundation_v068231.last_source_workspace_capacity_bytes_peak_v06823611 = std::max(
+        perf_foundation_v068231.last_source_workspace_capacity_bytes_peak_v06823611,
+        source_workspace_v06823611);
+
     stats.total_seconds += elapsed(total_start);
     copy_text(stats.message, sizeof(stats.message), "native fixed-state raw program evaluated");
     return 0;
@@ -17207,6 +17529,19 @@ void capture_performance_foundation_v068231(
     out = PerformanceFoundationV068231{};
     if (!context) return;
     out = context->perf_foundation_v068231;
+}
+
+std::uint64_t release_compact_record_products_v06823611(
+    xstar_fixed_state_context* context) {
+    if (!context || !context->last_record_product_compact_mode_v06823611) return 0u;
+    const std::uint64_t bytes =
+        static_cast<std::uint64_t>(context->last_compact_record_product_diagnostics_v06823611.capacity()) *
+        sizeof(CompactProductionRecordDiagnosticV06823611);
+    context->perf_foundation_v068231.compact_record_release_bytes_peak_v06823611 = std::max(
+        context->perf_foundation_v068231.compact_record_release_bytes_peak_v06823611, bytes);
+    std::vector<CompactProductionRecordDiagnosticV06823611>().swap(
+        context->last_compact_record_product_diagnostics_v06823611);
+    return bytes;
 }
 
 } // namespace xstar_local_zone_internal
@@ -17660,7 +17995,10 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
         context->source_leveltemp_energy_workspace_v06481231.end(),
         0.0);
     context->source_levwk_rnisi_workspace_v06828.fill(0.0);
-    context->last_record_diagnostics.clear();
+    std::vector<NativeRecordDiagnostic>().swap(context->last_record_diagnostics);
+    std::vector<CompactProductionRecordDiagnosticV06823611>().swap(
+        context->last_compact_record_product_diagnostics_v06823611);
+    context->last_record_product_compact_mode_v06823611 = false;
     context->last_element_diagnostics.clear();
     context->last_source_workspaces_valid_v064894 = false;
     context->last_source_workspace_flags_v064894 = 0u;
@@ -17910,7 +18248,9 @@ int xstar_fixed_state_get_last_product_diagnostic_counts_v1(
         copy_text(message, message_size, "product-diagnostic counts ABI mismatch");
         return 2;
     }
-    counts->record_count = context->last_record_diagnostics.size();
+    counts->record_count = context->last_record_product_compact_mode_v06823611
+        ? context->last_compact_record_product_diagnostics_v06823611.size()
+        : context->last_record_diagnostics.size();
     counts->continuum_count = context->last_continuum_workspace_diagnostics.size();
     counts->element_count = context->last_element_diagnostics.size();
     copy_text(message, message_size, "native product-diagnostic counts returned");
@@ -17932,10 +18272,40 @@ int xstar_fixed_state_get_last_record_product_diagnostics_v1(
         copy_text(message, message_size, "context and record diagnostic count are required");
         return 1;
     }
-    std::vector<NativeRecordDiagnostic> source = context->last_record_diagnostics;
-    std::stable_sort(source.begin(), source.end(), [](const auto& a, const auto& b) {
-        return a.evaluated.contribution.source_position < b.evaluated.contribution.source_position;
-    });
+
+    if (context->last_record_product_compact_mode_v06823611) {
+        const auto& source = context->last_compact_record_product_diagnostics_v06823611;
+        *count = source.size();
+        if (!rows) {
+            copy_text(message, message_size, "native compact record product-diagnostic count returned");
+            return 0;
+        }
+        if (capacity < source.size()) {
+            copy_text(message, message_size, "record product-diagnostic output capacity too small");
+            return 3;
+        }
+        const bool already_sorted = std::is_sorted(source.begin(), source.end(), [](const auto& a, const auto& b) {
+            return a.row.source_position < b.row.source_position;
+        });
+        if (already_sorted) {
+            for (std::size_t i = 0; i < source.size(); ++i) rows[i] = source[i].row;
+        } else {
+            // Sort only source indices.  The historical getter copied every
+            // ~1200-B rich diagnostic and then stable-sorted that copy.  The
+            // index surface is ~8 B/record and preserves identical stable
+            // source-position ordering without duplicating record payloads.
+            std::vector<std::size_t> order(source.size());
+            std::iota(order.begin(), order.end(), 0u);
+            std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+                return source[a].row.source_position < source[b].row.source_position;
+            });
+            for (std::size_t i = 0; i < order.size(); ++i) rows[i] = source[order[i]].row;
+        }
+        copy_text(message, message_size, "native compact record product diagnostics returned");
+        return 0;
+    }
+
+    const auto& source = context->last_record_diagnostics;
     *count = source.size();
     if (!rows) {
         copy_text(message, message_size, "native record product-diagnostic count returned");
@@ -17945,66 +18315,26 @@ int xstar_fixed_state_get_last_record_product_diagnostics_v1(
         copy_text(message, message_size, "record product-diagnostic output capacity too small");
         return 3;
     }
-    for (std::size_t i = 0; i < source.size(); ++i) {
-        const auto& d = source[i];
-        const auto& item = d.evaluated;
-        const auto& c = item.contribution;
-        auto& out = rows[i];
-        std::memset(&out, 0, sizeof(out));
-        out.source_position = c.source_position;
-        out.record = c.record;
-        out.element_index = d.element_index;
-        out.element_z = d.element_z;
-        out.data_type = c.data_type;
-        out.rate_type = c.rate_type;
-        out.ion_stage = c.ion_stage;
-        out.lower_row = c.lower_row;
-        out.upper_row = c.upper_row;
-        out.spectral = item.spectral ? 1u : 0u;
-        out.ans[0] = c.ans1; out.ans[1] = c.ans2; out.ans[2] = c.ans3;
-        out.ans[3] = c.ans4; out.ans[4] = c.ans5; out.ans[5] = c.ans6;
-        out.line_energy_ev = item.line_energy_ev;
-        out.atomic_mass_amu = item.atomic_mass_amu;
-        out.density_scale = c.density_scale;
-        out.natural_width_ev = item.natural_width_ev;
-        out.opakab = item.opakab;
-        out.type50_valid = item.type50_shadow.valid ? 1u : 0u;
-        out.type50_line_index_one_based = item.type50_shadow.line_index_one_based;
-        out.type50_wavelength_a = item.type50_shadow.stored_wavelength_a;
-        out.type50_ptmp1 = item.type50_shadow.ptmp1;
-        out.type50_ptmp2 = item.type50_shadow.ptmp2;
-        out.type50_tau_in = item.type50_shadow.line_tau_in;
-        out.type50_tau_out = item.type50_shadow.line_tau_out;
-        out.type53_valid = item.bound_free_payload().type53_shadow.valid ? 1u : 0u;
-        out.type49_valid = item.bound_free_payload().type49_shadow.valid ? 1u : 0u;
-        out.type99_valid = item.type99_shadow.valid ? 1u : 0u;
-        if (item.bound_free_payload().type49_shadow.valid) {
-            out.continuum_index_one_based = item.bound_free_payload().type49_shadow.continuum_index_one_based;
-        } else if (item.bound_free_payload().type53_shadow.valid) {
-            out.continuum_index_one_based = item.bound_free_payload().type53_shadow.continuum_index_one_based;
-        } else if (item.type99_shadow.valid) {
-            out.continuum_index_one_based = item.type99_shadow.nbinc_threshold_one_based;
-        } else {
-            out.continuum_index_one_based = item.continuum_index_one_based;
+    const bool already_sorted = std::is_sorted(source.begin(), source.end(), [](const auto& a, const auto& b) {
+        return a.evaluated.contribution.source_position < b.evaluated.contribution.source_position;
+    });
+    if (already_sorted) {
+        for (std::size_t i = 0; i < source.size(); ++i) {
+            rows[i] = make_record_product_row_v06823611(
+                source[i].element_index, source[i].element_z, source[i].evaluated);
         }
-        out.type53_threshold_ev = item.bound_free_payload().type53_shadow.threshold_ev;
-        out.type53_base_threshold_ev = item.bound_free_payload().type53_shadow.base_threshold_ev;
-        out.type49_threshold_ev = item.bound_free_payload().type49_shadow.threshold_ev;
-        out.type99_threshold_ev = item.type99_shadow.threshold_ev;
-        if (item.bound_free_payload().type49_shadow.valid) {
-            out.threshold_abs_sigma_cm2 = item.bound_free_payload().type49_shadow.threshold_cross_section_cm2;
-            out.threshold_stimulated_sigma_cm2 = item.bound_free_payload().type49_shadow.threshold_stimulated_cross_section_cm2;
-        } else if (item.bound_free_payload().type53_shadow.valid) {
-            out.threshold_abs_sigma_cm2 = item.bound_free_payload().type53_shadow.threshold_cross_section_cm2;
-            out.threshold_stimulated_sigma_cm2 = item.bound_free_payload().type53_shadow.threshold_stimulated_cross_section_cm2;
-        } else {
-            out.threshold_abs_sigma_cm2 = item.opakab;
-            out.threshold_stimulated_sigma_cm2 = 0.0;
+    } else {
+        std::vector<std::size_t> order(source.size());
+        std::iota(order.begin(), order.end(), 0u);
+        std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+            return source[a].evaluated.contribution.source_position <
+                   source[b].evaluated.contribution.source_position;
+        });
+        for (std::size_t i = 0; i < order.size(); ++i) {
+            const auto& d = source[order[i]];
+            rows[i] = make_record_product_row_v06823611(
+                d.element_index, d.element_z, d.evaluated);
         }
-        out.type53_ptmp1 = item.bound_free_payload().type53_shadow.ptmp1;
-        out.type53_ptmp2 = item.bound_free_payload().type53_shadow.ptmp2;
-        out.type53_tau_in = item.bound_free_payload().type53_shadow.tau_in;
-        out.type53_tau_out = item.bound_free_payload().type53_shadow.tau_out;
     }
     copy_text(message, message_size, "native record product diagnostics returned");
     return 0;
