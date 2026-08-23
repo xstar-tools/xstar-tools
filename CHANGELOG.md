@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.36.5 - lazy native dense matrix and production solve-response diagnostic split - 2026-08-23
+
+- Close `0.6.82.36.4` on the workstation: Fe science/policies/work structure all ACCEPT; dense rescues were `0`, native `heat/heat2` elision removed `368,025,856 B`, peak RSS fell `3,515,383,808 -> 3,147,141,120 B` (`0.895248x`), and internal total improved `73.762340 -> 72.717758 s`.
+- Continue the `.36` excess-storage phase. The native element engine still retained one full `n x n` dense matrix even though accepted Fe production never entered dense rescue. Normal Lucy/fixed-point solving uses the compact superlevel matrix and source term stream; the full dense matrix is required only by explicit matrix/residual diagnostics or the cold rescue path.
+- Make the native dense matrix lazy. Ordinary production does not allocate it. Explicit non-production diagnostic calls retain the historical eager matrix, and a triggered dense rescue reconstructs the matrix in the same source term order before invoking the unchanged dense solver. For Fe `n_max=4796`, the elided capacity is `4796^2 * 8 = 184,012,928 B` (~175.5 MiB).
+- Separate the historical `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE` output trace from true production. Native production keeps the same `leqt2f` kernel, populations, iteration ordering and controller arithmetic but does not retain solve-response trace buffers solely for qualification output. Non-production diagnostics remain unchanged.
+- Add `V0682365_ELEMENT_ENGINE_DENSE_MATRIX_MODE=LAZY_DIAGNOSTIC_OR_RESCUE`, `V0682365_PRODUCTION_SOLVE_RESPONSE_POLICY=ELIDED_OUTPUT_DIAGNOSTICS`, and a focused same-host Fe qualification against accepted `.36.4`.
+- Scientific revision remains frozen at `0.6.48.12.3.45.3.3.8`; public ABIs `60487 / 6048110 / 60488` and strict-FP behavior remain unchanged.
+
 ## 0.6.82.36.4 - lazy native element-engine heating matrices - 2026-08-22
 
 - Close `0.6.82.36.3` on the workstation: Fe science/work structure/direct-line mode all ACCEPT; caller-side element-solver storage fell `552,884,400 -> 845,616 B`, persistent scratch fell `813,707,876 -> 261,669,092 B`, peak RSS fell `4,619,792,384 -> 3,515,383,808 B` (`0.760940x`), and internal total improved `76.290929 -> 73.762340 s`.

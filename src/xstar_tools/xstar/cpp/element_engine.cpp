@@ -198,20 +198,28 @@ struct Workspace {
     std::vector<double> row_scale;
     std::vector<double> relative_residual;
 
-    bool ensure(int new_n, int new_nsp, int new_nion, bool return_heating_matrices) {
+    bool ensure(int new_n, int new_nsp, int new_nion, bool return_matrices, bool retain_dense_diagnostics) {
         const bool resized = new_n != n || new_nsp != nsp || new_nion != nion;
         n = new_n;
         nsp = new_nsp;
         nion = new_nion;
         const std::size_t nn = static_cast<std::size_t>(n) * static_cast<std::size_t>(n);
         const std::size_t ss = static_cast<std::size_t>(nsp) * static_cast<std::size_t>(nsp);
-        dense.assign(nn, 0.0);
+        // 0.6.82.36.5: the full n*n dense matrix is not part of the normal
+        // Lucy/fixed-point path.  Retain it only for explicit matrix/summary
+        // diagnostics.  The dense-rescue path reconstructs the identical
+        // source-ordered matrix on demand if a rescue is actually triggered.
+        if (return_matrices || retain_dense_diagnostics) {
+            dense.assign(nn, 0.0);
+        } else if (dense.capacity() != 0u) {
+            std::vector<double>().swap(dense);
+        }
         // 0.6.82.36.4: heat/heat2 are output-only diagnostic matrices.
         // Production thermal totals are reduced directly from the canonical
         // term stream below; neither matrix participates in Lucy/fixed-point
         // arithmetic. Keep their exact historical contents only when the API
         // caller explicitly requests matrix outputs.
-        if (return_heating_matrices) {
+        if (return_matrices) {
             heat.assign(nn, 0.0);
             heat2.assign(nn, 0.0);
         } else {
@@ -891,13 +899,18 @@ int run_element_impl(
 
     Workspace& w = context.workspace;
     const bool return_matrices = (input.flags & XSTAR_ELEMENT_RETURN_MATRICES) != 0u;
-    if (w.ensure(input.n_rows, input.n_superlevels, input.n_ions, return_matrices)) context.stats.workspace_resizes += 1;
+    const bool capture_solve_stage_trace =
+        (input.flags & XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY) != 0u;
+    if (w.ensure(input.n_rows, input.n_superlevels, input.n_ions, return_matrices, capture_solve_stage_trace)) {
+        context.stats.workspace_resizes += 1;
+    }
     const int n = input.n_rows;
     const int nsp = input.n_superlevels;
     const int nion = input.n_ions;
 
     const auto assembly_t0 = clock_type::now();
-    std::fill(w.dense.begin(), w.dense.end(), 0.0);
+    const bool retain_dense_matrix = !w.dense.empty();
+    if (retain_dense_matrix) std::fill(w.dense.begin(), w.dense.end(), 0.0);
     if (return_matrices) {
         std::fill(w.heat.begin(), w.heat.end(), 0.0);
         std::fill(w.heat2.begin(), w.heat2.end(), 0.0);
@@ -905,14 +918,17 @@ int run_element_impl(
     std::fill(w.rhs.begin(), w.rhs.end(), 0.0);
     for (std::size_t i = 0; i < input.term_count; ++i) {
         const auto& term = input.terms[i];
-        const std::size_t p = index2(term.row - 1, term.column - 1, n);
-        w.dense[p] += term.aj1;
+        if (retain_dense_matrix) {
+            const std::size_t p = index2(term.row - 1, term.column - 1, n);
+            w.dense[p] += term.aj1;
+        }
         if (return_matrices) {
+            const std::size_t p = index2(term.row - 1, term.column - 1, n);
             w.heat[p] += term.cj;
             w.heat2[p] += term.cj2;
         }
     }
-    apply_matrix_construction_dense_closure(input, w.dense);
+    if (retain_dense_matrix) apply_matrix_construction_dense_closure(input, w.dense);
     w.rhs[static_cast<std::size_t>(input.normalization_row - 1)] = 1.0;
     output.matrix_assembly_seconds = seconds_since(assembly_t0);
     context.stats.matrix_assembly_seconds += output.matrix_assembly_seconds;
@@ -928,8 +944,6 @@ int run_element_impl(
     int outer = 0;
     int total_fixed = 0;
     bool dense_rescue_used = false;
-    const bool capture_solve_stage_trace =
-        (input.flags & XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY) != 0u;
     w.solve_stage_trace_valid = false;
     w.trace_element_z = input.element_z;
     w.final_outer_iteration = 0;
@@ -1070,7 +1084,23 @@ int run_element_impl(
             }
             if ((!std::isfinite(total) || total <= 0.0) &&
                 (input.flags & XSTAR_ELEMENT_ALLOW_DENSE_RESCUE)) {
-                std::vector<double> dense_copy = w.dense;
+                std::vector<double> dense_copy;
+                if (!w.dense.empty()) {
+                    dense_copy = w.dense;
+                } else {
+                    // 0.6.82.36.5 rescue-on-demand: reconstruct in the same
+                    // source term order used by the historical eager matrix.
+                    // This path is cold in accepted Fe production (zero rescues)
+                    // but retains exact rescue behavior for other models.
+                    const std::size_t dense_count =
+                        static_cast<std::size_t>(n) * static_cast<std::size_t>(n);
+                    dense_copy.assign(dense_count, 0.0);
+                    for (std::size_t k = 0; k < input.term_count; ++k) {
+                        const auto& term = input.terms[k];
+                        dense_copy[index2(term.row - 1, term.column - 1, n)] += term.aj1;
+                    }
+                    apply_matrix_construction_dense_closure(input, dense_copy);
+                }
                 solve_normalized(dense_copy, n, input.normalization_row, w.solve_rhs,
                                  w.solve_result, w.solve_residual, "dense rescue");
                 std::copy(w.solve_result.begin(), w.solve_result.begin() + n, w.x.begin());

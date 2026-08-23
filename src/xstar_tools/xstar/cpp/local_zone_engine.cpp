@@ -12176,7 +12176,9 @@ int run_impl(
     ctx.last_helium_unqualified_type71_ablation = helium_unqualified_type71_ablation;
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     ctx.last_helium_solve_response = helium_solve_response;
-    ctx.last_all_element_solve_response = all_element_solve_response || all_element_solve_system;
+    ctx.last_all_element_solve_response =
+        (all_element_solve_response || all_element_solve_system) &&
+        !environment_flag("XSTAR_NATIVE_PRODUCTION");
     ctx.last_all_element_solve_system = return_solve_system_diagnostics_v0682363;
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     ctx.last_helium_source_insertion_order = helium_source_insertion_order;
@@ -13316,8 +13318,15 @@ int run_impl(
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
-        const bool capture_element_solve_response = all_element_solve_response || all_element_solve_system ||
-            (helium_solve_response && element.element_z == 2);
+        // 0.6.82.36.5: all-element solve-response capture is a qualification
+        // output surface, not production physics.  Native production already
+        // preserves the same leqt2f kernel, populations, iteration counts and
+        // controller arithmetic without retaining the response trace.  Keep
+        // explicit non-production diagnostics unchanged.
+        const bool capture_element_solve_response =
+            (all_element_solve_response || all_element_solve_system ||
+             (helium_solve_response && element.element_z == 2)) &&
+            !native_production_v064897;
         if (capture_element_solve_response) {
             ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY;
         }
