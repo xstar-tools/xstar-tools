@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.36.13 - compact prepared bound-free sgbar cache spans - 2026-08-23
+
+- Preserve the accepted `.36.12` science, compact-record ownership, thermal-row elision, and allocator-trim policies.
+- Store each cached Type-49/53 prepared `sgbar` surface only over the literal source interval `nb1..klmax` that `phint53` consumes, rather than retaining a dense 999/9999-bin vector per geometry. The computed binary64 `sgbar` values, source-bin indices, threshold-publication scalar, cache keys, build/reuse policy, and integration order are unchanged.
+- Add internal telemetry for compact reduced/full `sgbar` capacity versus dense-equivalent capacity and the aggregate compact/dense value ratio.
+- Qualify only `multi_element_xi1_ne1e12`; reuse the already-completed `.33.8` baseline stored in the `.36.11` broad qualification by default, and compare incrementally against the completed `.36.12` candidate.
+
 ## 0.6.82.36.12 - production transient-memory lifetime and allocator release - 2026-08-23
 
 - Close the `.36.11` broad host result scientifically and structurally: exact science/STEP/spectrum/work ownership ACCEPT, peak RSS `10,353,270,784 -> 8,508,006,400 B` versus `.36.10` (about `1.845 GB` removed), and total runtime `1270.888162 s`. This is a material improvement but remains far above the ~`2.575 GB` FORTRAN workstation memory class, so `.36` remains open.

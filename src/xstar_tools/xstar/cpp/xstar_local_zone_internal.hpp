@@ -117,6 +117,16 @@ struct PerformanceFoundationV068231 {
     std::uint64_t revisit_bound_free_sidecar_bytes_peak_v06823612 = 0u;
     std::uint64_t thermal_diagonal_rows_elided_peak_v06823612 = 0u;
     std::uint64_t thermal_diagonal_bytes_elided_peak_v06823612 = 0u;
+    // 0.6.82.36.13: compact prepared Type49/53 geometry-cache ownership.
+    std::uint64_t bf_reduced_sgbar_capacity_bytes_current_v06823613 = 0u;
+    std::uint64_t bf_reduced_sgbar_capacity_bytes_peak_v06823613 = 0u;
+    std::uint64_t bf_reduced_sgbar_dense_equivalent_bytes_peak_v06823613 = 0u;
+    std::uint64_t bf_full_sgbar_capacity_bytes_current_v06823613 = 0u;
+    std::uint64_t bf_full_sgbar_capacity_bytes_peak_v06823613 = 0u;
+    std::uint64_t bf_full_sgbar_dense_equivalent_bytes_peak_v06823613 = 0u;
+    std::uint64_t bf_sgbar_compacted_geometry_count_v06823613 = 0u;
+    std::uint64_t bf_sgbar_compact_values_current_v06823613 = 0u;
+    std::uint64_t bf_sgbar_dense_values_current_v06823613 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

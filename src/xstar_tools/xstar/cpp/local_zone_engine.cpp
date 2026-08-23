@@ -1373,6 +1373,11 @@ struct BoundFreePreparedGeometryV064895 {
     std::uint64_t phextrap_input_sigma_hash = 0;
     std::uint64_t phextrap_output_energy_hash = 0;
     std::uint64_t phextrap_output_sigma_hash = 0;
+    // 0.6.82.36.13: retain only the source bins actually consumed by
+    // phint53 (nb1..klmax inclusive) instead of a dense ncn2-wide vector.
+    // sgbar_base_index maps the compact storage back to the literal source
+    // bin index; values and evaluation order are unchanged.
+    int sgbar_base_index = 0;
     std::vector<double> sgbar;
     bool exact_threshold_publication_reached = false;
     int exact_publish_kl = -1;
@@ -1396,6 +1401,18 @@ struct BoundFreePerfCountersV064895 {
     std::uint64_t full_selected_type49_integrals = 0;
     std::uint64_t full_selected_type53_integrals = 0;
     std::uint64_t legacy_full_eager_integrals = 0;
+    // 0.6.82.36.13 compact prepared-geometry ownership telemetry.
+    std::uint64_t reduced_sgbar_capacity_bytes_current_v06823613 = 0;
+    std::uint64_t reduced_sgbar_capacity_bytes_peak_v06823613 = 0;
+    std::uint64_t reduced_sgbar_dense_equivalent_bytes_current_v06823613 = 0;
+    std::uint64_t reduced_sgbar_dense_equivalent_bytes_peak_v06823613 = 0;
+    std::uint64_t full_sgbar_capacity_bytes_current_v06823613 = 0;
+    std::uint64_t full_sgbar_capacity_bytes_peak_v06823613 = 0;
+    std::uint64_t full_sgbar_dense_equivalent_bytes_current_v06823613 = 0;
+    std::uint64_t full_sgbar_dense_equivalent_bytes_peak_v06823613 = 0;
+    std::uint64_t sgbar_compacted_geometry_count_v06823613 = 0;
+    std::uint64_t sgbar_compact_values_current_v06823613 = 0;
+    std::uint64_t sgbar_dense_values_current_v06823613 = 0;
 };
 
 struct Type53SourceShadow {
@@ -6541,6 +6558,22 @@ BoundFreePreparedGeometryV064895 prepare_bound_free_geometry(
         }
     }
 
+    // 0.6.82.36.13: all later consumers read only nb1..klmax inclusive.
+    // Compact after the exact-threshold scalar has been captured so the
+    // generated binary64 sgbar values are byte-for-byte identical to the
+    // dense implementation while unused leading/trailing zeros are dropped.
+    {
+        const int compact_begin_v06823613 = nb1;
+        const int compact_end_v06823613 = klmax;
+        if (compact_begin_v06823613 < 0 || compact_end_v06823613 < compact_begin_v06823613 ||
+            compact_end_v06823613 >= n_grid) return BoundFreePreparedGeometryV064895{};
+        std::vector<double> compact_sgbar_v06823613(
+            out.sgbar.begin() + compact_begin_v06823613,
+            out.sgbar.begin() + compact_end_v06823613 + 1);
+        out.sgbar.swap(compact_sgbar_v06823613);
+        out.sgbar_base_index = compact_begin_v06823613;
+    }
+
     out.valid = true;
     out.source_bin_count = source_bin_count;
     out.source_energy_hash = binary64_sequence_fnv1a(source_energy_ev, source_bin_count);
@@ -6623,8 +6656,16 @@ bool evaluate_type53_source_integral(
     const int nb1 = geometry->nb1;
     const int klmax = geometry->klmax;
     const std::vector<double>& sgbar = geometry->sgbar;
+    const int sgbar_base_v06823613 = geometry->sgbar_base_index;
     if (pair_count < 2 || nb1 < 0 || klmax <= nb1 || klmax >= n_grid ||
-        sgbar.size() != source_bin_count) return false;
+        sgbar_base_v06823613 > nb1 || sgbar.empty() ||
+        static_cast<std::size_t>(klmax - sgbar_base_v06823613) >= sgbar.size()) return false;
+    const auto sgbar_at_v06823613 = [&](int source_index_v06823613) -> double {
+        if (source_index_v06823613 < sgbar_base_v06823613) return 0.0;
+        const std::size_t offset_v06823613 = static_cast<std::size_t>(
+            source_index_v06823613 - sgbar_base_v06823613);
+        return offset_v06823613 < sgbar.size() ? sgbar[offset_v06823613] : 0.0;
+    };
 
     constexpr double kBoltzmannErgK = xstar_constants::kBoltzmannErgPerK;
     constexpr double kKtEvPerT4 = xstar_constants::kLegacyBoltzmannEvPerT4;
@@ -6651,7 +6692,7 @@ bool evaluate_type53_source_integral(
     double sumi = 0.0;
     double sumc = 0.0;
     double sumc2 = 0.0;
-    double sgtpp = sgbar[static_cast<std::size_t>(nb1)];
+    double sgtpp = sgbar_at_v06823613(nb1);
     double bremtmpp = source_bremsa[nb1] / 12.56;
     double epiip = source_energy_ev[nb1];
     double temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
@@ -6668,8 +6709,8 @@ bool evaluate_type53_source_integral(
     bool threshold_publication_reached = false;
     int kl = nb1;
     while (kl < klmax && kl + 1 < n_grid) {
-        const double sgtp = std::max(0.0, sgbar[static_cast<std::size_t>(kl)]);
-        sgtpp = sgbar[static_cast<std::size_t>(kl + 1)];
+        const double sgtp = std::max(0.0, sgbar_at_v06823613(kl));
+        sgtpp = sgbar_at_v06823613(kl + 1);
         bremtmpp = source_bremsa[kl + 1] / 12.56;
         const double epii = source_energy_ev[kl];
         epiip = source_energy_ev[kl + 1];
@@ -6993,13 +7034,63 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
         geometry.type49_semantics == type49_semantics && geometry.phextrap_pairs == phextrap_pairs &&
         geometry.phextrap_max_points == expected_phextrap_max;
     if (!reusable) {
+        const std::uint64_t old_capacity_bytes_v06823613 =
+            static_cast<std::uint64_t>(geometry.sgbar.capacity()) * sizeof(double);
+        const std::uint64_t old_dense_bytes_v06823613 = geometry.valid
+            ? static_cast<std::uint64_t>(geometry.source_bin_count) * sizeof(double) : 0u;
+        const std::uint64_t old_compact_values_v06823613 =
+            static_cast<std::uint64_t>(geometry.sgbar.size());
+        const std::uint64_t old_dense_values_v06823613 = geometry.valid
+            ? static_cast<std::uint64_t>(geometry.source_bin_count) : 0u;
         geometry = prepare_bound_free_geometry(
             program.reals.data() + record.real_offset,
             record_context && record_context->valid ? record_context->pair_real_count : record.real_count,
             energy, count, threshold_ev, type49_semantics, phextrap_pairs, record_context);
         if (!geometry.valid) return nullptr;
-        if (full_grid) ++rate_context.bound_free_perf->full_geometry_builds;
-        else ++rate_context.bound_free_perf->reduced_geometry_builds;
+        const std::uint64_t new_capacity_bytes_v06823613 =
+            static_cast<std::uint64_t>(geometry.sgbar.capacity()) * sizeof(double);
+        const std::uint64_t new_dense_bytes_v06823613 =
+            static_cast<std::uint64_t>(geometry.source_bin_count) * sizeof(double);
+        auto& perf_v06823613 = *rate_context.bound_free_perf;
+        auto replace_counter_v06823613 = [](std::uint64_t& current, std::uint64_t old_value, std::uint64_t new_value) {
+            current = current >= old_value ? current - old_value + new_value : new_value;
+        };
+        if (full_grid) {
+            replace_counter_v06823613(
+                perf_v06823613.full_sgbar_capacity_bytes_current_v06823613,
+                old_capacity_bytes_v06823613, new_capacity_bytes_v06823613);
+            replace_counter_v06823613(
+                perf_v06823613.full_sgbar_dense_equivalent_bytes_current_v06823613,
+                old_dense_bytes_v06823613, new_dense_bytes_v06823613);
+            perf_v06823613.full_sgbar_capacity_bytes_peak_v06823613 = std::max(
+                perf_v06823613.full_sgbar_capacity_bytes_peak_v06823613,
+                perf_v06823613.full_sgbar_capacity_bytes_current_v06823613);
+            perf_v06823613.full_sgbar_dense_equivalent_bytes_peak_v06823613 = std::max(
+                perf_v06823613.full_sgbar_dense_equivalent_bytes_peak_v06823613,
+                perf_v06823613.full_sgbar_dense_equivalent_bytes_current_v06823613);
+            ++rate_context.bound_free_perf->full_geometry_builds;
+        } else {
+            replace_counter_v06823613(
+                perf_v06823613.reduced_sgbar_capacity_bytes_current_v06823613,
+                old_capacity_bytes_v06823613, new_capacity_bytes_v06823613);
+            replace_counter_v06823613(
+                perf_v06823613.reduced_sgbar_dense_equivalent_bytes_current_v06823613,
+                old_dense_bytes_v06823613, new_dense_bytes_v06823613);
+            perf_v06823613.reduced_sgbar_capacity_bytes_peak_v06823613 = std::max(
+                perf_v06823613.reduced_sgbar_capacity_bytes_peak_v06823613,
+                perf_v06823613.reduced_sgbar_capacity_bytes_current_v06823613);
+            perf_v06823613.reduced_sgbar_dense_equivalent_bytes_peak_v06823613 = std::max(
+                perf_v06823613.reduced_sgbar_dense_equivalent_bytes_peak_v06823613,
+                perf_v06823613.reduced_sgbar_dense_equivalent_bytes_current_v06823613);
+            ++rate_context.bound_free_perf->reduced_geometry_builds;
+        }
+        replace_counter_v06823613(
+            perf_v06823613.sgbar_compact_values_current_v06823613,
+            old_compact_values_v06823613, static_cast<std::uint64_t>(geometry.sgbar.size()));
+        replace_counter_v06823613(
+            perf_v06823613.sgbar_dense_values_current_v06823613,
+            old_dense_values_v06823613, static_cast<std::uint64_t>(geometry.source_bin_count));
+        ++perf_v06823613.sgbar_compacted_geometry_count_v06823613;
     } else {
         if (full_grid) ++rate_context.bound_free_perf->full_geometry_reuses;
         else ++rate_context.bound_free_perf->reduced_geometry_reuses;
@@ -17601,6 +17692,25 @@ void capture_performance_foundation_v068231(
     out = PerformanceFoundationV068231{};
     if (!context) return;
     out = context->perf_foundation_v068231;
+    const auto& bf_v06823613 = context->bound_free_perf_v064895;
+    out.bf_reduced_sgbar_capacity_bytes_current_v06823613 =
+        bf_v06823613.reduced_sgbar_capacity_bytes_current_v06823613;
+    out.bf_reduced_sgbar_capacity_bytes_peak_v06823613 =
+        bf_v06823613.reduced_sgbar_capacity_bytes_peak_v06823613;
+    out.bf_reduced_sgbar_dense_equivalent_bytes_peak_v06823613 =
+        bf_v06823613.reduced_sgbar_dense_equivalent_bytes_peak_v06823613;
+    out.bf_full_sgbar_capacity_bytes_current_v06823613 =
+        bf_v06823613.full_sgbar_capacity_bytes_current_v06823613;
+    out.bf_full_sgbar_capacity_bytes_peak_v06823613 =
+        bf_v06823613.full_sgbar_capacity_bytes_peak_v06823613;
+    out.bf_full_sgbar_dense_equivalent_bytes_peak_v06823613 =
+        bf_v06823613.full_sgbar_dense_equivalent_bytes_peak_v06823613;
+    out.bf_sgbar_compacted_geometry_count_v06823613 =
+        bf_v06823613.sgbar_compacted_geometry_count_v06823613;
+    out.bf_sgbar_compact_values_current_v06823613 =
+        bf_v06823613.sgbar_compact_values_current_v06823613;
+    out.bf_sgbar_dense_values_current_v06823613 =
+        bf_v06823613.sgbar_dense_values_current_v06823613;
 }
 
 std::uint64_t release_compact_record_products_v06823611(

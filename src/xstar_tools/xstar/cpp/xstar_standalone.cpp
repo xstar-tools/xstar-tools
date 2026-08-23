@@ -22156,6 +22156,21 @@ void emit_controller_performance_instrumentation(
             << "V06823612_REVISIT_RECORD_INLINE_BYTES_PEAK=" << perf.foundation_v068231.revisit_record_inline_bytes_peak_v06823612 << "\n"
             << "V06823612_REVISIT_BOUND_FREE_SIDECAR_COUNT_PEAK=" << perf.foundation_v068231.revisit_bound_free_sidecar_count_peak_v06823612 << "\n"
             << "V06823612_REVISIT_BOUND_FREE_SIDECAR_BYTES_PEAK=" << perf.foundation_v068231.revisit_bound_free_sidecar_bytes_peak_v06823612 << "\n"
+            << "V06823613_BOUND_FREE_SGBAR_MODE=COMPACT_USED_SOURCE_SPAN_CACHED_REUSE\n"
+            << "V06823613_BF_REDUCED_SGBAR_CAPACITY_BYTES_CURRENT=" << perf.foundation_v068231.bf_reduced_sgbar_capacity_bytes_current_v06823613 << "\n"
+            << "V06823613_BF_REDUCED_SGBAR_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.bf_reduced_sgbar_capacity_bytes_peak_v06823613 << "\n"
+            << "V06823613_BF_REDUCED_SGBAR_DENSE_EQUIVALENT_BYTES_PEAK=" << perf.foundation_v068231.bf_reduced_sgbar_dense_equivalent_bytes_peak_v06823613 << "\n"
+            << "V06823613_BF_FULL_SGBAR_CAPACITY_BYTES_CURRENT=" << perf.foundation_v068231.bf_full_sgbar_capacity_bytes_current_v06823613 << "\n"
+            << "V06823613_BF_FULL_SGBAR_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.bf_full_sgbar_capacity_bytes_peak_v06823613 << "\n"
+            << "V06823613_BF_FULL_SGBAR_DENSE_EQUIVALENT_BYTES_PEAK=" << perf.foundation_v068231.bf_full_sgbar_dense_equivalent_bytes_peak_v06823613 << "\n"
+            << "V06823613_BF_SGBAR_COMPACTED_GEOMETRIES=" << perf.foundation_v068231.bf_sgbar_compacted_geometry_count_v06823613 << "\n"
+            << "V06823613_BF_SGBAR_COMPACT_VALUES_CURRENT=" << perf.foundation_v068231.bf_sgbar_compact_values_current_v06823613 << "\n"
+            << "V06823613_BF_SGBAR_DENSE_VALUES_CURRENT=" << perf.foundation_v068231.bf_sgbar_dense_values_current_v06823613 << "\n"
+            << "V06823613_BF_SGBAR_COMPACTION_RATIO="
+            << (perf.foundation_v068231.bf_sgbar_dense_values_current_v06823613 > 0u
+                    ? static_cast<double>(perf.foundation_v068231.bf_sgbar_compact_values_current_v06823613) /
+                        static_cast<double>(perf.foundation_v068231.bf_sgbar_dense_values_current_v06823613)
+                    : 0.0) << "\n"
             << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"
