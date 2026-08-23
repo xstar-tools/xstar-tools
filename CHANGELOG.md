@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.36.10 - cross-model memory-scaling qualification - 2026-08-23
+
+- Close the focused Fe lifetime qualification on the workstation: `0.6.82.36.9` reproduced exact science/work structure, peak RSS about `2,740,756,480 B` internally, and total time `71.950648 s`; the accepted-boundary lifetime gate is closed.
+- Add a same-host C++ baseline/candidate qualification for `c5_lowxi_cf0_em025_ne1e12` and `multi_element_xi1_ne1e12`. The historical baseline is accepted `0.6.82.33.8`, chosen because it predates the `.36` memory-elision series and is the broad-model ~11--12 GB memory-class anchor.
+- The runner supports split `baseline`, `candidate`, and `compare` actions so the expensive broad baseline can be preserved across interrupted candidate runs, plus `prepare` and one-shot `run` actions.
+- Capture `/usr/bin/time -v` RSS, internal RSS/heap telemetry, total/controller/fixed-traversal timing, exact science/public-spectrum/STEP comparisons, and candidate-only `.35/.36` ownership diagnostics.
+- Compare both models against the accepted `.36.9` Fe memory anchor supplied via `--fe-reference-root`, reporting exact Fe RSS ratios and a within-10%-of-Fe memory-class indicator. A memory-target miss is reported as `CONTINUE_068236`, not as an execution failure; exact science remains mandatory.
+- This is a qualification-only revision. Production C/C++ source is byte-identical to `0.6.82.36.9`; frozen science revision `0.6.48.12.3.45.3.3.8` and ABIs `60487 / 6048110 / 60488` are unchanged.
+
 ## 0.6.82.36.9 - accepted-boundary lifetime performance-gate hotfix - 2026-08-23
 
 - Host result for 0.6.82.36.8 reproduced the accepted science, work structure, lifetime ownership, and RSS reduction of 0.6.82.36.7, but the focused runner rejected only because a single candidate timing was 1.033646x the accepted 0.6.82.36.6 baseline while the fixed threshold was 1.02x.
