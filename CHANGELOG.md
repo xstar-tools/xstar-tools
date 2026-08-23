@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.36.7 - accepted-boundary DSEC snapshot lifetime elision - 2026-08-23
+
+- Close `0.6.82.36.6` on the workstation: Fe science/policies/work structure ACCEPT; dense rescues remained `0`; peak RSS fell `3,147,141,120 -> 2,962,411,520 B` internally (and `/usr/bin/time` reported `2,892,980 kB`), while internal total improved `72.717758 -> 70.924118 s`.
+- Continue the `.36` ownership phase without changing scientific work. Under the frozen exact accepted-boundary recompute policy, the final DSEC snapshot is not reused after controller acceptance, yet it remained fully resident while `evaluate_full_boundary()` allocated a second full accepted-boundary snapshot. Release that obsolete DSEC owner before exact recomputation in ordinary production.
+- Elide the unused second copy of the accepted final boundary into `data.last_iteration` in ordinary production. The returned boundary remains the canonical owner; the next DSEC callback overwrites `last_iteration`. Reference/diagnostic modes retain the historical copy and lifetime.
+- Add phase telemetry `V0682367_LAST_DSEC_SNAPSHOT_RELEASED_BYTES_PEAK`, pre/post-release RSS, post-recompute RSS, and final-boundary copy/elision counts.
+- Preserve `.36.1` direct-line O(1), `.36.3` caller matrix elision, `.36.4` native heat/heat2 elision, `.36.5/.36.6` dense matrix rescue-on-demand and publication-essential final populations.
+- Science revision remains frozen at `0.6.48.12.3.45.3.3.8`; C API ABI `60487`, production-zone ABI `6048110`, and fixed-state ABI `60488` are unchanged.
+
 ## 0.6.82.36.6 - dense-matrix elision publication-population ownership hotfix - 2026-08-23
 
 - Fix the host-rejected `0.6.82.36.5` production failure (`active spectral population row translation overflow`) without reverting native dense-matrix elision.

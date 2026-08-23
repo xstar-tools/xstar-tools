@@ -313,6 +313,15 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t radial_rss_last_bytes_v068233 = 0u;
     std::uint64_t radial_rss_peak_bytes_v068233 = 0u;
     std::vector<std::uint64_t> radial_rss_samples_bytes_v068233;
+    // 0.6.82.36.7: exact accepted-boundary recomputation does not consume the
+    // preceding DSEC snapshot once the controller has accepted its scalar state.
+    // Track the production-only lifetime release separately from science state.
+    std::uint64_t accepted_boundary_last_dsec_released_bytes_peak_v0682367 = 0u;
+    std::uint64_t accepted_boundary_rss_before_release_peak_v0682367 = 0u;
+    std::uint64_t accepted_boundary_rss_after_release_peak_v0682367 = 0u;
+    std::uint64_t accepted_boundary_rss_after_recompute_peak_v0682367 = 0u;
+    std::uint64_t final_boundary_last_iteration_copy_count_v0682367 = 0u;
+    std::uint64_t final_boundary_last_iteration_copy_elided_count_v0682367 = 0u;
     // 0.6.82.35.2: glibc allocator snapshots paired with key RSS phases.
     std::uint64_t heap_after_atdb_uordblks_v0682352 = 0u;
     std::uint64_t heap_after_atdb_hblkhd_v0682352 = 0u;
@@ -17296,7 +17305,22 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot(
             native_gate_reason_v82_patch52017);
     }
     ++data.native_scientific_gate_count;
-    data.last_iteration = snapshot;
+    // 0.6.82.36.7: ordinary production owns the accepted final boundary in
+    // the returned snapshot.  A second full copy in data.last_iteration is
+    // unused: the next DSEC callback overwrites last_iteration, while the
+    // accepted-boundary reuse path is disabled by the frozen production policy.
+    // Preserve the historical copy only for reference/diagnostic execution.
+    const bool retain_final_last_iteration_v0682367 =
+        data.reference_trajectory_mode || data.reference_diagnostics_enabled ||
+        data.retain_prefix_diagnostics || data.diagnostic_full_trajectory_continue;
+    if (retain_final_last_iteration_v0682367) {
+        data.last_iteration = snapshot;
+        if (g_performance_v064890) {
+            ++g_performance_v064890->final_boundary_last_iteration_copy_count_v0682367;
+        }
+    } else if (g_performance_v064890) {
+        ++g_performance_v064890->final_boundary_last_iteration_copy_elided_count_v0682367;
+    }
     return snapshot;
 }
 
@@ -17683,8 +17707,40 @@ FixedDsecSnapshot evaluate_accepted_boundary(
     // is proven byte-exact against this path.
     if (force_legacy_enabled || !experimental_reuse_enabled) {
         ++data.accepted_boundary_legacy_count_v064894;
-        return evaluate_full_boundary(
+        // 0.6.82.36.7: the exact-recompute branch has already consumed the
+        // accepted DSEC scalar state.  Ordinary production never promotes the
+        // retained DSEC workspace here, so release that full snapshot before
+        // allocating the accepted-boundary snapshot.  This changes ownership
+        // only; controller/science arithmetic and the recompute itself are
+        // unchanged.  Reference/diagnostic modes retain the historical owner.
+        const bool preserve_last_dsec_v0682367 =
+            data.reference_trajectory_mode || data.reference_diagnostics_enabled ||
+            data.retain_prefix_diagnostics || data.diagnostic_full_trajectory_continue;
+        if (!preserve_last_dsec_v0682367 && data.last_iteration.kind == "dsec") {
+            if (g_performance_v064890) {
+                const auto bytes_v0682367 = snapshot_memory_v068233(data.last_iteration);
+                g_performance_v064890->accepted_boundary_last_dsec_released_bytes_peak_v0682367 =
+                    std::max(g_performance_v064890->accepted_boundary_last_dsec_released_bytes_peak_v0682367,
+                             bytes_v0682367.capacity);
+                g_performance_v064890->accepted_boundary_rss_before_release_peak_v0682367 =
+                    std::max(g_performance_v064890->accepted_boundary_rss_before_release_peak_v0682367,
+                             current_rss_bytes_v068233());
+            }
+            data.last_iteration = FixedDsecSnapshot{};
+            if (g_performance_v064890) {
+                g_performance_v064890->accepted_boundary_rss_after_release_peak_v0682367 =
+                    std::max(g_performance_v064890->accepted_boundary_rss_after_release_peak_v0682367,
+                             current_rss_bytes_v068233());
+            }
+        }
+        auto recomputed_v0682367 = evaluate_full_boundary(
             data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
+        if (g_performance_v064890) {
+            g_performance_v064890->accepted_boundary_rss_after_recompute_peak_v0682367 =
+                std::max(g_performance_v064890->accepted_boundary_rss_after_recompute_peak_v0682367,
+                         current_rss_bytes_v068233());
+        }
+        return recomputed_v0682367;
     }
     std::optional<FixedDsecSnapshot> prepared;
     try {
@@ -21975,6 +22031,14 @@ void emit_controller_performance_instrumentation(
             << "V068233_RSS_RADIAL_EVENT_LAST_BYTES=" << perf.radial_rss_last_bytes_v068233 << "\n"
             << "V068233_RSS_RADIAL_EVENT_PEAK_BYTES=" << perf.radial_rss_peak_bytes_v068233 << "\n"
             << "V068233_RSS_RADIAL_EVENT_SAMPLES=" << perf.radial_rss_samples_bytes_v068233.size() << "\n"
+            << "V0682367_ACCEPTED_BOUNDARY_LAST_DSEC_MODE=RELEASE_BEFORE_EXACT_RECOMPUTE\n"
+            << "V0682367_FINAL_BOUNDARY_LAST_ITERATION_MODE=ELIDED_PRODUCTION_COPY\n"
+            << "V0682367_LAST_DSEC_SNAPSHOT_RELEASED_BYTES_PEAK=" << perf.accepted_boundary_last_dsec_released_bytes_peak_v0682367 << "\n"
+            << "V0682367_RSS_BEFORE_LAST_DSEC_RELEASE_PEAK=" << perf.accepted_boundary_rss_before_release_peak_v0682367 << "\n"
+            << "V0682367_RSS_AFTER_LAST_DSEC_RELEASE_PEAK=" << perf.accepted_boundary_rss_after_release_peak_v0682367 << "\n"
+            << "V0682367_RSS_AFTER_BOUNDARY_RECOMPUTE_PEAK=" << perf.accepted_boundary_rss_after_recompute_peak_v0682367 << "\n"
+            << "V0682367_FINAL_BOUNDARY_COPY_COUNT=" << perf.final_boundary_last_iteration_copy_count_v0682367 << "\n"
+            << "V0682367_FINAL_BOUNDARY_COPY_ELIDED_COUNT=" << perf.final_boundary_last_iteration_copy_elided_count_v0682367 << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
             << "V0682352_HEAP_AFTER_ATDB_UORDBLKS_BYTES=" << perf.heap_after_atdb_uordblks_v0682352 << "\n"
@@ -22097,6 +22161,14 @@ void emit_controller_performance_instrumentation(
             << "V068233_RADIAL_RSS_LAST_BYTES=" << perf.radial_rss_last_bytes_v068233 << "\n"
             << "V068233_RADIAL_RSS_PEAK_BYTES=" << perf.radial_rss_peak_bytes_v068233 << "\n"
             << "V068233_RADIAL_RSS_SAMPLE_COUNT=" << perf.radial_rss_samples_bytes_v068233.size() << "\n"
+            << "V0682367_ACCEPTED_BOUNDARY_LAST_DSEC_MODE=RELEASE_BEFORE_EXACT_RECOMPUTE\n"
+            << "V0682367_FINAL_BOUNDARY_LAST_ITERATION_MODE=ELIDED_PRODUCTION_COPY\n"
+            << "V0682367_LAST_DSEC_SNAPSHOT_RELEASED_BYTES_PEAK=" << perf.accepted_boundary_last_dsec_released_bytes_peak_v0682367 << "\n"
+            << "V0682367_RSS_BEFORE_LAST_DSEC_RELEASE_PEAK=" << perf.accepted_boundary_rss_before_release_peak_v0682367 << "\n"
+            << "V0682367_RSS_AFTER_LAST_DSEC_RELEASE_PEAK=" << perf.accepted_boundary_rss_after_release_peak_v0682367 << "\n"
+            << "V0682367_RSS_AFTER_BOUNDARY_RECOMPUTE_PEAK=" << perf.accepted_boundary_rss_after_recompute_peak_v0682367 << "\n"
+            << "V0682367_FINAL_BOUNDARY_COPY_COUNT=" << perf.final_boundary_last_iteration_copy_count_v0682367 << "\n"
+            << "V0682367_FINAL_BOUNDARY_COPY_ELIDED_COUNT=" << perf.final_boundary_last_iteration_copy_elided_count_v0682367 << "\n"
             << "V0682332_FINAL_SNAPSHOTS_CURRENT_BYTES=" << perf.final_snapshots_current_bytes_v0682332 << "\n"
             << "V0682332_FINAL_SNAPSHOTS_PEAK_BYTES=" << perf.final_snapshots_peak_bytes_v0682332 << "\n"
             << "V0682332_FINAL_SNAPSHOTS_CURRENT_CAPACITY_BYTES=" << perf.final_snapshots_current_capacity_bytes_v0682332 << "\n"
