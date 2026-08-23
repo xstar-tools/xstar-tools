@@ -21924,6 +21924,7 @@ void emit_controller_performance_instrumentation(
             << "V0682352_PERSISTENT_POPULATION_BYTES=" << perf.foundation_v068231.persistent_population_bytes << "\n"
             << "V0682352_PERSISTENT_SPECTRAL_BYTES=" << perf.foundation_v068231.persistent_spectral_bytes << "\n"
             << "V0682352_PERSISTENT_ELEMENT_SOLVER_BYTES=" << perf.foundation_v068231.persistent_element_solver_bytes << "\n"
+            << "V0682362_ELEMENT_OUTPUT_MATRIX_MODE=LAZY_DIAGNOSTIC_ONLY\n"
             << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"

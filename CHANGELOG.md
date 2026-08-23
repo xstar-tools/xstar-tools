@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.36.2 - lazy caller-side element output matrices - 2026-08-22
+
+- Close `0.6.82.36.1` on the workstation: Fe science, direct-identity mode, detailed-line inventory, RSS non-regression, and performance all ACCEPT. Same-host internal total is `76.290929 s` versus `.35.3` `88.505015 s` (`0.861996x`), while the targeted diagnostic line stage is `0.074419 s` versus `11.955262 s` (`0.006225x`).
+- Continue the `.36` excess-work/storage phase with a memory-only ownership correction discovered by the `.35.3/.36.1` telemetry. Ordinary production was allocating and zeroing three caller-side `n*n` output matrices (`dense`, `heat`, `heat2`) even though the element engine simultaneously owns and solves its own three live matrices. The caller copies are needed only by explicit solve-system diagnostics.
+- Make caller-side element matrices lazy. In normal production they remain unallocated; `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM` and the historical helium solve-system diagnostic still request and receive the unchanged matrix outputs. No matrix arithmetic, solver ordering, rate evaluation, controller/transport logic, or publication science is altered.
+- Add `V0682362_ELEMENT_OUTPUT_MATRIX_MODE=LAZY_DIAGNOSTIC_ONLY` and a focused Fe qualification against accepted same-host `.36.1`. Require unchanged science/work structure, retention of the `.36.1` O(1) line lookup, at least 95% removal of the caller element-solver capacity block, at least 60% reduction of total persistent scratch capacity, at least 5% peak-RSS reduction, and no more than 2% runtime regression.
+- Preserve science revision `0.6.48.12.3.45.3.3.8`, ABIs `60487 / 6048110 / 60488`, strict-FP behavior, and the `.36.1` publication optimization. Keep the planned `.37` compiled-ATDB/flat-SoA work separate.
+
 ## 0.6.82.36.1 - same-host direct-line optimization qualification hotfix - 2026-08-22
 
 - Revise host-tested `0.6.82.36` under the no-version-reuse rule. The workstation Fe run kept science, direct-identity mode, detailed-line inventory, and RSS non-regression ACCEPT, but the focused runner returned REJECT only because its whole-run gate required `total_ratio <= 0.85`.

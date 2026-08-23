@@ -10464,7 +10464,8 @@ void prepare_buffers(
     ElementBuffers& b,
     const ElementProgram& e,
     const xstar_fixed_state_input_v1* runtime_input = nullptr,
-    bool preserve_initial_seed = false) {
+    bool preserve_initial_seed = false,
+    bool return_matrices = false) {
     b.runtime_seed_loaded = false;
     b.runtime_seed_renormalized = false;
     b.runtime_seed_sum_before_policy = 0.0;
@@ -10475,7 +10476,24 @@ void prepare_buffers(
     const std::size_t n = static_cast<std::size_t>(e.n_rows);
     const std::size_t ni = static_cast<std::size_t>(e.n_ions);
     b.superlevels.resize(n); b.ions.resize(n); b.initial.resize(n);
-    b.populations.resize(n); b.outer.resize(n); b.dense.resize(n * n); b.heat.resize(n * n); b.heat2.resize(n * n); b.rhs.resize(n);
+    b.populations.resize(n); b.outer.resize(n); b.rhs.resize(n);
+    // 0.6.82.36.2: the element engine owns the live dense/heating matrices.
+    // The caller-side copies are output-only diagnostics and were previously
+    // allocated and zeroed for every production solve despite never being
+    // returned.  Keep them lazy so ordinary production does not commit a
+    // second three-matrix n*n workspace.
+    if (return_matrices) {
+        b.dense.resize(n * n);
+        b.heat.resize(n * n);
+        b.heat2.resize(n * n);
+    } else {
+        // Also release any capacity left by a prior diagnostic-mode call in
+        // the same process; ordinary production must not retain diagnostic
+        // matrix ownership after that mode is disabled.
+        if (b.dense.capacity() != 0u) std::vector<double>().swap(b.dense);
+        if (b.heat.capacity() != 0u) std::vector<double>().swap(b.heat);
+        if (b.heat2.capacity() != 0u) std::vector<double>().swap(b.heat2);
+    }
     b.gamma.resize(n); b.alpha.resize(n); b.fgamma.resize(5 * n); b.falpha.resize(5 * n); b.igamma.resize(n); b.ialpha.resize(n);
     b.ion_population.resize(ni); b.ion_population_final.resize(ni); b.ionization.resize(ni); b.recombination.resize(ni);
     b.ionization_components.resize(3 * ni); b.recombination_components.resize(3 * ni);
@@ -10485,9 +10503,11 @@ void prepare_buffers(
     // so explicitly restore that exact zero state without reallocating.
     std::fill(b.populations.begin(), b.populations.end(), 0.0);
     std::fill(b.outer.begin(), b.outer.end(), 0.0);
-    std::fill(b.dense.begin(), b.dense.end(), 0.0);
-    std::fill(b.heat.begin(), b.heat.end(), 0.0);
-    std::fill(b.heat2.begin(), b.heat2.end(), 0.0);
+    if (return_matrices) {
+        std::fill(b.dense.begin(), b.dense.end(), 0.0);
+        std::fill(b.heat.begin(), b.heat.end(), 0.0);
+        std::fill(b.heat2.begin(), b.heat2.end(), 0.0);
+    }
     std::fill(b.rhs.begin(), b.rhs.end(), 0.0);
     std::fill(b.gamma.begin(), b.gamma.end(), 0.0);
     std::fill(b.alpha.begin(), b.alpha.end(), 0.0);
@@ -10551,14 +10571,20 @@ void prepare_buffers(
 // Purpose: Implement bind output as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void bind_output(xstar_element_output_v1& out, ElementBuffers& b, int element_z) {
+void bind_output(
+    xstar_element_output_v1& out,
+    ElementBuffers& b,
+    int element_z,
+    bool return_matrices = false) {
     xstar_element_output_init_v1(&out);
     out.element_z = element_z;
     out.populations = b.populations.data(); out.populations_capacity = b.populations.size();
     out.final_outer_start_populations = b.outer.data(); out.final_outer_start_capacity = b.outer.size();
-    out.dense_matrix = b.dense.data(); out.dense_matrix_capacity = b.dense.size();
-    out.heating_matrix = b.heat.data(); out.heating_matrix_capacity = b.heat.size();
-    out.heating_matrix2 = b.heat2.data(); out.heating_matrix2_capacity = b.heat2.size();
+    if (return_matrices) {
+        out.dense_matrix = b.dense.data(); out.dense_matrix_capacity = b.dense.size();
+        out.heating_matrix = b.heat.data(); out.heating_matrix_capacity = b.heat.size();
+        out.heating_matrix2 = b.heat2.data(); out.heating_matrix2_capacity = b.heat2.size();
+    }
     out.rhs = b.rhs.data(); out.rhs_capacity = b.rhs.size();
     out.gamma = b.gamma.data(); out.gamma_capacity = b.gamma.size();
     out.alpha = b.alpha.data(); out.alpha_capacity = b.alpha.size();
@@ -13258,8 +13284,12 @@ int run_impl(
         residual_audit_v064812339.post_pass2_prebuffer_seconds = elapsed(post_pass2_prebuffer_started_v064812339);
         const auto buffer_allocation_started_v064812339 = clock_type::now();
         auto& buffers = ctx.scratch_v068231.element_buffers;
-        if (buffers.dense.capacity() > 0u) ++perf_foundation_v068231.element_buffer_reuses;
-        prepare_buffers(buffers, active.element, &input, source_compact_basis_seed);
+        const bool return_element_matrices_v0682362 =
+            all_element_solve_system || (helium_solve_response && element.element_z == 2);
+        if (buffers.populations.capacity() > 0u) ++perf_foundation_v068231.element_buffer_reuses;
+        prepare_buffers(
+            buffers, active.element, &input, source_compact_basis_seed,
+            return_element_matrices_v0682362);
         residual_audit_v064812339.buffer_allocation_seconds = elapsed(buffer_allocation_started_v064812339);
         perf_foundation_v068231.matrix_workspace_seconds +=
             residual_audit_v064812339.buffer_allocation_seconds;
@@ -13299,7 +13329,9 @@ int run_impl(
         ein.ion_by_row = buffers.ions.data();
         ein.initial_populations = buffers.initial.data();
         xstar_element_output_v1 eout{};
-        bind_output(eout, buffers, active.element.element_z);
+        bind_output(
+            eout, buffers, active.element.element_z,
+            return_element_matrices_v0682362);
         perf_foundation_v068231.element_input_seconds +=
             elapsed(element_input_started_v068231);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
