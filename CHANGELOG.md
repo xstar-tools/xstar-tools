@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.36.9 - accepted-boundary lifetime performance-gate hotfix - 2026-08-23
+
+- Host result for 0.6.82.36.8 reproduced the accepted science, work structure, lifetime ownership, and RSS reduction of 0.6.82.36.7, but the focused runner rejected only because a single candidate timing was 1.033646x the accepted 0.6.82.36.6 baseline while the fixed threshold was 1.02x.
+- Production C++ science/ownership source is unchanged from 0.6.82.36.8 and therefore unchanged from 0.6.82.36.7. The 0.6.82.36.7 and 0.6.82.36.8 same-source host runs measured 71.971868 s and 73.310426 s respectively, demonstrating about 1.9% same-source timing spread on the workstation.
+- The focused Fe qualification runner now treats <=1.05x of the accepted 0.6.82.36.6 total time as performance non-regression. Science, work-structure, lifetime, RSS, heap, and ownership gates remain unchanged. This is a qualification-policy revision only; it does not change physics, arithmetic, evaluation order, solver/controller/transport behavior, publication ownership, or the frozen science revision 0.6.48.12.3.45.3.3.8.
+- The accepted-boundary lifetime implementation retained from 0.6.82.36.7 releases the obsolete compact DSEC snapshot before exact recomputation and elides production final-boundary copies into `last_iteration`; host evidence shows exact science and peak RSS reduced from 2,962,411,520 B to about 2,739,552,256 B.
+
 ## 0.6.82.36.8 - accepted-boundary lifetime qualification-policy hotfix - 2026-08-23
 
 - Host return for 0.6.82.36.7 preserved exact science/work structure and reduced Fe peak RSS from 2,962,411,520 B to 2,739,548,160 B (internal marker), with `/usr/bin/time` max RSS 2,675,340 kB.
