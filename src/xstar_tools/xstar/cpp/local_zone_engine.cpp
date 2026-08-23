@@ -11999,6 +11999,13 @@ int run_impl(
     const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
     const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
     const bool all_element_solve_system = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM");
+    // 0.6.82.36.3: true production historically enables the qualification
+    // solve-system flag as part of the accepted source-faithful profile, but
+    // that flag only requests diagnostic matrix copies; it does not change
+    // matrix construction or solver arithmetic.  Do not let the historical
+    // production profile force three output-only n*n matrix copies.
+    const bool return_solve_system_diagnostics_v0682363 =
+        all_element_solve_system && !environment_flag("XSTAR_NATIVE_PRODUCTION");
     const bool source_compact_basis_seed = environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
     const bool matrix_construction_closure =
         environment_flag("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
@@ -12170,7 +12177,7 @@ int run_impl(
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     ctx.last_helium_solve_response = helium_solve_response;
     ctx.last_all_element_solve_response = all_element_solve_response || all_element_solve_system;
-    ctx.last_all_element_solve_system = all_element_solve_system;
+    ctx.last_all_element_solve_system = return_solve_system_diagnostics_v0682363;
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     ctx.last_helium_source_insertion_order = helium_source_insertion_order;
     const auto total_start = clock_type::now();
@@ -13284,12 +13291,13 @@ int run_impl(
         residual_audit_v064812339.post_pass2_prebuffer_seconds = elapsed(post_pass2_prebuffer_started_v064812339);
         const auto buffer_allocation_started_v064812339 = clock_type::now();
         auto& buffers = ctx.scratch_v068231.element_buffers;
-        const bool return_element_matrices_v0682362 =
-            all_element_solve_system || (helium_solve_response && element.element_z == 2);
+        const bool return_element_matrices_v0682363 =
+            return_solve_system_diagnostics_v0682363 ||
+            (helium_solve_response && !native_production_v064897 && element.element_z == 2);
         if (buffers.populations.capacity() > 0u) ++perf_foundation_v068231.element_buffer_reuses;
         prepare_buffers(
             buffers, active.element, &input, source_compact_basis_seed,
-            return_element_matrices_v0682362);
+            return_element_matrices_v0682363);
         residual_audit_v064812339.buffer_allocation_seconds = elapsed(buffer_allocation_started_v064812339);
         perf_foundation_v068231.matrix_workspace_seconds +=
             residual_audit_v064812339.buffer_allocation_seconds;
@@ -13313,7 +13321,7 @@ int run_impl(
         if (capture_element_solve_response) {
             ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY;
         }
-        if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
+        if (return_element_matrices_v0682363) {
             ein.flags |= XSTAR_ELEMENT_RETURN_MATRICES;
         }
         ein.element_z = active.element.element_z;
@@ -13331,7 +13339,7 @@ int run_impl(
         xstar_element_output_v1 eout{};
         bind_output(
             eout, buffers, active.element.element_z,
-            return_element_matrices_v0682362);
+            return_element_matrices_v0682363);
         perf_foundation_v068231.element_input_seconds +=
             elapsed(element_input_started_v068231);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
@@ -13811,7 +13819,7 @@ int run_impl(
             element_diagnostic.final_population_after_condensed = std::move(stage_after_condensed);
             element_diagnostic.final_fixed_point_population_before = std::move(stage_fixed_before);
             element_diagnostic.final_fixed_point_population_after = std::move(stage_fixed_after);
-            if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
+            if (return_element_matrices_v0682363) {
                 element_diagnostic.dense_matrix = buffers.dense;
                 element_diagnostic.heating_matrix = buffers.heat;
                 element_diagnostic.heating_matrix2 = buffers.heat2;

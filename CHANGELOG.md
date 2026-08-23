@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.36.3 - 2026-08-22
+
+- Correct the rejected 0.6.82.36.2 matrix-elision attempt: true production historically sets `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM=1`, which caused the new lazy-output condition to remain true and therefore left all three caller-side `n x n` diagnostic matrices allocated.
+- Separate solve-system output diagnostics from native production. Production keeps the accepted solver, matrix construction, solve-response, rates, ordering, and publication paths, but no longer requests or copies output-only dense/heating/heating2 matrices.
+- Preserve explicit non-production solve-system diagnostics unchanged.
+- Scientific revision remains frozen at 0.6.48.12.3.45.3.3.8; public ABIs unchanged.
+
 ## 0.6.82.36.2 - lazy caller-side element output matrices - 2026-08-22
 
 - Close `0.6.82.36.1` on the workstation: Fe science, direct-identity mode, detailed-line inventory, RSS non-regression, and performance all ACCEPT. Same-host internal total is `76.290929 s` versus `.35.3` `88.505015 s` (`0.861996x`), while the targeted diagnostic line stage is `0.074419 s` versus `11.955262 s` (`0.006225x`).
