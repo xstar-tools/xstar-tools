@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.36.8 - accepted-boundary lifetime qualification-policy hotfix - 2026-08-23
+
+- Host return for 0.6.82.36.7 preserved exact science/work structure and reduced Fe peak RSS from 2,962,411,520 B to 2,739,548,160 B (internal marker), with `/usr/bin/time` max RSS 2,675,340 kB.
+- 0.6.82.36.7 was nevertheless rejected only because its focused harness incorrectly required the already-compacted retained DSEC snapshot itself to exceed 64 MiB; the measured snapshot was 950,323 B.
+- The actual large ownership reduction was the production elision of the unused final-boundary deep copy: retained copy count 0, elided count 3; radial peak `uordblks` fell from 2,033,270,176 B to 1,919,171,360 B.
+- Production C++ ownership/science source is unchanged from 0.6.82.36.7.  The corrected lifetime gate now requires the release branch to execute (`released_bytes > 0`), zero retained final-boundary copies, at least one elided final-boundary copy, and non-pathological RSS behavior around release.  The independent RSS-reduction and performance gates remain unchanged.
+- Science remains frozen at 0.6.48.12.3.45.3.3.8; ABI and numerical kernels are unchanged.
+
 ## 0.6.82.36.7 - accepted-boundary DSEC snapshot lifetime elision - 2026-08-23
 
 - Close `0.6.82.36.6` on the workstation: Fe science/policies/work structure ACCEPT; dense rescues remained `0`; peak RSS fell `3,147,141,120 -> 2,962,411,520 B` internally (and `/usr/bin/time` reported `2,892,980 kB`), while internal total improved `72.717758 -> 70.924118 s`.
