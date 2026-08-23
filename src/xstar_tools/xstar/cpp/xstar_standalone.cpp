@@ -22171,6 +22171,11 @@ void emit_controller_performance_instrumentation(
                     ? static_cast<double>(perf.foundation_v068231.bf_sgbar_compact_values_current_v06823613) /
                         static_cast<double>(perf.foundation_v068231.bf_sgbar_dense_values_current_v06823613)
                     : 0.0) << "\n"
+            << "V06823614_BOUND_FREE_REVISIT_MODE=COMPACT_CONTEXT_THRESHOLD_RICH_FORENSIC\n"
+            << "V06823614_REVISIT_COMPACT_COUNT_PEAK=" << perf.foundation_v068231.revisit_compact_count_peak_v06823614 << "\n"
+            << "V06823614_REVISIT_COMPACT_INLINE_BYTES_PEAK=" << perf.foundation_v068231.revisit_compact_inline_bytes_peak_v06823614 << "\n"
+            << "V06823614_REVISIT_LEGACY_RICH_EQUIVALENT_BYTES_PEAK=" << perf.foundation_v068231.revisit_legacy_rich_equivalent_bytes_peak_v06823614 << "\n"
+            << "V06823614_REVISIT_BYTES_ELIDED_PEAK=" << perf.foundation_v068231.revisit_bytes_elided_peak_v06823614 << "\n"
             << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"

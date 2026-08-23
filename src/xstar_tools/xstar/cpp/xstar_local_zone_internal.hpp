@@ -127,6 +127,11 @@ struct PerformanceFoundationV068231 {
     std::uint64_t bf_sgbar_compacted_geometry_count_v06823613 = 0u;
     std::uint64_t bf_sgbar_compact_values_current_v06823613 = 0u;
     std::uint64_t bf_sgbar_dense_values_current_v06823613 = 0u;
+    // 0.6.82.36.14: compact retained Type-49/53 revisit ownership.
+    std::uint64_t revisit_compact_count_peak_v06823614 = 0u;
+    std::uint64_t revisit_compact_inline_bytes_peak_v06823614 = 0u;
+    std::uint64_t revisit_legacy_rich_equivalent_bytes_peak_v06823614 = 0u;
+    std::uint64_t revisit_bytes_elided_peak_v06823614 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

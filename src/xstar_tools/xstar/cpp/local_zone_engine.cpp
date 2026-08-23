@@ -1702,6 +1702,67 @@ struct EvaluatedRecord {
     Type99SourceShadow type99_shadow{};
 };
 
+// 0.6.82.36.14: call-2 selected Type-49/53 revisits need only the
+// bound-free source context plus threshold-publication scalars.  Retaining a
+// full EvaluatedRecord and its six-shadow bound-free sidecar for every revisit
+// identity amplified broad-model accepted-boundary memory by hundreds of MiB.
+// This compact state preserves every value consumed by the later selected
+// full-grid replay and by the existing revisit audit, while leaving explicit
+// legacy/forensic mode on the historical rich owner.
+struct BoundFreeThresholdPublicationV06823614 {
+    bool valid = false;
+    bool threshold_publication_reached = false;
+    double threshold_cross_section_cm2 = 0.0;
+    double threshold_stimulated_cross_section_cm2 = 0.0;
+};
+
+struct BoundFreeRevisitStateV06823614 {
+    Type53RecordContext record_context{};
+    double ptmp_sum = 1.0;
+    double threshold_ev = 0.0;
+    bool row46_contract = false;
+    bool type49 = false;
+    BoundFreeThresholdPublicationV06823614 seed_or_reduced{};
+    BoundFreeThresholdPublicationV06823614 full_cached{};
+    BoundFreeThresholdPublicationV06823614 threshold_zero_fallback{};
+};
+
+BoundFreeThresholdPublicationV06823614 compact_threshold_publication_v06823614(
+    const Type53SourceShadow& shadow) {
+    BoundFreeThresholdPublicationV06823614 out{};
+    out.valid = shadow.valid;
+    out.threshold_publication_reached = shadow.threshold_publication_reached;
+    out.threshold_cross_section_cm2 = shadow.threshold_cross_section_cm2;
+    out.threshold_stimulated_cross_section_cm2 = shadow.threshold_stimulated_cross_section_cm2;
+    return out;
+}
+
+BoundFreeRevisitStateV06823614 compact_bound_free_revisit_v06823614(
+    const EvaluatedRecord& evaluated, bool type49) {
+    const auto& payload = evaluated.bound_free_payload();
+    BoundFreeRevisitStateV06823614 out{};
+    out.record_context = payload.bound_free_record_context_v064895;
+    out.ptmp_sum = payload.bound_free_ptmp_sum_v064895;
+    out.threshold_ev = payload.bound_free_threshold_ev_v064895;
+    out.row46_contract = payload.bound_free_row46_contract_v064895;
+    out.type49 = type49;
+    if (type49) {
+        out.seed_or_reduced = compact_threshold_publication_v06823614(
+            payload.type49_calc_emisab_shadow);
+        out.full_cached = compact_threshold_publication_v06823614(
+            payload.type49_calc_emis_shadow);
+        out.threshold_zero_fallback = compact_threshold_publication_v06823614(
+            payload.type49_shadow);
+    } else {
+        const auto& seed = payload.type53_calc_emisab_shadow.valid
+            ? payload.type53_calc_emisab_shadow : payload.type53_shadow;
+        out.seed_or_reduced = compact_threshold_publication_v06823614(seed);
+        out.full_cached = compact_threshold_publication_v06823614(
+            payload.type53_calc_emis_shadow);
+    }
+    return out;
+}
+
 struct PreliminaryCachedRecordV064812337 {
     std::size_t ordinal = 0u;
     EvaluatedRecord evaluated{};
@@ -9576,6 +9637,71 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     return shadow;
 }
 
+// 0.6.82.36.14: compact equivalent of the selected full-grid Type-49/53
+// replay.  The scientific kernel and prepared-geometry cache are identical to
+// evaluate_selected_fullgrid_bound_free(); only the retained caller state is
+// narrowed to the values that function actually consumes.
+Type53SourceShadow evaluate_selected_fullgrid_bound_free_v06823614(
+    const Program& program,
+    const ElementProgram& element,
+    const ProgramRecord& record,
+    const xstar_fixed_state_input_v1& input,
+    const BoundFreeRevisitStateV06823614& revisit,
+    const RateEvaluationContextV064894& rate_context) {
+    Type53SourceShadow shadow{};
+    if (record.opcode != XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
+        record.opcode != XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) return shadow;
+    if (record.real_offset + record.real_count > program.reals.size()) return shadow;
+    const double* r = program.reals.data() + record.real_offset;
+    const ElementRow scalar_dummy{};
+    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
+    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
+    Type53RecordContext record_context = revisit.record_context;
+    const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
+    if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
+    const std::size_t pair_real_count = record_context.valid
+        ? record_context.pair_real_count : record.real_count;
+    if (pair_real_count < 4 || pair_real_count % 2 != 0) return shadow;
+    if (type49 && revisit.threshold_ev <= 0.0) {
+        shadow.valid = revisit.threshold_zero_fallback.valid;
+        shadow.threshold_publication_reached =
+            revisit.threshold_zero_fallback.threshold_publication_reached;
+        shadow.threshold_cross_section_cm2 =
+            revisit.threshold_zero_fallback.threshold_cross_section_cm2;
+        shadow.threshold_stimulated_cross_section_cm2 =
+            revisit.threshold_zero_fallback.threshold_stimulated_cross_section_cm2;
+        return shadow;
+    }
+    const xstar_type53_row46_dsec_runtime_oracle::Entry* row46_contract = nullptr;
+    if (!type49 && revisit.row46_contract) {
+        row46_contract = find_type53_row46_dsec_runtime_oracle_entry(
+            record.source_position, record.record);
+    }
+    xstar_fixed_state_input_v1 full_input = input;
+    full_input.dsec_radiation_energy_ev = nullptr;
+    full_input.dsec_bremsa = nullptr;
+    full_input.dsec_radiation_bin_count = 0;
+    const BoundFreePreparedGeometryV064895* prepared = prepared_bound_free_geometry(
+        program, record, full_input, revisit.threshold_ev,
+        type49, type49, record_context.valid ? &record_context : nullptr,
+        true, rate_context);
+    xstar_element_contribution_v1 contribution{};
+    const bool ok = evaluate_type53_source_integral(
+        r, pair_real_count, lower, upper, full_input,
+        revisit.threshold_ev, revisit.ptmp_sum,
+        row46_contract, record_context.valid ? &record_context : nullptr,
+        record.record, type49, type49, contribution, &shadow, prepared);
+    if (!ok) return Type53SourceShadow{};
+    if (rate_context.bound_free_perf) {
+        ++rate_context.bound_free_perf->full_dynamic_integrals;
+        if (type49) ++rate_context.bound_free_perf->full_selected_type49_integrals;
+        else ++rate_context.bound_free_perf->full_selected_type53_integrals;
+    }
+    return shadow;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute ground row for stage within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
@@ -12566,6 +12692,10 @@ int run_impl(
         type53_revisit_evaluated_v82_patch5181;
     std::map<std::pair<std::uint64_t,std::uint64_t>,EvaluatedRecord>
         type49_revisit_evaluated_v82_patch52082;
+    std::map<std::pair<std::uint64_t,std::uint64_t>,BoundFreeRevisitStateV06823614>
+        type53_revisit_compact_v06823614;
+    std::map<std::pair<std::uint64_t,std::uint64_t>,BoundFreeRevisitStateV06823614>
+        type49_revisit_compact_v06823614;
     std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
     std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
     // Type-76 is a literal UCalc side effect rather than a later selected-RRC
@@ -12705,6 +12835,9 @@ int run_impl(
             type53_calc_emisab_workspace_v82_patch5181);
     rate_context_v064894.bound_free_cache = &ctx.bound_free_prepared_v064895;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
+    const bool use_compact_bound_free_revisit_v06823614 =
+        native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
+        !environment_flag("XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT");
 
     write_type49_identical_state_probe(
         ctx, input,
@@ -13040,13 +13173,25 @@ int run_impl(
             // DEFER_PRODUCT_PROJECTION, so avoid copying the ~6 KiB EvaluatedRecord
             // payload into ordered maps on those transient evaluations.
             if (!defer_product_projection && record.data_type == 53 && record.rate_type == 7) {
-                type53_revisit_evaluated_v82_patch5181[std::make_pair(
+                const auto revisit_key_v06823614 = std::make_pair(
                     static_cast<std::uint64_t>(record.source_position),
-                    static_cast<std::uint64_t>(record.record))] = item;
+                    static_cast<std::uint64_t>(record.record));
+                if (use_compact_bound_free_revisit_v06823614) {
+                    type53_revisit_compact_v06823614[revisit_key_v06823614] =
+                        compact_bound_free_revisit_v06823614(item, false);
+                } else {
+                    type53_revisit_evaluated_v82_patch5181[revisit_key_v06823614] = item;
+                }
             } else if (!defer_product_projection && record.data_type == 49 && record.rate_type == 7) {
-                type49_revisit_evaluated_v82_patch52082[std::make_pair(
+                const auto revisit_key_v06823614 = std::make_pair(
                     static_cast<std::uint64_t>(record.source_position),
-                    static_cast<std::uint64_t>(record.record))] = item;
+                    static_cast<std::uint64_t>(record.record));
+                if (use_compact_bound_free_revisit_v06823614) {
+                    type49_revisit_compact_v06823614[revisit_key_v06823614] =
+                        compact_bound_free_revisit_v06823614(item, true);
+                } else {
+                    type49_revisit_evaluated_v82_patch52082[revisit_key_v06823614] = item;
+                }
             }
             evaluated.push_back(std::move(item));
             evaluated_records.push_back(&record);
@@ -14049,17 +14194,27 @@ int run_impl(
         residual_audit_v064812339.errc_slot_entries = source_errc_rank_energy_by_slot_v82_patch5209.size();
         residual_audit_v064812339.errc_owner_entries = source_errc_owner_by_slot_v82_patch5209.size();
         residual_audit_v064812339.line_wavelength_entries = source_line_wavelength_by_identity_v82_patch5208.size();
-        residual_audit_v064812339.type53_revisit_entries = type53_revisit_evaluated_v82_patch5181.size();
-        residual_audit_v064812339.type49_revisit_entries = type49_revisit_evaluated_v82_patch52082.size();
+        residual_audit_v064812339.type53_revisit_entries =
+            type53_revisit_evaluated_v82_patch5181.size() + type53_revisit_compact_v06823614.size();
+        residual_audit_v064812339.type49_revisit_entries =
+            type49_revisit_evaluated_v82_patch52082.size() + type49_revisit_compact_v06823614.size();
         {
-            const std::uint64_t revisit_count_v06823612 =
+            const std::uint64_t rich_revisit_count_v06823614 =
                 static_cast<std::uint64_t>(type53_revisit_evaluated_v82_patch5181.size() +
                                            type49_revisit_evaluated_v82_patch52082.size());
+            const std::uint64_t compact_revisit_count_v06823614 =
+                static_cast<std::uint64_t>(type53_revisit_compact_v06823614.size() +
+                                           type49_revisit_compact_v06823614.size());
+            const std::uint64_t revisit_count_v06823612 =
+                rich_revisit_count_v06823614 + compact_revisit_count_v06823614;
+            const std::uint64_t actual_inline_bytes_v06823614 =
+                rich_revisit_count_v06823614 * sizeof(EvaluatedRecord) +
+                compact_revisit_count_v06823614 * sizeof(BoundFreeRevisitStateV06823614);
             perf_foundation_v068231.revisit_record_count_peak_v06823612 = std::max(
                 perf_foundation_v068231.revisit_record_count_peak_v06823612, revisit_count_v06823612);
             perf_foundation_v068231.revisit_record_inline_bytes_peak_v06823612 = std::max(
                 perf_foundation_v068231.revisit_record_inline_bytes_peak_v06823612,
-                revisit_count_v06823612 * sizeof(EvaluatedRecord));
+                actual_inline_bytes_v06823614);
             std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*> revisit_sidecars_v06823612;
             const auto collect_revisit_v06823612 = [&](const auto& source_v06823612) {
                 for (const auto& item_v06823612 : source_v06823612) {
@@ -14080,6 +14235,23 @@ int run_impl(
             perf_foundation_v068231.revisit_bound_free_sidecar_bytes_peak_v06823612 = std::max(
                 perf_foundation_v068231.revisit_bound_free_sidecar_bytes_peak_v06823612,
                 sidecar_count_v06823612 * sizeof(BoundFreeEvaluatedPayloadV06823087));
+            perf_foundation_v068231.revisit_compact_count_peak_v06823614 = std::max(
+                perf_foundation_v068231.revisit_compact_count_peak_v06823614,
+                compact_revisit_count_v06823614);
+            perf_foundation_v068231.revisit_compact_inline_bytes_peak_v06823614 = std::max(
+                perf_foundation_v068231.revisit_compact_inline_bytes_peak_v06823614,
+                compact_revisit_count_v06823614 * sizeof(BoundFreeRevisitStateV06823614));
+            const std::uint64_t legacy_equivalent_v06823614 = compact_revisit_count_v06823614 *
+                (sizeof(EvaluatedRecord) + sizeof(BoundFreeEvaluatedPayloadV06823087));
+            perf_foundation_v068231.revisit_legacy_rich_equivalent_bytes_peak_v06823614 = std::max(
+                perf_foundation_v068231.revisit_legacy_rich_equivalent_bytes_peak_v06823614,
+                legacy_equivalent_v06823614);
+            const std::uint64_t compact_actual_v06823614 = compact_revisit_count_v06823614 *
+                sizeof(BoundFreeRevisitStateV06823614);
+            const std::uint64_t elided_v06823614 = legacy_equivalent_v06823614 > compact_actual_v06823614
+                ? legacy_equivalent_v06823614 - compact_actual_v06823614 : 0u;
+            perf_foundation_v068231.revisit_bytes_elided_peak_v06823614 = std::max(
+                perf_foundation_v068231.revisit_bytes_elided_peak_v06823614, elided_v06823614);
         }
         residual_audit_v064812339.element_to_mapback_seconds = elapsed(residual_element_started_v064812339);
         write_residual_scaling_audit(residual_audit_v064812339);
@@ -15534,15 +15706,26 @@ int run_impl(
                     input.radiation_energy_ev, continuum_capacity);
                 const bool selected = consumer_decision_v82_patch5208.actual_consumer;
                 if (selected) ++type53_selected;
-                const auto eit = type53_revisit_evaluated_v82_patch5181.find(std::make_pair(
-                    static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
-                if (eit == type53_revisit_evaluated_v82_patch5181.end()) continue;
-                const auto& item = eit->second;
-                const Type53SourceShadow& seed_shadow = item.bound_free_payload().type53_calc_emisab_shadow.valid
-                    ? item.bound_free_payload().type53_calc_emisab_shadow : item.bound_free_payload().type53_shadow;
-                Type53SourceShadow lazy_revisit_shadow_v064895{};
-                const Type53SourceShadow* revisit_shadow_ptr_v064895 =
-                    &item.bound_free_payload().type53_calc_emis_shadow;
+                const auto revisit_key_v06823614 = std::make_pair(
+                    static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record));
+                const auto compact_it_v06823614 = type53_revisit_compact_v06823614.find(revisit_key_v06823614);
+                const auto rich_it_v06823614 = type53_revisit_evaluated_v82_patch5181.find(revisit_key_v06823614);
+                if (compact_it_v06823614 == type53_revisit_compact_v06823614.end() &&
+                    rich_it_v06823614 == type53_revisit_evaluated_v82_patch5181.end()) continue;
+                BoundFreeThresholdPublicationV06823614 seed_shadow_v06823614{};
+                BoundFreeThresholdPublicationV06823614 revisit_shadow_v06823614{};
+                if (compact_it_v06823614 != type53_revisit_compact_v06823614.end()) {
+                    seed_shadow_v06823614 = compact_it_v06823614->second.seed_or_reduced;
+                    revisit_shadow_v06823614 = compact_it_v06823614->second.full_cached;
+                } else {
+                    const auto& payload_v06823614 = rich_it_v06823614->second.bound_free_payload();
+                    seed_shadow_v06823614 = compact_threshold_publication_v06823614(
+                        payload_v06823614.type53_calc_emisab_shadow.valid
+                            ? payload_v06823614.type53_calc_emisab_shadow
+                            : payload_v06823614.type53_shadow);
+                    revisit_shadow_v06823614 = compact_threshold_publication_v06823614(
+                        payload_v06823614.type53_calc_emis_shadow);
+                }
                 if (selected && !rate_context_v064894.force_legacy_bound_free) {
                     const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
                         static_cast<std::uint64_t>(c.source_position),
@@ -15558,12 +15741,19 @@ int run_impl(
                         });
                     if (element_it_v064895 == ctx.program.elements.end())
                         throw std::runtime_error("9.5 selected Type53 element missing");
-                    lazy_revisit_shadow_v064895 = evaluate_selected_fullgrid_bound_free(
-                        ctx.program, *element_it_v064895, selected_record_v064895, input,
-                        item, rate_context_v064894);
-                    revisit_shadow_ptr_v064895 = &lazy_revisit_shadow_v064895;
+                    Type53SourceShadow lazy_revisit_shadow_v064895{};
+                    if (compact_it_v06823614 != type53_revisit_compact_v06823614.end()) {
+                        lazy_revisit_shadow_v064895 = evaluate_selected_fullgrid_bound_free_v06823614(
+                            ctx.program, *element_it_v064895, selected_record_v064895, input,
+                            compact_it_v06823614->second, rate_context_v064894);
+                    } else {
+                        lazy_revisit_shadow_v064895 = evaluate_selected_fullgrid_bound_free(
+                            ctx.program, *element_it_v064895, selected_record_v064895, input,
+                            rich_it_v06823614->second, rate_context_v064894);
+                    }
+                    revisit_shadow_v06823614 =
+                        compact_threshold_publication_v06823614(lazy_revisit_shadow_v064895);
                 }
-                const Type53SourceShadow& revisit_shadow = *revisit_shadow_ptr_v064895;
                 const xstar_spectral_contribution_v1* spectral_item = nullptr;
                 for (const auto& candidate : spectral) {
                     if (candidate.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE &&
@@ -15580,12 +15770,12 @@ int run_impl(
                 double revisit_opakab = seed_opakab;
                 std::string action = selected ? "SELECTED_UCALC_ZERO_NO_PUBLICATION" : "UNSELECTED_RETAIN_SEED";
                 bool modified = false;
-                if (selected && revisit_shadow.valid && revisit_shadow.threshold_publication_reached &&
+                if (selected && revisit_shadow_v06823614.valid && revisit_shadow_v06823614.threshold_publication_reached &&
                     spectral_item->abundance_lower > 0.0) {
                     const double ratio = spectral_item->abundance_upper / spectral_item->abundance_lower;
                     const double coefficient = std::max(0.0,
-                        revisit_shadow.threshold_cross_section_cm2 -
-                        ratio * revisit_shadow.threshold_stimulated_cross_section_cm2);
+                        revisit_shadow_v06823614.threshold_cross_section_cm2 -
+                        ratio * revisit_shadow_v06823614.threshold_stimulated_cross_section_cm2);
                     revisit_opakab = coefficient * spectral_item->abundance_lower * spectral_item->hydrogen_density;
                     opakab[slot] = revisit_opakab;
                     ++type53_revisit_published;
@@ -15606,10 +15796,10 @@ int run_impl(
                     revisit_csv << c.slot_one_based << ',' << c.source_position << ',' << c.record << ',' << c.data_type << ','
                         << (selected ? 1 : 0) << ',' << (rit == source_ncbin.final_rank.end() ? 0 : rit->second) << ','
                         << seed_opakab << ',' << spectral_item->abundance_lower << ',' << spectral_item->abundance_upper << ','
-                        << (seed_shadow.threshold_publication_reached ? 1 : 0) << ','
-                        << seed_shadow.threshold_cross_section_cm2 << ',' << seed_shadow.threshold_stimulated_cross_section_cm2 << ','
-                        << (revisit_shadow.threshold_publication_reached ? 1 : 0) << ','
-                        << revisit_shadow.threshold_cross_section_cm2 << ',' << revisit_shadow.threshold_stimulated_cross_section_cm2 << ','
+                        << (seed_shadow_v06823614.threshold_publication_reached ? 1 : 0) << ','
+                        << seed_shadow_v06823614.threshold_cross_section_cm2 << ',' << seed_shadow_v06823614.threshold_stimulated_cross_section_cm2 << ','
+                        << (revisit_shadow_v06823614.threshold_publication_reached ? 1 : 0) << ','
+                        << revisit_shadow_v06823614.threshold_cross_section_cm2 << ',' << revisit_shadow_v06823614.threshold_stimulated_cross_section_cm2 << ','
                         << revisit_opakab << ',' << opakab[slot] << ',' << action << ',' << (modified ? 1 : 0) << '\n';
                 }
             }
@@ -15679,12 +15869,24 @@ int run_impl(
             for (const auto& c : seed_rrc_candidates) {
                 if (c.data_type != 49) continue;
                 ++type49_candidates_v82_patch52082;
-                const auto eit_v82_patch52082 = type49_revisit_evaluated_v82_patch52082.find(std::make_pair(
-                    static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
-                if (eit_v82_patch52082 == type49_revisit_evaluated_v82_patch52082.end()) continue;
-                const auto& item_v82_patch52082 = eit_v82_patch52082->second;
-                const Type53SourceShadow& reduced_shadow_v82_patch52082 =
-                    item_v82_patch52082.bound_free_payload().type49_calc_emisab_shadow;
+                const auto revisit_key_v06823614 = std::make_pair(
+                    static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record));
+                const auto compact_it_v06823614 = type49_revisit_compact_v06823614.find(revisit_key_v06823614);
+                const auto rich_it_v06823614 = type49_revisit_evaluated_v82_patch52082.find(revisit_key_v06823614);
+                if (compact_it_v06823614 == type49_revisit_compact_v06823614.end() &&
+                    rich_it_v06823614 == type49_revisit_evaluated_v82_patch52082.end()) continue;
+                BoundFreeThresholdPublicationV06823614 reduced_shadow_v06823614{};
+                BoundFreeThresholdPublicationV06823614 full_shadow_v06823614{};
+                if (compact_it_v06823614 != type49_revisit_compact_v06823614.end()) {
+                    reduced_shadow_v06823614 = compact_it_v06823614->second.seed_or_reduced;
+                    full_shadow_v06823614 = compact_it_v06823614->second.full_cached;
+                } else {
+                    const auto& payload_v06823614 = rich_it_v06823614->second.bound_free_payload();
+                    reduced_shadow_v06823614 = compact_threshold_publication_v06823614(
+                        payload_v06823614.type49_calc_emisab_shadow);
+                    full_shadow_v06823614 = compact_threshold_publication_v06823614(
+                        payload_v06823614.type49_calc_emis_shadow);
+                }
 
                 const xstar_spectral_contribution_v1* spectral_item_v82_patch52082 = nullptr;
                 for (const auto& candidate_v82_patch52082 : spectral) {
@@ -15707,9 +15909,6 @@ int run_impl(
                     input.radiation_energy_ev, continuum_capacity);
                 const bool selected_v82_patch52082 = consumer_v82_patch52082.actual_consumer;
                 if (selected_v82_patch52082) ++type49_selected_v82_patch52082;
-                Type53SourceShadow lazy_full_shadow_v064895{};
-                const Type53SourceShadow* full_shadow_ptr_v064895 =
-                    &item_v82_patch52082.bound_free_payload().type49_calc_emis_shadow;
                 if (selected_v82_patch52082 && !rate_context_v064894.force_legacy_bound_free) {
                     const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
                         static_cast<std::uint64_t>(c.source_position),
@@ -15725,13 +15924,19 @@ int run_impl(
                         });
                     if (element_it_v064895 == ctx.program.elements.end())
                         throw std::runtime_error("9.5 selected Type49 element missing");
-                    lazy_full_shadow_v064895 = evaluate_selected_fullgrid_bound_free(
-                        ctx.program, *element_it_v064895, selected_record_v064895, input,
-                        item_v82_patch52082, rate_context_v064894);
-                    full_shadow_ptr_v064895 = &lazy_full_shadow_v064895;
+                    Type53SourceShadow lazy_full_shadow_v064895{};
+                    if (compact_it_v06823614 != type49_revisit_compact_v06823614.end()) {
+                        lazy_full_shadow_v064895 = evaluate_selected_fullgrid_bound_free_v06823614(
+                            ctx.program, *element_it_v064895, selected_record_v064895, input,
+                            compact_it_v06823614->second, rate_context_v064894);
+                    } else {
+                        lazy_full_shadow_v064895 = evaluate_selected_fullgrid_bound_free(
+                            ctx.program, *element_it_v064895, selected_record_v064895, input,
+                            rich_it_v06823614->second, rate_context_v064894);
+                    }
+                    full_shadow_v06823614 =
+                        compact_threshold_publication_v06823614(lazy_full_shadow_v064895);
                 }
-                const Type53SourceShadow& full_shadow_v82_patch52082 =
-                    *full_shadow_ptr_v064895;
 
                 const std::size_t slot_v82_patch52082 = static_cast<std::size_t>(c.slot_one_based);
                 const double full_seed_opakab_v82_patch52082 =
@@ -15740,7 +15945,7 @@ int run_impl(
                 const double lower_v82_patch52082 = spectral_item_v82_patch52082->abundance_lower;
                 const double upper_v82_patch52082 = spectral_item_v82_patch52082->abundance_upper;
                 const double density_v82_patch52082 = spectral_item_v82_patch52082->hydrogen_density;
-                auto published_opakab = [&](const Type53SourceShadow& shadow) {
+                auto published_opakab = [&](const BoundFreeThresholdPublicationV06823614& shadow) {
                     if (!shadow.valid || !shadow.threshold_publication_reached ||
                         !(lower_v82_patch52082 > 0.0)) return 0.0;
                     const double ratio_v82_patch52082 = upper_v82_patch52082 / lower_v82_patch52082;
@@ -15750,16 +15955,16 @@ int run_impl(
                     return coefficient_v82_patch52082 * lower_v82_patch52082 * density_v82_patch52082;
                 };
                 const double reduced_hypothetical_v82_patch52082 =
-                    published_opakab(reduced_shadow_v82_patch52082);
+                    published_opakab(reduced_shadow_v06823614);
                 const double full_revisit_v82_patch52082 =
-                    published_opakab(full_shadow_v82_patch52082);
+                    published_opakab(full_shadow_v06823614);
                 if (reduced_hypothetical_v82_patch52082 != full_revisit_v82_patch52082)
                     ++type49_reduced_full_different_v82_patch52082;
 
                 bool modified_v82_patch52082 = false;
                 std::string action_v82_patch52082 = "UNSELECTED_RETAIN_FULLGRID_SEED";
-                if (selected_v82_patch52082 && full_shadow_v82_patch52082.valid &&
-                    full_shadow_v82_patch52082.threshold_publication_reached &&
+                if (selected_v82_patch52082 && full_shadow_v06823614.valid &&
+                    full_shadow_v06823614.threshold_publication_reached &&
                     lower_v82_patch52082 > 0.0) {
                     opakab[slot_v82_patch52082] = full_revisit_v82_patch52082;
                     ++type49_revisit_published_v82_patch52082;
@@ -15783,13 +15988,13 @@ int run_impl(
                                 ? 0 : rank_it_v82_patch52082->second) << ','
                         << full_seed_opakab_v82_patch52082 << ',' << lower_v82_patch52082 << ','
                         << upper_v82_patch52082 << ','
-                        << (reduced_shadow_v82_patch52082.threshold_publication_reached ? 1 : 0) << ','
-                        << reduced_shadow_v82_patch52082.threshold_cross_section_cm2 << ','
-                        << reduced_shadow_v82_patch52082.threshold_stimulated_cross_section_cm2 << ','
+                        << (reduced_shadow_v06823614.threshold_publication_reached ? 1 : 0) << ','
+                        << reduced_shadow_v06823614.threshold_cross_section_cm2 << ','
+                        << reduced_shadow_v06823614.threshold_stimulated_cross_section_cm2 << ','
                         << reduced_hypothetical_v82_patch52082 << ','
-                        << (full_shadow_v82_patch52082.threshold_publication_reached ? 1 : 0) << ','
-                        << full_shadow_v82_patch52082.threshold_cross_section_cm2 << ','
-                        << full_shadow_v82_patch52082.threshold_stimulated_cross_section_cm2 << ','
+                        << (full_shadow_v06823614.threshold_publication_reached ? 1 : 0) << ','
+                        << full_shadow_v06823614.threshold_cross_section_cm2 << ','
+                        << full_shadow_v06823614.threshold_stimulated_cross_section_cm2 << ','
                         << full_revisit_v82_patch52082 << ',' << opakab[slot_v82_patch52082] << ','
                         << action_v82_patch52082 << ',' << (modified_v82_patch52082 ? 1 : 0) << '\n';
                 }

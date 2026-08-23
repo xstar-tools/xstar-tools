@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.36.14 - compact retained bound-free revisit state - 2026-08-23
+
+- Close the `.36.13` broad host return scientifically and structurally: exact science/ownership/work structure ACCEPT; `multi_element_xi1_ne1e12` peak RSS `8,242,622,464 -> 6,824,124,416 B` versus `.36.12` (about `1.418 GB` removed), with total runtime `1253.745258 s` versus the `.33.8` baseline `1662.569827 s`. The FORTRAN workstation memory target remains `2,574,954,496 B`, so `.36` remains open.
+- Preserve the accepted `.36.13` compact prepared Type-49/53 `sgbar` cache unchanged. Its host telemetry retained `64,121,042 / 242,819,334 = 0.264069` of dense-equivalent values while keeping all fixed-call/record counts and science exact.
+- Replace ordinary native-production Type-49/53 selected-revisit ownership from retained full `EvaluatedRecord` objects plus six-shadow `BoundFreeEvaluatedPayloadV06823087` sidecars with `BoundFreeRevisitStateV06823614`: only the exact `Type53RecordContext`, bound-free threshold/ptmp/row46 scalars, and threshold-publication values consumed by the later selected full-grid replay/audit are retained.
+- Preserve the historical rich revisit maps for explicit legacy/forensic operation (`XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT=1` or legacy bound-free mode). The selected full-grid scientific kernel, prepared-geometry cache, source identity lookup, evaluation order, and floating-point arithmetic remain unchanged.
+- Add `.36.14` telemetry for compact revisit count/bytes, legacy-rich equivalent bytes, and bytes elided. `.36.12` revisit-sidecar telemetry remains visible and should fall to zero in ordinary native production.
+- Qualification remains broad-only with explicit `--case multi_element_xi1_ne1e12`. Reuse the expensive `.33.8` baseline already stored in the completed `.36.11` run, and compare incrementally against the completed `.36.13` candidate; no new `.33.8` baseline run is required.
+- Public ABIs remain `60487 / 6048110 / 60488`; frozen science remains `0.6.48.12.3.45.3.3.8`.
+
 ## 0.6.82.36.13 - compact prepared bound-free sgbar cache spans - 2026-08-23
 
 - Preserve the accepted `.36.12` science, compact-record ownership, thermal-row elision, and allocator-trim policies.
