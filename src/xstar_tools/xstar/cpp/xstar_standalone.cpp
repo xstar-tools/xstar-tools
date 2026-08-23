@@ -21929,6 +21929,7 @@ void emit_controller_performance_instrumentation(
             << "V0682364_ELEMENT_ENGINE_HEATING_MATRIX_MODE=LAZY_RETURN_MATRICES_ONLY\n"
             << "V0682365_ELEMENT_ENGINE_DENSE_MATRIX_MODE=LAZY_DIAGNOSTIC_OR_RESCUE\n"
             << "V0682365_PRODUCTION_SOLVE_RESPONSE_POLICY=ELIDED_OUTPUT_DIAGNOSTICS\n"
+            << "V0682366_PUBLICATION_ACTIVE_POPULATION_MODE=RETAIN_FINAL_ONLY\n"
             << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"

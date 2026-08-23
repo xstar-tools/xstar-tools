@@ -13782,6 +13782,13 @@ int run_impl(
         }
         element_diagnostic.thermal_compact_populations = thermal_populations;
         element_diagnostic.thermal_compact_population_closure_applied = element_thermal_compact_closure_applied;
+        // 0.6.82.36.6: accepted-boundary/final publication consumes the final
+        // compact active populations independently of the optional all-element
+        // solve-response trace (notably pprint(4) endpoint-abundance replay).
+        // Retain this O(n) vector whenever element diagnostics are retained,
+        // while leaving the O(n^2) dense matrix and the rest of the solve-stage
+        // response package disabled in native production.
+        element_diagnostic.active_final_populations = buffers.populations;
         element_diagnostic.heating = element_heating;
         element_diagnostic.cooling = element_cooling;
         element_diagnostic.heating2 = element_heating2;
@@ -13817,7 +13824,8 @@ int run_impl(
             element_diagnostic.active_initial_populations = buffers.initial;
             element_diagnostic.active_final_outer_start_populations =
                 stage_trace_captured ? std::move(stage_final_outer_start) : buffers.outer;
-            element_diagnostic.active_final_populations = buffers.populations;
+            // active_final_populations is retained unconditionally above for
+            // publication ownership; do not duplicate the assignment here.
             element_diagnostic.solve_stage_trace_captured = stage_trace_captured;
             element_diagnostic.final_outer_iteration = stage_final_outer_iteration;
             element_diagnostic.final_fixed_iterations = stage_final_fixed_iterations;

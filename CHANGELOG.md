@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.36.6 - dense-matrix elision publication-population ownership hotfix - 2026-08-23
+
+- Fix the host-rejected `0.6.82.36.5` production failure (`active spectral population row translation overflow`) without reverting native dense-matrix elision.
+- Preserve the compact final active-population vector on accepted-boundary/final evaluations because publication replay (`pprint(4)` endpoint-abundance ownership) consumes it independently of solve-response diagnostics.
+- Keep the heavy all-element solve-response trace and the native `n x n` dense matrix elided in ordinary native production; explicit non-production diagnostics and rescue-on-demand behavior remain unchanged.
+- Add `V0682366_PUBLICATION_ACTIVE_POPULATION_MODE=RETAIN_FINAL_ONLY` and a focused same-host Fe qualification against accepted `0.6.82.36.4`.
+- Science revision remains frozen at `0.6.48.12.3.45.3.3.8`; C API ABI `60487`, production-zone ABI `6048110`, and fixed-state ABI `60488` are unchanged.
+
 ## 0.6.82.36.5 - lazy native dense matrix and production solve-response diagnostic split - 2026-08-23
 
 - Close `0.6.82.36.4` on the workstation: Fe science/policies/work structure all ACCEPT; dense rescues were `0`, native `heat/heat2` elision removed `368,025,856 B`, peak RSS fell `3,515,383,808 -> 3,147,141,120 B` (`0.895248x`), and internal total improved `73.762340 -> 72.717758 s`.
