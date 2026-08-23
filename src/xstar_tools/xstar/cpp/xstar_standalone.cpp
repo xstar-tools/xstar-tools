@@ -343,6 +343,15 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t abi_record_rows_capacity_bytes_peak_v06823611 = 0u;
     std::uint64_t snapshot_record_rows_capacity_bytes_peak_v06823611 = 0u;
     std::uint64_t native_compact_record_release_bytes_peak_v06823611 = 0u;
+    // 0.6.82.36.12: glibc arena-return checkpoints. These are memory-lifetime
+    // diagnostics only; malloc_trim does not change any retained scientific
+    // object, source order, or floating-point arithmetic.
+    std::uint64_t allocator_trim_calls_v06823612 = 0u;
+    std::uint64_t allocator_trim_successes_v06823612 = 0u;
+    std::uint64_t allocator_trim_rss_before_peak_v06823612 = 0u;
+    std::uint64_t allocator_trim_rss_after_peak_v06823612 = 0u;
+    std::uint64_t allocator_trim_rss_reduction_total_v06823612 = 0u;
+    std::uint64_t allocator_trim_rss_reduction_peak_v06823612 = 0u;
     // 0.6.82.35.2: glibc allocator snapshots paired with key RSS phases.
     std::uint64_t heap_after_atdb_uordblks_v0682352 = 0u;
     std::uint64_t heap_after_atdb_hblkhd_v0682352 = 0u;
@@ -481,6 +490,27 @@ HeapSnapshotV0682352 current_heap_snapshot_v0682352() {
 #endif
 #endif
     return out;
+}
+
+void allocator_trim_checkpoint_v06823612() {
+    if (!g_performance_v064890) return;
+    auto& perf = *g_performance_v064890;
+    const std::uint64_t before = current_rss_bytes_v068233();
+    ++perf.allocator_trim_calls_v06823612;
+    int trimmed = 0;
+#if defined(__GLIBC__)
+    trimmed = ::malloc_trim(0);
+#endif
+    if (trimmed != 0) ++perf.allocator_trim_successes_v06823612;
+    const std::uint64_t after = current_rss_bytes_v068233();
+    perf.allocator_trim_rss_before_peak_v06823612 = std::max(
+        perf.allocator_trim_rss_before_peak_v06823612, before);
+    perf.allocator_trim_rss_after_peak_v06823612 = std::max(
+        perf.allocator_trim_rss_after_peak_v06823612, after);
+    const std::uint64_t reduction = before > after ? before - after : 0u;
+    perf.allocator_trim_rss_reduction_total_v06823612 += reduction;
+    perf.allocator_trim_rss_reduction_peak_v06823612 = std::max(
+        perf.allocator_trim_rss_reduction_peak_v06823612, reduction);
 }
 
 // v82 patch 5.20.17.3.8 diagnostic sidecars.  These are strictly opt-in and
@@ -17810,6 +17840,10 @@ FixedDsecSnapshot evaluate_accepted_boundary(
                              current_rss_bytes_v068233());
             }
         }
+        // 0.6.82.36.12: DSEC/root-finding has just released temporary
+        // allocation families. Return free glibc arena pages before allocating
+        // the exact accepted-boundary product state.
+        allocator_trim_checkpoint_v06823612();
         if (g_performance_v064890) {
             const auto rss_v06823611 = current_rss_bytes_v068233();
             const auto heap_v06823611 = current_heap_snapshot_v0682352();
@@ -18981,6 +19015,9 @@ void stream_saved_shell_detail_v068233(
         g_performance_v064890->detal4_rows_streamed_v068233 +=
             stream_state.radial_zones.front().accepted_controller.evaluation.radiation_energy_ev.size();
         ++g_performance_v064890->saved_shells_streamed_v068233;
+        // 0.6.82.36.12: per-zone writer temporaries are dead here. Returning
+        // free arena pages prevents RSS from ratcheting upward zone by zone.
+        allocator_trim_checkpoint_v06823612();
         const auto rss = current_rss_bytes_v068233();
         const auto heap_after_zone_v06823611 = current_heap_snapshot_v0682352();
         g_performance_v064890->rss_after_zone_publication_peak_v06823611 = std::max(
@@ -22110,6 +22147,15 @@ void emit_controller_performance_instrumentation(
             << "V06823611_THERMAL_DIAGONAL_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.thermal_diagonal_capacity_bytes_peak_v06823611 << "\n"
             << "V06823611_LAST_SOURCE_WORKSPACE_CAPACITY_BYTES_PEAK=" << perf.foundation_v068231.last_source_workspace_capacity_bytes_peak_v06823611 << "\n"
             << "V06823611_COMPACT_RECORD_RELEASE_BYTES_PEAK=" << perf.foundation_v068231.compact_record_release_bytes_peak_v06823611 << "\n"
+            << "V06823612_THERMAL_DIAGONAL_ROW_MODE=ELIDED_NATIVE_PRODUCTION_DIAGNOSTIC_ONLY\n"
+            << "V06823612_THERMAL_DIAGONAL_ROWS_ELIDED_PEAK=" << perf.foundation_v068231.thermal_diagonal_rows_elided_peak_v06823612 << "\n"
+            << "V06823612_THERMAL_DIAGONAL_BYTES_ELIDED_PEAK=" << perf.foundation_v068231.thermal_diagonal_bytes_elided_peak_v06823612 << "\n"
+            << "V06823612_PRELIMINARY_BOUND_FREE_SIDECAR_COUNT_PEAK=" << perf.foundation_v068231.preliminary_bound_free_sidecar_count_peak_v06823612 << "\n"
+            << "V06823612_PRELIMINARY_BOUND_FREE_SIDECAR_BYTES_PEAK=" << perf.foundation_v068231.preliminary_bound_free_sidecar_bytes_peak_v06823612 << "\n"
+            << "V06823612_REVISIT_RECORD_COUNT_PEAK=" << perf.foundation_v068231.revisit_record_count_peak_v06823612 << "\n"
+            << "V06823612_REVISIT_RECORD_INLINE_BYTES_PEAK=" << perf.foundation_v068231.revisit_record_inline_bytes_peak_v06823612 << "\n"
+            << "V06823612_REVISIT_BOUND_FREE_SIDECAR_COUNT_PEAK=" << perf.foundation_v068231.revisit_bound_free_sidecar_count_peak_v06823612 << "\n"
+            << "V06823612_REVISIT_BOUND_FREE_SIDECAR_BYTES_PEAK=" << perf.foundation_v068231.revisit_bound_free_sidecar_bytes_peak_v06823612 << "\n"
             << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"
@@ -22183,6 +22229,13 @@ void emit_controller_performance_instrumentation(
             << "V06823611_ABI_RECORD_ROWS_CAPACITY_BYTES_PEAK=" << perf.abi_record_rows_capacity_bytes_peak_v06823611 << "\n"
             << "V06823611_SNAPSHOT_RECORD_ROWS_CAPACITY_BYTES_PEAK=" << perf.snapshot_record_rows_capacity_bytes_peak_v06823611 << "\n"
             << "V06823611_NATIVE_COMPACT_RECORD_RELEASE_BYTES_PEAK=" << perf.native_compact_record_release_bytes_peak_v06823611 << "\n"
+            << "V06823612_ALLOCATOR_TRIM_MODE=GLIBC_ACCEPTED_BOUNDARY_AND_ZONE_CHECKPOINTS\n"
+            << "V06823612_ALLOCATOR_TRIM_CALLS=" << perf.allocator_trim_calls_v06823612 << "\n"
+            << "V06823612_ALLOCATOR_TRIM_SUCCESSES=" << perf.allocator_trim_successes_v06823612 << "\n"
+            << "V06823612_ALLOCATOR_TRIM_RSS_BEFORE_PEAK=" << perf.allocator_trim_rss_before_peak_v06823612 << "\n"
+            << "V06823612_ALLOCATOR_TRIM_RSS_AFTER_PEAK=" << perf.allocator_trim_rss_after_peak_v06823612 << "\n"
+            << "V06823612_ALLOCATOR_TRIM_RSS_REDUCTION_TOTAL=" << perf.allocator_trim_rss_reduction_total_v06823612 << "\n"
+            << "V06823612_ALLOCATOR_TRIM_RSS_REDUCTION_PEAK=" << perf.allocator_trim_rss_reduction_peak_v06823612 << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
             << "V0682352_HEAP_AFTER_ATDB_UORDBLKS_BYTES=" << perf.heap_after_atdb_uordblks_v0682352 << "\n"

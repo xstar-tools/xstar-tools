@@ -107,6 +107,16 @@ struct PerformanceFoundationV068231 {
     std::uint64_t thermal_diagonal_capacity_bytes_peak_v06823611 = 0u;
     std::uint64_t last_source_workspace_capacity_bytes_peak_v06823611 = 0u;
     std::uint64_t compact_record_release_bytes_peak_v06823611 = 0u;
+    // 0.6.82.36.12: nested-owner attribution that was invisible to the
+    // capacity-only persistent scratch counters in .36.11.
+    std::uint64_t preliminary_bound_free_sidecar_count_peak_v06823612 = 0u;
+    std::uint64_t preliminary_bound_free_sidecar_bytes_peak_v06823612 = 0u;
+    std::uint64_t revisit_record_count_peak_v06823612 = 0u;
+    std::uint64_t revisit_record_inline_bytes_peak_v06823612 = 0u;
+    std::uint64_t revisit_bound_free_sidecar_count_peak_v06823612 = 0u;
+    std::uint64_t revisit_bound_free_sidecar_bytes_peak_v06823612 = 0u;
+    std::uint64_t thermal_diagonal_rows_elided_peak_v06823612 = 0u;
+    std::uint64_t thermal_diagonal_bytes_elided_peak_v06823612 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

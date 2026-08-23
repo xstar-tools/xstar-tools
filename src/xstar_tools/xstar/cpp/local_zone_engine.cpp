@@ -12073,6 +12073,15 @@ int run_impl(
         environment_flag("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
     const bool compact_record_products_v06823611 =
         native_production_v064897 && !force_096_record_provenance_v064897;
+    // 0.6.82.36.12: the canonical thermal reducer consumes the immutable
+    // thermal ledger directly. The per-term ThermalDiagonalDiagnostic rows are
+    // output-only forensic state and are not consumed by ordinary standalone
+    // production science or FITS publication. Keep them for library/forensic
+    // use, but do not materialize their large row/string surface in production.
+    const bool retain_thermal_diagonal_rows_v06823612 =
+        !native_production_v064897 ||
+        environment_flag("XSTAR_V06823612_RETAIN_THERMAL_DIAGONAL_DIAGNOSTICS");
+    std::uint64_t thermal_diagonal_rows_elided_v06823612 = 0u;
     ctx.last_record_product_compact_mode_v06823611 = compact_record_products_v06823611;
     if (compact_record_products_v06823611) {
         // A prior explicit forensic call may have left a very large rich-vector
@@ -12114,7 +12123,11 @@ int run_impl(
     ctx.last_continuum_secondary_ledger_corrected = false;
     ctx.last_thermal_diagonal_rows_included = 0;
     ctx.last_thermal_diagonal_normalization_terms_included = 0;
-    ctx.last_thermal_diagonal_diagnostics.clear();
+    if (retain_thermal_diagonal_rows_v06823612) {
+        ctx.last_thermal_diagonal_diagnostics.clear();
+    } else {
+        std::vector<ThermalDiagonalDiagnostic>().swap(ctx.last_thermal_diagonal_diagnostics);
+    }
     ctx.last_thermal_population_count = 0;
     ctx.last_thermal_population_fingerprint = 0;
     ctx.last_committed_population_count = 0;
@@ -12742,6 +12755,23 @@ int run_impl(
             preliminary_evaluated_v064812315.push_back(&cached_v064812337.evaluated);
             preliminary_records_v064812315.push_back(
                 &ctx.program.records[static_cast<std::size_t>(index)]);
+        }
+        {
+            std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*> preliminary_sidecars_v06823612;
+            for (const auto& cached_v06823612 : preliminary_cache_v064812337) {
+                if (cached_v06823612.evaluated.bound_free_payload_v06823087) {
+                    preliminary_sidecars_v06823612.insert(
+                        cached_v06823612.evaluated.bound_free_payload_v06823087.get());
+                }
+            }
+            const std::uint64_t count_v06823612 =
+                static_cast<std::uint64_t>(preliminary_sidecars_v06823612.size());
+            perf_foundation_v068231.preliminary_bound_free_sidecar_count_peak_v06823612 = std::max(
+                perf_foundation_v068231.preliminary_bound_free_sidecar_count_peak_v06823612,
+                count_v06823612);
+            perf_foundation_v068231.preliminary_bound_free_sidecar_bytes_peak_v06823612 = std::max(
+                perf_foundation_v068231.preliminary_bound_free_sidecar_bytes_peak_v06823612,
+                count_v06823612 * sizeof(BoundFreeEvaluatedPayloadV06823087));
         }
         perf_foundation_v068231.preliminary_cache_seconds += std::max(
             0.0,
@@ -13757,6 +13787,16 @@ int run_impl(
                 const double weighted_population = compact_population * element.abundance;
                 const double primary_unweighted = compact_population * term.cj;
                 const double secondary_unweighted = compact_population * term.cj2;
+                ++ctx.last_thermal_diagonal_rows_included;
+                const bool normalization_row_v06823612 =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW) != 0u;
+                if (normalization_row_v06823612) {
+                    ++ctx.last_thermal_diagonal_normalization_terms_included;
+                }
+                if (!retain_thermal_diagonal_rows_v06823612) {
+                    ++thermal_diagonal_rows_elided_v06823612;
+                    continue;
+                }
                 ThermalDiagonalDiagnostic diagonal;
                 diagonal.element_z = element.element_z;
                 diagonal.active_min_stage = active.min_stage;
@@ -13790,10 +13830,6 @@ int run_impl(
                 diagonal.cj2 = term.cj2;
                 diagonal.native_cj = term.native_cj;
                 diagonal.source_cj = term.source_cj;
-                ++ctx.last_thermal_diagonal_rows_included;
-                if (diagonal.normalization_row) {
-                    ++ctx.last_thermal_diagonal_normalization_terms_included;
-                }
                 if (term.cj > 0.0) {
                     diagonal.unweighted_cooling_contribution = primary_unweighted;
                     diagonal.cooling_contribution = primary_unweighted * element.abundance;
@@ -13924,6 +13960,36 @@ int run_impl(
         residual_audit_v064812339.line_wavelength_entries = source_line_wavelength_by_identity_v82_patch5208.size();
         residual_audit_v064812339.type53_revisit_entries = type53_revisit_evaluated_v82_patch5181.size();
         residual_audit_v064812339.type49_revisit_entries = type49_revisit_evaluated_v82_patch52082.size();
+        {
+            const std::uint64_t revisit_count_v06823612 =
+                static_cast<std::uint64_t>(type53_revisit_evaluated_v82_patch5181.size() +
+                                           type49_revisit_evaluated_v82_patch52082.size());
+            perf_foundation_v068231.revisit_record_count_peak_v06823612 = std::max(
+                perf_foundation_v068231.revisit_record_count_peak_v06823612, revisit_count_v06823612);
+            perf_foundation_v068231.revisit_record_inline_bytes_peak_v06823612 = std::max(
+                perf_foundation_v068231.revisit_record_inline_bytes_peak_v06823612,
+                revisit_count_v06823612 * sizeof(EvaluatedRecord));
+            std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*> revisit_sidecars_v06823612;
+            const auto collect_revisit_v06823612 = [&](const auto& source_v06823612) {
+                for (const auto& item_v06823612 : source_v06823612) {
+                    const auto& evaluated_v06823612 = item_v06823612.second;
+                    if (evaluated_v06823612.bound_free_payload_v06823087) {
+                        revisit_sidecars_v06823612.insert(
+                            evaluated_v06823612.bound_free_payload_v06823087.get());
+                    }
+                }
+            };
+            collect_revisit_v06823612(type53_revisit_evaluated_v82_patch5181);
+            collect_revisit_v06823612(type49_revisit_evaluated_v82_patch52082);
+            const std::uint64_t sidecar_count_v06823612 =
+                static_cast<std::uint64_t>(revisit_sidecars_v06823612.size());
+            perf_foundation_v068231.revisit_bound_free_sidecar_count_peak_v06823612 = std::max(
+                perf_foundation_v068231.revisit_bound_free_sidecar_count_peak_v06823612,
+                sidecar_count_v06823612);
+            perf_foundation_v068231.revisit_bound_free_sidecar_bytes_peak_v06823612 = std::max(
+                perf_foundation_v068231.revisit_bound_free_sidecar_bytes_peak_v06823612,
+                sidecar_count_v06823612 * sizeof(BoundFreeEvaluatedPayloadV06823087));
+        }
         residual_audit_v064812339.element_to_mapback_seconds = elapsed(residual_element_started_v064812339);
         write_residual_scaling_audit(residual_audit_v064812339);
         write_traversal_selection_audit(traversal_audit_v064812340);
@@ -17458,6 +17524,12 @@ int run_impl(
     perf_foundation_v068231.last_source_workspace_capacity_bytes_peak_v06823611 = std::max(
         perf_foundation_v068231.last_source_workspace_capacity_bytes_peak_v06823611,
         source_workspace_v06823611);
+    perf_foundation_v068231.thermal_diagonal_rows_elided_peak_v06823612 = std::max(
+        perf_foundation_v068231.thermal_diagonal_rows_elided_peak_v06823612,
+        thermal_diagonal_rows_elided_v06823612);
+    perf_foundation_v068231.thermal_diagonal_bytes_elided_peak_v06823612 = std::max(
+        perf_foundation_v068231.thermal_diagonal_bytes_elided_peak_v06823612,
+        thermal_diagonal_rows_elided_v06823612 * sizeof(ThermalDiagonalDiagnostic));
 
     stats.total_seconds += elapsed(total_start);
     copy_text(stats.message, sizeof(stats.message), "native fixed-state raw program evaluated");

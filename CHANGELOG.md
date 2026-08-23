@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.36.12 - production transient-memory lifetime and allocator release - 2026-08-23
+
+- Close the `.36.11` broad host result scientifically and structurally: exact science/STEP/spectrum/work ownership ACCEPT, peak RSS `10,353,270,784 -> 8,508,006,400 B` versus `.36.10` (about `1.845 GB` removed), and total runtime `1270.888162 s`. This is a material improvement but remains far above the ~`2.575 GB` FORTRAN workstation memory class, so `.36` remains open.
+- Use the new `.36.11` phase telemetry to separate live working state from allocator retention. The broad run still reached about `8.4 GB` during accepted-boundary publication and remained at about `7.13 GB` before final publication even though the measured glibc live heap there was only about `2.25 GB` (`uordblks + hblkhd`), demonstrating substantial freed arena pages remaining resident.
+- Stop materializing the per-term `ThermalDiagonalDiagnostic` row ledger in ordinary `XSTAR_NATIVE_PRODUCTION`. The accepted canonical thermal reducer continues to consume the same source-ordered canonical thermal ledger and preserves all counters/arithmetic; full diagnostic rows remain available in non-production/forensic mode or when `XSTAR_V06823612_RETAIN_THERMAL_DIAGONAL_DIAGNOSTICS=1`. `.36.11` measured about `260 MB` of retained thermal-diagonal vector capacity before this change.
+- Add glibc `malloc_trim(0)` memory-lifetime checkpoints after obsolete DSEC/root-finding temporaries are released and after per-zone publication temporaries die, before the next long-lived phase. These checkpoints do not modify scientific state, source order, or floating-point arithmetic; they only request that the allocator return free arena pages to the OS.
+- Add `.36.12` attribution for bound-free sidecars hidden inside the preliminary cache and Type-49/53 revisit maps, plus elided thermal-diagonal rows/bytes and allocator-trim calls/successes/RSS reductions. These measurements determine the next `.36.x` owner if broad memory remains above target.
+- Preserve the `.36.11` compact record-product ownership architecture and all `.36.1-.36.9` matrix/lifetime policies unchanged. Public ABIs remain `60487 / 6048110 / 60488`, and frozen science remains `0.6.48.12.3.45.3.3.8`.
+- Qualification remains broad-only with the familiar explicit `--case multi_element_xi1_ne1e12` interface. The completed `.36.11` run can supply both its expensive `.33.8` baseline and the `.36.11` candidate reference, so `.36.12` does not require rerunning the ~1660 s `.33.8` baseline.
+
 ## 0.6.82.36.11 - compact native-production record-product ownership - 2026-08-23
 
 - Continue the open `.36` memory-scaling campaign after the cross-model `.36.10` host return: C5 remained in the Fe memory class, but `multi_element_xi1_ne1e12` still peaked at `10,353,270,784 B` versus `2,740,756,480 B` for accepted Fe `.36.9`, despite exact science and a substantial runtime improvement.
