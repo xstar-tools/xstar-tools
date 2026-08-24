@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.36.15 - compact hot evaluated-record diagnostics and production telemetry - 2026-08-23
+
+- Close the `.36.14` broad host return scientifically and structurally: exact science/ownership/work structure ACCEPT; `multi_element_xi1_ne1e12` peak RSS `6,824,124,416 -> 6,268,588,032 B` versus `.36.13` (about `556 MB` removed), but total runtime regressed `1253.745258 -> 1309.484549 s`. The memory reduction is retained, but `.36` remains open and this revision explicitly requires both memory and runtime non-regression/improvement.
+- Carry forward the `.35` work-equivalence result: C++ performs the same high-level scientific work and fewer atomic-record evaluations than canonical FORTRAN, so the remaining speed deficit is primarily cost per unit work (representation size, copies, pointer chasing, allocation/telemetry traffic, cache locality), not missing work elimination.
+- Replace the mutually exclusive inline Type-50/Type-51/Type-99 diagnostic shadows inside hot `EvaluatedRecord` objects with one tagged `std::variant` payload. Type-50 still retains its exact source/calc-emissivity pair together. Type-49/53 bound-free sidecars and all scientific contribution/rate state are unchanged. `sizeof(EvaluatedRecord)` falls from the `.36.14` `1184 B` layout to `600 B`, eliminating `584 B` per hot record without changing source order or arithmetic.
+- In ordinary native production, count preliminary/pass-2 bound-free ownership incrementally while records are already hot instead of rescanning full `preliminary_cache` / `evaluated` vectors and allocating temporary pointer-dedup hash sets solely for memory telemetry. `XSTAR_V06823615_DEEP_MEMORY_TELEMETRY=1` preserves the historical deep-scan forensic path.
+- Add `.36.15` telemetry for evaluated-record size, bytes elided per record, production scan records elided, and incremental/deep telemetry call counts. Existing `.36.11` evaluated-record-capacity markers automatically report the compact layout.
+- Freeze `.36.13` compact prepared `sgbar` spans and `.36.14` compact bound-free revisit state. No rate/profile/matrix/controller arithmetic or scientific gating changes are introduced.
+- Qualification remains broad-only with explicit `--case multi_element_xi1_ne1e12`, reuses the expensive `.33.8` baseline already stored in the completed `.36.11` run, and compares incrementally against the completed `.36.14` candidate. Promotion requires exact science/work/ownership plus RSS no higher than `.36.14` and runtime no higher than `.36.14`; the runner reports fixed traversal and fixed spectral timing separately.
+- Public ABIs remain `60487 / 6048110 / 60488`; frozen science remains `0.6.48.12.3.45.3.3.8`.
+
 ## 0.6.82.36.14 - compact retained bound-free revisit state - 2026-08-23
 
 - Close the `.36.13` broad host return scientifically and structurally: exact science/ownership/work structure ACCEPT; `multi_element_xi1_ne1e12` peak RSS `8,242,622,464 -> 6,824,124,416 B` versus `.36.12` (about `1.418 GB` removed), with total runtime `1253.745258 s` versus the `.33.8` baseline `1662.569827 s`. The FORTRAN workstation memory target remains `2,574,954,496 B`, so `.36` remains open.

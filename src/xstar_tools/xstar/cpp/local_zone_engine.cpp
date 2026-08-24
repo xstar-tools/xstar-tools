@@ -48,6 +48,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -1661,6 +1662,24 @@ struct BoundFreeEvaluatedPayloadV06823087 {
     bool bound_free_row46_contract_v064895 = false;
 };
 
+// 0.6.82.36.15: Type-50, Type-51, and Type-99 source shadows are mutually
+// exclusive by atomic data type.  The historical EvaluatedRecord carried all
+// four inline shadows (two Type-50 phases plus Type-51 and Type-99), forcing
+// every evaluated record to zero/move nearly a kilobyte of inactive diagnostic
+// state.  Keep the Type-50 pair together because both phases are live for a
+// Type-50 record, but store the three mutually exclusive families in one tagged
+// payload.  Scientific contribution fields and source arithmetic are unchanged.
+struct Type50DiagnosticPairV06823615 {
+    Type50SourceShadow source{};
+    Type50SourceShadow calc_emis{};
+};
+
+using EvaluatedDiagnosticPayloadV06823615 = std::variant<
+    std::monostate,
+    Type50DiagnosticPairV06823615,
+    Type51SourceShadow,
+    Type99SourceShadow>;
+
 struct EvaluatedRecord {
     xstar_element_contribution_v1 contribution{};
     bool spectral = false;
@@ -1693,13 +1712,55 @@ struct EvaluatedRecord {
     // Type70/calt70 after its density/temperature-dependent Milne rescaling.
     std::vector<double> generic_bound_free_offset_ryd_v0648120;
     std::vector<double> generic_bound_free_sigma_cm2_v0648120;
-    Type51SourceShadow type51_shadow{};
-    Type50SourceShadow type50_shadow{};
-    // 0.6.82.19: calc_emis_all revisits Type-50 on the full epi/bremsa
-    // grid after the reduced calc_hmc/calc_emisab stages. Keep that source
-    // lifetime distinct; cfrac=1 hid this because photoexcitation is zero.
-    Type50SourceShadow type50_calc_emis_shadow{};
-    Type99SourceShadow type99_shadow{};
+    EvaluatedDiagnosticPayloadV06823615 diagnostic_payload_v06823615{};
+
+    Type50DiagnosticPairV06823615& mutable_type50_pair_v06823615() {
+        if (auto* pair = std::get_if<Type50DiagnosticPairV06823615>(&diagnostic_payload_v06823615))
+            return *pair;
+        if (!std::holds_alternative<std::monostate>(diagnostic_payload_v06823615))
+            throw std::logic_error("evaluated diagnostic family conflict: Type50");
+        return diagnostic_payload_v06823615.emplace<Type50DiagnosticPairV06823615>();
+    }
+    Type50SourceShadow& mutable_type50_shadow_v06823615() {
+        return mutable_type50_pair_v06823615().source;
+    }
+    Type50SourceShadow& mutable_type50_calc_emis_shadow_v06823615() {
+        return mutable_type50_pair_v06823615().calc_emis;
+    }
+    Type51SourceShadow& mutable_type51_shadow_v06823615() {
+        if (auto* shadow = std::get_if<Type51SourceShadow>(&diagnostic_payload_v06823615))
+            return *shadow;
+        if (!std::holds_alternative<std::monostate>(diagnostic_payload_v06823615))
+            throw std::logic_error("evaluated diagnostic family conflict: Type51");
+        return diagnostic_payload_v06823615.emplace<Type51SourceShadow>();
+    }
+    Type99SourceShadow& mutable_type99_shadow_v06823615() {
+        if (auto* shadow = std::get_if<Type99SourceShadow>(&diagnostic_payload_v06823615))
+            return *shadow;
+        if (!std::holds_alternative<std::monostate>(diagnostic_payload_v06823615))
+            throw std::logic_error("evaluated diagnostic family conflict: Type99");
+        return diagnostic_payload_v06823615.emplace<Type99SourceShadow>();
+    }
+    const Type50SourceShadow& type50_shadow_v06823615() const {
+        static const Type50SourceShadow empty{};
+        const auto* pair = std::get_if<Type50DiagnosticPairV06823615>(&diagnostic_payload_v06823615);
+        return pair ? pair->source : empty;
+    }
+    const Type50SourceShadow& type50_calc_emis_shadow_v06823615() const {
+        static const Type50SourceShadow empty{};
+        const auto* pair = std::get_if<Type50DiagnosticPairV06823615>(&diagnostic_payload_v06823615);
+        return pair ? pair->calc_emis : empty;
+    }
+    const Type51SourceShadow& type51_shadow_v06823615() const {
+        static const Type51SourceShadow empty{};
+        const auto* shadow = std::get_if<Type51SourceShadow>(&diagnostic_payload_v06823615);
+        return shadow ? *shadow : empty;
+    }
+    const Type99SourceShadow& type99_shadow_v06823615() const {
+        static const Type99SourceShadow empty{};
+        const auto* shadow = std::get_if<Type99SourceShadow>(&diagnostic_payload_v06823615);
+        return shadow ? *shadow : empty;
+    }
 };
 
 // 0.6.82.36.14: call-2 selected Type-49/53 revisits need only the
@@ -1990,29 +2051,29 @@ static xstar_fixed_record_product_diagnostic_v1 make_record_product_row_v0682361
     out.density_scale = c.density_scale;
     out.natural_width_ev = item.natural_width_ev;
     out.opakab = item.opakab;
-    out.type50_valid = item.type50_shadow.valid ? 1u : 0u;
-    out.type50_line_index_one_based = item.type50_shadow.line_index_one_based;
-    out.type50_wavelength_a = item.type50_shadow.stored_wavelength_a;
-    out.type50_ptmp1 = item.type50_shadow.ptmp1;
-    out.type50_ptmp2 = item.type50_shadow.ptmp2;
-    out.type50_tau_in = item.type50_shadow.line_tau_in;
-    out.type50_tau_out = item.type50_shadow.line_tau_out;
+    out.type50_valid = item.type50_shadow_v06823615().valid ? 1u : 0u;
+    out.type50_line_index_one_based = item.type50_shadow_v06823615().line_index_one_based;
+    out.type50_wavelength_a = item.type50_shadow_v06823615().stored_wavelength_a;
+    out.type50_ptmp1 = item.type50_shadow_v06823615().ptmp1;
+    out.type50_ptmp2 = item.type50_shadow_v06823615().ptmp2;
+    out.type50_tau_in = item.type50_shadow_v06823615().line_tau_in;
+    out.type50_tau_out = item.type50_shadow_v06823615().line_tau_out;
     out.type53_valid = bf.type53_shadow.valid ? 1u : 0u;
     out.type49_valid = bf.type49_shadow.valid ? 1u : 0u;
-    out.type99_valid = item.type99_shadow.valid ? 1u : 0u;
+    out.type99_valid = item.type99_shadow_v06823615().valid ? 1u : 0u;
     if (bf.type49_shadow.valid) {
         out.continuum_index_one_based = bf.type49_shadow.continuum_index_one_based;
     } else if (bf.type53_shadow.valid) {
         out.continuum_index_one_based = bf.type53_shadow.continuum_index_one_based;
-    } else if (item.type99_shadow.valid) {
-        out.continuum_index_one_based = item.type99_shadow.nbinc_threshold_one_based;
+    } else if (item.type99_shadow_v06823615().valid) {
+        out.continuum_index_one_based = item.type99_shadow_v06823615().nbinc_threshold_one_based;
     } else {
         out.continuum_index_one_based = item.continuum_index_one_based;
     }
     out.type53_threshold_ev = bf.type53_shadow.threshold_ev;
     out.type53_base_threshold_ev = bf.type53_shadow.base_threshold_ev;
     out.type49_threshold_ev = bf.type49_shadow.threshold_ev;
-    out.type99_threshold_ev = item.type99_shadow.threshold_ev;
+    out.type99_threshold_ev = item.type99_shadow_v06823615().threshold_ev;
     if (bf.type49_shadow.valid) {
         out.threshold_abs_sigma_cm2 = bf.type49_shadow.threshold_cross_section_cm2;
         out.threshold_stimulated_sigma_cm2 = bf.type49_shadow.threshold_stimulated_cross_section_cm2;
@@ -8510,43 +8571,46 @@ EvaluatedRecord evaluate_record(
             c.ans5 = 0.0;
             c.ans6 = 0.0;
 
-            out.type50_shadow.valid = true;
-            out.type50_shadow.ans = {c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6};
-            out.type50_shadow.stored_wavelength_a = stored_wavelength_a;
-            out.type50_shadow.endpoint_energy_ev = endpoint_energy_ev;
-            out.type50_shadow.covering_fraction = cfrac;
-            out.type50_shadow.ptmp1 = ptmp1;
-            out.type50_shadow.ptmp2 = ptmp2;
-            out.type50_shadow.bremsa_nb1 = bremsa_nb1;
-            out.type50_shadow.density_floor_s = density_floor;
-            out.type50_shadow.density_floor_applied = density_floor > escaped_raw;
-            out.type50_shadow.photoexcitation_zero_covering = cover == 0.0;
-            out.type50_shadow.used_dsec_covering = has_dsec_covering;
-            out.type50_shadow.used_dsec_radiation = used_dsec_radiation;
-            out.type50_shadow.nb1_one_based = nb1_one_based;
-            out.type50_shadow.hydrogen_escape_state_applied = hydrogen_escape_state_applied;
-            out.type50_shadow.magnesium_escape_state_applied = magnesium_escape_state_applied;
-            out.type50_shadow.magnesium_source_endpoint_energy_applied =
+            auto& type50_shadow_v06823615 = out.mutable_type50_shadow_v06823615();
+            type50_shadow_v06823615.valid = true;
+            type50_shadow_v06823615.ans = {c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6};
+            type50_shadow_v06823615.stored_wavelength_a = stored_wavelength_a;
+            type50_shadow_v06823615.endpoint_energy_ev = endpoint_energy_ev;
+            type50_shadow_v06823615.covering_fraction = cfrac;
+            type50_shadow_v06823615.ptmp1 = ptmp1;
+            type50_shadow_v06823615.ptmp2 = ptmp2;
+            type50_shadow_v06823615.bremsa_nb1 = bremsa_nb1;
+            type50_shadow_v06823615.density_floor_s = density_floor;
+            type50_shadow_v06823615.density_floor_applied = density_floor > escaped_raw;
+            type50_shadow_v06823615.photoexcitation_zero_covering = cover == 0.0;
+            type50_shadow_v06823615.used_dsec_covering = has_dsec_covering;
+            type50_shadow_v06823615.used_dsec_radiation = used_dsec_radiation;
+            type50_shadow_v06823615.nb1_one_based = nb1_one_based;
+            type50_shadow_v06823615.hydrogen_escape_state_applied = hydrogen_escape_state_applied;
+            type50_shadow_v06823615.magnesium_escape_state_applied = magnesium_escape_state_applied;
+            type50_shadow_v06823615.magnesium_source_endpoint_energy_applied =
                 magnesium_source_endpoint_energy_applied;
-            out.type50_shadow.source_idest1 = source_idest1;
-            out.type50_shadow.source_idest2 = source_idest2;
-            out.type50_shadow.source_endpoint1_energy_ev = source_endpoint1_energy_ev;
-            out.type50_shadow.source_endpoint2_energy_ev = source_endpoint2_energy_ev;
-            out.type50_shadow.line_index_one_based = line_index_one_based;
-            out.type50_shadow.line_tau_in = line_tau_in;
-            out.type50_shadow.line_tau_out = line_tau_out;
+            type50_shadow_v06823615.source_idest1 = source_idest1;
+            type50_shadow_v06823615.source_idest2 = source_idest2;
+            type50_shadow_v06823615.source_endpoint1_energy_ev = source_endpoint1_energy_ev;
+            type50_shadow_v06823615.source_endpoint2_energy_ev = source_endpoint2_energy_ev;
+            type50_shadow_v06823615.line_index_one_based = line_index_one_based;
+            type50_shadow_v06823615.line_tau_in = line_tau_in;
+            type50_shadow_v06823615.line_tau_out = line_tau_out;
 
-            out.type50_calc_emis_shadow = out.type50_shadow;
-            out.type50_calc_emis_shadow.ans = {
+            auto& type50_calc_emis_shadow_v06823615 =
+                out.mutable_type50_calc_emis_shadow_v06823615();
+            type50_calc_emis_shadow_v06823615 = type50_shadow_v06823615;
+            type50_calc_emis_shadow_v06823615.ans = {
                 full_photo, escaped,
                 -escaped * endpoint_energy_ev * kErgPerEv,
                 -full_photo * endpoint_energy_ev * kErgPerEv,
                 0.0, 0.0};
-            out.type50_calc_emis_shadow.bremsa_nb1 =
+            type50_calc_emis_shadow_v06823615.bremsa_nb1 =
                 full_grid_available ? full_bremsa_nb1 : bremsa_nb1;
-            out.type50_calc_emis_shadow.nb1_one_based =
+            type50_calc_emis_shadow_v06823615.nb1_one_based =
                 full_grid_available ? full_nb1_one_based : nb1_one_based;
-            out.type50_calc_emis_shadow.used_dsec_radiation = false;
+            type50_calc_emis_shadow_v06823615.used_dsec_radiation = false;
 
             const bool use_fixed_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_MANIFOLD_ORACLE");
             const bool use_dsec_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_DSEC_RUNTIME_ORACLE");
@@ -8707,7 +8771,7 @@ EvaluatedRecord evaluate_record(
             c.ans3 = committed[2]; c.ans4 = committed[3];
             c.ans5 = committed[4]; c.ans6 = committed[5];
 
-            auto& shadow = out.type51_shadow;
+            auto& shadow = out.mutable_type51_shadow_v06823615();
             shadow.valid = true;
             shadow.source_faithful_mode = source_faithful_committed;
             shadow.replacement_applied = source_faithful_committed;
@@ -8910,7 +8974,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
-            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, calc_hmc_input, c, &out.type99_shadow)) {
+            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, calc_hmc_input, c, &out.mutable_type99_shadow_v06823615())) {
                 out.spectral = true;
                 out.bound_free_spectral = true;
                 // v82 patch 5.1/5.2 source semantics: Type-99 retains its
@@ -8918,7 +8982,7 @@ EvaluatedRecord evaluate_record(
                 // the literal ucalc Type-99 branch (calt99 -> phint53hunt) never
                 // assigns direct opakab.  Keep the pointer; publish zero opacity.
                 out.continuum_index_one_based = record.continuum_index_one_based;
-                out.line_energy_ev = out.type99_shadow.threshold_ev;
+                out.line_energy_ev = out.type99_shadow_v06823615().threshold_ev;
                 out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
                 out.opakab = 0.0;
                 break;
@@ -10081,7 +10145,7 @@ void apply_type99_persistent_leveltemp_z1_z30(
                     "Type-99 persistent leveltemp integral reevaluation failed");
             }
             contribution = corrected;
-            item.type99_shadow = corrected_shadow;
+            item.mutable_type99_shadow_v06823615() = corrected_shadow;
         }
     }
     if (evaluated.size() != evaluated_records.size()) {
@@ -11613,8 +11677,8 @@ bool native_bound_free_curve(const Program& program,
         const int nxs = static_cast<int>(ints[2]);
         const std::size_t offset = static_cast<std::size_t>(nden + ntem + nden * ntem);
         if (nden <= 0 || ntem < 2 || nxs < 2 || offset + 2u * static_cast<std::size_t>(nxs) > record.real_count) return false;
-        curve.threshold_ev = evaluated.type99_shadow.threshold_ev;
-        const double scale = evaluated.type99_shadow.cross_section_scale;
+        curve.threshold_ev = evaluated.type99_shadow_v06823615().threshold_ev;
+        const double scale = evaluated.type99_shadow_v06823615().cross_section_scale;
         curve.offset_ryd.reserve(static_cast<std::size_t>(nxs));
         curve.sigma_cm2.reserve(static_cast<std::size_t>(nxs));
         for (int i = 0; i < nxs; ++i) {
@@ -12838,6 +12902,28 @@ int run_impl(
     const bool use_compact_bound_free_revisit_v06823614 =
         native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
         !environment_flag("XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT");
+    // 0.6.82.36.15: the .36.11/.36.12 ownership probes used a second full
+    // pass over every preliminary/pass-2 EvaluatedRecord plus temporary
+    // unordered_sets solely to deduplicate diagnostic sidecar pointers.  In
+    // ordinary native production each source ordinal contributes at most one
+    // live EvaluatedRecord, and compact revisit ownership no longer shares its
+    // bound-free sidecar.  Count those owners while records are already hot.
+    // The historical deep scan remains opt-in for forensic qualification.
+    const bool incremental_memory_telemetry_v06823615 =
+        native_production_v064897 &&
+        !environment_flag("XSTAR_V06823615_DEEP_MEMORY_TELEMETRY");
+    if (incremental_memory_telemetry_v06823615)
+        ++perf_foundation_v068231.incremental_memory_telemetry_calls_v06823615;
+    else
+        ++perf_foundation_v068231.deep_memory_telemetry_calls_v06823615;
+    constexpr std::uint64_t legacy_evaluated_record_bytes_v06823615 = 1184u;
+    static_assert(sizeof(EvaluatedRecord) < legacy_evaluated_record_bytes_v06823615,
+        "0.6.82.36.15 evaluated diagnostic compaction did not reduce the hot record");
+    perf_foundation_v068231.evaluated_record_bytes_v06823615 = sizeof(EvaluatedRecord);
+    perf_foundation_v068231.evaluated_record_legacy_bytes_v06823615 =
+        legacy_evaluated_record_bytes_v06823615;
+    perf_foundation_v068231.evaluated_record_bytes_elided_v06823615 =
+        legacy_evaluated_record_bytes_v06823615 - sizeof(EvaluatedRecord);
 
     write_type49_identical_state_probe(
         ctx, input,
@@ -12942,11 +13028,16 @@ int run_impl(
             ctx.visited_data_types[item_v064812340.first] += item_v064812340.second;
         }
         stats.visited_data_types = ctx.visited_data_types.size();
+        std::uint64_t preliminary_sidecar_count_incremental_v06823615 = 0u;
         for (const std::size_t ordinal : preliminary_ordinals_v064812340) {
             const int index = traversal_order_v064894[ordinal];
             const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
             EvaluatedRecord preliminary_item_v064812337 =
                 evaluate_source_record(record);
+            if (incremental_memory_telemetry_v06823615 &&
+                preliminary_item_v064812337.bound_free_payload_v06823087) {
+                ++preliminary_sidecar_count_incremental_v06823615;
+            }
             const std::size_t capacity_before_v064812337 =
                 preliminary_cache_v064812337.capacity();
             const auto allocation_started_v064812337 = clock_type::now();
@@ -12981,15 +13072,22 @@ int run_impl(
                 &ctx.program.records[static_cast<std::size_t>(index)]);
         }
         {
-            std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*> preliminary_sidecars_v06823612;
-            for (const auto& cached_v06823612 : preliminary_cache_v064812337) {
-                if (cached_v06823612.evaluated.bound_free_payload_v06823087) {
-                    preliminary_sidecars_v06823612.insert(
-                        cached_v06823612.evaluated.bound_free_payload_v06823087.get());
+            std::uint64_t count_v06823612 = preliminary_sidecar_count_incremental_v06823615;
+            if (incremental_memory_telemetry_v06823615) {
+                perf_foundation_v068231.preliminary_scan_records_elided_v06823615 +=
+                    static_cast<std::uint64_t>(preliminary_cache_v064812337.size());
+            } else {
+                std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*>
+                    preliminary_sidecars_v06823612;
+                for (const auto& cached_v06823612 : preliminary_cache_v064812337) {
+                    if (cached_v06823612.evaluated.bound_free_payload_v06823087) {
+                        preliminary_sidecars_v06823612.insert(
+                            cached_v06823612.evaluated.bound_free_payload_v06823087.get());
+                    }
                 }
+                count_v06823612 =
+                    static_cast<std::uint64_t>(preliminary_sidecars_v06823612.size());
             }
-            const std::uint64_t count_v06823612 =
-                static_cast<std::uint64_t>(preliminary_sidecars_v06823612.size());
             perf_foundation_v068231.preliminary_bound_free_sidecar_count_peak_v06823612 = std::max(
                 perf_foundation_v068231.preliminary_bound_free_sidecar_count_peak_v06823612,
                 count_v06823612);
@@ -13152,6 +13250,8 @@ int run_impl(
             else if (active_pass2_count_v064812337 > 0u) ++perf_foundation_v068231.evaluated_capacity_reuses;
         }
         std::size_t preliminary_cursor_v064812337 = 0u;
+        std::uint64_t evaluated_sidecar_count_incremental_v06823615 = 0u;
+        std::uint64_t evaluated_generic_bf_capacity_incremental_v06823615 = 0u;
         const auto evaluate_pass2_ordinal = [&](std::size_t ordinal) {
             const int index = traversal_order_v064894[ordinal];
             const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
@@ -13193,6 +13293,16 @@ int run_impl(
                     type49_revisit_evaluated_v82_patch52082[revisit_key_v06823614] = item;
                 }
             }
+            if (incremental_memory_telemetry_v06823615) {
+                if (item.bound_free_payload_v06823087)
+                    ++evaluated_sidecar_count_incremental_v06823615;
+                evaluated_generic_bf_capacity_incremental_v06823615 +=
+                    static_cast<std::uint64_t>(
+                        item.generic_bound_free_offset_ryd_v0648120.capacity()) * sizeof(double);
+                evaluated_generic_bf_capacity_incremental_v06823615 +=
+                    static_cast<std::uint64_t>(
+                        item.generic_bound_free_sigma_cm2_v0648120.capacity()) * sizeof(double);
+            }
             evaluated.push_back(std::move(item));
             evaluated_records.push_back(&record);
         };
@@ -13218,25 +13328,34 @@ int run_impl(
             perf_foundation_v068231.evaluated_record_inline_capacity_bytes_peak_v06823611,
             static_cast<std::uint64_t>(evaluated.capacity()) * sizeof(EvaluatedRecord));
         {
-            std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*>
-                evaluated_sidecars_v06823611;
-            std::uint64_t evaluated_generic_bf_capacity_v06823611 = 0u;
-            for (const auto& evaluated_item_v06823611 : evaluated) {
-                if (evaluated_item_v06823611.bound_free_payload_v06823087) {
-                    evaluated_sidecars_v06823611.insert(
-                        evaluated_item_v06823611.bound_free_payload_v06823087.get());
+            std::uint64_t evaluated_sidecar_count_v06823611 =
+                evaluated_sidecar_count_incremental_v06823615;
+            std::uint64_t evaluated_generic_bf_capacity_v06823611 =
+                evaluated_generic_bf_capacity_incremental_v06823615;
+            if (incremental_memory_telemetry_v06823615) {
+                perf_foundation_v068231.evaluated_scan_records_elided_v06823615 +=
+                    static_cast<std::uint64_t>(evaluated.size());
+            } else {
+                std::unordered_set<const BoundFreeEvaluatedPayloadV06823087*>
+                    evaluated_sidecars_v06823611;
+                evaluated_generic_bf_capacity_v06823611 = 0u;
+                for (const auto& evaluated_item_v06823611 : evaluated) {
+                    if (evaluated_item_v06823611.bound_free_payload_v06823087) {
+                        evaluated_sidecars_v06823611.insert(
+                            evaluated_item_v06823611.bound_free_payload_v06823087.get());
+                    }
+                    evaluated_generic_bf_capacity_v06823611 +=
+                        static_cast<std::uint64_t>(
+                            evaluated_item_v06823611.generic_bound_free_offset_ryd_v0648120.capacity()) *
+                        sizeof(double);
+                    evaluated_generic_bf_capacity_v06823611 +=
+                        static_cast<std::uint64_t>(
+                            evaluated_item_v06823611.generic_bound_free_sigma_cm2_v0648120.capacity()) *
+                        sizeof(double);
                 }
-                evaluated_generic_bf_capacity_v06823611 +=
-                    static_cast<std::uint64_t>(
-                        evaluated_item_v06823611.generic_bound_free_offset_ryd_v0648120.capacity()) *
-                    sizeof(double);
-                evaluated_generic_bf_capacity_v06823611 +=
-                    static_cast<std::uint64_t>(
-                        evaluated_item_v06823611.generic_bound_free_sigma_cm2_v0648120.capacity()) *
-                    sizeof(double);
+                evaluated_sidecar_count_v06823611 =
+                    static_cast<std::uint64_t>(evaluated_sidecars_v06823611.size());
             }
-            const std::uint64_t evaluated_sidecar_count_v06823611 =
-                static_cast<std::uint64_t>(evaluated_sidecars_v06823611.size());
             perf_foundation_v068231.evaluated_bound_free_sidecar_count_peak_v06823611 = std::max(
                 perf_foundation_v068231.evaluated_bound_free_sidecar_count_peak_v06823611,
                 evaluated_sidecar_count_v06823611);
@@ -13466,8 +13585,8 @@ int run_impl(
                     rank_energy_ev = item.bound_free_payload().type49_shadow.source_errc_rank_energy_ev;
                 else if (pr->data_type == 53 && item.bound_free_payload().type53_shadow.valid)
                     rank_energy_ev = item.bound_free_payload().type53_shadow.source_errc_rank_energy_ev;
-                else if (pr->data_type == 99 && item.type99_shadow.valid)
-                    rank_energy_ev = item.type99_shadow.source_errc_rank_energy_ev;
+                else if (pr->data_type == 99 && item.type99_shadow_v06823615().valid)
+                    rank_energy_ev = item.type99_shadow_v06823615().source_errc_rank_energy_ev;
                 if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
                 const auto identity = std::make_pair(
                     static_cast<std::uint64_t>(pr->source_position),
@@ -14680,18 +14799,18 @@ int run_impl(
             // source wavelength.  Keep evaluated.line_energy_ev as the rate
             // endpoint delta and use a separate spectral feature coordinate.
             double spectral_feature_energy_ev_v82_patch5206 = evaluated[k].line_energy_ev;
-            if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow.valid &&
-                evaluated[k].type50_shadow.stored_wavelength_a > 0.0) {
+            if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow_v06823615().valid &&
+                evaluated[k].type50_shadow_v06823615().stored_wavelength_a > 0.0) {
                 spectral_feature_energy_ev_v82_patch5206 =
                     xstar_constants::kLegacyLinopacPhotonEnergyAngstromEv /
-                    evaluated[k].type50_shadow.stored_wavelength_a;
+                    evaluated[k].type50_shadow_v06823615().stored_wavelength_a;
             }
             if (!evaluated[k].bound_free_spectral && spectral_feature_energy_ev_v82_patch5206 > 0.0) {
                 double source_line_wavelength_v82_patch5208 =
                     local_zone_source_real_literal(12398.4016) / spectral_feature_energy_ev_v82_patch5206;
-                if (evaluated[k].type50_shadow.valid &&
-                    evaluated[k].type50_shadow.stored_wavelength_a > 0.0) {
-                    source_line_wavelength_v82_patch5208 = evaluated[k].type50_shadow.stored_wavelength_a;
+                if (evaluated[k].type50_shadow_v06823615().valid &&
+                    evaluated[k].type50_shadow_v06823615().stored_wavelength_a > 0.0) {
+                    source_line_wavelength_v82_patch5208 = evaluated[k].type50_shadow_v06823615().stored_wavelength_a;
                 }
                 source_line_wavelength_by_identity_v82_patch5208[
                     {static_cast<std::uint64_t>(rec.source_position), rec.record}] =
@@ -14820,9 +14939,9 @@ int run_impl(
             const double cfrac = effective_spectral_covering_fraction(input);
             sc.ptmp1 = 1.0 - cfrac;
             sc.ptmp2 = 1.0 + cfrac;
-            if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow.valid) {
-                sc.ptmp1 = evaluated[k].type50_shadow.ptmp1;
-                sc.ptmp2 = evaluated[k].type50_shadow.ptmp2;
+            if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow_v06823615().valid) {
+                sc.ptmp1 = evaluated[k].type50_shadow_v06823615().ptmp1;
+                sc.ptmp2 = evaluated[k].type50_shadow_v06823615().ptmp2;
             } else if (evaluated[k].bound_free_spectral &&
                        evaluated[k].bound_free_payload().type53_shadow.valid) {
                 sc.ptmp1 = evaluated[k].bound_free_payload().type53_shadow.ptmp1;
@@ -14838,11 +14957,11 @@ int run_impl(
             // on full epi/bremsa. fline/rcem must consume that answer, not
             // the earlier reduced-grid calc_hmc answer retained in rec.ans*.
             if (!evaluated[k].bound_free_spectral &&
-                evaluated[k].type50_calc_emis_shadow.valid) {
-                sc.ans1 = evaluated[k].type50_calc_emis_shadow.ans[0];
-                sc.ans2 = evaluated[k].type50_calc_emis_shadow.ans[1];
-                sc.ans3 = evaluated[k].type50_calc_emis_shadow.ans[2];
-                sc.ans4 = evaluated[k].type50_calc_emis_shadow.ans[3];
+                evaluated[k].type50_calc_emis_shadow_v06823615().valid) {
+                sc.ans1 = evaluated[k].type50_calc_emis_shadow_v06823615().ans[0];
+                sc.ans2 = evaluated[k].type50_calc_emis_shadow_v06823615().ans[1];
+                sc.ans3 = evaluated[k].type50_calc_emis_shadow_v06823615().ans[2];
+                sc.ans4 = evaluated[k].type50_calc_emis_shadow_v06823615().ans[3];
             }
             // v82 patch 5.20.9.4: the broad bound-free spectral commit is
             // exactly the calc_emisab_all phase.  Both Type-53 and Type-49
@@ -14903,8 +15022,8 @@ int run_impl(
                     const double abund2 = upper_population * element.abundance * input.hydrogen_density_cm3;
                     const double opakb1 = sc.opakab * abund1;
                     double wavelength_a = 0.0;
-                    if (evaluated[k].type50_shadow.valid)
-                        wavelength_a = evaluated[k].type50_shadow.stored_wavelength_a;
+                    if (evaluated[k].type50_shadow_v06823615().valid)
+                        wavelength_a = evaluated[k].type50_shadow_v06823615().stored_wavelength_a;
                     csv << std::setprecision(17)
                         << call_index << ',' << rec.source_position << ',' << rec.record << ','
                         << element.element_z << ',' << rec.ion_stage << ',' << rec.lower_row << ','
@@ -19378,78 +19497,78 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.bound_free_payload().type53_shadow.continuum_index_one_based
                         << ',' << item.bound_free_payload().type53_shadow.dsec_radiation_bin_count
                         << ',' << item.bound_free_payload().type53_shadow.continuum_tau_count
-                        << ',' << (item.type50_shadow.valid ? 1 : 0);
-            for (double value : item.type50_shadow.ans) record_file << ',' << value;
-            record_file << ',' << item.type50_shadow.stored_wavelength_a
-                        << ',' << item.type50_shadow.endpoint_energy_ev
-                        << ',' << item.type50_shadow.covering_fraction
-                        << ',' << item.type50_shadow.ptmp1
-                        << ',' << item.type50_shadow.ptmp2
-                        << ',' << item.type50_shadow.bremsa_nb1
-                        << ',' << item.type50_shadow.density_floor_s
-                        << ',' << (item.type50_shadow.density_floor_applied ? 1 : 0)
-                        << ',' << (item.type50_shadow.photoexcitation_zero_covering ? 1 : 0)
-                        << ',' << (item.type50_shadow.used_dsec_covering ? 1 : 0)
-                        << ',' << (item.type50_shadow.used_dsec_radiation ? 1 : 0)
-                        << ',' << item.type50_shadow.nb1_one_based
-                        << ',' << (item.type50_shadow.hydrogen_escape_state_applied ? 1 : 0)
-                        << ',' << (item.type50_shadow.magnesium_escape_state_applied ? 1 : 0)
-                        << ',' << (item.type50_shadow.magnesium_source_endpoint_energy_applied ? 1 : 0)
-                        << ',' << item.type50_shadow.source_idest1
-                        << ',' << item.type50_shadow.source_idest2
-                        << ',' << item.type50_shadow.source_endpoint1_energy_ev
-                        << ',' << item.type50_shadow.source_endpoint2_energy_ev
-                        << ',' << item.type50_shadow.line_index_one_based
-                        << ',' << item.type50_shadow.line_tau_in
-                        << ',' << item.type50_shadow.line_tau_out
-                        << ',' << (item.type99_shadow.valid ? 1 : 0);
-            for (double value : item.type99_shadow.ans) record_file << ',' << value;
-            record_file << ',' << item.type99_shadow.threshold_ev
-                        << ',' << item.type99_shadow.destination_energy_ev
-                        << ',' << item.type99_shadow.bound_energy_ev
-                        << ',' << item.type99_shadow.parent_energy_ev
-                        << ',' << item.type99_shadow.bound_statistical_weight
-                        << ',' << item.type99_shadow.parent_statistical_weight
-                        << ',' << item.type99_shadow.destination_statistical_weight
-                        << ',' << item.type99_shadow.swrat
-                        << ',' << (item.type99_shadow.persistent_leveltemp_context_valid ? 1 : 0)
-                        << ',' << (item.type99_shadow.persistent_leveltemp_context_applied ? 1 : 0)
-                        << ',' << item.type99_shadow.bound_owner_stage
-                        << ',' << item.type99_shadow.parent_owner_stage
-                        << ',' << item.type99_shadow.destination_owner_stage
-                        << ',' << item.type99_shadow.calt99_density_cm3
-                        << ',' << item.type99_shadow.phint53hunt_density_cm3
-                        << ',' << item.type99_shadow.rec_cm3_s
-                        << ',' << item.type99_shadow.milne_alpha_cm3_s
-                        << ',' << item.type99_shadow.cross_section_scale
-                        << ',' << item.type99_shadow.ans2d_unscaled_s
-                        << ',' << item.type99_shadow.phint_scale
-                        << ',' << item.type99_shadow.pirt_unscaled_s
-                        << ',' << item.type99_shadow.rrrt_unscaled_s
-                        << ',' << item.type99_shadow.piht_unscaled_erg_s
-                        << ',' << item.type99_shadow.rrcl_unscaled_erg_s
-                        << ',' << item.type99_shadow.piht2_unscaled_erg_s
-                        << ',' << item.type99_shadow.rrcl2_unscaled_erg_s
-                        << ',' << item.type99_shadow.energy_difference_ev
-                        << ',' << (item.type99_shadow.destination_threshold_identity ? 1 : 0)
-                        << ',' << item.type99_shadow.ans5_pre_energy_correction
-                        << ',' << item.type99_shadow.ans6_pre_energy_correction
-                        << ',' << item.type99_shadow.ans5_energy_correction_numerator
-                        << ',' << item.type99_shadow.ans5_energy_correction_denominator
-                        << ',' << item.type99_shadow.ans5_energy_correction_factor
-                        << ',' << item.type99_shadow.ans6_energy_correction_numerator
-                        << ',' << item.type99_shadow.ans6_energy_correction_denominator
-                        << ',' << item.type99_shadow.ans6_energy_correction_factor
-                        << ',' << (item.type99_shadow.destination_identity_correction_applied ? 1 : 0)
-                        << ',' << item.type99_shadow.nbinc_threshold_one_based
-                        << ',' << item.type99_shadow.nb1_one_based
-                        << ',' << item.type99_shadow.nphint_one_based
-                        << ',' << item.type99_shadow.ndelt
-                        << ',' << item.type99_shadow.npass
-                        << ',' << item.type99_shadow.last_pass_first_kl_one_based
-                        << ',' << item.type99_shadow.last_pass_last_kl_one_based
-                        << ',' << item.type99_shadow.cached_atmp22_stale_reuses
-                        << ',' << (item.type99_shadow.used_dsec_radiation ? 1 : 0)
+                        << ',' << (item.type50_shadow_v06823615().valid ? 1 : 0);
+            for (double value : item.type50_shadow_v06823615().ans) record_file << ',' << value;
+            record_file << ',' << item.type50_shadow_v06823615().stored_wavelength_a
+                        << ',' << item.type50_shadow_v06823615().endpoint_energy_ev
+                        << ',' << item.type50_shadow_v06823615().covering_fraction
+                        << ',' << item.type50_shadow_v06823615().ptmp1
+                        << ',' << item.type50_shadow_v06823615().ptmp2
+                        << ',' << item.type50_shadow_v06823615().bremsa_nb1
+                        << ',' << item.type50_shadow_v06823615().density_floor_s
+                        << ',' << (item.type50_shadow_v06823615().density_floor_applied ? 1 : 0)
+                        << ',' << (item.type50_shadow_v06823615().photoexcitation_zero_covering ? 1 : 0)
+                        << ',' << (item.type50_shadow_v06823615().used_dsec_covering ? 1 : 0)
+                        << ',' << (item.type50_shadow_v06823615().used_dsec_radiation ? 1 : 0)
+                        << ',' << item.type50_shadow_v06823615().nb1_one_based
+                        << ',' << (item.type50_shadow_v06823615().hydrogen_escape_state_applied ? 1 : 0)
+                        << ',' << (item.type50_shadow_v06823615().magnesium_escape_state_applied ? 1 : 0)
+                        << ',' << (item.type50_shadow_v06823615().magnesium_source_endpoint_energy_applied ? 1 : 0)
+                        << ',' << item.type50_shadow_v06823615().source_idest1
+                        << ',' << item.type50_shadow_v06823615().source_idest2
+                        << ',' << item.type50_shadow_v06823615().source_endpoint1_energy_ev
+                        << ',' << item.type50_shadow_v06823615().source_endpoint2_energy_ev
+                        << ',' << item.type50_shadow_v06823615().line_index_one_based
+                        << ',' << item.type50_shadow_v06823615().line_tau_in
+                        << ',' << item.type50_shadow_v06823615().line_tau_out
+                        << ',' << (item.type99_shadow_v06823615().valid ? 1 : 0);
+            for (double value : item.type99_shadow_v06823615().ans) record_file << ',' << value;
+            record_file << ',' << item.type99_shadow_v06823615().threshold_ev
+                        << ',' << item.type99_shadow_v06823615().destination_energy_ev
+                        << ',' << item.type99_shadow_v06823615().bound_energy_ev
+                        << ',' << item.type99_shadow_v06823615().parent_energy_ev
+                        << ',' << item.type99_shadow_v06823615().bound_statistical_weight
+                        << ',' << item.type99_shadow_v06823615().parent_statistical_weight
+                        << ',' << item.type99_shadow_v06823615().destination_statistical_weight
+                        << ',' << item.type99_shadow_v06823615().swrat
+                        << ',' << (item.type99_shadow_v06823615().persistent_leveltemp_context_valid ? 1 : 0)
+                        << ',' << (item.type99_shadow_v06823615().persistent_leveltemp_context_applied ? 1 : 0)
+                        << ',' << item.type99_shadow_v06823615().bound_owner_stage
+                        << ',' << item.type99_shadow_v06823615().parent_owner_stage
+                        << ',' << item.type99_shadow_v06823615().destination_owner_stage
+                        << ',' << item.type99_shadow_v06823615().calt99_density_cm3
+                        << ',' << item.type99_shadow_v06823615().phint53hunt_density_cm3
+                        << ',' << item.type99_shadow_v06823615().rec_cm3_s
+                        << ',' << item.type99_shadow_v06823615().milne_alpha_cm3_s
+                        << ',' << item.type99_shadow_v06823615().cross_section_scale
+                        << ',' << item.type99_shadow_v06823615().ans2d_unscaled_s
+                        << ',' << item.type99_shadow_v06823615().phint_scale
+                        << ',' << item.type99_shadow_v06823615().pirt_unscaled_s
+                        << ',' << item.type99_shadow_v06823615().rrrt_unscaled_s
+                        << ',' << item.type99_shadow_v06823615().piht_unscaled_erg_s
+                        << ',' << item.type99_shadow_v06823615().rrcl_unscaled_erg_s
+                        << ',' << item.type99_shadow_v06823615().piht2_unscaled_erg_s
+                        << ',' << item.type99_shadow_v06823615().rrcl2_unscaled_erg_s
+                        << ',' << item.type99_shadow_v06823615().energy_difference_ev
+                        << ',' << (item.type99_shadow_v06823615().destination_threshold_identity ? 1 : 0)
+                        << ',' << item.type99_shadow_v06823615().ans5_pre_energy_correction
+                        << ',' << item.type99_shadow_v06823615().ans6_pre_energy_correction
+                        << ',' << item.type99_shadow_v06823615().ans5_energy_correction_numerator
+                        << ',' << item.type99_shadow_v06823615().ans5_energy_correction_denominator
+                        << ',' << item.type99_shadow_v06823615().ans5_energy_correction_factor
+                        << ',' << item.type99_shadow_v06823615().ans6_energy_correction_numerator
+                        << ',' << item.type99_shadow_v06823615().ans6_energy_correction_denominator
+                        << ',' << item.type99_shadow_v06823615().ans6_energy_correction_factor
+                        << ',' << (item.type99_shadow_v06823615().destination_identity_correction_applied ? 1 : 0)
+                        << ',' << item.type99_shadow_v06823615().nbinc_threshold_one_based
+                        << ',' << item.type99_shadow_v06823615().nb1_one_based
+                        << ',' << item.type99_shadow_v06823615().nphint_one_based
+                        << ',' << item.type99_shadow_v06823615().ndelt
+                        << ',' << item.type99_shadow_v06823615().npass
+                        << ',' << item.type99_shadow_v06823615().last_pass_first_kl_one_based
+                        << ',' << item.type99_shadow_v06823615().last_pass_last_kl_one_based
+                        << ',' << item.type99_shadow_v06823615().cached_atmp22_stale_reuses
+                        << ',' << (item.type99_shadow_v06823615().used_dsec_radiation ? 1 : 0)
                         << ',' << item.bound_free_payload().type53_shadow.legacy_max_abs
                         << ',' << item.bound_free_payload().type53_shadow.shadow_max_abs
                         << ',' << item.bound_free_payload().type53_shadow.committed_max_abs
@@ -19508,31 +19627,31 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.bound_free_payload().type49_shadow.continuum_index_one_based
                         << ',' << item.bound_free_payload().type49_shadow.dsec_radiation_bin_count
                         << ',' << item.bound_free_payload().type49_shadow.continuum_tau_count
-                        << ',' << (item.type51_shadow.valid ? 1 : 0)
-                        << ',' << (item.type51_shadow.source_faithful_mode ? 1 : 0)
-                        << ',' << (item.type51_shadow.replacement_applied ? 1 : 0)
-                        << ',' << (item.type51_shadow.endpoint_order_exact ? 1 : 0)
-                        << ',' << (item.type51_shadow.committed_nonfinite ? 1 : 0)
-                        << ',' << item.type51_shadow.bt_type
-                        << ',' << item.type51_shadow.point_count
-                        << ',' << item.type51_shadow.eij_ryd
-                        << ',' << item.type51_shadow.eij_ev
-                        << ',' << item.type51_shadow.scaling_c
-                        << ',' << item.type51_shadow.physical_temperature_k
-                        << ',' << item.type51_shadow.floor_temperature_k
-                        << ',' << item.type51_shadow.effective_temperature_k
-                        << ',' << (item.type51_shadow.temperature_floor_applied ? 1 : 0)
-                        << ',' << item.type51_shadow.scaled_temperature
-                        << ',' << item.type51_shadow.transformed_temperature
-                        << ',' << item.type51_shadow.scaled_upsilon
-                        << ',' << item.type51_shadow.upsilon
-                        << ',' << item.type51_shadow.lower_statistical_weight
-                        << ',' << item.type51_shadow.upper_statistical_weight
-                        << ',' << item.type51_shadow.electron_density_cm3
-                        << ',' << item.type51_shadow.q_excitation_cm3_s
-                        << ',' << item.type51_shadow.q_deexcitation_cm3_s;
-            for (double value : item.type51_shadow.ans) record_file << ',' << value;
-            for (double value : item.type51_shadow.legacy_ans) record_file << ',' << value;
+                        << ',' << (item.type51_shadow_v06823615().valid ? 1 : 0)
+                        << ',' << (item.type51_shadow_v06823615().source_faithful_mode ? 1 : 0)
+                        << ',' << (item.type51_shadow_v06823615().replacement_applied ? 1 : 0)
+                        << ',' << (item.type51_shadow_v06823615().endpoint_order_exact ? 1 : 0)
+                        << ',' << (item.type51_shadow_v06823615().committed_nonfinite ? 1 : 0)
+                        << ',' << item.type51_shadow_v06823615().bt_type
+                        << ',' << item.type51_shadow_v06823615().point_count
+                        << ',' << item.type51_shadow_v06823615().eij_ryd
+                        << ',' << item.type51_shadow_v06823615().eij_ev
+                        << ',' << item.type51_shadow_v06823615().scaling_c
+                        << ',' << item.type51_shadow_v06823615().physical_temperature_k
+                        << ',' << item.type51_shadow_v06823615().floor_temperature_k
+                        << ',' << item.type51_shadow_v06823615().effective_temperature_k
+                        << ',' << (item.type51_shadow_v06823615().temperature_floor_applied ? 1 : 0)
+                        << ',' << item.type51_shadow_v06823615().scaled_temperature
+                        << ',' << item.type51_shadow_v06823615().transformed_temperature
+                        << ',' << item.type51_shadow_v06823615().scaled_upsilon
+                        << ',' << item.type51_shadow_v06823615().upsilon
+                        << ',' << item.type51_shadow_v06823615().lower_statistical_weight
+                        << ',' << item.type51_shadow_v06823615().upper_statistical_weight
+                        << ',' << item.type51_shadow_v06823615().electron_density_cm3
+                        << ',' << item.type51_shadow_v06823615().q_excitation_cm3_s
+                        << ',' << item.type51_shadow_v06823615().q_deexcitation_cm3_s;
+            for (double value : item.type51_shadow_v06823615().ans) record_file << ',' << value;
+            for (double value : item.type51_shadow_v06823615().legacy_ans) record_file << ',' << value;
             record_file << ',' << item.bound_free_payload().type53_shadow.threshold_cross_section_cm2
                         << ',' << item.bound_free_payload().type53_shadow.threshold_stimulated_cross_section_cm2
                         << ',' << item.bound_free_payload().type49_shadow.threshold_cross_section_cm2
@@ -19974,12 +20093,12 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                     source_answers = item.bound_free_payload().type53_shadow.ans; source_answer_basis = "type53_source_shadow";
                 } else if (c.data_type == 49 && item.bound_free_payload().type49_shadow.valid) {
                     source_answers = item.bound_free_payload().type49_shadow.ans; source_answer_basis = "type49_source_shadow";
-                } else if (c.data_type == 50 && item.type50_shadow.valid) {
-                    source_answers = item.type50_shadow.ans; source_answer_basis = "type50_source_shadow";
-                } else if (c.data_type == 51 && item.type51_shadow.valid) {
-                    source_answers = item.type51_shadow.ans; source_answer_basis = "type51_source_shadow";
-                } else if (c.data_type == 99 && item.type99_shadow.valid) {
-                    source_answers = item.type99_shadow.ans; source_answer_basis = "type99_source_shadow";
+                } else if (c.data_type == 50 && item.type50_shadow_v06823615().valid) {
+                    source_answers = item.type50_shadow_v06823615().ans; source_answer_basis = "type50_source_shadow";
+                } else if (c.data_type == 51 && item.type51_shadow_v06823615().valid) {
+                    source_answers = item.type51_shadow_v06823615().ans; source_answer_basis = "type51_source_shadow";
+                } else if (c.data_type == 99 && item.type99_shadow_v06823615().valid) {
+                    source_answers = item.type99_shadow_v06823615().ans; source_answer_basis = "type99_source_shadow";
                 }
                 const double native_aj1[4] = {c.ans1, c.ans2, -c.ans1, -c.ans2};
                 const double native_aj2[4] = {c.ans2, c.ans1, -c.ans1, -c.ans2};

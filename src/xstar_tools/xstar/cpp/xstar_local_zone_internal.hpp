@@ -132,6 +132,15 @@ struct PerformanceFoundationV068231 {
     std::uint64_t revisit_compact_inline_bytes_peak_v06823614 = 0u;
     std::uint64_t revisit_legacy_rich_equivalent_bytes_peak_v06823614 = 0u;
     std::uint64_t revisit_bytes_elided_peak_v06823614 = 0u;
+    // 0.6.82.36.15: hot EvaluatedRecord representation and production-only
+    // telemetry-overhead elision.  These remain observation-only counters.
+    std::uint64_t evaluated_record_bytes_v06823615 = 0u;
+    std::uint64_t evaluated_record_legacy_bytes_v06823615 = 0u;
+    std::uint64_t evaluated_record_bytes_elided_v06823615 = 0u;
+    std::uint64_t preliminary_scan_records_elided_v06823615 = 0u;
+    std::uint64_t evaluated_scan_records_elided_v06823615 = 0u;
+    std::uint64_t incremental_memory_telemetry_calls_v06823615 = 0u;
+    std::uint64_t deep_memory_telemetry_calls_v06823615 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 
