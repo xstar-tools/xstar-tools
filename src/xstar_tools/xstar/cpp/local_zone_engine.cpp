@@ -1354,6 +1354,185 @@ struct Type53RecordContext {
     int phextrap_max_points = 0;
 };
 
+// 0.6.82.37.1: Type-49/53 payload layout is immutable after ATDB lowering.
+// Decode that layout once when the fixed-state context is compiled instead of
+// re-reading magic values, tail widths, leveltemp ownership, and candidate
+// energies on every bound-free evaluation.  This is the first rate-family
+// specific compiled execution slice; scientific rate arithmetic remains live.
+Type53RecordContext decode_bound_free_record_context_v0682371(
+    const Program& program, const ProgramRecord& record) {
+    Type53RecordContext context{};
+    if (record.opcode != XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
+        record.opcode != XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) return context;
+    if (record.real_offset + record.real_count > program.reals.size() ||
+        record.int_offset + record.int_count > program.ints.size()) {
+        throw std::runtime_error("bound-free compiled context payload range invalid");
+    }
+    const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
+    const std::int64_t* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
+    if (!r || record.real_count < 4) {
+        throw std::runtime_error("bound-free compiled context payload requires energy/sigma pairs");
+    }
+
+    constexpr std::size_t kContextRealsV4 = 40;
+    constexpr std::size_t kContextRealsV3 = 22;
+    constexpr std::size_t kContextRealsV2 = 10;
+    constexpr std::size_t kContextRealsV1 = 7;
+    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
+        constexpr std::int64_t kType53LayoutMagicV3 = 221;
+        constexpr std::int64_t kType53LayoutMagicV4 = 224;
+        const bool has_v4_magic = ints && record.int_count >= 4 && ints[3] == kType53LayoutMagicV4;
+        const bool has_v3_magic = ints && record.int_count >= 4 && ints[3] == kType53LayoutMagicV3;
+        if (has_v4_magic) {
+            if (record.real_count < 4 + kContextRealsV4 ||
+                (record.real_count - kContextRealsV4) % 2 != 0) {
+                throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 payload is malformed");
+            }
+            if (ints[1] <= 0 || ints[2] < 0 || static_cast<std::uint64_t>(ints[2]) > 0x3fffffffu) {
+                throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 metadata is invalid");
+            }
+            const std::size_t base = record.real_count - kContextRealsV4;
+            context.valid = true; context.layout_version = 4; context.pair_real_count = base;
+            context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
+            context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
+            context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
+            context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
+            context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
+            context.leveltemp_destination_column = static_cast<int>(ints[1]);
+            context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[2]);
+            for (std::size_t stage = 0; stage < 30; ++stage) {
+                const double value = r[base + 10 + stage];
+                if ((context.leveltemp_candidate_mask & (std::uint32_t{1} << stage)) != 0u && !std::isfinite(value))
+                    throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp candidate energy is non-finite");
+                context.leveltemp_candidate_energy_ev[stage] = value;
+            }
+            context.persistent_leveltemp_candidates_valid = true;
+            context.continuum_index_one_based = static_cast<int>(ints[0]);
+        } else if (has_v3_magic) {
+            if (record.real_count < 4 + kContextRealsV3 ||
+                (record.real_count - kContextRealsV3) % 2 != 0)
+                throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 payload is malformed");
+            if (ints[1] <= 0 || ints[2] < 0 || ints[2] > 0x0fff)
+                throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 metadata is invalid");
+            const std::size_t base = record.real_count - kContextRealsV3;
+            context.valid = true; context.layout_version = 3; context.pair_real_count = base;
+            context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
+            context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
+            context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
+            context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
+            context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
+            context.leveltemp_destination_column = static_cast<int>(ints[1]);
+            context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[2]);
+            for (std::size_t stage = 0; stage < 12; ++stage) {
+                const double value = r[base + 10 + stage];
+                if ((context.leveltemp_candidate_mask & (1u << stage)) != 0u && !std::isfinite(value))
+                    throw std::runtime_error("Mg Type-53 persistent-leveltemp candidate energy is non-finite");
+                context.leveltemp_candidate_energy_ev[stage] = value;
+            }
+            context.persistent_leveltemp_candidates_valid = true;
+            context.continuum_index_one_based = static_cast<int>(ints[0]);
+        } else if (record.real_count >= 4 + kContextRealsV2 &&
+                   (record.real_count - kContextRealsV2) % 2 == 0) {
+            const std::size_t base = record.real_count - kContextRealsV2;
+            context.valid = true; context.layout_version = 2; context.pair_real_count = base;
+            context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
+            context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
+            context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
+            context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
+            context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
+            context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        } else if (record.real_count >= 4 + kContextRealsV1 &&
+                   (record.real_count - kContextRealsV1) % 2 == 0) {
+            const std::size_t base = record.real_count - kContextRealsV1;
+            context.valid = true; context.layout_version = 1; context.pair_real_count = base;
+            context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 0];
+            context.bound_energy_ev = r[base + 1]; context.continuum_energy_ev = r[base + 2];
+            context.bound_statistical_weight = r[base + 3]; context.continuum_statistical_weight = r[base + 4];
+            context.destination_statistical_weight = r[base + 5]; context.leveltemp_destination_energy_ev = r[base + 6];
+            context.excited_parent_statistical_weight = context.destination_statistical_weight;
+            context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        } else if (record.real_count % 2 != 0) {
+            throw std::runtime_error("bound-free payload/context layout invalid");
+        }
+        return context;
+    }
+
+    constexpr std::int64_t kType49LayoutMagicV3 = 222;
+    constexpr std::int64_t kType49LayoutMagicV4 = 225;
+    const bool type49_v4 = ints && record.int_count >= 5 && ints[4] == kType49LayoutMagicV4;
+    const bool type49_v3 = ints && record.int_count >= 5 && ints[4] == kType49LayoutMagicV3;
+    if (type49_v4 && record.real_count >= 4 + kContextRealsV4 &&
+        (record.real_count - kContextRealsV4) % 2 == 0) {
+        const std::size_t base = record.real_count - kContextRealsV4;
+        context.valid = true; context.layout_version = 4; context.pair_real_count = base;
+        context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
+        context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
+        context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
+        context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
+        context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
+        context.continuum_index_one_based = static_cast<int>(ints[0]);
+        context.phextrap_max_points = static_cast<int>(ints[1]);
+        context.leveltemp_destination_column = static_cast<int>(ints[2]);
+        context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[3]);
+        if (context.leveltemp_destination_column <= 0 || (context.leveltemp_candidate_mask & ~0x3fffffffu) != 0u)
+            throw std::runtime_error("Z1-Z30 Type-49 persistent leveltemp metadata invalid");
+        for (std::size_t stage = 0; stage < 30; ++stage) {
+            context.leveltemp_candidate_energy_ev[stage] = r[base + 10 + stage];
+            if ((context.leveltemp_candidate_mask & (std::uint32_t{1} << stage)) != 0u &&
+                !std::isfinite(context.leveltemp_candidate_energy_ev[stage]))
+                throw std::runtime_error("Z1-Z30 Type-49 persistent leveltemp candidate non-finite");
+        }
+        context.persistent_leveltemp_candidates_valid = true;
+    } else if (type49_v3 && record.real_count >= 4 + kContextRealsV3 &&
+               (record.real_count - kContextRealsV3) % 2 == 0) {
+        const std::size_t base = record.real_count - kContextRealsV3;
+        context.valid = true; context.layout_version = 3; context.pair_real_count = base;
+        context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
+        context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
+        context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
+        context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
+        context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
+        context.continuum_index_one_based = static_cast<int>(ints[0]);
+        context.phextrap_max_points = static_cast<int>(ints[1]);
+        context.leveltemp_destination_column = static_cast<int>(ints[2]);
+        context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[3]);
+        if (context.leveltemp_destination_column <= 0 || (context.leveltemp_candidate_mask & ~0x0fffu) != 0u)
+            throw std::runtime_error("Mg Type-49 persistent leveltemp metadata invalid");
+        for (std::size_t stage = 0; stage < 12; ++stage) {
+            context.leveltemp_candidate_energy_ev[stage] = r[base + 10 + stage];
+            if ((context.leveltemp_candidate_mask & (1u << stage)) != 0u &&
+                !std::isfinite(context.leveltemp_candidate_energy_ev[stage]))
+                throw std::runtime_error("Mg Type-49 persistent leveltemp candidate non-finite");
+        }
+        context.persistent_leveltemp_candidates_valid = true;
+    } else if (record.real_count >= 4 + kContextRealsV2 &&
+               (record.real_count - kContextRealsV2) % 2 == 0) {
+        const std::size_t base = record.real_count - kContextRealsV2;
+        context.valid = true; context.layout_version = 2; context.pair_real_count = base;
+        context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
+        context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
+        context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
+        context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
+        context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
+        context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        context.phextrap_max_points = (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
+    } else if (record.real_count >= 4 + kContextRealsV1 &&
+               (record.real_count - kContextRealsV1) % 2 == 0) {
+        const std::size_t base = record.real_count - kContextRealsV1;
+        context.valid = true; context.layout_version = 1; context.pair_real_count = base;
+        context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 0];
+        context.bound_energy_ev = r[base + 1]; context.continuum_energy_ev = r[base + 2];
+        context.bound_statistical_weight = r[base + 3]; context.continuum_statistical_weight = r[base + 4];
+        context.destination_statistical_weight = r[base + 5]; context.leveltemp_destination_energy_ev = r[base + 6];
+        context.excited_parent_statistical_weight = context.destination_statistical_weight;
+        context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        context.phextrap_max_points = (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
+    } else if (record.real_count % 2 != 0) {
+        throw std::runtime_error("Type-49 bound-free payload/context layout invalid");
+    }
+    return context;
+}
+
 // v0.6.48.9.5: immutable Type49/53 phint53 geometry prepared once per
 // atomic record and radiation-energy grid.  The radiation amplitudes,
 // temperature, populations, escape factors, and all source-order dynamic
@@ -1414,6 +1593,8 @@ struct BoundFreePerfCountersV064895 {
     std::uint64_t sgbar_compacted_geometry_count_v06823613 = 0;
     std::uint64_t sgbar_compact_values_current_v06823613 = 0;
     std::uint64_t sgbar_dense_values_current_v06823613 = 0;
+    // 0.6.82.37.1 compiled bound-free execution metadata counters.
+    std::uint64_t predecoded_context_hits_v0682371 = 0;
 };
 
 struct Type53SourceShadow {
@@ -4078,6 +4259,11 @@ struct xstar_fixed_state_context_impl {
     // immutable program-record index.  Reduced/full grids have separate
     // caches because Type49 phextrap owns different caller capacities.
     std::vector<BoundFreePreparedRecordCacheV064895> bound_free_prepared_v064895;
+    // 0.6.82.37.1: compact record-index -> bound-free slot mapping.  The
+    // prepared cache and decoded immutable layout are allocated only for the
+    // Type-49/53 records that can consume them.
+    std::vector<std::uint32_t> bound_free_slot_by_record_v0682371;
+    std::vector<Type53RecordContext> bound_free_context_by_slot_v0682371;
     BoundFreePerfCountersV064895 bound_free_perf_v064895{};
     xstar_element_engine_context* element_context = nullptr;
     xstar_spectral_context* spectral_context = nullptr;
@@ -7076,6 +7262,10 @@ struct RateEvaluationContextV064894 {
     const SourceContinuumWorkspace* calc_emisab_workspace = nullptr;
     // v0.6.48.9.5 prepared bound-free engine.
     std::vector<BoundFreePreparedRecordCacheV064895>* bound_free_cache = nullptr;
+    // 0.6.82.37.1: sparse Type-49/53 slot map and immutable predecoded
+    // context.  Ordinary records never allocate a prepared-cache object.
+    const std::vector<std::uint32_t>* bound_free_slot_by_record_v0682371 = nullptr;
+    const std::vector<Type53RecordContext>* bound_free_context_by_slot_v0682371 = nullptr;
     BoundFreePerfCountersV064895* bound_free_perf = nullptr;
     bool force_legacy_bound_free = false;
     std::uint64_t reduced_energy_hash = 0;
@@ -7142,6 +7332,40 @@ RateEvaluationContextV064894 make_rate_evaluation_context(
     return context;
 }
 
+// 0.6.82.37.1: resolve a Type-49/53 record to its compact bound-free
+// execution slot.  UINT32_MAX means this record has no bound-free execution
+// state.  The source ProgramRecord remains authoritative for identity/order.
+std::uint32_t bound_free_slot_v0682371(
+    const Program& program,
+    const ProgramRecord& record,
+    const RateEvaluationContextV064894& rate_context) {
+    if (!rate_context.bound_free_slot_by_record_v0682371) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    const std::ptrdiff_t record_index = &record - program.records.data();
+    if (record_index < 0 ||
+        static_cast<std::size_t>(record_index) >= rate_context.bound_free_slot_by_record_v0682371->size()) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    return (*rate_context.bound_free_slot_by_record_v0682371)[static_cast<std::size_t>(record_index)];
+}
+
+const Type53RecordContext* predecoded_bound_free_context_v0682371(
+    const Program& program,
+    const ProgramRecord& record,
+    const RateEvaluationContextV064894& rate_context) {
+    if (!rate_context.bound_free_context_by_slot_v0682371) return nullptr;
+    const std::uint32_t slot = bound_free_slot_v0682371(program, record, rate_context);
+    if (slot == std::numeric_limits<std::uint32_t>::max() ||
+        static_cast<std::size_t>(slot) >= rate_context.bound_free_context_by_slot_v0682371->size()) {
+        return nullptr;
+    }
+    if (rate_context.bound_free_perf) {
+        ++rate_context.bound_free_perf->predecoded_context_hits_v0682371;
+    }
+    return &(*rate_context.bound_free_context_by_slot_v0682371)[static_cast<std::size_t>(slot)];
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute prepared bound free geometry for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
@@ -7158,9 +7382,10 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
     const RateEvaluationContextV064894& rate_context) {
     if (rate_context.force_legacy_bound_free || !rate_context.bound_free_cache ||
         !rate_context.bound_free_perf) return nullptr;
-    const std::ptrdiff_t record_index = &record - program.records.data();
-    if (record_index < 0 || static_cast<std::size_t>(record_index) >= program.records.size() ||
-        static_cast<std::size_t>(record_index) >= rate_context.bound_free_cache->size()) return nullptr;
+    const std::uint32_t slot_v0682371 =
+        bound_free_slot_v0682371(program, record, rate_context);
+    if (slot_v0682371 == std::numeric_limits<std::uint32_t>::max() ||
+        static_cast<std::size_t>(slot_v0682371) >= rate_context.bound_free_cache->size()) return nullptr;
     const bool has_dsec = eval_input.dsec_radiation_energy_ev && eval_input.dsec_bremsa &&
         eval_input.dsec_radiation_bin_count >= 3;
     const double* energy = has_dsec ? eval_input.dsec_radiation_energy_ev : eval_input.radiation_energy_ev;
@@ -7168,7 +7393,7 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
     if (!energy || count < 3) return nullptr;
     const std::uint64_t expected_hash = full_grid
         ? rate_context.full_energy_hash : rate_context.reduced_energy_hash;
-    auto& slot = (*rate_context.bound_free_cache)[static_cast<std::size_t>(record_index)];
+    auto& slot = (*rate_context.bound_free_cache)[static_cast<std::size_t>(slot_v0682371)];
     auto& geometry = full_grid ? slot.full : slot.reduced;
     const int expected_phextrap_max = phextrap_pairs && record_context &&
         record_context->phextrap_max_points > 0 ? record_context->phextrap_max_points
@@ -7398,126 +7623,15 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE: {
             if (!r || record.real_count < 4) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
             if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
-            constexpr std::size_t kType53ContextRealsV4 = 40;
-            constexpr std::size_t kType53ContextRealsV3 = 22;
-            constexpr std::size_t kType53ContextRealsV2 = 10;
-            constexpr std::size_t kType53ContextRealsV1 = 7;
-            constexpr std::int64_t kType53LeveltempLayoutMagicV048746221 = 221;
-            constexpr std::int64_t kType53LeveltempLayoutMagicZ1Z30V06481231 = 224;
-            Type53RecordContext record_context{};
-            const bool has_v4_magic = ints && record.int_count >= 4 &&
-                ints[3] == kType53LeveltempLayoutMagicZ1Z30V06481231;
-            const bool has_v3_magic = ints && record.int_count >= 4 &&
-                ints[3] == kType53LeveltempLayoutMagicV048746221;
-            if (has_v4_magic) {
-                if (record.real_count < 4 + kType53ContextRealsV4 ||
-                    (record.real_count - kType53ContextRealsV4) % 2 != 0) {
-                    throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 payload is malformed");
-                }
-                if (ints[1] <= 0 || ints[2] < 0 ||
-                    static_cast<std::uint64_t>(ints[2]) > 0x3fffffffu) {
-                    throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 metadata is invalid");
-                }
-                const std::size_t base = record.real_count - kType53ContextRealsV4;
-                record_context.valid = true;
-                record_context.layout_version = 4;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 1];
-                record_context.bound_energy_ev = r[base + 2];
-                record_context.continuum_energy_ev = r[base + 3];
-                record_context.bound_statistical_weight = r[base + 4];
-                record_context.continuum_statistical_weight = r[base + 5];
-                record_context.destination_statistical_weight = r[base + 6];
-                record_context.leveltemp_destination_energy_ev = r[base + 7];
-                record_context.excited_parent_energy_ev = r[base + 8];
-                record_context.excited_parent_statistical_weight = r[base + 9];
-                record_context.leveltemp_destination_column = static_cast<int>(ints[1]);
-                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[2]);
-                for (std::size_t stage = 0; stage < 30; ++stage) {
-                    const double value = r[base + 10 + stage];
-                    if ((record_context.leveltemp_candidate_mask & (std::uint32_t{1} << stage)) != 0u &&
-                        !std::isfinite(value)) {
-                        throw std::runtime_error(
-                            "Z1-Z30 Type-53 persistent-leveltemp candidate energy is non-finite");
-                    }
-                    record_context.leveltemp_candidate_energy_ev[stage] = value;
-                }
-                record_context.persistent_leveltemp_candidates_valid = true;
-                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
-            } else if (has_v3_magic) {
-                if (record.real_count < 4 + kType53ContextRealsV3 ||
-                    (record.real_count - kType53ContextRealsV3) % 2 != 0) {
-                    throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 payload is malformed");
-                }
-                if (ints[1] <= 0 || ints[2] < 0 || ints[2] > 0x0fff) {
-                    throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 metadata is invalid");
-                }
-                const std::size_t base = record.real_count - kType53ContextRealsV3;
-                record_context.valid = true;
-                record_context.layout_version = 3;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 1];
-                record_context.bound_energy_ev = r[base + 2];
-                record_context.continuum_energy_ev = r[base + 3];
-                record_context.bound_statistical_weight = r[base + 4];
-                record_context.continuum_statistical_weight = r[base + 5];
-                record_context.destination_statistical_weight = r[base + 6];
-                record_context.leveltemp_destination_energy_ev = r[base + 7];
-                record_context.excited_parent_energy_ev = r[base + 8];
-                record_context.excited_parent_statistical_weight = r[base + 9];
-                record_context.leveltemp_destination_column = static_cast<int>(ints[1]);
-                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[2]);
-                for (std::size_t stage = 0; stage < 12; ++stage) {
-                    const double value = r[base + 10 + stage];
-                    if ((record_context.leveltemp_candidate_mask & (1u << stage)) != 0u &&
-                        !std::isfinite(value)) {
-                        throw std::runtime_error(
-                            "Mg Type-53 persistent-leveltemp candidate energy is non-finite");
-                    }
-                    record_context.leveltemp_candidate_energy_ev[stage] = value;
-                }
-                record_context.persistent_leveltemp_candidates_valid = true;
-                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
-            } else if (record.real_count >= 4 + kType53ContextRealsV2 &&
-                (record.real_count - kType53ContextRealsV2) % 2 == 0) {
-                const std::size_t base = record.real_count - kType53ContextRealsV2;
-                record_context.valid = true;
-                record_context.layout_version = 2;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 1];
-                record_context.bound_energy_ev = r[base + 2];
-                record_context.continuum_energy_ev = r[base + 3];
-                record_context.bound_statistical_weight = r[base + 4];
-                record_context.continuum_statistical_weight = r[base + 5];
-                record_context.destination_statistical_weight = r[base + 6];
-                record_context.leveltemp_destination_energy_ev = r[base + 7];
-                record_context.excited_parent_energy_ev = r[base + 8];
-                record_context.excited_parent_statistical_weight = r[base + 9];
-                record_context.continuum_index_one_based =
-                    (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-            } else if (record.real_count >= 4 + kType53ContextRealsV1 &&
-                       (record.real_count - kType53ContextRealsV1) % 2 == 0) {
-                const std::size_t base = record.real_count - kType53ContextRealsV1;
-                record_context.valid = true;
-                record_context.layout_version = 1;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 0];
-                record_context.bound_energy_ev = r[base + 1];
-                record_context.continuum_energy_ev = r[base + 2];
-                record_context.bound_statistical_weight = r[base + 3];
-                record_context.continuum_statistical_weight = r[base + 4];
-                record_context.destination_statistical_weight = r[base + 5];
-                record_context.leveltemp_destination_energy_ev = r[base + 6];
-                record_context.excited_parent_statistical_weight = record_context.destination_statistical_weight;
-                record_context.continuum_index_one_based =
-                    (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-            } else if (record.real_count % 2 != 0) {
-                throw std::runtime_error("bound-free payload/context layout invalid");
+            Type53RecordContext fallback_record_context_v0682371{};
+            const Type53RecordContext* compiled_record_context_v0682371 =
+                predecoded_bound_free_context_v0682371(program, record, rate_context);
+            if (!compiled_record_context_v0682371) {
+                fallback_record_context_v0682371 =
+                    decode_bound_free_record_context_v0682371(program, record);
+                compiled_record_context_v0682371 = &fallback_record_context_v0682371;
             }
+            const Type53RecordContext& record_context = *compiled_record_context_v0682371;
             const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : record.real_count;
             const std::size_t n = pair_real_count / 2;
             const double threshold = std::max(record_context.valid ? record_context.threshold_ev : delta_ev, 1.0e-12);
@@ -7999,123 +8113,15 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
             if (!r || record.real_count < 4) throw std::runtime_error("Type-49 bound-free payload requires energy/sigma pairs");
-            constexpr std::size_t kBoundFreeContextRealsV4 = 40;
-            constexpr std::size_t kBoundFreeContextRealsV3 = 22;
-            constexpr std::size_t kBoundFreeContextRealsV2 = 10;
-            constexpr std::size_t kBoundFreeContextRealsV1 = 7;
-            constexpr std::int64_t kType49LeveltempLayoutMagicV048746222 = 222;
-            constexpr std::int64_t kType49LeveltempLayoutMagicZ1Z30V06481231 = 225;
-            Type53RecordContext record_context{};
-            const bool type49_v4 = ints && record.int_count >= 5 &&
-                ints[4] == kType49LeveltempLayoutMagicZ1Z30V06481231;
-            const bool type49_v3 = ints && record.int_count >= 5 &&
-                ints[4] == kType49LeveltempLayoutMagicV048746222;
-            if (type49_v4 && record.real_count >= 4 + kBoundFreeContextRealsV4 &&
-                (record.real_count - kBoundFreeContextRealsV4) % 2 == 0) {
-                const std::size_t base = record.real_count - kBoundFreeContextRealsV4;
-                record_context.valid = true;
-                record_context.layout_version = 4;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 1];
-                record_context.bound_energy_ev = r[base + 2];
-                record_context.continuum_energy_ev = r[base + 3];
-                record_context.bound_statistical_weight = r[base + 4];
-                record_context.continuum_statistical_weight = r[base + 5];
-                record_context.destination_statistical_weight = r[base + 6];
-                record_context.leveltemp_destination_energy_ev = r[base + 7];
-                record_context.excited_parent_energy_ev = r[base + 8];
-                record_context.excited_parent_statistical_weight = r[base + 9];
-                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
-                record_context.phextrap_max_points = static_cast<int>(ints[1]);
-                record_context.leveltemp_destination_column = static_cast<int>(ints[2]);
-                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[3]);
-                if (record_context.leveltemp_destination_column <= 0 ||
-                    (record_context.leveltemp_candidate_mask & ~0x3fffffffu) != 0u) {
-                    throw std::runtime_error("Z1-Z30 Type-49 persistent leveltemp metadata invalid");
-                }
-                for (std::size_t stage = 0; stage < 30; ++stage) {
-                    record_context.leveltemp_candidate_energy_ev[stage] = r[base + 10 + stage];
-                    if ((record_context.leveltemp_candidate_mask & (std::uint32_t{1} << stage)) != 0u &&
-                        !std::isfinite(record_context.leveltemp_candidate_energy_ev[stage])) {
-                        throw std::runtime_error("Z1-Z30 Type-49 persistent leveltemp candidate non-finite");
-                    }
-                }
-                record_context.persistent_leveltemp_candidates_valid = true;
-            } else if (type49_v3 && record.real_count >= 4 + kBoundFreeContextRealsV3 &&
-                (record.real_count - kBoundFreeContextRealsV3) % 2 == 0) {
-                const std::size_t base = record.real_count - kBoundFreeContextRealsV3;
-                record_context.valid = true;
-                record_context.layout_version = 3;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 1];
-                record_context.bound_energy_ev = r[base + 2];
-                record_context.continuum_energy_ev = r[base + 3];
-                record_context.bound_statistical_weight = r[base + 4];
-                record_context.continuum_statistical_weight = r[base + 5];
-                record_context.destination_statistical_weight = r[base + 6];
-                record_context.leveltemp_destination_energy_ev = r[base + 7];
-                record_context.excited_parent_energy_ev = r[base + 8];
-                record_context.excited_parent_statistical_weight = r[base + 9];
-                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
-                record_context.phextrap_max_points = static_cast<int>(ints[1]);
-                record_context.leveltemp_destination_column = static_cast<int>(ints[2]);
-                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[3]);
-                if (record_context.leveltemp_destination_column <= 0 ||
-                    (record_context.leveltemp_candidate_mask & ~0x0fffu) != 0u) {
-                    throw std::runtime_error("Mg Type-49 persistent leveltemp metadata invalid");
-                }
-                for (std::size_t stage = 0; stage < 12; ++stage) {
-                    record_context.leveltemp_candidate_energy_ev[stage] = r[base + 10 + stage];
-                    if ((record_context.leveltemp_candidate_mask & (1u << stage)) != 0u &&
-                        !std::isfinite(record_context.leveltemp_candidate_energy_ev[stage])) {
-                        throw std::runtime_error("Mg Type-49 persistent leveltemp candidate non-finite");
-                    }
-                }
-                record_context.persistent_leveltemp_candidates_valid = true;
-            } else if (record.real_count >= 4 + kBoundFreeContextRealsV2 &&
-                (record.real_count - kBoundFreeContextRealsV2) % 2 == 0) {
-                const std::size_t base = record.real_count - kBoundFreeContextRealsV2;
-                record_context.valid = true;
-                record_context.layout_version = 2;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 1];
-                record_context.bound_energy_ev = r[base + 2];
-                record_context.continuum_energy_ev = r[base + 3];
-                record_context.bound_statistical_weight = r[base + 4];
-                record_context.continuum_statistical_weight = r[base + 5];
-                record_context.destination_statistical_weight = r[base + 6];
-                record_context.leveltemp_destination_energy_ev = r[base + 7];
-                record_context.excited_parent_energy_ev = r[base + 8];
-                record_context.excited_parent_statistical_weight = r[base + 9];
-                record_context.continuum_index_one_based =
-                    (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-                record_context.phextrap_max_points =
-                    (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
-            } else if (record.real_count >= 4 + kBoundFreeContextRealsV1 &&
-                       (record.real_count - kBoundFreeContextRealsV1) % 2 == 0) {
-                const std::size_t base = record.real_count - kBoundFreeContextRealsV1;
-                record_context.valid = true;
-                record_context.layout_version = 1;
-                record_context.pair_real_count = base;
-                record_context.base_threshold_ev = r[base + 0];
-                record_context.threshold_ev = r[base + 0];
-                record_context.bound_energy_ev = r[base + 1];
-                record_context.continuum_energy_ev = r[base + 2];
-                record_context.bound_statistical_weight = r[base + 3];
-                record_context.continuum_statistical_weight = r[base + 4];
-                record_context.destination_statistical_weight = r[base + 5];
-                record_context.leveltemp_destination_energy_ev = r[base + 6];
-                record_context.excited_parent_statistical_weight = record_context.destination_statistical_weight;
-                record_context.continuum_index_one_based =
-                    (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-                record_context.phextrap_max_points =
-                    (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
-            } else if (record.real_count % 2 != 0) {
-                throw std::runtime_error("Type-49 bound-free payload/context layout invalid");
+            Type53RecordContext fallback_record_context_v0682371{};
+            const Type53RecordContext* compiled_record_context_v0682371 =
+                predecoded_bound_free_context_v0682371(program, record, rate_context);
+            if (!compiled_record_context_v0682371) {
+                fallback_record_context_v0682371 =
+                    decode_bound_free_record_context_v0682371(program, record);
+                compiled_record_context_v0682371 = &fallback_record_context_v0682371;
             }
+            const Type53RecordContext& record_context = *compiled_record_context_v0682371;
             const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : record.real_count;
             const std::size_t n = pair_real_count / 2;
             const double source_threshold = record_context.valid ? record_context.threshold_ev : delta_ev;
@@ -12920,6 +12926,10 @@ int run_impl(
             input,
             type53_calc_emisab_workspace_v82_patch5181);
     rate_context_v064894.bound_free_cache = &ctx.bound_free_prepared_v064895;
+    rate_context_v064894.bound_free_slot_by_record_v0682371 =
+        &ctx.bound_free_slot_by_record_v0682371;
+    rate_context_v064894.bound_free_context_by_slot_v0682371 =
+        &ctx.bound_free_context_by_slot_v0682371;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
     const bool use_compact_bound_free_revisit_v06823614 =
         native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
@@ -18065,6 +18075,8 @@ void capture_performance_foundation_v068231(
         bf_v06823613.sgbar_compact_values_current_v06823613;
     out.bf_sgbar_dense_values_current_v06823613 =
         bf_v06823613.sgbar_dense_values_current_v06823613;
+    out.bound_free_predecoded_context_hits_v0682371 =
+        bf_v06823613.predecoded_context_hits_v0682371;
 }
 
 std::uint64_t release_compact_record_products_v06823611(
@@ -18096,7 +18108,16 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     }
     ptr->flat_record_indices_v068237.reserve(ptr->program.records.size());
     ptr->element_execution_plan_v068237.reserve(ptr->program.elements.size());
-    ptr->bound_free_prepared_v064895.resize(ptr->program.records.size());
+    ptr->bound_free_slot_by_record_v0682371.assign(
+        ptr->program.records.size(), std::numeric_limits<std::uint32_t>::max());
+    const std::size_t bound_free_record_count_v0682371 = static_cast<std::size_t>(
+        std::count_if(ptr->program.records.begin(), ptr->program.records.end(),
+            [](const ProgramRecord& record) {
+                return record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
+                    record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
+            }));
+    ptr->bound_free_prepared_v064895.reserve(bound_free_record_count_v0682371);
+    ptr->bound_free_context_by_slot_v0682371.reserve(bound_free_record_count_v0682371);
 
     // Build canonical linked source order once into a single flat array.  A
     // generation-mark vector validates disjoint element chains without
@@ -18134,6 +18155,22 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
             const auto compact_index_v068237 = static_cast<std::uint32_t>(record_index_v068237);
             ptr->flat_record_indices_v068237.push_back(compact_index_v068237);
             ++data_type_counts_v068237[record.data_type];
+            if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
+                record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
+                if (ptr->bound_free_slot_by_record_v0682371[record_index_v068237] !=
+                    std::numeric_limits<std::uint32_t>::max()) {
+                    throw std::runtime_error("duplicate bound-free record in compiled execution plan");
+                }
+                const std::size_t slot_v0682371 = ptr->bound_free_prepared_v064895.size();
+                if (slot_v0682371 >= static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+                    throw std::runtime_error("0.6.82.37.1 bound-free execution slot exceeds 32-bit capacity");
+                }
+                ptr->bound_free_slot_by_record_v0682371[record_index_v068237] =
+                    static_cast<std::uint32_t>(slot_v0682371);
+                ptr->bound_free_prepared_v064895.emplace_back();
+                ptr->bound_free_context_by_slot_v0682371.push_back(
+                    decode_bound_free_record_context_v0682371(ptr->program, record));
+            }
             if (source_preliminary_rate_record(ptr->program, element, record, false)) {
                 plan_v068237.preliminary_source.push_back(RecordSelectionV068237{
                     static_cast<std::uint32_t>(ordinal_v068237), compact_index_v068237});
@@ -18159,6 +18196,10 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     if (ptr->flat_record_indices_v068237.size() != ptr->program.records.size()) {
         throw std::runtime_error("0.6.82.37 flat execution plan does not cover every lowered record exactly once");
     }
+    if (ptr->bound_free_prepared_v064895.size() != bound_free_record_count_v0682371 ||
+        ptr->bound_free_context_by_slot_v0682371.size() != bound_free_record_count_v0682371) {
+        throw std::runtime_error("0.6.82.37.1 sparse bound-free execution inventory mismatch");
+    }
     auto& perf_v068237 = ptr->perf_foundation_v068231;
     perf_v068237.execution_plan_records_v068237 =
         static_cast<std::uint64_t>(ptr->flat_record_indices_v068237.size());
@@ -18175,6 +18216,26 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     }
     perf_v068237.identity_map_entries_elided_v068237 =
         static_cast<std::uint64_t>(ptr->program.records.size());
+    perf_v068237.bound_free_execution_records_v0682371 =
+        static_cast<std::uint64_t>(ptr->bound_free_prepared_v064895.size());
+    perf_v068237.bound_free_slot_map_bytes_v0682371 =
+        static_cast<std::uint64_t>(ptr->bound_free_slot_by_record_v0682371.capacity()) *
+        sizeof(std::uint32_t);
+    perf_v068237.bound_free_sparse_cache_bytes_v0682371 =
+        static_cast<std::uint64_t>(ptr->bound_free_prepared_v064895.capacity()) *
+        sizeof(BoundFreePreparedRecordCacheV064895);
+    perf_v068237.bound_free_dense_cache_equivalent_bytes_v0682371 =
+        static_cast<std::uint64_t>(ptr->program.records.size()) *
+        sizeof(BoundFreePreparedRecordCacheV064895);
+    perf_v068237.bound_free_cache_bytes_elided_v0682371 =
+        perf_v068237.bound_free_dense_cache_equivalent_bytes_v0682371 >=
+                perf_v068237.bound_free_sparse_cache_bytes_v0682371
+            ? perf_v068237.bound_free_dense_cache_equivalent_bytes_v0682371 -
+                perf_v068237.bound_free_sparse_cache_bytes_v0682371
+            : 0u;
+    perf_v068237.bound_free_predecoded_context_bytes_v0682371 =
+        static_cast<std::uint64_t>(ptr->bound_free_context_by_slot_v0682371.capacity()) *
+        sizeof(Type53RecordContext);
     std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
     int rc = xstar_element_engine_context_create_v1(&ptr->element_context, error.data(), error.size());
     if (rc != 0) throw std::runtime_error(std::string("cannot create element context: ") + error.data());

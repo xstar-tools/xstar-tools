@@ -150,6 +150,14 @@ struct PerformanceFoundationV068231 {
     std::uint64_t execution_plan_preliminary_entries_v068237 = 0u;
     std::uint64_t direct_selection_records_v068237 = 0u;
     std::uint64_t identity_map_entries_elided_v068237 = 0u;
+    // 0.6.82.37.1: sparse Type-49/53 execution slice.
+    std::uint64_t bound_free_execution_records_v0682371 = 0u;
+    std::uint64_t bound_free_slot_map_bytes_v0682371 = 0u;
+    std::uint64_t bound_free_sparse_cache_bytes_v0682371 = 0u;
+    std::uint64_t bound_free_dense_cache_equivalent_bytes_v0682371 = 0u;
+    std::uint64_t bound_free_cache_bytes_elided_v0682371 = 0u;
+    std::uint64_t bound_free_predecoded_context_bytes_v0682371 = 0u;
+    std::uint64_t bound_free_predecoded_context_hits_v0682371 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

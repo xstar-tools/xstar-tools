@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.37.1 - sparse bound-free execution slice - 2026-08-24
+
+- Continue the accepted `.37` compiled execution-plan architecture with the first rate-family-specific sparse execution slice.
+- Allocate prepared Type-49/53 geometry state only for actual bound-free records instead of every lowered record.
+- Compile a direct record-index -> bound-free-slot map and predecode immutable Type-49/53 layout/leveltemp context once at fixed-context creation.
+- Reuse the predecoded context in the hot Type-49/53 evaluation path while preserving source-order arithmetic, rate kernels, `.36.13` compact sgbar values, and `.36.14` revisit semantics.
+- Add ownership/performance telemetry for sparse cache bytes, dense-equivalent bytes elided, predecoded context bytes, and predecode hits.
+- Qualification reuses the `.33.8` baseline captured in the `.36.11` broad run and compares incrementally with accepted `.37`; promotion requires exact science/work plus lower RSS and lower total runtime.
+
 ## 0.6.82.37 - compiled flat execution-plan foundation - 2026-08-23
 
 - Formally close the `0.6.82.36` canonical-work-elimination tranche at accepted `.36.15`. The broad `multi_element_xi1_ne1e12` host return is exact for science/ownership/work structure, with peak RSS `6,218,616,832 B`, total time `1282.913787 s`, fixed traversal `741.542959 s`, and fixed spectral `392.579900 s`. The remaining `3,643,662,336 B` gap to the workstation FORTRAN RSS target is not treated as an unfinished canonical-gating problem.
