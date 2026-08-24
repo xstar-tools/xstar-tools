@@ -773,6 +773,69 @@ static std::pair<int,int> small_a_core_bounds(
     return {first_core, last_core};
 }
 
+// 0.6.82.38.2: normal-production Type-50 small-a core localization.
+// The historical helper above performs two binary searches and therefore
+// evaluates the exact signed-delet predicate roughly O(log N) times per
+// profile.  Here the mathematical crossings are used only as integer seeds;
+// the final bounds are corrected with the identical source arithmetic and
+// strict predicates used above.  Consequently the returned first/last core
+// points are bit-for-bit the same integers as small_a_core_bounds(), while
+// normal production usually needs only the two seed calculations and zero or
+// a few local predicate corrections.
+static std::pair<int,int> small_a_core_bounds_localized_v0682382(
+    int first_point, int last_point, double e00, double deleused,
+    double line_energy_ev, double dele) {
+    constexpr int ml2 = 10000;
+    if (first_point > last_point) return {last_point + 1, first_point - 1};
+    if (!(std::isfinite(e00) && std::isfinite(deleused) && deleused > 0.0 &&
+          std::isfinite(line_energy_ev) && std::isfinite(dele) && dele > 0.0)) {
+        return small_a_core_bounds(
+            first_point, last_point, e00, deleused, line_energy_ev, dele);
+    }
+    auto signed_delet = [=](int point) {
+        const double energy = source_add(e00,
+            source_mul(static_cast<double>(point - ml2), deleused));
+        return source_div(source_sub(energy, line_energy_ev), dele);
+    };
+
+    // Seed the strict lower crossing (signed_delet > -5).  This estimate is
+    // not science state; exact source-predicate correction below is authority.
+    const double lower_crossing = static_cast<double>(ml2) +
+        ((line_energy_ev - source_real_literal(5.0) * dele) - e00) / deleused;
+    int first_core;
+    if (!std::isfinite(lower_crossing)) {
+        first_core = first_point;
+    } else {
+        const double floored = std::floor(lower_crossing);
+        if (floored < static_cast<double>(first_point - 1)) first_core = first_point;
+        else if (floored >= static_cast<double>(last_point)) first_core = last_point + 1;
+        else first_core = static_cast<int>(floored) + 1;
+    }
+    while (first_core > first_point &&
+           signed_delet(first_core - 1) > source_real_literal(-5.0)) --first_core;
+    while (first_core <= last_point &&
+           !(signed_delet(first_core) > source_real_literal(-5.0))) ++first_core;
+
+    // Seed the strict upper crossing (signed_delet < +5).
+    const double upper_crossing = static_cast<double>(ml2) +
+        ((line_energy_ev + source_real_literal(5.0) * dele) - e00) / deleused;
+    int last_core;
+    if (!std::isfinite(upper_crossing)) {
+        last_core = last_point;
+    } else {
+        const double ceiled = std::ceil(upper_crossing);
+        if (ceiled <= static_cast<double>(first_point)) last_core = first_point - 1;
+        else if (ceiled > static_cast<double>(last_point + 1)) last_core = last_point;
+        else last_core = static_cast<int>(ceiled) - 1;
+    }
+    while (last_core < last_point &&
+           signed_delet(last_core + 1) < source_real_literal(5.0)) ++last_core;
+    while (last_core >= first_point &&
+           !(signed_delet(last_core) < source_real_literal(5.0))) --last_core;
+
+    return {first_core, last_core};
+}
+
 } // extern "C" -- v064812329 C++ template helpers
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
@@ -1110,13 +1173,13 @@ static int run_inline_farwing_profile_cursor_advance(
 #define XSTAR_V064812330_PROCESS_FAR_RANGE(BEGIN_VALUE, END_VALUE) do { \
         int point_v064812330 = (BEGIN_VALUE); \
         const int end_v064812330 = (END_VALUE); \
+        const double base_offset_v0682382 = static_cast<double>(point_v064812330 - ml2); \
+        __m256d offsets_v0682382 = _mm256_set_pd( \
+            base_offset_v0682382 + 3.0, base_offset_v0682382 + 2.0, \
+            base_offset_v0682382 + 1.0, base_offset_v0682382); \
+        const __m256d offset_step_v0682382 = _mm256_set1_pd(4.0); \
         while (point_v064812330 + 3 <= end_v064812330) { \
-            const double o0 = static_cast<double>(point_v064812330 - ml2); \
-            const double o1 = static_cast<double>(point_v064812330 + 1 - ml2); \
-            const double o2 = static_cast<double>(point_v064812330 + 2 - ml2); \
-            const double o3 = static_cast<double>(point_v064812330 + 3 - ml2); \
-            const __m256d offsets = _mm256_set_pd(o3, o2, o1, o0); \
-            const __m256d energies = _mm256_add_pd(e004, _mm256_mul_pd(offsets, deleused4)); \
+            const __m256d energies = _mm256_add_pd(e004, _mm256_mul_pd(offsets_v0682382, deleused4)); \
             const __m256d signed_v = _mm256_div_pd(_mm256_sub_pd(energies, line4), dele4); \
             const __m256d v = _mm256_andnot_pd(sign, signed_v); \
             const __m256d v2 = _mm256_mul_pd(v, v); \
@@ -1140,6 +1203,9 @@ static int run_inline_farwing_profile_cursor_advance(
             ++g_type50_prod_avx2_blocks_v064812328; \
             g_type50_prod_avx2_points_v064812328 += 4u; \
             point_v064812330 += 4; \
+            /* Offsets are exact small integers in binary64; +4 therefore */ \
+            /* reproduces the same offset bits without four scalar converts. */ \
+            offsets_v0682382 = _mm256_add_pd(offsets_v0682382, offset_step_v0682382); \
         } \
         while (point_v064812330 <= end_v064812330) { \
             scalar_point(point_v064812330); \
@@ -1850,8 +1916,17 @@ static int apply_line_profile_optimized(
     if (production_inline_avx2_v064812328) {
         const int first_point = mlmin + 1;
         const int last_point = mlmax;
-        const auto core = small_a_core_bounds(
-            first_point, last_point, e00, deleused, line_energy_ev, dele);
+        // 0.6.82.38.2 normal production localizes the |v|<5 core from the
+        // analytic crossings, then corrects with the exact historical source
+        // predicate.  Explicit 12.3.30/12.3.32 experiment modes retain their
+        // historical binary-search helper so the fallback surfaces stay frozen.
+        const bool historical_core_geometry_v0682382 =
+            force_12330_hint_consume_v064812331 ||
+            (enable_tmpop_prep_v064812332 != enable_tmpe_prep_v064812332);
+        const auto core = historical_core_geometry_v0682382
+            ? small_a_core_bounds(first_point, last_point, e00, deleused, line_energy_ev, dele)
+            : small_a_core_bounds_localized_v0682382(
+                first_point, last_point, e00, deleused, line_energy_ev, dele);
         if (force_12330_hint_consume_v064812331) {
             // Explicit science-safe fallback: exact 12.3.30 production path.
             ++g_type50_fallback_hint_profiles_v064812331;

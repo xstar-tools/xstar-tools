@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.38.2 - exact Type-50 core localization and AVX2 offset cursor - 2026-08-24
+
+- Accept the host-qualified `0.6.82.38.1` spectral direct-index repair for `multi_element_xi1_ne1e12`: science/ownership/work ACCEPT, total `1051.731587 s`, fixed spectral `263.485125 s`, Type-50 profile `153.095704 s`, and peak RSS `3,945,746,432 B`.  Relative to accepted `.37.5`, total fell by `128.390179 s` and fixed spectral by `125.648216 s`; `.38` dense Type-50 schedule storage remains `2,133,584 B` with zero legacy-cache bytes.
+- Keep `.38.1` direct spectral-record lookup and `.38` dense Type-50 schedule frozen.  No source order, Type-49/53 behavior, publication identity, solver/controller/transport arithmetic, public ABI, or strict-FP policy changes.
+- Replace the normal-production small-a Type-50 `|v|<5` core's two binary searches with algebraic crossing seeds followed by exact correction using the frozen `signed_delet` source arithmetic and strict `>-5` / `<+5` predicates.  The algebraic values are only search seeds; final integer core bounds remain defined by the historical predicates.  Explicit historical Type-50 experiment/fallback modes continue to use the old binary-search helper.
+- Replace per-four-point reconstruction of four scalar integer offsets in the normal AVX2 far-wing loop with an AVX2 offset cursor initialized once per contiguous far-wing range and advanced by exact binary64 `+4`.  All offsets are small integers exactly representable in binary64, so the downstream `e00 + offset*deleused`, profile formula, scalar trapezoid recurrence, boundary decisions, and sequential `opakc += optp2` commits are unchanged.
+- Do not revive previously rejected `tmpop`/`tmpe` AVX2 preparation, range-update AVX2, schedule-cache, or `ncut==4` experiments.  Do not vectorize Gaussian/large-a Voigt evaluation with approximate math.
+- Treat `.38.2` as the final planned Type-50/spectral microkernel pass before `.39` retained-state/memory-bandwidth work unless host evidence exposes a new exact, architecture-level spectral bottleneck.  Promotion requires exact science/ownership/work, Type-50 profile time strictly below `.38.1`, total and fixed-spectral time within the `0.5%` nonregression band of `.38.1`, and peak RSS within the `0.5%` memory nonregression band.
+
 ## 0.6.82.38.1 - spectral reconstruction direct-index lookup hotfix - 2026-08-24
 
 - Revises rejected `0.6.82.38` after host qualification: the dense Type-50 schedule reduced RSS and profile-kernel time but regressed all-fixed spectral time by 24.716874 s versus accepted `0.6.82.37.5`.
