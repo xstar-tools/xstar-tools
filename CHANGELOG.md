@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.37.3 - deferred RRC emission-view replay - 2026-08-24
+
+- Preserve the accepted `.37.2` accepted-boundary memory compaction while removing its spectral replay regression.
+- Eliminate temporary reconstruction of the second/base bound-free emission curve for every deferred RRC record; derive emission threshold, phextrap policy, and exact base source-pair count directly from the retained evaluator shadow.
+- Reuse the retained opacity sample storage through an emission view that maps only the literal base-pair prefix used by `.37`, avoiding trailing opacity-only pair processing without duplicating sample vectors.
+- Add telemetry for temporary curve builds/bytes elided and opacity-vs-emission source-pair counts.
+- Keep source order, rate arithmetic, Type-49/53/88 formulas, `.37.2` compact ownership, `.36.13` sgbar compaction, and public ABIs frozen.
+
 ## 0.6.82.37.2 - accepted-boundary transient compaction - 2026-08-24
 
 - Records the host rejection of `0.6.82.37.1`: exact science/ownership/work remained ACCEPT and RSS fell by 74,203,136 bytes versus accepted `.37`, but total runtime regressed by 1.2069%, so `.37.1` is not promoted.

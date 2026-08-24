@@ -168,6 +168,11 @@ struct PerformanceFoundationV068231 {
     std::uint64_t deferred_rrc_duplicate_sample_bytes_elided_peak_v0682372 = 0u;
     std::uint64_t deferred_rrc_evaluated_inline_bytes_elided_peak_v0682372 = 0u;
     std::uint64_t deferred_rrc_bound_free_payload_bytes_elided_peak_v0682372 = 0u;
+    // 0.6.82.37.3 emission-view replay telemetry.
+    std::uint64_t deferred_rrc_temp_curve_builds_elided_peak_v0682373 = 0u;
+    std::uint64_t deferred_rrc_temp_curve_sample_bytes_elided_peak_v0682373 = 0u;
+    std::uint64_t deferred_rrc_opacity_source_pairs_peak_v0682373 = 0u;
+    std::uint64_t deferred_rrc_emission_source_pairs_peak_v0682373 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

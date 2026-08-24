@@ -11456,10 +11456,15 @@ double type59_curve_sigma_cm2(const NativeBoundFreeCurve& curve, double energy_e
     return std::isfinite(sigma) ? std::max(0.0, sigma) : 0.0;
 }
 
-struct BoundFreeEmissionConfigV0682372 {
+struct BoundFreeEmissionConfigV0682373 {
     double threshold_ev = 0.0;
     bool apply_source_phextrap = false;
     int phextrap_max_points = 0;
+    // 0.6.82.37.3: emission replay is a view over the retained opacity
+    // sample storage.  Type-49/53 calc_hmc/base shadows may own a shorter
+    // literal source prefix than the full calc_emis opacity view.  Retain the
+    // source pair count so replay does not process trailing opacity-only pairs.
+    int source_pair_count = 0;
 };
 
 struct Phint53GridMapV82Patch57 {
@@ -11543,18 +11548,28 @@ void phextrap_source(const NativeBoundFreeCurve& curve,
 // XSTAR-FUNCTION-COMMENT-END
 Phint53GridMapV82Patch57 phint53_grid_map(
     const NativeBoundFreeCurve& curve, const double* epi, int ncn2,
-    const BoundFreeEmissionConfigV0682372* replay_config_v0682372 = nullptr) {
+    const BoundFreeEmissionConfigV0682373* replay_config_v0682373 = nullptr) {
     Phint53GridMapV82Patch57 out;
-    const double threshold_ev_v0682372 = replay_config_v0682372
-        ? replay_config_v0682372->threshold_ev : curve.threshold_ev;
-    const bool apply_phextrap_v0682372 = replay_config_v0682372
-        ? replay_config_v0682372->apply_source_phextrap : curve.apply_source_phextrap;
-    const int phextrap_max_points_v0682372 = replay_config_v0682372
-        ? replay_config_v0682372->phextrap_max_points : curve.phextrap_max_points;
+    const double threshold_ev_v0682372 = replay_config_v0682373
+        ? replay_config_v0682373->threshold_ev : curve.threshold_ev;
+    const bool apply_phextrap_v0682372 = replay_config_v0682373
+        ? replay_config_v0682373->apply_source_phextrap : curve.apply_source_phextrap;
+    const int phextrap_max_points_v0682372 = replay_config_v0682373
+        ? replay_config_v0682373->phextrap_max_points : curve.phextrap_max_points;
     if (!epi || ncn2 < 3 || curve.offset_ryd.size() < 2 ||
         curve.offset_ryd.size() != curve.sigma_cm2.size() || !(threshold_ev_v0682372 > 0.0)) return out;
-    std::vector<double> energy_ryd = curve.offset_ryd;
-    std::vector<double> sigma_cm2 = curve.sigma_cm2;
+    const std::size_t available_pairs_v0682373 = curve.offset_ryd.size();
+    const std::size_t requested_pairs_v0682373 = replay_config_v0682373 &&
+            replay_config_v0682373->source_pair_count > 0
+        ? static_cast<std::size_t>(replay_config_v0682373->source_pair_count)
+        : available_pairs_v0682373;
+    const std::size_t source_pairs_v0682373 = std::min(
+        available_pairs_v0682373, requested_pairs_v0682373);
+    if (source_pairs_v0682373 < 2u) return out;
+    std::vector<double> energy_ryd(
+        curve.offset_ryd.begin(), curve.offset_ryd.begin() + static_cast<std::ptrdiff_t>(source_pairs_v0682373));
+    std::vector<double> sigma_cm2(
+        curve.sigma_cm2.begin(), curve.sigma_cm2.begin() + static_cast<std::ptrdiff_t>(source_pairs_v0682373));
     const std::size_t before = energy_ryd.size();
     if (apply_phextrap_v0682372) {
         NativeBoundFreeCurve replay_curve_v0682372;
@@ -11771,7 +11786,7 @@ struct DeferredRrcRecordV82Patch520 {
     bool source_rate42_type88 = false;
     double type88_rnist = 0.0;
     NativeBoundFreeCurve opacity_curve;
-    BoundFreeEmissionConfigV0682372 emission_config;
+    BoundFreeEmissionConfigV0682373 emission_config;
     Type53SourceShadow rrc_shadow;
     double lower_abundance = 0.0;
     double upper_abundance = 0.0;
@@ -11851,7 +11866,7 @@ Type88StaleOpakabV82Patch52010 source_type88_stale_opakab(
 // XSTAR-FUNCTION-COMMENT-END
 void accumulate_native_bound_free_rrc_from_abundances(
     const NativeBoundFreeCurve& curve,
-    const BoundFreeEmissionConfigV0682372& emission_config_v0682372,
+    const BoundFreeEmissionConfigV0682373& emission_config_v0682372,
     const Type53SourceShadow* rrc_shadow_v0682372,
     const ProgramRecord& record,
     double lower_abundance,
@@ -12846,6 +12861,12 @@ int run_impl(
     std::vector<DeferredRrcRecordV82Patch520> deferred_rrc_records_v82_patch520;
     std::uint64_t deferred_rrc_duplicate_sample_bytes_elided_v0682372 = 0u;
     std::uint64_t deferred_rrc_bound_free_payloads_elided_v0682372 = 0u;
+    // 0.6.82.37.3: count the temporary base-emission curve builds that are
+    // no longer materialized and the exact source-pair prefix used by replay.
+    std::uint64_t deferred_rrc_temp_curve_builds_elided_v0682373 = 0u;
+    std::uint64_t deferred_rrc_temp_curve_sample_bytes_elided_v0682373 = 0u;
+    std::uint64_t deferred_rrc_opacity_source_pairs_v0682373 = 0u;
+    std::uint64_t deferred_rrc_emission_source_pairs_v0682373 = 0u;
     // v82 patch 5.11: comparison-only producer attribution for the accepted
     // call-2/final sequence-59 opacity.  The environment path is owned by the
     // standalone diagnostic harness; production arrays and source order are
@@ -14756,6 +14777,12 @@ int run_impl(
                         deferred.emission_config.threshold_ev = deferred.opacity_curve.threshold_ev;
                         deferred.emission_config.apply_source_phextrap = deferred.opacity_curve.apply_source_phextrap;
                         deferred.emission_config.phextrap_max_points = deferred.opacity_curve.phextrap_max_points;
+                        deferred.emission_config.source_pair_count =
+                            static_cast<int>(deferred.opacity_curve.offset_ryd.size());
+                        deferred_rrc_opacity_source_pairs_v0682373 +=
+                            static_cast<std::uint64_t>(deferred.opacity_curve.offset_ryd.size());
+                        deferred_rrc_emission_source_pairs_v0682373 +=
+                            static_cast<std::uint64_t>(deferred.emission_config.source_pair_count);
                         deferred.rrc_shadow = type88_eval.bound_free_payload().type53_shadow;
                         deferred.lower_abundance = source_post_mapback_population_for_full_row(
                             active, buffers.populations, source_record.lower_row) * active.element.abundance;
@@ -14793,20 +14820,49 @@ int run_impl(
                 // remains the stable emission owner until 5.20.15 corrects the
                 // retained tauc workspace and re-enables literal pescv(tauc).
                 deferred.opacity_curve = std::move(curve);
-                NativeBoundFreeCurve emission_curve_v82_patch520149;
-                if (!native_bound_free_curve(ctx.program, source_record, evaluated[k],
-                        emission_curve_v82_patch520149, false)) {
-                    deferred.emission_config.threshold_ev = deferred.opacity_curve.threshold_ev;
-                    deferred.emission_config.apply_source_phextrap = deferred.opacity_curve.apply_source_phextrap;
-                    deferred.emission_config.phextrap_max_points = deferred.opacity_curve.phextrap_max_points;
-                } else {
-                    deferred.emission_config.threshold_ev = emission_curve_v82_patch520149.threshold_ev;
-                    deferred.emission_config.apply_source_phextrap = emission_curve_v82_patch520149.apply_source_phextrap;
-                    deferred.emission_config.phextrap_max_points = emission_curve_v82_patch520149.phextrap_max_points;
+                // 0.6.82.37.3: .37.2 stopped retaining the second emission
+                // curve but still rebuilt both of its vectors for every
+                // deferred record merely to read threshold/phextrap metadata.
+                // Derive the exact base-emission view from the already-captured
+                // evaluator shadow instead.  This preserves the .37 source
+                // pair count without allocating/copying a temporary curve.
+                deferred.emission_config.threshold_ev = deferred.opacity_curve.threshold_ev;
+                deferred.emission_config.apply_source_phextrap = deferred.opacity_curve.apply_source_phextrap;
+                deferred.emission_config.phextrap_max_points = deferred.opacity_curve.phextrap_max_points;
+                deferred.emission_config.source_pair_count =
+                    static_cast<int>(deferred.opacity_curve.offset_ryd.size());
+                if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
+                    source_record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
+                    const Type53SourceShadow& base_shadow_v0682373 =
+                        source_record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+                            ? evaluated[k].bound_free_payload().type49_shadow
+                            : evaluated[k].bound_free_payload().type53_shadow;
+                    const int base_pair_count_v0682373 = base_shadow_v0682373.phextrap_input_pair_count > 0
+                        ? base_shadow_v0682373.phextrap_input_pair_count
+                        : static_cast<int>(source_record.real_count / 2u);
+                    deferred.emission_config.threshold_ev = base_shadow_v0682373.threshold_ev > 0.0
+                        ? base_shadow_v0682373.threshold_ev : evaluated[k].line_energy_ev;
+                    deferred.emission_config.apply_source_phextrap =
+                        source_record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
+                        base_shadow_v0682373.phextrap_applied;
+                    deferred.emission_config.phextrap_max_points =
+                        base_shadow_v0682373.phextrap_max_points;
+                    if (base_pair_count_v0682373 >
+                        static_cast<int>(deferred.opacity_curve.offset_ryd.size())) {
+                        throw std::runtime_error(
+                            "0.6.82.37.3 base emission source-pair prefix exceeds retained opacity samples");
+                    }
+                    deferred.emission_config.source_pair_count = std::max(0, base_pair_count_v0682373);
                 }
-                deferred_rrc_duplicate_sample_bytes_elided_v0682372 +=
-                    static_cast<std::uint64_t>(emission_curve_v82_patch520149.offset_ryd.capacity() +
-                                               emission_curve_v82_patch520149.sigma_cm2.capacity()) * sizeof(double);
+                ++deferred_rrc_temp_curve_builds_elided_v0682373;
+                deferred_rrc_opacity_source_pairs_v0682373 +=
+                    static_cast<std::uint64_t>(deferred.opacity_curve.offset_ryd.size());
+                deferred_rrc_emission_source_pairs_v0682373 +=
+                    static_cast<std::uint64_t>(std::max(0, deferred.emission_config.source_pair_count));
+                const std::uint64_t emission_sample_bytes_v0682373 =
+                    2u * static_cast<std::uint64_t>(std::max(0, deferred.emission_config.source_pair_count)) * sizeof(double);
+                deferred_rrc_duplicate_sample_bytes_elided_v0682372 += emission_sample_bytes_v0682373;
+                deferred_rrc_temp_curve_sample_bytes_elided_v0682373 += emission_sample_bytes_v0682373;
                 if (evaluated[k].bound_free_payload_v06823087)
                     ++deferred_rrc_bound_free_payloads_elided_v0682372;
                 if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE)
@@ -15215,6 +15271,18 @@ int run_impl(
         perf_foundation_v068231.deferred_rrc_bound_free_payload_bytes_elided_peak_v0682372 = std::max(
             perf_foundation_v068231.deferred_rrc_bound_free_payload_bytes_elided_peak_v0682372,
             deferred_rrc_bound_free_payloads_elided_v0682372 * sizeof(BoundFreeEvaluatedPayloadV06823087));
+        perf_foundation_v068231.deferred_rrc_temp_curve_builds_elided_peak_v0682373 = std::max(
+            perf_foundation_v068231.deferred_rrc_temp_curve_builds_elided_peak_v0682373,
+            deferred_rrc_temp_curve_builds_elided_v0682373);
+        perf_foundation_v068231.deferred_rrc_temp_curve_sample_bytes_elided_peak_v0682373 = std::max(
+            perf_foundation_v068231.deferred_rrc_temp_curve_sample_bytes_elided_peak_v0682373,
+            deferred_rrc_temp_curve_sample_bytes_elided_v0682373);
+        perf_foundation_v068231.deferred_rrc_opacity_source_pairs_peak_v0682373 = std::max(
+            perf_foundation_v068231.deferred_rrc_opacity_source_pairs_peak_v0682373,
+            deferred_rrc_opacity_source_pairs_v0682373);
+        perf_foundation_v068231.deferred_rrc_emission_source_pairs_peak_v0682373 = std::max(
+            perf_foundation_v068231.deferred_rrc_emission_source_pairs_peak_v0682373,
+            deferred_rrc_emission_source_pairs_v0682373);
 
         ctx.scratch_v068231.preliminary_evaluated.clear();
         ctx.scratch_v068231.preliminary_records.clear();
