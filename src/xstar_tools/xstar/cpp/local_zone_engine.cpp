@@ -1267,30 +1267,54 @@ struct ElementProgram {
     std::vector<ElementRow> rows;
 };
 
-struct ProgramRecord {
-    std::int64_t source_position = 0;
-    std::int64_t record = 0;
-    int next_index = -1;
-    int element_index = 0;
-    int opcode = 0;
-    int data_type = 0;
-    int rate_type = 0;
-    int ion_index = 0;
-    int ion_stage = 0;
-    int lower_row = 0;
-    int upper_row = 0;
-    std::size_t real_offset = 0;
-    std::size_t real_count = 0;
-    std::size_t int_offset = 0;
-    std::size_t int_count = 0;
-    double density_scale = 1.0;
+// 0.6.82.37.5: final .37 execution-representation compaction.  Keep
+// canonical source/publication identity plus compact classification/endpoints
+// in the cold record, while payload addressing and evaluator scalars live in
+// a dense source-order hot header.  The evaluator therefore stops touching
+// the former 136-byte generic record for payload/scalar access.
+struct ProgramRecordHotV0682375 {
+    std::uint32_t real_offset = 0u;
+    std::uint32_t int_offset = 0u;
+    std::uint32_t line_index_one_based = 0u;
+    std::uint32_t continuum_index_one_based = 0u;
+    std::uint16_t real_count = 0u;
+    std::uint16_t int_count = 0u;
+    std::int16_t lower_row = 0;
+    std::int16_t upper_row = 0;
+    std::uint16_t ion_index = 0u;
+    std::uint8_t opcode = 0u;
+    std::uint8_t data_type = 0u;
+    std::uint8_t rate_type = 0u;
+    std::uint8_t ion_stage = 0u;
+    std::uint8_t matrix_enabled = 1u;
+    std::uint8_t reserved_v0682375 = 0u;
     double line_energy_ev = 0.0;
     double atomic_mass_amu = 1.0;
     double natural_width_ev = 0.0;
-    int line_index_one_based = 0;
-    int continuum_index_one_based = 0;
-    bool matrix_enabled = true;
 };
+static_assert(sizeof(ProgramRecordHotV0682375) == 56u,
+    "0.6.82.37.5 hot ProgramRecord header layout changed");
+
+struct ProgramRecord {
+    std::int64_t source_position = 0;
+    std::int64_t record = 0;
+    double density_scale = 1.0;
+    int next_index = -1;
+    int element_index = 0;
+    std::uint32_t line_index_one_based = 0u;
+    std::uint32_t continuum_index_one_based = 0u;
+    std::int16_t lower_row = 0;
+    std::int16_t upper_row = 0;
+    std::uint16_t ion_index = 0u;
+    std::uint8_t opcode = 0u;
+    std::uint8_t data_type = 0u;
+    std::uint8_t rate_type = 0u;
+    std::uint8_t ion_stage = 0u;
+    std::uint8_t matrix_enabled = 1u;
+    std::uint8_t reserved_v0682375 = 0u;
+};
+static_assert(sizeof(ProgramRecord) == 56u,
+    "0.6.82.37.5 cold ProgramRecord layout changed");
 
 struct LteIonTopology {
     int element_index = 0;
@@ -1319,6 +1343,7 @@ struct Program {
     std::size_t native_continuum_count = 0;
     std::vector<ElementProgram> elements;
     std::vector<ProgramRecord> records;
+    std::vector<ProgramRecordHotV0682375> hot_records_v0682375;
     std::vector<LteIonTopology> lte_ion_topology;
     std::vector<LteLevelData> lte_levels;
     std::vector<double> reals;
@@ -1329,6 +1354,67 @@ struct Program {
     std::vector<double> runtime_line_tau_in;
     std::vector<double> runtime_line_tau_out;
 };
+
+const ProgramRecordHotV0682375& execution_record_by_index_v0682375(
+    const Program& program, std::size_t index) {
+    if (index >= program.records.size() || index >= program.hot_records_v0682375.size()) {
+        throw std::runtime_error("0.6.82.37.5 hot/cold record index out of range");
+    }
+    return program.hot_records_v0682375[index];
+}
+
+const ProgramRecordHotV0682375& execution_record_v0682375(
+    const Program& program, const ProgramRecord& record) {
+    if (program.records.empty()) {
+        throw std::runtime_error("0.6.82.37.5 hot record lookup on empty program");
+    }
+    const std::ptrdiff_t index = &record - program.records.data();
+    if (index < 0 || static_cast<std::size_t>(index) >= program.records.size()) {
+        throw std::runtime_error("0.6.82.37.5 cold record is not owned by program");
+    }
+    return execution_record_by_index_v0682375(program, static_cast<std::size_t>(index));
+}
+
+ProgramRecordHotV0682375 make_execution_record_v0682375(
+    int opcode, int data_type, int rate_type, int ion_index, int ion_stage,
+    int lower_row, int upper_row, std::size_t real_offset, std::size_t real_count,
+    std::size_t int_offset, std::size_t int_count, double line_energy_ev,
+    double atomic_mass_amu, double natural_width_ev, int line_index_one_based,
+    int continuum_index_one_based, bool matrix_enabled) {
+    const auto fits_u8 = [](int value) { return value >= 0 && value <= 255; };
+    if (!fits_u8(opcode) || !fits_u8(data_type) || !fits_u8(rate_type) ||
+        ion_stage < 0 || ion_stage > 255 || ion_index < 0 || ion_index > 65535 ||
+        lower_row < std::numeric_limits<std::int16_t>::min() ||
+        lower_row > std::numeric_limits<std::int16_t>::max() ||
+        upper_row < std::numeric_limits<std::int16_t>::min() ||
+        upper_row > std::numeric_limits<std::int16_t>::max() ||
+        real_offset > std::numeric_limits<std::uint32_t>::max() ||
+        int_offset > std::numeric_limits<std::uint32_t>::max() ||
+        real_count > std::numeric_limits<std::uint16_t>::max() ||
+        int_count > std::numeric_limits<std::uint16_t>::max() ||
+        line_index_one_based < 0 || continuum_index_one_based < 0) {
+        throw std::runtime_error("0.6.82.37.5 record does not fit validated compact execution header");
+    }
+    ProgramRecordHotV0682375 hot{};
+    hot.real_offset = static_cast<std::uint32_t>(real_offset);
+    hot.int_offset = static_cast<std::uint32_t>(int_offset);
+    hot.line_index_one_based = static_cast<std::uint32_t>(line_index_one_based);
+    hot.continuum_index_one_based = static_cast<std::uint32_t>(continuum_index_one_based);
+    hot.real_count = static_cast<std::uint16_t>(real_count);
+    hot.int_count = static_cast<std::uint16_t>(int_count);
+    hot.lower_row = static_cast<std::int16_t>(lower_row);
+    hot.upper_row = static_cast<std::int16_t>(upper_row);
+    hot.ion_index = static_cast<std::uint16_t>(ion_index);
+    hot.opcode = static_cast<std::uint8_t>(opcode);
+    hot.data_type = static_cast<std::uint8_t>(data_type);
+    hot.rate_type = static_cast<std::uint8_t>(rate_type);
+    hot.ion_stage = static_cast<std::uint8_t>(ion_stage);
+    hot.matrix_enabled = matrix_enabled ? 1u : 0u;
+    hot.line_energy_ev = line_energy_ev;
+    hot.atomic_mass_amu = atomic_mass_amu;
+    hot.natural_width_ev = natural_width_ev;
+    return hot;
+}
 
 struct Type53RecordContext {
     bool valid = false;
@@ -1360,17 +1446,18 @@ struct Type53RecordContext {
 // energies on every bound-free evaluation.  This is the first rate-family
 // specific compiled execution slice; scientific rate arithmetic remains live.
 Type53RecordContext decode_bound_free_record_context_v0682371(
-    const Program& program, const ProgramRecord& record) {
+    const Program& program, const ProgramRecord& record,
+    const ProgramRecordHotV0682375& execution_v0682375) {
     Type53RecordContext context{};
     if (record.opcode != XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
         record.opcode != XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) return context;
-    if (record.real_offset + record.real_count > program.reals.size() ||
-        record.int_offset + record.int_count > program.ints.size()) {
+    if (execution_v0682375.real_offset + execution_v0682375.real_count > program.reals.size() ||
+        execution_v0682375.int_offset + execution_v0682375.int_count > program.ints.size()) {
         throw std::runtime_error("bound-free compiled context payload range invalid");
     }
-    const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
-    const std::int64_t* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
-    if (!r || record.real_count < 4) {
+    const double* r = execution_v0682375.real_count ? program.reals.data() + execution_v0682375.real_offset : nullptr;
+    const std::int64_t* ints = execution_v0682375.int_count ? program.ints.data() + execution_v0682375.int_offset : nullptr;
+    if (!r || execution_v0682375.real_count < 4) {
         throw std::runtime_error("bound-free compiled context payload requires energy/sigma pairs");
     }
 
@@ -1381,17 +1468,17 @@ Type53RecordContext decode_bound_free_record_context_v0682371(
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
         constexpr std::int64_t kType53LayoutMagicV3 = 221;
         constexpr std::int64_t kType53LayoutMagicV4 = 224;
-        const bool has_v4_magic = ints && record.int_count >= 4 && ints[3] == kType53LayoutMagicV4;
-        const bool has_v3_magic = ints && record.int_count >= 4 && ints[3] == kType53LayoutMagicV3;
+        const bool has_v4_magic = ints && execution_v0682375.int_count >= 4 && ints[3] == kType53LayoutMagicV4;
+        const bool has_v3_magic = ints && execution_v0682375.int_count >= 4 && ints[3] == kType53LayoutMagicV3;
         if (has_v4_magic) {
-            if (record.real_count < 4 + kContextRealsV4 ||
-                (record.real_count - kContextRealsV4) % 2 != 0) {
+            if (execution_v0682375.real_count < 4 + kContextRealsV4 ||
+                (execution_v0682375.real_count - kContextRealsV4) % 2 != 0) {
                 throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 payload is malformed");
             }
             if (ints[1] <= 0 || ints[2] < 0 || static_cast<std::uint64_t>(ints[2]) > 0x3fffffffu) {
                 throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 metadata is invalid");
             }
-            const std::size_t base = record.real_count - kContextRealsV4;
+            const std::size_t base = execution_v0682375.real_count - kContextRealsV4;
             context.valid = true; context.layout_version = 4; context.pair_real_count = base;
             context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
             context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
@@ -1409,12 +1496,12 @@ Type53RecordContext decode_bound_free_record_context_v0682371(
             context.persistent_leveltemp_candidates_valid = true;
             context.continuum_index_one_based = static_cast<int>(ints[0]);
         } else if (has_v3_magic) {
-            if (record.real_count < 4 + kContextRealsV3 ||
-                (record.real_count - kContextRealsV3) % 2 != 0)
+            if (execution_v0682375.real_count < 4 + kContextRealsV3 ||
+                (execution_v0682375.real_count - kContextRealsV3) % 2 != 0)
                 throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 payload is malformed");
             if (ints[1] <= 0 || ints[2] < 0 || ints[2] > 0x0fff)
                 throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 metadata is invalid");
-            const std::size_t base = record.real_count - kContextRealsV3;
+            const std::size_t base = execution_v0682375.real_count - kContextRealsV3;
             context.valid = true; context.layout_version = 3; context.pair_real_count = base;
             context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
             context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
@@ -1431,27 +1518,27 @@ Type53RecordContext decode_bound_free_record_context_v0682371(
             }
             context.persistent_leveltemp_candidates_valid = true;
             context.continuum_index_one_based = static_cast<int>(ints[0]);
-        } else if (record.real_count >= 4 + kContextRealsV2 &&
-                   (record.real_count - kContextRealsV2) % 2 == 0) {
-            const std::size_t base = record.real_count - kContextRealsV2;
+        } else if (execution_v0682375.real_count >= 4 + kContextRealsV2 &&
+                   (execution_v0682375.real_count - kContextRealsV2) % 2 == 0) {
+            const std::size_t base = execution_v0682375.real_count - kContextRealsV2;
             context.valid = true; context.layout_version = 2; context.pair_real_count = base;
             context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
             context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
             context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
             context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
             context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
-            context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-        } else if (record.real_count >= 4 + kContextRealsV1 &&
-                   (record.real_count - kContextRealsV1) % 2 == 0) {
-            const std::size_t base = record.real_count - kContextRealsV1;
+            context.continuum_index_one_based = (ints && execution_v0682375.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        } else if (execution_v0682375.real_count >= 4 + kContextRealsV1 &&
+                   (execution_v0682375.real_count - kContextRealsV1) % 2 == 0) {
+            const std::size_t base = execution_v0682375.real_count - kContextRealsV1;
             context.valid = true; context.layout_version = 1; context.pair_real_count = base;
             context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 0];
             context.bound_energy_ev = r[base + 1]; context.continuum_energy_ev = r[base + 2];
             context.bound_statistical_weight = r[base + 3]; context.continuum_statistical_weight = r[base + 4];
             context.destination_statistical_weight = r[base + 5]; context.leveltemp_destination_energy_ev = r[base + 6];
             context.excited_parent_statistical_weight = context.destination_statistical_weight;
-            context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-        } else if (record.real_count % 2 != 0) {
+            context.continuum_index_one_based = (ints && execution_v0682375.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        } else if (execution_v0682375.real_count % 2 != 0) {
             throw std::runtime_error("bound-free payload/context layout invalid");
         }
         return context;
@@ -1459,11 +1546,11 @@ Type53RecordContext decode_bound_free_record_context_v0682371(
 
     constexpr std::int64_t kType49LayoutMagicV3 = 222;
     constexpr std::int64_t kType49LayoutMagicV4 = 225;
-    const bool type49_v4 = ints && record.int_count >= 5 && ints[4] == kType49LayoutMagicV4;
-    const bool type49_v3 = ints && record.int_count >= 5 && ints[4] == kType49LayoutMagicV3;
-    if (type49_v4 && record.real_count >= 4 + kContextRealsV4 &&
-        (record.real_count - kContextRealsV4) % 2 == 0) {
-        const std::size_t base = record.real_count - kContextRealsV4;
+    const bool type49_v4 = ints && execution_v0682375.int_count >= 5 && ints[4] == kType49LayoutMagicV4;
+    const bool type49_v3 = ints && execution_v0682375.int_count >= 5 && ints[4] == kType49LayoutMagicV3;
+    if (type49_v4 && execution_v0682375.real_count >= 4 + kContextRealsV4 &&
+        (execution_v0682375.real_count - kContextRealsV4) % 2 == 0) {
+        const std::size_t base = execution_v0682375.real_count - kContextRealsV4;
         context.valid = true; context.layout_version = 4; context.pair_real_count = base;
         context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
         context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
@@ -1483,9 +1570,9 @@ Type53RecordContext decode_bound_free_record_context_v0682371(
                 throw std::runtime_error("Z1-Z30 Type-49 persistent leveltemp candidate non-finite");
         }
         context.persistent_leveltemp_candidates_valid = true;
-    } else if (type49_v3 && record.real_count >= 4 + kContextRealsV3 &&
-               (record.real_count - kContextRealsV3) % 2 == 0) {
-        const std::size_t base = record.real_count - kContextRealsV3;
+    } else if (type49_v3 && execution_v0682375.real_count >= 4 + kContextRealsV3 &&
+               (execution_v0682375.real_count - kContextRealsV3) % 2 == 0) {
+        const std::size_t base = execution_v0682375.real_count - kContextRealsV3;
         context.valid = true; context.layout_version = 3; context.pair_real_count = base;
         context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
         context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
@@ -1505,29 +1592,29 @@ Type53RecordContext decode_bound_free_record_context_v0682371(
                 throw std::runtime_error("Mg Type-49 persistent leveltemp candidate non-finite");
         }
         context.persistent_leveltemp_candidates_valid = true;
-    } else if (record.real_count >= 4 + kContextRealsV2 &&
-               (record.real_count - kContextRealsV2) % 2 == 0) {
-        const std::size_t base = record.real_count - kContextRealsV2;
+    } else if (execution_v0682375.real_count >= 4 + kContextRealsV2 &&
+               (execution_v0682375.real_count - kContextRealsV2) % 2 == 0) {
+        const std::size_t base = execution_v0682375.real_count - kContextRealsV2;
         context.valid = true; context.layout_version = 2; context.pair_real_count = base;
         context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 1];
         context.bound_energy_ev = r[base + 2]; context.continuum_energy_ev = r[base + 3];
         context.bound_statistical_weight = r[base + 4]; context.continuum_statistical_weight = r[base + 5];
         context.destination_statistical_weight = r[base + 6]; context.leveltemp_destination_energy_ev = r[base + 7];
         context.excited_parent_energy_ev = r[base + 8]; context.excited_parent_statistical_weight = r[base + 9];
-        context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-        context.phextrap_max_points = (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
-    } else if (record.real_count >= 4 + kContextRealsV1 &&
-               (record.real_count - kContextRealsV1) % 2 == 0) {
-        const std::size_t base = record.real_count - kContextRealsV1;
+        context.continuum_index_one_based = (ints && execution_v0682375.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        context.phextrap_max_points = (ints && execution_v0682375.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
+    } else if (execution_v0682375.real_count >= 4 + kContextRealsV1 &&
+               (execution_v0682375.real_count - kContextRealsV1) % 2 == 0) {
+        const std::size_t base = execution_v0682375.real_count - kContextRealsV1;
         context.valid = true; context.layout_version = 1; context.pair_real_count = base;
         context.base_threshold_ev = r[base + 0]; context.threshold_ev = r[base + 0];
         context.bound_energy_ev = r[base + 1]; context.continuum_energy_ev = r[base + 2];
         context.bound_statistical_weight = r[base + 3]; context.continuum_statistical_weight = r[base + 4];
         context.destination_statistical_weight = r[base + 5]; context.leveltemp_destination_energy_ev = r[base + 6];
         context.excited_parent_statistical_weight = context.destination_statistical_weight;
-        context.continuum_index_one_based = (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
-        context.phextrap_max_points = (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
-    } else if (record.real_count % 2 != 0) {
+        context.continuum_index_one_based = (ints && execution_v0682375.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+        context.phextrap_max_points = (ints && execution_v0682375.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
+    } else if (execution_v0682375.real_count % 2 != 0) {
         throw std::runtime_error("Type-49 bound-free payload/context layout invalid");
     }
     return context;
@@ -4652,29 +4739,49 @@ void load_records(const std::string& path, Program& program) {
         r.record = parse_number<std::int64_t>(c[1], "record");
         r.next_index = parse_number<int>(c[2], "next_index");
         r.element_index = parse_number<int>(c[3], "element_index");
-        r.opcode = parse_number<int>(c[4], "opcode");
-        r.data_type = parse_number<int>(c[5], "data_type");
-        r.rate_type = parse_number<int>(c[6], "rate_type");
-        r.ion_index = parse_number<int>(c[7], "ion_index");
-        r.ion_stage = parse_number<int>(c[8], "ion_stage");
-        r.lower_row = parse_number<int>(c[9], "lower_row");
-        r.upper_row = parse_number<int>(c[10], "upper_row");
-        r.real_offset = parse_number<std::size_t>(c[11], "real_offset");
-        r.real_count = parse_number<std::size_t>(c[12], "real_count");
-        r.int_offset = parse_number<std::size_t>(c[13], "int_offset");
-        r.int_count = parse_number<std::size_t>(c[14], "int_count");
+        const int opcode = parse_number<int>(c[4], "opcode");
+        const int data_type = parse_number<int>(c[5], "data_type");
+        const int rate_type = parse_number<int>(c[6], "rate_type");
+        const int ion_index = parse_number<int>(c[7], "ion_index");
+        const int ion_stage = parse_number<int>(c[8], "ion_stage");
+        const int lower_row = parse_number<int>(c[9], "lower_row");
+        const int upper_row = parse_number<int>(c[10], "upper_row");
+        const std::size_t real_offset = parse_number<std::size_t>(c[11], "real_offset");
+        const std::size_t real_count = parse_number<std::size_t>(c[12], "real_count");
+        const std::size_t int_offset = parse_number<std::size_t>(c[13], "int_offset");
+        const std::size_t int_count = parse_number<std::size_t>(c[14], "int_count");
         r.density_scale = parse_number<double>(c[15], "density_scale");
-        r.line_energy_ev = parse_number<double>(c[16], "line_energy_ev");
-        r.atomic_mass_amu = parse_number<double>(c[17], "atomic_mass_amu");
+        const double line_energy_ev = parse_number<double>(c[16], "line_energy_ev");
+        const double atomic_mass_amu = parse_number<double>(c[17], "atomic_mass_amu");
+        double natural_width_ev = 0.0;
+        int line_index_one_based = 0;
+        int continuum_index_one_based = 0;
+        bool matrix_enabled = true;
         if (c.size() == 21) {
-            r.line_index_one_based = parse_number<int>(c[18], "line_index");
-            r.continuum_index_one_based = parse_number<int>(c[19], "continuum_index");
-            r.matrix_enabled = parse_number<int>(c[20], "matrix_enabled") != 0;
+            line_index_one_based = parse_number<int>(c[18], "line_index");
+            continuum_index_one_based = parse_number<int>(c[19], "continuum_index");
+            matrix_enabled = parse_number<int>(c[20], "matrix_enabled") != 0;
         } else if (c.size() == 19) {
-            r.matrix_enabled = parse_number<int>(c[18], "matrix_enabled") != 0;
+            matrix_enabled = parse_number<int>(c[18], "matrix_enabled") != 0;
         }
         if (r.element_index < 0 || r.element_index >= static_cast<int>(program.elements.size())) throw std::runtime_error("record element_index out of range");
+        const auto hot_v0682375 = make_execution_record_v0682375(
+            opcode, data_type, rate_type, ion_index, ion_stage, lower_row, upper_row,
+            real_offset, real_count, int_offset, int_count, line_energy_ev,
+            atomic_mass_amu, natural_width_ev, line_index_one_based,
+            continuum_index_one_based, matrix_enabled);
+        r.opcode = hot_v0682375.opcode;
+        r.data_type = hot_v0682375.data_type;
+        r.rate_type = hot_v0682375.rate_type;
+        r.ion_index = hot_v0682375.ion_index;
+        r.ion_stage = hot_v0682375.ion_stage;
+        r.lower_row = hot_v0682375.lower_row;
+        r.upper_row = hot_v0682375.upper_row;
+        r.line_index_one_based = hot_v0682375.line_index_one_based;
+        r.continuum_index_one_based = hot_v0682375.continuum_index_one_based;
+        r.matrix_enabled = hot_v0682375.matrix_enabled;
         program.records.push_back(r);
+        program.hot_records_v0682375.push_back(hot_v0682375);
     }
 }
 
@@ -4774,17 +4881,30 @@ void validate_program(Program& p) {
             }
         }
     }
+    if (p.hot_records_v0682375.size() != p.records.size()) {
+        throw std::runtime_error("0.6.82.37.5 hot/cold record inventory mismatch");
+    }
     std::int64_t previous_source_position = 0;
     for (std::size_t k = 0; k < p.records.size(); ++k) {
         const auto& r = p.records[k];
+        const auto& hot_v0682375 = p.hot_records_v0682375[k];
         if (r.source_position <= 0 || r.source_position <= previous_source_position) {
             throw std::runtime_error("record source_position must be positive and strictly increasing");
         }
         previous_source_position = r.source_position;
         if (r.element_index < 0 || r.element_index >= static_cast<int>(p.elements.size())) throw std::runtime_error("record element_index out of range");
         if (r.next_index < -1 || r.next_index >= static_cast<int>(p.records.size())) throw std::runtime_error("record next_index out of range");
-        if (r.real_offset + r.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
-        if (r.int_offset + r.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
+        if (static_cast<std::size_t>(hot_v0682375.real_offset) + hot_v0682375.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
+        if (static_cast<std::size_t>(hot_v0682375.int_offset) + hot_v0682375.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
+        if (r.opcode != hot_v0682375.opcode || r.data_type != hot_v0682375.data_type ||
+            r.rate_type != hot_v0682375.rate_type || r.ion_index != hot_v0682375.ion_index ||
+            r.ion_stage != hot_v0682375.ion_stage || r.lower_row != hot_v0682375.lower_row ||
+            r.upper_row != hot_v0682375.upper_row ||
+            r.line_index_one_based != hot_v0682375.line_index_one_based ||
+            r.continuum_index_one_based != hot_v0682375.continuum_index_one_based ||
+            r.matrix_enabled != hot_v0682375.matrix_enabled) {
+            throw std::runtime_error("0.6.82.37.5 hot/cold classification mismatch");
+        }
         if (r.matrix_enabled) {
             // Source calc_hmc_element may retain raw idest endpoints above the
             // compact element dimension.  msolvelucy.f90 applies
@@ -4893,6 +5013,7 @@ Program load_program_bundle(const xstar_fixed_program_bundle_v1& bundle) {
         p.elements[static_cast<std::size_t>(src.element_index)].rows.push_back(row);
     }
     p.records.reserve(bundle.record_count);
+    p.hot_records_v0682375.reserve(bundle.record_count);
     for (std::size_t i = 0; i < bundle.record_count; ++i) {
         const auto& src = bundle.records[i];
         ProgramRecord r;
@@ -4900,25 +5021,25 @@ Program load_program_bundle(const xstar_fixed_program_bundle_v1& bundle) {
         r.record = src.record;
         r.next_index = src.next_index;
         r.element_index = src.element_index;
-        r.opcode = src.opcode;
-        r.data_type = src.data_type;
-        r.rate_type = src.rate_type;
-        r.ion_index = src.ion_index;
-        r.ion_stage = src.ion_stage;
-        r.lower_row = src.lower_row;
-        r.upper_row = src.upper_row;
-        r.real_offset = src.real_offset;
-        r.real_count = src.real_count;
-        r.int_offset = src.int_offset;
-        r.int_count = src.int_count;
         r.density_scale = src.density_scale;
-        r.line_energy_ev = src.line_energy_ev;
-        r.atomic_mass_amu = src.atomic_mass_amu;
-        r.natural_width_ev = src.natural_width_ev;
-        r.line_index_one_based = src.line_index_one_based;
-        r.continuum_index_one_based = src.continuum_index_one_based;
-        r.matrix_enabled = src.matrix_enabled != 0;
+        const auto hot_v0682375 = make_execution_record_v0682375(
+            src.opcode, src.data_type, src.rate_type, src.ion_index, src.ion_stage,
+            src.lower_row, src.upper_row, src.real_offset, src.real_count,
+            src.int_offset, src.int_count, src.line_energy_ev, src.atomic_mass_amu,
+            src.natural_width_ev, src.line_index_one_based,
+            src.continuum_index_one_based, src.matrix_enabled != 0);
+        r.opcode = hot_v0682375.opcode;
+        r.data_type = hot_v0682375.data_type;
+        r.rate_type = hot_v0682375.rate_type;
+        r.ion_index = hot_v0682375.ion_index;
+        r.ion_stage = hot_v0682375.ion_stage;
+        r.lower_row = hot_v0682375.lower_row;
+        r.upper_row = hot_v0682375.upper_row;
+        r.line_index_one_based = hot_v0682375.line_index_one_based;
+        r.continuum_index_one_based = hot_v0682375.continuum_index_one_based;
+        r.matrix_enabled = hot_v0682375.matrix_enabled;
         p.records.push_back(r);
+        p.hot_records_v0682375.push_back(hot_v0682375);
     }
     validate_program(p);
     return p;
@@ -6363,7 +6484,7 @@ Type99PhintResult evaluate_type99_phint53hunt(
 // Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
 Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_context(
-    const ProgramRecord& record,
+    const ProgramRecordHotV0682375& record,
     const double* payload,
     const std::int64_t* ints,
     std::size_t core_real_count
@@ -6474,7 +6595,7 @@ Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_con
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
 // XSTAR-FUNCTION-COMMENT-END
 bool evaluate_type99_source_faithful(
-    const ProgramRecord& record,
+    const ProgramRecordHotV0682375& record,
     const double* payload,
     const std::int64_t* ints,
     const ElementRow& lower,
@@ -7461,6 +7582,7 @@ const Type53RecordContext* predecoded_bound_free_context_v0682371(
 const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
     const Program& program,
     const ProgramRecord& record,
+    const ProgramRecordHotV0682375& execution_v0682375,
     const xstar_fixed_state_input_v1& eval_input,
     double threshold_ev,
     bool type49_semantics,
@@ -7500,8 +7622,8 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
         const std::uint64_t old_dense_values_v06823613 = geometry.valid
             ? static_cast<std::uint64_t>(geometry.source_bin_count) : 0u;
         geometry = prepare_bound_free_geometry(
-            program.reals.data() + record.real_offset,
-            record_context && record_context->valid ? record_context->pair_real_count : record.real_count,
+            program.reals.data() + execution_v0682375.real_offset,
+            record_context && record_context->valid ? record_context->pair_real_count : execution_v0682375.real_count,
             energy, count, threshold_ev, type49_semantics, phextrap_pairs, record_context);
         if (!geometry.valid) return nullptr;
         const std::uint64_t new_capacity_bytes_v06823613 =
@@ -7563,19 +7685,22 @@ EvaluatedRecord evaluate_record(
     const Program& program,
     const ElementProgram& element,
     const ProgramRecord& record,
+    const ProgramRecordHotV0682375& execution_v0682375,
     const xstar_fixed_state_input_v1& input,
     const RateEvaluationContextV064894& rate_context
 ) {
-    const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
-    const auto* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
+    const std::int64_t source_position_v0682375 = record.source_position;
+    const std::int64_t record_id_v0682375 = record.record;
+    const double* r = execution_v0682375.real_count ? program.reals.data() + execution_v0682375.real_offset : nullptr;
+    const auto* ints = execution_v0682375.int_count ? program.ints.data() + execution_v0682375.int_offset : nullptr;
     const ElementRow scalar_dummy{};
     // Preserve source raw idest values on the record, but evaluate any compact
     // row fallback through the same terminal-row alias used by msolvelucy.
-    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
-    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
-    const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
-    const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
-    const double delta_ev = record.line_energy_ev > 0.0 ? record.line_energy_ev : (record.matrix_enabled ? std::abs(upper.energy_ev - lower.energy_ev) : 0.0);
+    const int matrix_lower_row = execution_v0682375.matrix_enabled ? std::min(static_cast<int>(execution_v0682375.lower_row), element.n_rows) : 0;
+    const int matrix_upper_row = execution_v0682375.matrix_enabled ? std::min(static_cast<int>(execution_v0682375.upper_row), element.n_rows) : 0;
+    const ElementRow& lower = execution_v0682375.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
+    const ElementRow& upper = execution_v0682375.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
+    const double delta_ev = execution_v0682375.line_energy_ev > 0.0 ? execution_v0682375.line_energy_ev : (execution_v0682375.matrix_enabled ? std::abs(upper.energy_ev - lower.energy_ev) : 0.0);
     const double ne = rate_context.ne;
     const double t4 = rate_context.t4;
     const double sqrt_t4 = rate_context.sqrt_t4;
@@ -7590,85 +7715,85 @@ EvaluatedRecord evaluate_record(
 
     EvaluatedRecord out;
     auto& c = out.contribution;
-    c.source_position = record.source_position;
-    c.record = record.record;
-    c.data_type = record.data_type;
-    c.rate_type = record.rate_type;
-    c.ion_index = record.ion_index;
-    c.ion_stage = record.ion_stage;
-    c.lower_row = record.lower_row;
-    c.upper_row = record.upper_row;
+    c.source_position = source_position_v0682375;
+    c.record = record_id_v0682375;
+    c.data_type = execution_v0682375.data_type;
+    c.rate_type = execution_v0682375.rate_type;
+    c.ion_index = execution_v0682375.ion_index;
+    c.ion_stage = execution_v0682375.ion_stage;
+    c.lower_row = execution_v0682375.lower_row;
+    c.upper_row = execution_v0682375.upper_row;
     // Source calc_hmc_ion applies xpx at the common matrix insertion boundary
     // for every cj/cj2 channel.  Keep population rates unscaled.
-    c.density_scale = record.matrix_enabled ? input.hydrogen_density_cm3 : 1.0;
-    out.matrix_enabled = record.matrix_enabled;
+    c.density_scale = execution_v0682375.matrix_enabled ? input.hydrogen_density_cm3 : 1.0;
+    out.matrix_enabled = execution_v0682375.matrix_enabled;
     // Diagnostics must expose the serialized program metadata for every
     // opcode, not only spectral Type-50 rows.  The v21.10 Type-57 regression
-    // qualifies the literal source threshold carried by record.line_energy_ev.
-    out.line_energy_ev = record.line_energy_ev;
-    out.atomic_mass_amu = record.atomic_mass_amu;
-    out.natural_width_ev = record.natural_width_ev;
+    // qualifies the literal source threshold carried by execution_v0682375.line_energy_ev.
+    out.line_energy_ev = execution_v0682375.line_energy_ev;
+    out.atomic_mass_amu = execution_v0682375.atomic_mass_amu;
+    out.natural_width_ev = execution_v0682375.natural_width_ev;
 
-    switch (record.opcode) {
+    switch (execution_v0682375.opcode) {
         case XSTAR_FIXED_OPCODE_SIMPLE_UCALC: {
-            if (!r || record.real_count < 1) throw std::runtime_error("simple ucalc payload too short");
-            if (record.data_type == 1) {
-                const double eta = record.real_count > 1 ? r[1] : 0.0;
+            if (!r || execution_v0682375.real_count < 1) throw std::runtime_error("simple ucalc payload too short");
+            if (execution_v0682375.data_type == 1) {
+                const double eta = execution_v0682375.real_count > 1 ? r[1] : 0.0;
                 c.ans1 = r[0] / std::pow(std::max(t4, 1.0e-300), eta) * ne;
-            } else if (record.data_type == 2) {
-                if (record.real_count < 4) throw std::runtime_error("type2 payload too short");
+            } else if (execution_v0682375.data_type == 2) {
+                if (execution_v0682375.real_count < 4) throw std::runtime_error("type2 payload too short");
                 if (t4 <= 5.0) {
                     const double rate = r[0] * std::pow(t4, r[1]) * std::max(0.0, 1.0 + r[2] * limited_exp(r[3] * t4)) * 1.0e-9;
-                    if (record.rate_type == 5) c.ans2 = rate * input.neutral_h_density_cm3;
+                    if (execution_v0682375.rate_type == 5) c.ans2 = rate * input.neutral_h_density_cm3;
                     else c.ans1 = rate * input.neutral_h_density_cm3;
                 }
-            } else if (record.data_type == 3) {
-                if (record.real_count < 2) throw std::runtime_error("type3 payload too short");
+            } else if (execution_v0682375.data_type == 3) {
+                if (execution_v0682375.real_count < 2) throw std::runtime_error("type3 payload too short");
                 c.ans1 = r[0] * limited_exp(-r[1] / std::max(kt_ev, 1.0e-300)) / sqrt_t4 * ne;
-            } else if (record.data_type == 7) {
-                if (record.real_count < 4) throw std::runtime_error("type7 payload too short");
+            } else if (execution_v0682375.data_type == 7) {
+                if (execution_v0682375.real_count < 4) throw std::runtime_error("type7 payload too short");
                 const double rate = r[0] * 1.0e-6 * limited_exp(-r[2] / t4) * (1.0 + r[1] * limited_exp(-r[3] / t4)) / (t4 * sqrt_t4);
                 c.ans1 = rate * ne;
-            } else if (record.data_type == 8) {
-                if (record.real_count < 8) throw std::runtime_error("type8 payload too short");
+            } else if (execution_v0682375.data_type == 8) {
+                if (execution_v0682375.real_count < 8) throw std::runtime_error("type8 payload too short");
                 double rate = 0.0;
                 for (int k = 0; k < 4; ++k) rate += r[k] * limited_exp(-r[k + 4] / std::max(kt_ev, 1.0e-300));
                 c.ans1 = rate * 1.0e-6 * std::pow(t4, -1.5) * ne;
-            } else if (record.data_type == 20) {
-                if (record.real_count < 5) throw std::runtime_error("type20 payload too short");
+            } else if (execution_v0682375.data_type == 20) {
+                if (execution_v0682375.real_count < 5) throw std::runtime_error("type20 payload too short");
                 const double rate = r[0] * std::pow(t4, r[1]) * (1.0 + r[2] * limited_exp(r[3] * t4)) * limited_exp(-r[4] / t4) * 1.0e-9;
                 c.ans1 = rate * input.ionized_h_density_cm3;
             } else {
-                throw std::runtime_error("unsupported SIMPLE_UCALC data_type " + std::to_string(record.data_type));
+                throw std::runtime_error("unsupported SIMPLE_UCALC data_type " + std::to_string(execution_v0682375.data_type));
             }
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE2_CHARGE_TRANSFER: {
-            if (!r||record.real_count<4) throw std::runtime_error("type2 payload too short");
+            if (!r||execution_v0682375.real_count<4) throw std::runtime_error("type2 payload too short");
             if (t4<=5.0) {
                 const double rate=r[0]*std::pow(t4,r[1])*std::max(0.0,1.0+r[2]*limited_exp(r[3]*t4))*1.0e-9;
-                if (record.rate_type==5) c.ans2=rate*input.neutral_h_density_cm3;
+                if (execution_v0682375.rate_type==5) c.ans2=rate*input.neutral_h_density_cm3;
                 else c.ans1=rate*input.neutral_h_density_cm3;
             }
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE7_DIELECTRONIC_RECOMB: {
-            if (!r || record.real_count < 4) throw std::runtime_error("type7 payload too short");
+            if (!r || execution_v0682375.real_count < 4) throw std::runtime_error("type7 payload too short");
             const double rate = r[0] * 1.0e-6 * limited_exp(-r[2] / t4) *
                 (1.0 + r[1] * limited_exp(-r[3] / t4)) / (t4 * sqrt_t4);
             c.ans1 = rate * ne;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE9_CHARGE_TRANSFER: {
-            if (!r||record.real_count<4||!ints||record.int_count<1) throw std::runtime_error("type9 payload too short");
+            if (!r||execution_v0682375.real_count<4||!ints||execution_v0682375.int_count<1) throw std::runtime_error("type9 payload too short");
             const double rate=r[0]*std::pow(std::min(t4,1000.0),r[1])*(1.0+r[2]*limited_exp(r[3]*t4))*1.0e-9;
             c.ans2=rate*input.neutral_h_density_cm3*0.1;
             if (ints[0]!=0) c.ans2/=6.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE10_CHARGE_TRANSFER: {
-            if (!r || record.real_count < 4) throw std::runtime_error("type10 payload too short");
-            const double eex = record.real_count >= 7 ? r[6] : 0.0;
+            if (!r || execution_v0682375.real_count < 4) throw std::runtime_error("type10 payload too short");
+            const double eex = execution_v0682375.real_count >= 7 ? r[6] : 0.0;
             // v0.6.48.11.3: ucalc.f90 Type 10 calls expo() for both
             // exponentials.  expo.f90 clamps its argument to [-60,60].
             const double rate = r[0] * std::pow(t4, r[1]) *
@@ -7677,7 +7802,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE30_THREE_BODY_RECOMB: {
-            if (!ints||record.int_count<1) throw std::runtime_error("type30 payload too short");
+            if (!ints||execution_v0682375.int_count<1) throw std::runtime_error("type30 payload too short");
             const double t6=t4/100.0;
             const double nmx=static_cast<double>(ints[0]);
             const double yy=nmx*nmx/std::max(6.34*t6,1.0e-300);
@@ -7690,10 +7815,10 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE38_RR_FIT: {
-            if (!r||record.real_count<4) throw std::runtime_error("type38 payload too short");
+            if (!r||execution_v0682375.real_count<4) throw std::runtime_error("type38 payload too short");
             double b=r[1];
             const double t0=r[2]/1.0e4, t1=r[3]/1.0e4;
-            if (record.real_count>5) b+=r[4]*limited_exp(-(r[5]/1.0e4)/t4);
+            if (execution_v0682375.real_count>5) b+=r[4]*limited_exp(-(r[5]/1.0e4)/t4);
             const double s0=std::sqrt(t4/std::max(t0,1.0e-300));
             const double s1=std::sqrt(t4/std::max(t1,1.0e-300));
             const double rate=r[0]/(1.0e-48+s0*std::pow(1.0+s0,1.0-b)*std::pow(1.0+s1,1.0+b));
@@ -7701,26 +7826,26 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE39_DR_FIT: {
-            if (!r||record.real_count<2||record.real_count%2!=0) throw std::runtime_error("type39 payload invalid");
-            const std::size_t n=record.real_count/2;
+            if (!r||execution_v0682375.real_count<2||execution_v0682375.real_count%2!=0) throw std::runtime_error("type39 payload invalid");
+            const std::size_t n=execution_v0682375.real_count/2;
             double rate=0.0;
             for (std::size_t k=0;k<n;++k) rate+=r[k]*limited_exp(-(r[k+n]/1.0e4)/t4);
             c.ans1=rate*1.0e-6*std::pow(t4,-1.5)*ne;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE: {
-            if (!r || record.real_count < 4) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
+            if (!r || execution_v0682375.real_count < 4) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
             if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
             Type53RecordContext fallback_record_context_v0682371{};
             const Type53RecordContext* compiled_record_context_v0682371 =
                 predecoded_bound_free_context_v0682371(program, record, rate_context);
             if (!compiled_record_context_v0682371) {
                 fallback_record_context_v0682371 =
-                    decode_bound_free_record_context_v0682371(program, record);
+                    decode_bound_free_record_context_v0682371(program, record, execution_v0682375);
                 compiled_record_context_v0682371 = &fallback_record_context_v0682371;
             }
             const Type53RecordContext& record_context = *compiled_record_context_v0682371;
-            const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : record.real_count;
+            const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : execution_v0682375.real_count;
             const std::size_t n = pair_real_count / 2;
             const double threshold = std::max(record_context.valid ? record_context.threshold_ev : delta_ev, 1.0e-12);
             double photo = 0.0;
@@ -7751,7 +7876,7 @@ EvaluatedRecord evaluate_record(
                 environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") ||
                 environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION"));
             const auto* row46_contract = use_row46_contract
-                ? find_type53_row46_dsec_runtime_oracle_entry(record.source_position, record.record)
+                ? find_type53_row46_dsec_runtime_oracle_entry(source_position_v0682375, record_id_v0682375)
                 : nullptr;
             double contract_ptmp1 = 0.5;
             double contract_ptmp2 = 0.5;
@@ -7931,8 +8056,8 @@ EvaluatedRecord evaluate_record(
                     2.0 * pescv_source(contract_tau_in + contract_tau_out) * contract_covering;
             }
             if (row46_contract) {
-                if (element.element_z != 2 || record.data_type != 53 || record.rate_type != 7 ||
-                    record.lower_row != row46_contract->lower_row || record.upper_row != row46_contract->upper_row) {
+                if (element.element_z != 2 || execution_v0682375.data_type != 53 || execution_v0682375.rate_type != 7 ||
+                    execution_v0682375.lower_row != row46_contract->lower_row || execution_v0682375.upper_row != row46_contract->upper_row) {
                     throw std::runtime_error("type53 row46 coupled replacement identity mismatch");
                 }
                 captured_state_anchor =
@@ -7979,13 +8104,13 @@ EvaluatedRecord evaluate_record(
             out.bound_free_payload().bound_free_row46_contract_v064895 = row46_contract != nullptr;
             const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
                 prepared_bound_free_geometry(
-                    program, record, calc_hmc_input, source_threshold, false, false,
+                    program, record, execution_v0682375, calc_hmc_input, source_threshold, false, false,
                     record_context.valid ? &record_context : nullptr, false, rate_context);
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
-                record_context.valid ? &record_context : nullptr, record.record, false, false,
+                record_context.valid ? &record_context : nullptr, record_id_v0682375, false, false,
                 source_shadow, &out.bound_free_payload().type53_shadow_v0682374(), prepared_reduced_v064895);
             if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
                 ++rate_context.bound_free_perf->reduced_dynamic_integrals;
@@ -8013,7 +8138,7 @@ EvaluatedRecord evaluate_record(
                     const bool calc_emisab_exact = evaluate_type53_source_integral(
                         r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
                         contract_ptmp1 + contract_ptmp2, row46_contract,
-                        record_context.valid ? &record_context : nullptr, record.record, false, false,
+                        record_context.valid ? &record_context : nullptr, record_id_v0682375, false, false,
                         calc_emisab_contribution, &out.bound_free_payload().type53_calc_emisab_shadow_v0682374());
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_reduced_duplicate_integrals;
@@ -8034,7 +8159,7 @@ EvaluatedRecord evaluate_record(
                     const bool calc_emis_exact = evaluate_type53_source_integral(
                         r, pair_real_count, lower, upper, calc_emis_input, source_threshold,
                         contract_ptmp1 + contract_ptmp2, row46_contract,
-                        record_context.valid ? &record_context : nullptr, record.record, false, false,
+                        record_context.valid ? &record_context : nullptr, record_id_v0682375, false, false,
                         calc_emis_contribution, &out.bound_free_payload().type53_calc_emis_shadow_v0682374());
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_full_eager_integrals;
@@ -8121,7 +8246,7 @@ EvaluatedRecord evaluate_record(
                     out.bound_free_payload().type53_shadow_v0682374().continuum_tau_count = input.continuum_tau_count;
                 }
                 const bool helium_source_faithful = !production_source_faithful_type53 &&
-                    element.element_z == 2 && (record_context.valid || record.ion_stage == 2);
+                    element.element_z == 2 && (record_context.valid || execution_v0682375.ion_stage == 2);
                 if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error(
                         "Mg Type-53 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -8175,8 +8300,8 @@ EvaluatedRecord evaluate_record(
                 }
                 if (carbon_source_faithful) {
                     write_c_type53_promotion_audit(
-                        record.source_position, record.record, record.data_type, record.rate_type,
-                        record.ion_stage, record.lower_row, record.upper_row,
+                        source_position_v0682375, record_id_v0682375, execution_v0682375.data_type, execution_v0682375.rate_type,
+                        execution_v0682375.ion_stage, execution_v0682375.lower_row, execution_v0682375.upper_row,
                         legacy_type53_ans, source_shadow, c, source_exact, source_exact);
                 }
             }
@@ -8190,7 +8315,7 @@ EvaluatedRecord evaluate_record(
             out.continuum_index_one_based = record_context.valid && record_context.continuum_index_one_based > 0
                 ? record_context.continuum_index_one_based : 0;
             out.line_energy_ev = threshold;
-            out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
+            out.atomic_mass_amu = execution_v0682375.atomic_mass_amu > 0.0 ? execution_v0682375.atomic_mass_amu : 1.0;
             // opakab is the source photoabsorption cross section here.  The
             // spectral commit applies the live lower-level population,
             // elemental abundance, and hydrogen density exactly once.
@@ -8200,17 +8325,17 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
-            if (!r || record.real_count < 4) throw std::runtime_error("Type-49 bound-free payload requires energy/sigma pairs");
+            if (!r || execution_v0682375.real_count < 4) throw std::runtime_error("Type-49 bound-free payload requires energy/sigma pairs");
             Type53RecordContext fallback_record_context_v0682371{};
             const Type53RecordContext* compiled_record_context_v0682371 =
                 predecoded_bound_free_context_v0682371(program, record, rate_context);
             if (!compiled_record_context_v0682371) {
                 fallback_record_context_v0682371 =
-                    decode_bound_free_record_context_v0682371(program, record);
+                    decode_bound_free_record_context_v0682371(program, record, execution_v0682375);
                 compiled_record_context_v0682371 = &fallback_record_context_v0682371;
             }
             const Type53RecordContext& record_context = *compiled_record_context_v0682371;
-            const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : record.real_count;
+            const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : execution_v0682375.real_count;
             const std::size_t n = pair_real_count / 2;
             const double source_threshold = record_context.valid ? record_context.threshold_ev : delta_ev;
             const double threshold = std::max(source_threshold, 1.0e-12);
@@ -8318,11 +8443,11 @@ EvaluatedRecord evaluate_record(
                 out.bound_free_payload().bound_free_row46_contract_v064895 = false;
                 const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
                     prepared_bound_free_geometry(
-                        program, record, calc_hmc_input, source_threshold, true, true,
+                        program, record, execution_v0682375, calc_hmc_input, source_threshold, true, true,
                         record_context.valid ? &record_context : nullptr, false, rate_context);
                 source_exact = evaluate_type53_source_integral(
                     r, pair_real_count, lower, upper, calc_hmc_input, source_threshold, ptmp1 + ptmp2,
-                    nullptr, record_context.valid ? &record_context : nullptr, record.record,
+                    nullptr, record_context.valid ? &record_context : nullptr, record_id_v0682375,
                     true, true, source_shadow, &out.bound_free_payload().type49_shadow_v0682374(), prepared_reduced_v064895);
                 if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
                     ++rate_context.bound_free_perf->reduced_dynamic_integrals;
@@ -8349,7 +8474,7 @@ EvaluatedRecord evaluate_record(
                     const bool calc_emisab_exact = evaluate_type53_source_integral(
                         r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
                         ptmp1 + ptmp2, nullptr, record_context.valid ? &record_context : nullptr,
-                        record.record, true, true, calc_emisab_contribution,
+                        record_id_v0682375, true, true, calc_emisab_contribution,
                         &out.bound_free_payload().type49_calc_emisab_shadow_v0682374());
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_reduced_duplicate_integrals;
@@ -8372,7 +8497,7 @@ EvaluatedRecord evaluate_record(
                     calc_emis_input.dsec_radiation_bin_count = 0;
                     const bool calc_emis_exact = evaluate_type53_source_integral(
                         r, pair_real_count, lower, upper, calc_emis_input, source_threshold, ptmp1 + ptmp2,
-                        nullptr, calc_emis_record_context.valid ? &calc_emis_record_context : nullptr, record.record,
+                        nullptr, calc_emis_record_context.valid ? &calc_emis_record_context : nullptr, record_id_v0682375,
                         true, true, calc_emis_contribution, &out.bound_free_payload().type49_calc_emis_shadow_v0682374());
                     if (rate_context.bound_free_perf)
                         ++rate_context.bound_free_perf->legacy_full_eager_integrals;
@@ -8473,7 +8598,7 @@ EvaluatedRecord evaluate_record(
             out.bound_free_spectral = true;
             out.continuum_index_one_based = continuum_index > 0 ? continuum_index : 0;
             out.line_energy_ev = source_threshold;
-            out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
+            out.atomic_mass_amu = execution_v0682375.atomic_mass_amu > 0.0 ? execution_v0682375.atomic_mass_amu : 1.0;
             // opakab is the source photoabsorption cross section here.  The
             // spectral commit applies the live lower-level population,
             // elemental abundance, and hydrogen density exactly once.
@@ -8483,7 +8608,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE: {
-            if (!r || record.real_count < 2) throw std::runtime_error("radiative line payload requires A and oscillator strength");
+            if (!r || execution_v0682375.real_count < 2) throw std::runtime_error("radiative line payload requires A and oscillator strength");
             const double a = std::max(0.0, r[0]);
             const double oscillator = std::max(0.0, r[1]);
             // 0.6.82.30.8.12: preserve the literal Type-50/91 source
@@ -8496,7 +8621,7 @@ EvaluatedRecord evaluate_record(
             // Only legacy/manual payloads that do not carry r[2] may derive a
             // fallback wavelength from the endpoint energy.
             const bool has_source_wavelength =
-                record.real_count >= 3 && std::isfinite(r[2]);
+                execution_v0682375.real_count >= 3 && std::isfinite(r[2]);
             const double stored_wavelength_a = has_source_wavelength
                 ? std::abs(r[2])
                 : (delta_ev > 0.0 ? 12398.4016 / delta_ev : 0.0);
@@ -8521,13 +8646,13 @@ EvaluatedRecord evaluate_record(
             int source_idest2 = 0;
             double source_endpoint1_energy_ev = 0.0;
             double source_endpoint2_energy_ev = 0.0;
-            double endpoint_energy_ev = (record.real_count >= 4 && std::isfinite(r[3]) && r[3] >= 0.0)
+            double endpoint_energy_ev = (execution_v0682375.real_count >= 4 && std::isfinite(r[3]) && r[3] >= 0.0)
                 ? r[3] : delta_ev;
             // Fresh v17.15 lowering carries the literal source idest pair and
             // both mutable leveltemp endpoint values inline.  This is the
             // native path for all Mg Type-50 rows; the optional legacy escape
             // map below remains a compatibility override for older fixtures.
-            if (record.real_count >= 6 && record.int_count >= 2 && ints &&
+            if (execution_v0682375.real_count >= 6 && execution_v0682375.int_count >= 2 && ints &&
                 std::isfinite(r[4]) && std::isfinite(r[5])) {
                 source_idest1 = static_cast<int>(ints[0]);
                 source_idest2 = static_cast<int>(ints[1]);
@@ -8544,11 +8669,11 @@ EvaluatedRecord evaluate_record(
             // or H/Mg compatibility path.
             const bool native_runtime_escape =
                 (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE) != 0u &&
-                record.line_index_one_based > 0 &&
+                execution_v0682375.line_index_one_based > 0 &&
                 program.runtime_line_tau_in.size() == program.runtime_line_tau_out.size() &&
-                static_cast<std::size_t>(record.line_index_one_based) <= program.runtime_line_tau_in.size();
+                static_cast<std::size_t>(execution_v0682375.line_index_one_based) <= program.runtime_line_tau_in.size();
             if (native_runtime_escape) {
-                line_index_one_based = record.line_index_one_based;
+                line_index_one_based = execution_v0682375.line_index_one_based;
                 const std::size_t line_index = static_cast<std::size_t>(line_index_one_based - 1);
                 line_tau_in = program.runtime_line_tau_in[line_index];
                 line_tau_out = program.runtime_line_tau_out[line_index];
@@ -8560,7 +8685,7 @@ EvaluatedRecord evaluate_record(
             }
             const auto& hydrogen_escape = hydrogen_type50_escape_state();
             if (!native_runtime_escape && hydrogen_escape.enabled && element.element_z == 1) {
-                const auto found = hydrogen_escape.line_index_by_record.find(record.record);
+                const auto found = hydrogen_escape.line_index_by_record.find(record_id_v0682375);
                 if (found == hydrogen_escape.line_index_by_record.end()) {
                     throw std::runtime_error("hydrogen Type-50 record is missing from source line-index map");
                 }
@@ -8575,8 +8700,8 @@ EvaluatedRecord evaluate_record(
             }
             const auto& magnesium_escape = magnesium_type50_escape_state();
             if (!native_runtime_escape && magnesium_escape.enabled && element.element_z == 12 &&
-                magnesium_escape.active_records.count(record.record) != 0) {
-                const auto found = magnesium_escape.line_index_by_record.find(record.record);
+                magnesium_escape.active_records.count(record_id_v0682375) != 0) {
+                const auto found = magnesium_escape.line_index_by_record.find(record_id_v0682375);
                 if (found == magnesium_escape.line_index_by_record.end()) {
                     throw std::runtime_error("active magnesium Type-50 record is missing from source line-index map");
                 }
@@ -8590,7 +8715,7 @@ EvaluatedRecord evaluate_record(
                 magnesium_escape_state_applied = true;
                 if (magnesium_escape.endpoint_energy_transport) {
                     const auto endpoint =
-                        magnesium_escape.endpoint_by_record.find(record.record);
+                        magnesium_escape.endpoint_by_record.find(record_id_v0682375);
                     if (endpoint == magnesium_escape.endpoint_by_record.end()) {
                         throw std::runtime_error(
                             "active magnesium Type-50 record is missing source endpoint energy");
@@ -8737,15 +8862,15 @@ EvaluatedRecord evaluate_record(
                 if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error("type50 DSEC runtime oracle replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
                 }
-                const auto* oracle = find_type50_dsec_runtime_oracle_entry(record.source_position, record.record);
+                const auto* oracle = find_type50_dsec_runtime_oracle_entry(source_position_v0682375, record_id_v0682375);
                 if (oracle) {
                     if (input.temperature_k != xstar_type50_dsec_runtime_oracle::kTemperatureK ||
                         input.hydrogen_density_cm3 != xstar_type50_dsec_runtime_oracle::kHydrogenDensityCm3 ||
                         input.electron_fraction_xee != xstar_type50_dsec_runtime_oracle::kElectronFractionXee) {
                         throw std::runtime_error("type50 DSEC runtime oracle replacement is restricted to the captured evaluation-61 state");
                     }
-                    if (record.data_type != 50 || record.ion_stage != 2 ||
-                        record.lower_row != oracle->lower_row || record.upper_row != oracle->upper_row) {
+                    if (execution_v0682375.data_type != 50 || execution_v0682375.ion_stage != 2 ||
+                        execution_v0682375.lower_row != oracle->lower_row || execution_v0682375.upper_row != oracle->upper_row) {
                         throw std::runtime_error("type50 DSEC runtime oracle identity mismatch");
                     }
                     c.ans1 = oracle->ans[0]; c.ans2 = oracle->ans[1]; c.ans3 = oracle->ans[2];
@@ -8755,21 +8880,21 @@ EvaluatedRecord evaluate_record(
                 if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error("type50 manifold oracle replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
                 }
-                const auto* oracle = find_type50_manifold_oracle_entry(record.source_position, record.record);
+                const auto* oracle = find_type50_manifold_oracle_entry(source_position_v0682375, record_id_v0682375);
                 if (oracle) {
                     if (input.temperature_k != xstar_type50_manifold_oracle::kTemperatureK ||
                         input.hydrogen_density_cm3 != xstar_type50_manifold_oracle::kHydrogenDensityCm3) {
                         throw std::runtime_error("type50 manifold oracle replacement is restricted to the evaluation-61 fixed state");
                     }
-                    if (record.data_type != 50 || record.ion_stage != 2 ||
-                        record.lower_row != oracle->lower_row || record.upper_row != oracle->upper_row) {
+                    if (execution_v0682375.data_type != 50 || execution_v0682375.ion_stage != 2 ||
+                        execution_v0682375.lower_row != oracle->lower_row || execution_v0682375.upper_row != oracle->upper_row) {
                         throw std::runtime_error("type50 manifold oracle identity mismatch");
                     }
                     c.ans1 = oracle->ans[0]; c.ans2 = oracle->ans[1]; c.ans3 = oracle->ans[2];
                     c.ans4 = oracle->ans[3]; c.ans5 = oracle->ans[4]; c.ans6 = oracle->ans[5];
                 }
             }
-            const double mass = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
+            const double mass = execution_v0682375.atomic_mass_amu > 0.0 ? execution_v0682375.atomic_mass_amu : 1.0;
             const double thermal_velocity = 1.29e6 / std::sqrt(std::max(mass / std::max(t4, 1.0e-300), 1.0e-300));
             const double v = std::sqrt(std::pow(input.turbulent_velocity_km_s * 1.0e5, 2) + thermal_velocity * thermal_velocity);
             // v82 patch 5.20.6: literal ucalc Type-50 uses the stored source
@@ -8782,7 +8907,7 @@ EvaluatedRecord evaluate_record(
             out.spectral = true;
             out.line_energy_ev = delta_ev;
             out.atomic_mass_amu = mass;
-            out.natural_width_ev = record.natural_width_ev;
+            out.natural_width_ev = execution_v0682375.natural_width_ev;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION: {
@@ -8790,24 +8915,24 @@ EvaluatedRecord evaluate_record(
             // and nrdt=11 (nine-point) Burgess-Tully records.  Other payload
             // lengths follow the source no-contribution path rather than
             // terminating the model.
-            if (record.real_count != 7 && record.real_count != 11) break;
+            if (execution_v0682375.real_count != 7 && execution_v0682375.real_count != 11) break;
 
             // Evaluate the canonical/source-faithful representation first.
             // The legacy evaluator remains the committed compatibility path
             // wherever it produces a finite result, preserving all accepted
             // pre-0.6.82.2 outputs.
             const auto bt = type51_upsilon(
-                r, record.real_count, ints, record.int_count, input.temperature_k
+                r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
             );
             if (!bt.valid) {
                 std::ostringstream msg;
                 msg << "invalid source-faithful type51 payload"
-                    << " record=" << record.record
-                    << " real_count=" << record.real_count
-                    << " int_count=" << record.int_count
-                    << " bt_type=" << (record.int_count ? ints[0] : 0)
-                    << " eij_ryd=" << (record.real_count ? r[0] : 0.0)
-                    << " c=" << (record.real_count > 1 ? r[1] : 0.0);
+                    << " record=" << record_id_v0682375
+                    << " real_count=" << execution_v0682375.real_count
+                    << " int_count=" << execution_v0682375.int_count
+                    << " bt_type=" << (execution_v0682375.int_count ? ints[0] : 0)
+                    << " eij_ryd=" << (execution_v0682375.real_count ? r[0] : 0.0)
+                    << " c=" << (execution_v0682375.real_count > 1 ? r[1] : 0.0);
                 throw std::runtime_error(msg.str());
             }
             const double t_xstar = input.temperature_k / 1.0e4;
@@ -8836,7 +8961,7 @@ EvaluatedRecord evaluate_record(
             }};
 
             const double legacy_ups = type51_upsilon_legacy(
-                r, record.real_count, ints, record.int_count, input.temperature_k
+                r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
             );
             const bool legacy_valid = std::isfinite(legacy_ups);
             std::array<double,6> legacy_ans{{
@@ -8920,7 +9045,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE54_ANGULAR_REDIS: {
-            if (!ints || record.int_count < 5) throw std::runtime_error("type54 payload requires ni,nf,li,lf,iq");
+            if (!ints || execution_v0682375.int_count < 5) throw std::runtime_error("type54 payload requires ni,nf,li,lf,iq");
             const int ni0=static_cast<int>(ints[0]), nf0=static_cast<int>(ints[1]);
             const int li=static_cast<int>(ints[2]), lf=static_cast<int>(ints[3]), iq=static_cast<int>(ints[4]);
             if (ni0 == nf0) break;
@@ -8935,15 +9060,15 @@ EvaluatedRecord evaluate_record(
             c.ans3 = -rate*delt*xstar_constants::kModernErgPerEv;
             // Type 54 is rate-family 4 and owns an exact nplini slot. It can
             // emit even though its oscillator-strength opacity is zero.
-            out.spectral = record.rate_type == 4 && record.line_index_one_based > 0;
+            out.spectral = execution_v0682375.rate_type == 4 && execution_v0682375.line_index_one_based > 0;
             out.bound_free_spectral = false;
             out.line_energy_ev = delta_ev;
-            out.atomic_mass_amu = record.atomic_mass_amu;
+            out.atomic_mass_amu = execution_v0682375.atomic_mass_amu;
             out.opakab = 0.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE57_COLLISIONAL_IONIZATION: {
-            if (!ints || record.int_count < 2) throw std::runtime_error("type57 payload requires packed_n,level_metadata_n");
+            if (!ints || execution_v0682375.int_count < 2) throw std::runtime_error("type57 payload requires packed_n,level_metadata_n");
             // 0.6.82.30.8.1: literal ucalc.f90 Type-57 semantics.  The first
             // INTEGER belongs to the Type-57 record itself and is passed
             // directly to calt57 as the principal quantum number.  Do not
@@ -8953,8 +9078,8 @@ EvaluatedRecord evaluate_record(
             // defines Type-57 i1=n and Type-83 i1=1.
             const int i57=static_cast<int>(ints[0]);
             const int n=i57;
-            const int source_local_level = record.int_count >= 3
-                ? static_cast<int>(ints[2]) : record.lower_row;
+            const int source_local_level = execution_v0682375.int_count >= 3
+                ? static_cast<int>(ints[2]) : execution_v0682375.lower_row;
             if (i57<=0 || source_local_level<=1) break;
             // 0.6.82.13: canonical Type-57 source semantics are production
             // semantics for every applicable record, independent of element.
@@ -8962,7 +9087,7 @@ EvaluatedRecord evaluate_record(
             double e1=lower.energy_ev;
             double eth=std::max(upper.energy_ev-e1,0.0);
             if (source_faithful) {
-                if (!r || record.real_count < 4) {
+                if (!r || execution_v0682375.real_count < 4) {
                     throw std::runtime_error(
                         "source-faithful type57 requires literal e1/eth/g1/g2 payload");
                 }
@@ -8988,10 +9113,10 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE: {
-            if (!r || !ints || record.real_count < 8 || record.int_count < 7)
+            if (!r || !ints || execution_v0682375.real_count < 8 || execution_v0682375.int_count < 7)
                 throw std::runtime_error("type59 payload too short");
             const std::size_t original_real_count = static_cast<std::size_t>(std::max<std::int64_t>(0, ints[0]));
-            if (original_real_count < 6 || original_real_count + 2u > record.real_count)
+            if (original_real_count < 6 || original_real_count + 2u > execution_v0682375.real_count)
                 throw std::runtime_error("type59 lowered payload layout invalid");
             const int l2 = static_cast<int>(ints[1]);
             const bool source_zero = ints[2] != 0;
@@ -9002,7 +9127,7 @@ EvaluatedRecord evaluate_record(
             const double ggup = r[original_real_count + 1u];
             if (!(threshold > 0.0) || !(ggup > 1.0e-24)) break;
             const double swrat = gglo / ggup;
-            const bool zero_reverse = record.rate_type == 1 || id1 > 1;
+            const bool zero_reverse = execution_v0682375.rate_type == 1 || id1 > 1;
             const auto ph = type59_phintfo_source(
                 r, original_real_count, l2, threshold, swrat, zero_reverse, calc_hmc_input,
                 rate_context.type59_full_source_energy_ev,
@@ -9011,9 +9136,9 @@ EvaluatedRecord evaluate_record(
             if (ph.source_bremsint_skip) break;
             c.ans1=ph.ans[0]; c.ans2=ph.ans[1]; c.ans3=ph.ans[2];
             c.ans4=ph.ans[3]; c.ans5=ph.ans[4]; c.ans6=ph.ans[5];
-            out.spectral = record.continuum_index_one_based > 0;
+            out.spectral = execution_v0682375.continuum_index_one_based > 0;
             out.bound_free_spectral = out.spectral;
-            out.continuum_index_one_based = record.continuum_index_one_based;
+            out.continuum_index_one_based = execution_v0682375.continuum_index_one_based;
             out.line_energy_ev = threshold;
             out.opakab = ph.threshold_sigma_cm2;
             break;
@@ -9023,7 +9148,7 @@ EvaluatedRecord evaluate_record(
             // initialized zero answers for degenerate endpoints before it
             // interpolates the tabulated collision strength.
             if (delta_ev <= 1.0e-16) break;
-            const double ups = type56_upsilon(r, record.real_count, input.temperature_k);
+            const double ups = type56_upsilon(r, execution_v0682375.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type56 payload");
             if (!(lower.statistical_weight > 0.0) || !(upper.statistical_weight > 0.0)) {
                 throw std::runtime_error("type56 requires positive statistical weights");
@@ -9048,12 +9173,12 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE86_AUGER: {
-            if (!r || record.real_count < 1) throw std::runtime_error("type86 payload requires Auger rate");
+            if (!r || execution_v0682375.real_count < 1) throw std::runtime_error("type86 payload requires Auger rate");
             c.ans1=std::max(0.0,r[0]);
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE: {
-            if (!r || record.real_count < 4) {
+            if (!r || execution_v0682375.real_count < 4) {
                 throw std::runtime_error("type88 payload requires energy/sigma pairs");
             }
             const double* source_energy_ev = calc_hmc_input.dsec_radiation_energy_ev && calc_hmc_input.dsec_radiation_bin_count >= 3
@@ -9065,15 +9190,15 @@ EvaluatedRecord evaluate_record(
             if (!source_energy_ev || !source_bremsa || source_bins < 3) {
                 throw std::runtime_error("type88 calc_hmc requires live reduced radiation grid");
             }
-            std::size_t pair_count = record.real_count / 2;
+            std::size_t pair_count = execution_v0682375.real_count / 2;
             double threshold = delta_ev;
-            if (ints && record.int_count >= 1 && ints[0] >= 2) {
+            if (ints && execution_v0682375.int_count >= 1 && ints[0] >= 2) {
                 pair_count = static_cast<std::size_t>(ints[0]);
                 const std::size_t pair_reals = 2 * pair_count;
-                if (pair_reals + 1 < record.real_count) threshold = std::max(0.0, r[pair_reals]);
+                if (pair_reals + 1 < execution_v0682375.real_count) threshold = std::max(0.0, r[pair_reals]);
             }
             const std::size_t pair_reals = 2 * pair_count;
-            if (pair_count < 2 || pair_reals > record.real_count || threshold <= 0.0) {
+            if (pair_count < 2 || pair_reals > execution_v0682375.real_count || threshold <= 0.0) {
                 c.ans1 = 0.0; c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
                 break;
             }
@@ -9090,16 +9215,16 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
-            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, calc_hmc_input, c, &out.mutable_type99_shadow_v06823615())) {
+            if (evaluate_type99_source_faithful(execution_v0682375, r, ints, lower, upper, calc_hmc_input, c, &out.mutable_type99_shadow_v06823615())) {
                 out.spectral = true;
                 out.bound_free_spectral = true;
                 // v82 patch 5.1/5.2 source semantics: Type-99 retains its
                 // atomic npconi2 identity for diagnostics/RRC association, but
                 // the literal ucalc Type-99 branch (calt99 -> phint53hunt) never
                 // assigns direct opakab.  Keep the pointer; publish zero opacity.
-                out.continuum_index_one_based = record.continuum_index_one_based;
+                out.continuum_index_one_based = execution_v0682375.continuum_index_one_based;
                 out.line_energy_ev = out.type99_shadow_v06823615().threshold_ev;
-                out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
+                out.atomic_mass_amu = execution_v0682375.atomic_mass_amu > 0.0 ? execution_v0682375.atomic_mass_amu : 1.0;
                 out.opakab = 0.0;
                 break;
             }
@@ -9107,10 +9232,10 @@ EvaluatedRecord evaluate_record(
             // qualification uses the appended source destination metadata and
             // the live DSEC workspace above; older compact fixtures retain the
             // pre-v36 approximate evaluator so ABI/self-tests remain readable.
-            if (!r || !ints || record.int_count < 3) throw std::runtime_error("type99 payload requires nden,ntem,nxs");
+            if (!r || !ints || execution_v0682375.int_count < 3) throw std::runtime_error("type99 payload requires nden,ntem,nxs");
             const int nd=static_cast<int>(ints[0]), nt=static_cast<int>(ints[1]), nx=static_cast<int>(ints[2]);
             const std::size_t need=static_cast<std::size_t>(nd+nt+nd*nt+2*nx);
-            if (nd<=0||nt<2||nx<2||record.real_count<need) throw std::runtime_error("invalid type99 grid dimensions");
+            if (nd<=0||nt<2||nx<2||execution_v0682375.real_count<need) throw std::runtime_error("invalid type99 grid dimensions");
             if (!input.radiation_energy_ev||!input.radiation_flux||input.radiation_bin_count<2) throw std::runtime_error("type99 requires live radiation grid");
             const double* dg=r; const double* tg=r+nd; const double* table=r+nd+nt; const double* xs=r+nd+nt+nd*nt;
             double logn=std::log10(std::max(input.hydrogen_density_cm3,1.0e-300));
@@ -9152,7 +9277,7 @@ EvaluatedRecord evaluate_record(
             // used wherever the FORTRAN data model supplies these records.
             const bool source_faithful = true;
             const double ups=callaway_upsilon(
-                record.data_type,r,record.real_count,input.temperature_k,delta_ev,source_faithful
+                execution_v0682375.data_type,r,execution_v0682375.real_count,input.temperature_k,delta_ev,source_faithful
             );
             if (source_faithful) {
                 const double t_xstar = input.temperature_k / 1.0e4;
@@ -9181,12 +9306,12 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE66_COLLISION: {
-            if (!r || record.real_count < 6) throw std::runtime_error("type66 payload too short");
+            if (!r || execution_v0682375.real_count < 6) throw std::runtime_error("type66 payload too short");
             const double de = r[0] > 0.0 ? r[0] : delta_ev;
             if (!(de > 0.0)) break;
             const double wavelength = 12398.4016 / de;
             const double effective_temperature = std::max(input.temperature_k, 2.8777e6 / wavelength);
-            const double upsilon = std::max(0.0, type66_upsilon(r, record.real_count, effective_temperature));
+            const double upsilon = std::max(0.0, type66_upsilon(r, execution_v0682375.real_count, effective_temperature));
             const double gu = std::max(upper.statistical_weight, 1.0e-48);
             const double gl = std::max(lower.statistical_weight, 1.0e-48);
             const double qd = 8.626e-8 * upsilon / sqrt_t4 / gu;
@@ -9198,9 +9323,9 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE68_HELIKE_COLLISION: {
-            if (!ints||record.int_count<1) throw std::runtime_error("type68 payload requires Z");
+            if (!ints||execution_v0682375.int_count<1) throw std::runtime_error("type68 payload requires Z");
             const double wav=delta_ev>0.0?12398.4016/delta_ev:0.0;
-            const double ups=type68_upsilon(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k,wav);
+            const double ups=type68_upsilon(r,execution_v0682375.real_count,static_cast<int>(ints[0]),input.temperature_k,wav);
             // 0.6.82.13: canonical He-like Type-68 constants/order are always
             // used wherever the FORTRAN data model supplies Type-68.
             const bool source_constants = true;
@@ -9232,7 +9357,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION: {
-            if (!ints || record.int_count < 5) throw std::runtime_error("type63 payload requires ni,li,nf,lf,iq");
+            if (!ints || execution_v0682375.int_count < 5) throw std::runtime_error("type63 payload requires ni,li,nf,lf,iq");
             double values[6]{};
             // v0.6.48.7.33: matrix lower/upper endpoints are source energy
             // ordered, but ans1/ans2 retain the literal packed-record initial
@@ -9241,7 +9366,7 @@ EvaluatedRecord evaluate_record(
             // readable without changing the fixed-state C ABI.
             const ElementRow* initial = &lower;
             const ElementRow* final = &upper;
-            if (record.int_count >= 7) {
+            if (execution_v0682375.int_count >= 7) {
                 initial = &row_at(element, static_cast<int>(ints[5]));
                 final = &row_at(element, static_cast<int>(ints[6]));
             } else {
@@ -9262,7 +9387,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE69_HELIKE_COLLISION: {
-            const double ups = type69_upsilon(r, record.real_count, input.temperature_k);
+            const double ups = type69_upsilon(r, execution_v0682375.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type69 payload");
             // Match collisions.q_rates_from_upsilon operation order literally.
             // Using the algebraically equivalent T4 coefficient changes the
@@ -9285,8 +9410,8 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE71_SUPERLEVEL_CASCADE: {
             double aij=0.0,wavelength=0.0;
-            if (!type71_rate(r,record.real_count,ints,record.int_count,input.temperature_k,input.hydrogen_density_cm3,aij,wavelength)) throw std::runtime_error("invalid type71 payload");
-            if (record.int_count>=6 && (ints[5]==96 || ints[5]==97)) aij=std::min(aij,1.0e10);
+            if (!type71_rate(r,execution_v0682375.real_count,ints,execution_v0682375.int_count,input.temperature_k,input.hydrogen_density_cm3,aij,wavelength)) throw std::runtime_error("invalid type71 payload");
+            if (execution_v0682375.int_count>=6 && (ints[5]==96 || ints[5]==97)) aij=std::min(aij,1.0e10);
             c.ans2=aij;
             const double photon=(wavelength>0.1)?12398.4016/wavelength:delta_ev;
             const double erg=(wavelength>0.1)?1.602197e-12:kErgPerEv;
@@ -9299,27 +9424,27 @@ EvaluatedRecord evaluate_record(
             out.spectral = false;
             out.bound_free_spectral = false;
             out.line_energy_ev = photon;
-            out.atomic_mass_amu = record.atomic_mass_amu;
+            out.atomic_mass_amu = execution_v0682375.atomic_mass_amu;
             out.opakab = 0.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE77_SUPERLEVEL_COLLISION: {
-            if (record.lower_row==record.upper_row || delta_ev<1.0) break;
+            if (execution_v0682375.lower_row==execution_v0682375.upper_row || delta_ev<1.0) break;
             double upward=0.0,downward=0.0;
-            if (!type77_rates(r,record.real_count,ints,record.int_count,input.temperature_k,input.hydrogen_density_cm3,delta_ev,upward,downward)) throw std::runtime_error("invalid type77 payload");
+            if (!type77_rates(r,execution_v0682375.real_count,ints,execution_v0682375.int_count,input.temperature_k,input.hydrogen_density_cm3,delta_ev,upward,downward)) throw std::runtime_error("invalid type77 payload");
             c.ans1=upward; c.ans2=downward;
             c.ans5=downward*delta_ev*xstar_constants::kLegacyCollisionErgPerEv;
             c.ans6=upward*delta_ev*xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE72_DIELECTRONIC_CAPTURE: {
-            if (!r||record.real_count<2||!ints||record.int_count<2) throw std::runtime_error("type72 payload too short");
+            if (!r||execution_v0682375.real_count<2||!ints||execution_v0682375.int_count<2) throw std::runtime_error("type72 payload too short");
             // Match ucalc.py::_calt72_rate literally.  Type 72 is one of the
             // historical collision branches that uses the rounded XSTAR
             // 0.861707 eV per 10^4 K coefficient, not the modern constant.
             const double source_ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t4;
             const double scale=3.3e-11*std::pow(13.6/source_ekt_ev,1.5);
-            const double rtmp=record.real_count>=3?r[2]:1.0;
+            const double rtmp=execution_v0682375.real_count>=3?r[2]:1.0;
             const double rate=scale*limited_exp(-r[1]/source_ekt_ev)*(r[0]/1.0e13)*rtmp;
             const auto& ground=row_at(element,static_cast<int>(ints[0]));
             const auto& parent=row_at(element,static_cast<int>(ints[1]));
@@ -9329,7 +9454,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE73_HELIKE_COLLISION: {
-            if (!r||record.real_count<7||!ints||record.int_count<1) throw std::runtime_error("type73 payload too short");
+            if (!r||execution_v0682375.real_count<7||!ints||execution_v0682375.int_count<1) throw std::runtime_error("type73 payload too short");
             // native_fixed_program.py compacts the raw Type-73 integer
             // payload [level1, level2, Z] to [Z]; the record rows retain the
             // two endpoints.  From this point onward preserve the exact
@@ -9338,7 +9463,7 @@ EvaluatedRecord evaluate_record(
             if (!(wavelength_a>0.0)) break;
             const double source_energy_ev=12398.4016/std::max(wavelength_a,1.0e-48);
             const double crate=type73_rate(
-                r,record.real_count,static_cast<int>(ints[0]),input.temperature_k);
+                r,execution_v0682375.real_count,static_cast<int>(ints[0]),input.temperature_k);
             const double gl=lower.statistical_weight;
             const double gu=upper.statistical_weight;
             const double omega=crate/std::max(gl,1.0e-48);
@@ -9354,7 +9479,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE76_TWO_PHOTON: {
-            if (!r||record.real_count<1) throw std::runtime_error("type76 payload too short");
+            if (!r||execution_v0682375.real_count<1) throw std::runtime_error("type76 payload too short");
             const double aij=std::max(0.0,r[0]);
             c.ans2=aij;
             c.ans3=-aij*delta_ev*xstar_constants::kLegacyCollisionErgPerEv;
@@ -9367,16 +9492,16 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE95_SPLINE_IONIZATION: {
-            if (!r||record.real_count<6||!ints||record.int_count<1) throw std::runtime_error("type95 payload too short");
+            if (!r||execution_v0682375.real_count<6||!ints||execution_v0682375.int_count<1) throw std::runtime_error("type95 payload too short");
             const double ee=r[0];
             const double tt=(xstar_constants::kLegacyBoltzmannEvPerT4 * t4)/std::max(ee,1.0e-300);
             if (!(tt>0.0)) throw std::runtime_error("type95 invalid scaled temperature");
             const double xx=1.0-0.693147/std::log(tt+2.0);
-            const double rho=type95_spline_rho(r,record.real_count,xx);
+            const double rho=type95_spline_rho(r,execution_v0682375.real_count,xx);
             double e1=0.0,e2=0.0,e3=0.0; eint_values(1.0/tt,e1,e2,e3);
             const double citmp1=1.0e-6*e1*rho/std::sqrt(tt*ee*ee*ee);
             c.ans1=citmp1*ne;
-            const auto& parent=row_at(element,static_cast<int>(ints[record.int_count-1]));
+            const auto& parent=row_at(element,static_cast<int>(ints[execution_v0682375.int_count-1]));
             const double rinf=2.08e-22*lower.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
             // Literal Type-95 detailed balance uses expo(-1./tt), whose
             // source clamp is +/-60 (expo.f90), not the generic +/-700 guard.
@@ -9386,55 +9511,55 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC: {
-            const int dt=record.data_type;
+            const int dt=execution_v0682375.data_type;
             const auto escape=source_line_escape_generic(program,record,input);
             const double ptmp_sum=escape.ptmp1+escape.ptmp2;
-            auto ion_first_row=[&]()->const ElementRow&{for(const auto& rw:element.rows)if(rw.ion==record.ion_index)return rw;return row_at(element,1);};
-            auto ion_terminal_row=[&]()->const ElementRow&{const ElementRow* found=nullptr;for(const auto& rw:element.rows)if(rw.ion==record.ion_index)found=&rw;return found?*found:row_at(element,element.n_rows);};
+            auto ion_first_row=[&]()->const ElementRow&{for(const auto& rw:element.rows)if(rw.ion==execution_v0682375.ion_index)return rw;return row_at(element,1);};
+            auto ion_terminal_row=[&]()->const ElementRow&{const ElementRow* found=nullptr;for(const auto& rw:element.rows)if(rw.ion==execution_v0682375.ion_index)found=&rw;return found?*found:row_at(element,element.n_rows);};
             const ElementRow& first=ion_first_row(); const ElementRow& terminal=ion_terminal_row();
             const double cf_ne=std::max(0.0,ne);
             auto collision_commit=[&](double ups,double de,const ElementRow& lo,const ElementRow& up){
                 ups=std::max(0.0,ups);const double ex=limited_exp(-de/std::max(kt_ev,1e-48));const double qd=8.626e-8*ups/std::max(sqrt_t4*up.statistical_weight,1e-48);const double qe=qd*up.statistical_weight*ex/std::max(lo.statistical_weight,1e-48);c.ans1=qe*cf_ne;c.ans2=qd*cf_ne;c.ans5=c.ans2*de*kErgPerEv;c.ans6=c.ans1*de*kErgPerEv;
             };
             auto source_grid=[&](){const bool d=calc_hmc_input.dsec_radiation_energy_ev&&calc_hmc_input.dsec_bremsa&&calc_hmc_input.dsec_radiation_bin_count>=3;return std::tuple<const double*,const double*,std::size_t>{d?calc_hmc_input.dsec_radiation_energy_ev:calc_hmc_input.radiation_energy_ev,d?calc_hmc_input.dsec_bremsa:calc_hmc_input.radiation_flux,d?calc_hmc_input.dsec_radiation_bin_count:calc_hmc_input.radiation_bin_count};};
-            auto commit_phint=[&](const std::vector<double>& sigma,double threshold,double sw,bool zero_reverse){auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,zero_reverse,calc_hmc_input);c.ans1=ph.ans[0];c.ans2=ph.ans[1];c.ans3=ph.ans[2];c.ans4=ph.ans[3];c.ans5=ph.ans[4];c.ans6=ph.ans[5];out.opakab=ph.threshold_sigma_cm2;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;};
+            auto commit_phint=[&](const std::vector<double>& sigma,double threshold,double sw,bool zero_reverse){auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,zero_reverse,calc_hmc_input);c.ans1=ph.ans[0];c.ans2=ph.ans[1];c.ans3=ph.ans[2];c.ans4=ph.ans[3];c.ans5=ph.ans[4];c.ans6=ph.ans[5];out.opakab=ph.threshold_sigma_cm2;out.spectral=execution_v0682375.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=execution_v0682375.continuum_index_one_based;out.line_energy_ev=threshold;};
             switch(dt){
-                case 3:{if(!r||record.real_count<2)throw std::runtime_error("type3 payload");c.ans1=r[0]*limited_exp(-r[1]/std::max(0.861707*t4,1e-48))/sqrt_t4*cf_ne;break;}
-                case 4:{if(!r||record.real_count<5)throw std::runtime_error("type4 payload");double wav=std::abs(r[0]),f=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0&&gu>0&&gl>0){double aij=6.67e7*gl*f/gu/std::pow(wav*1e-4,2);if(f<=1.01e-12||wav>=1e9)aij=1e5;c.ans1=aij*ptmp_sum;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;c.ans4=c.ans1*(12398.4016/wav)*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
-                case 5:{if(!r||record.real_count<6)throw std::runtime_error("type5 payload");double de=std::abs(upper.energy_ev-lower.energy_ev),base=8.629e-8*r[4]*std::pow(t4,r[5]);c.ans2=base/std::max(lower.statistical_weight,1e-48);c.ans1=base*limited_exp(-de/std::max(0.861707*t4,1e-48))/std::max(upper.statistical_weight,1e-48);break;}
+                case 3:{if(!r||execution_v0682375.real_count<2)throw std::runtime_error("type3 payload");c.ans1=r[0]*limited_exp(-r[1]/std::max(0.861707*t4,1e-48))/sqrt_t4*cf_ne;break;}
+                case 4:{if(!r||execution_v0682375.real_count<5)throw std::runtime_error("type4 payload");double wav=std::abs(r[0]),f=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0&&gu>0&&gl>0){double aij=6.67e7*gl*f/gu/std::pow(wav*1e-4,2);if(f<=1.01e-12||wav>=1e9)aij=1e5;c.ans1=aij*ptmp_sum;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;c.ans4=c.ans1*(12398.4016/wav)*kErgPerEv;out.spectral=execution_v0682375.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
+                case 5:{if(!r||execution_v0682375.real_count<6)throw std::runtime_error("type5 payload");double de=std::abs(upper.energy_ev-lower.energy_ev),base=8.629e-8*r[4]*std::pow(t4,r[5]);c.ans2=base/std::max(lower.statistical_weight,1e-48);c.ans1=base*limited_exp(-de/std::max(0.861707*t4,1e-48))/std::max(upper.statistical_weight,1e-48);break;}
                 case 6:case 26:case 32: break;
-                case 8:{if(!r||record.real_count<8)throw std::runtime_error("type8 payload");double rate=0;for(int k=0;k<4;++k)rate+=r[k]*limited_exp(-r[k+4]/std::max(0.861707*t4,1e-48));c.ans1=rate*1e-6*std::pow(t4,-1.5)*cf_ne;break;}
-                case 11:{if(!r||record.real_count<4)throw std::runtime_error("type11 payload");double de=std::abs(upper.energy_ev-lower.energy_ev);c.ans1=6.669e15*r[1]*r[2]/std::max(r[3]*r[0]*r[0],1e-300);c.ans4=c.ans1*de*kErgPerEv;break;}
-                case 16:{if(!r||record.real_count%5)throw std::runtime_error("type16 payload");double ekt=0.861707*t4,cs=0,cs2=0;for(std::size_t k=0;k<record.real_count;k+=5){double x=r[k]/std::max(ekt,1e-48);if(!(x>0))continue;double em1=source_ee1expo_generic(x),f1=em1/x,f2=source_ff2_generic(x);double fi=std::max(0.0,r[k+1]*(1-x*f1)+r[k+2]*(1+x-x*(2+x)*f1)+r[k+3]*f1+r[k+4]*x*f2);cs+=fi*limited_exp(-x)/x;cs2+=fi/x;}c.ans1=cs*6.69e-7/std::pow(std::max(ekt,1e-48),1.5)*cf_ne;double rinf=2.08e-22*first.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=cs2*6.69e-7/std::pow(std::max(ekt,1e-48),1.5)*cf_ne*rinf*cf_ne;break;}
-                case 17:{if(!r||record.real_count<2)throw std::runtime_error("type17 payload");double de=std::abs(upper.energy_ev-lower.energy_ev);c.ans2=8.629e-8*r[0]*std::pow(t4,r[1])/std::max(upper.statistical_weight,1e-48);c.ans1=(0.861707*t4>de/20.0)?c.ans2*upper.statistical_weight/std::max(lower.statistical_weight,1e-48):0.0;break;}
-                case 18:{if(!r||record.real_count<4)throw std::runtime_error("type18 payload");double alg=std::clamp(std::log10(t4/std::max(r[3],1e-48))+4.0,3.5,7.5);c.ans1=std::pow(10.0,r[0]+r[1]*std::pow(alg-r[2],2))/t4/1e4*cf_ne;break;}
-                case 20:{if(!r||record.real_count<5)throw std::runtime_error("type20 payload");double rate=r[0]*std::pow(t4,r[1])*(1+r[2]*limited_exp(r[3]*t4))*limited_exp(-r[4]/std::max(t4,1e-48))*1e-9;c.ans1=rate*input.ionized_h_density_cm3;break;}
-                case 21:{if(!r||record.real_count<3)throw std::runtime_error("type21 payload");double alpha=t4<1?r[1]:r[2];c.ans1=r[0]*std::pow(t4,alpha)*input.ionized_h_density_cm3;break;}
-                case 22:{if(!r||record.real_count<5)throw std::runtime_error("type22 payload");if(t4<=6){double rate=1e-12*(r[0]/t4+r[1]+t4*(r[2]+t4*r[3]))*std::pow(t4,-1.5)*limited_exp(-r[4]/t4);c.ans1=std::max(0.0,rate)*cf_ne;}break;}
-                case 25:{if(!r||record.real_count<5)throw std::runtime_error("type25 payload");double e=r[0],chir=input.temperature_k/(11590.0*std::max(e,1e-48));if(chir>.0115){double chi=std::max(chir,.1),ch2=chi*chi,ch3=ch2*chi;double alpha=(.001193+.9764*chi+.6604*ch2+.02590*ch3)/(1+1.488*chi+.2972*ch2+.004925*ch3);double beta=(-.0005725+.01345*chi+.8691*ch2+.03404*ch3)/(1+2.197*chi+.2457*ch2+.002503*ch3);double ch=1/chi,fchi=.3*ch*(r[1]+r[2]*(1+ch)+(r[3]-(r[1]+r[2]*(2+ch))*ch)*alpha+r[4]*beta*ch);double cion=2.2e-6*std::sqrt(chir)*fchi/(e*std::sqrt(e));double raw=cion*cf_ne,rinf=2.08e-22*lower.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=raw*rinf*cf_ne;c.ans1=raw*limited_exp(-1/chir);c.ans5=c.ans2*e*kErgPerEv;c.ans6=c.ans1*e*kErgPerEv;}break;}
-                case 28:{if(!r||record.real_count<5)throw std::runtime_error("type28 payload");std::size_t idx=4;if(record.real_count>=12){std::size_t j=source_linear_hunt_generic(r+record.real_count-4,4,t4);idx=record.real_count-8+j-1;idx=std::min(idx,record.real_count-1);}double ups=r[idx],wav=std::abs(r[0]);if(wav>1e-24){double ex=limited_exp(-(12398.4016/wav)/std::max(0.861707*t4,1e-48));double cji=8.626e-8*ups/sqrt_t4/std::max(upper.statistical_weight,1e-48);double cij=cji*upper.statistical_weight*ex/sqrt_t4/std::max(lower.statistical_weight,1e-48);c.ans1=cij*cf_ne;c.ans2=cji*cf_ne;}break;}
-                case 31:{if(!r||record.real_count<2)throw std::runtime_error("type31 payload");double wav=std::abs(r[0]),f=r[1];if(wav>0){double aij=.02655*f*8*std::acos(-1.0)/std::pow(wav*1e-8,2)*lower.statistical_weight/std::max(upper.statistical_weight,1e-24);double decay=aij*ptmp_sum,v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));double sig=.02655*f*wav*1e-8/std::max(v,1e-48),energy=12398.4016/wav;auto [epi,brem,n]=source_grid();double pump=0;if(epi&&brem&&n){int nb=type99_nbinc_fortran_value(energy,epi,n);if(nb>0&&nb<=static_cast<int>(n))pump=sig*brem[nb-1]*v/3e10;}if(wav>.99e9){pump=0;sig=0;}decay+=pump*lower.statistical_weight/std::max(upper.statistical_weight,1e-48);c.ans1=decay;c.ans2=0;c.ans3=pump*energy*kErgPerEv;c.ans4=decay*energy*kErgPerEv;out.opakab=sig;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;}break;}
-                case 33:{if(!r||record.real_count<4)throw std::runtime_error("type33 payload");double wav=std::abs(r[0]);if(wav>1e-24)collision_commit(r[3],12398.4016/wav,lower,upper);break;}
-                case 34:{if(!r||record.real_count<5)throw std::runtime_error("type34 payload");double wav=std::abs(r[0]),aij=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0&&gu>0&&gl>0){double f=aij*std::pow(wav*1e-8,2)*gu/(.667274*gl);c.ans1=aij*ptmp_sum;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;c.ans4=c.ans1*(12398.4016/wav)*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
-                case 37:{if(!r)throw std::runtime_error("type37 payload");int nn=ints&&record.int_count?static_cast<int>(ints[0]):std::min<int>(4,record.real_count/2);double rate=0;for(int k=0;k<std::min({nn,4,static_cast<int>(record.real_count)-4});++k)rate+=r[k]*limited_exp(-r[k+4]/std::max(0.861707*t4,1e-48));c.ans1=rate*1e-6*std::pow(t4,-1.5)*cf_ne;break;}
-                case 65:{if(!r||!ints||record.int_count<1)throw std::runtime_error("type65 payload");double eth=std::abs(terminal.energy_ev-lower.energy_ev);int ion_nlev=0;for(const auto& rw:element.rows)if(rw.ion==record.ion_index)++ion_nlev;double ci=type57_szirc(static_cast<int>(ints[0]),input.temperature_k,r[0],static_cast<double>(ion_nlev+1));c.ans1=ci*cf_ne;double rinf=2.08e-22*first.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=c.ans1*rinf*limited_exp(eth/std::max(0.861707*t4,1e-48));c.ans5=c.ans2*eth*kErgPerEv;c.ans6=c.ans1*eth*kErgPerEv;break;}
-                case 67:{if(!r||record.real_count<3)throw std::runtime_error("type67 payload");double wav=delta_ev>0?12398.4016/delta_ev:0,tused=wav>0?std::max(input.temperature_k,2.8777e6/wav):input.temperature_k,tp=std::log10(std::max(tused,1e-300)),ups=std::max(0.0,r[0]+r[1]*tp+r[2]*tp*tp);collision_commit(ups,delta_ev,lower,upper);break;}
-                case 75:{if(!r||record.real_count<2)throw std::runtime_error("type75 payload");double rate=3.3e-11*std::pow(13.6/std::max(0.861707*t4,1e-48),1.5)*limited_exp(-r[1]/std::max(0.861707*t4,1e-48))*(r[0]/1e13)*(record.real_count>=3?r[2]:1.0);c.ans2=rate*cf_ne;break;}
-                case 79:{if(!r||record.real_count<5)throw std::runtime_error("type79 payload");double wav=std::abs(r[0]),f=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0){double aij=6.67e7*gl*f/std::max(gu,1e-48)/std::pow(wav*1e-4,2);if(f<=1.01e-12||wav>=1e9)aij=1e5;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*12398.4016/wav*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
-                case 81:{if(!r||record.real_count<1)throw std::runtime_error("type81 payload");collision_commit(r[0],delta_ev,lower,upper);break;}
-                case 82:{if(!r||record.real_count<4)throw std::runtime_error("type82 payload");double wav=std::abs(r[0]),f=r[2],aij=r[3],v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));double sig=.02655*f*wav*1e-8/std::max(v,1e-48),energy=12398.4016/std::max(wav,1e-48);auto [epi,brem,n]=source_grid();double pump=0;if(epi&&brem&&n){int nb=type99_nbinc_fortran_value(energy,epi,n);if(nb>0&&nb<=static_cast<int>(n))pump=sig*brem[nb-1]*v/3e10;}double decay=aij*ptmp_sum;c.ans1=pump;c.ans2=decay;c.ans3=pump*energy*kErgPerEv;out.opakab=sig;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;break;}
+                case 8:{if(!r||execution_v0682375.real_count<8)throw std::runtime_error("type8 payload");double rate=0;for(int k=0;k<4;++k)rate+=r[k]*limited_exp(-r[k+4]/std::max(0.861707*t4,1e-48));c.ans1=rate*1e-6*std::pow(t4,-1.5)*cf_ne;break;}
+                case 11:{if(!r||execution_v0682375.real_count<4)throw std::runtime_error("type11 payload");double de=std::abs(upper.energy_ev-lower.energy_ev);c.ans1=6.669e15*r[1]*r[2]/std::max(r[3]*r[0]*r[0],1e-300);c.ans4=c.ans1*de*kErgPerEv;break;}
+                case 16:{if(!r||execution_v0682375.real_count%5)throw std::runtime_error("type16 payload");double ekt=0.861707*t4,cs=0,cs2=0;for(std::size_t k=0;k<execution_v0682375.real_count;k+=5){double x=r[k]/std::max(ekt,1e-48);if(!(x>0))continue;double em1=source_ee1expo_generic(x),f1=em1/x,f2=source_ff2_generic(x);double fi=std::max(0.0,r[k+1]*(1-x*f1)+r[k+2]*(1+x-x*(2+x)*f1)+r[k+3]*f1+r[k+4]*x*f2);cs+=fi*limited_exp(-x)/x;cs2+=fi/x;}c.ans1=cs*6.69e-7/std::pow(std::max(ekt,1e-48),1.5)*cf_ne;double rinf=2.08e-22*first.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=cs2*6.69e-7/std::pow(std::max(ekt,1e-48),1.5)*cf_ne*rinf*cf_ne;break;}
+                case 17:{if(!r||execution_v0682375.real_count<2)throw std::runtime_error("type17 payload");double de=std::abs(upper.energy_ev-lower.energy_ev);c.ans2=8.629e-8*r[0]*std::pow(t4,r[1])/std::max(upper.statistical_weight,1e-48);c.ans1=(0.861707*t4>de/20.0)?c.ans2*upper.statistical_weight/std::max(lower.statistical_weight,1e-48):0.0;break;}
+                case 18:{if(!r||execution_v0682375.real_count<4)throw std::runtime_error("type18 payload");double alg=std::clamp(std::log10(t4/std::max(r[3],1e-48))+4.0,3.5,7.5);c.ans1=std::pow(10.0,r[0]+r[1]*std::pow(alg-r[2],2))/t4/1e4*cf_ne;break;}
+                case 20:{if(!r||execution_v0682375.real_count<5)throw std::runtime_error("type20 payload");double rate=r[0]*std::pow(t4,r[1])*(1+r[2]*limited_exp(r[3]*t4))*limited_exp(-r[4]/std::max(t4,1e-48))*1e-9;c.ans1=rate*input.ionized_h_density_cm3;break;}
+                case 21:{if(!r||execution_v0682375.real_count<3)throw std::runtime_error("type21 payload");double alpha=t4<1?r[1]:r[2];c.ans1=r[0]*std::pow(t4,alpha)*input.ionized_h_density_cm3;break;}
+                case 22:{if(!r||execution_v0682375.real_count<5)throw std::runtime_error("type22 payload");if(t4<=6){double rate=1e-12*(r[0]/t4+r[1]+t4*(r[2]+t4*r[3]))*std::pow(t4,-1.5)*limited_exp(-r[4]/t4);c.ans1=std::max(0.0,rate)*cf_ne;}break;}
+                case 25:{if(!r||execution_v0682375.real_count<5)throw std::runtime_error("type25 payload");double e=r[0],chir=input.temperature_k/(11590.0*std::max(e,1e-48));if(chir>.0115){double chi=std::max(chir,.1),ch2=chi*chi,ch3=ch2*chi;double alpha=(.001193+.9764*chi+.6604*ch2+.02590*ch3)/(1+1.488*chi+.2972*ch2+.004925*ch3);double beta=(-.0005725+.01345*chi+.8691*ch2+.03404*ch3)/(1+2.197*chi+.2457*ch2+.002503*ch3);double ch=1/chi,fchi=.3*ch*(r[1]+r[2]*(1+ch)+(r[3]-(r[1]+r[2]*(2+ch))*ch)*alpha+r[4]*beta*ch);double cion=2.2e-6*std::sqrt(chir)*fchi/(e*std::sqrt(e));double raw=cion*cf_ne,rinf=2.08e-22*lower.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=raw*rinf*cf_ne;c.ans1=raw*limited_exp(-1/chir);c.ans5=c.ans2*e*kErgPerEv;c.ans6=c.ans1*e*kErgPerEv;}break;}
+                case 28:{if(!r||execution_v0682375.real_count<5)throw std::runtime_error("type28 payload");std::size_t idx=4;if(execution_v0682375.real_count>=12){std::size_t j=source_linear_hunt_generic(r+execution_v0682375.real_count-4,4,t4);idx=execution_v0682375.real_count-8+j-1;idx=std::min(idx,static_cast<std::size_t>(execution_v0682375.real_count-1));}double ups=r[idx],wav=std::abs(r[0]);if(wav>1e-24){double ex=limited_exp(-(12398.4016/wav)/std::max(0.861707*t4,1e-48));double cji=8.626e-8*ups/sqrt_t4/std::max(upper.statistical_weight,1e-48);double cij=cji*upper.statistical_weight*ex/sqrt_t4/std::max(lower.statistical_weight,1e-48);c.ans1=cij*cf_ne;c.ans2=cji*cf_ne;}break;}
+                case 31:{if(!r||execution_v0682375.real_count<2)throw std::runtime_error("type31 payload");double wav=std::abs(r[0]),f=r[1];if(wav>0){double aij=.02655*f*8*std::acos(-1.0)/std::pow(wav*1e-8,2)*lower.statistical_weight/std::max(upper.statistical_weight,1e-24);double decay=aij*ptmp_sum,v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(execution_v0682375.atomic_mass_amu/t4,1e-48)),2));double sig=.02655*f*wav*1e-8/std::max(v,1e-48),energy=12398.4016/wav;auto [epi,brem,n]=source_grid();double pump=0;if(epi&&brem&&n){int nb=type99_nbinc_fortran_value(energy,epi,n);if(nb>0&&nb<=static_cast<int>(n))pump=sig*brem[nb-1]*v/3e10;}if(wav>.99e9){pump=0;sig=0;}decay+=pump*lower.statistical_weight/std::max(upper.statistical_weight,1e-48);c.ans1=decay;c.ans2=0;c.ans3=pump*energy*kErgPerEv;c.ans4=decay*energy*kErgPerEv;out.opakab=sig;out.spectral=execution_v0682375.line_index_one_based>0;out.line_energy_ev=energy;}break;}
+                case 33:{if(!r||execution_v0682375.real_count<4)throw std::runtime_error("type33 payload");double wav=std::abs(r[0]);if(wav>1e-24)collision_commit(r[3],12398.4016/wav,lower,upper);break;}
+                case 34:{if(!r||execution_v0682375.real_count<5)throw std::runtime_error("type34 payload");double wav=std::abs(r[0]),aij=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0&&gu>0&&gl>0){double f=aij*std::pow(wav*1e-8,2)*gu/(.667274*gl);c.ans1=aij*ptmp_sum;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;c.ans4=c.ans1*(12398.4016/wav)*kErgPerEv;out.spectral=execution_v0682375.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
+                case 37:{if(!r)throw std::runtime_error("type37 payload");int nn=ints&&execution_v0682375.int_count?static_cast<int>(ints[0]):std::min<int>(4,execution_v0682375.real_count/2);double rate=0;for(int k=0;k<std::min({nn,4,static_cast<int>(execution_v0682375.real_count)-4});++k)rate+=r[k]*limited_exp(-r[k+4]/std::max(0.861707*t4,1e-48));c.ans1=rate*1e-6*std::pow(t4,-1.5)*cf_ne;break;}
+                case 65:{if(!r||!ints||execution_v0682375.int_count<1)throw std::runtime_error("type65 payload");double eth=std::abs(terminal.energy_ev-lower.energy_ev);int ion_nlev=0;for(const auto& rw:element.rows)if(rw.ion==execution_v0682375.ion_index)++ion_nlev;double ci=type57_szirc(static_cast<int>(ints[0]),input.temperature_k,r[0],static_cast<double>(ion_nlev+1));c.ans1=ci*cf_ne;double rinf=2.08e-22*first.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=c.ans1*rinf*limited_exp(eth/std::max(0.861707*t4,1e-48));c.ans5=c.ans2*eth*kErgPerEv;c.ans6=c.ans1*eth*kErgPerEv;break;}
+                case 67:{if(!r||execution_v0682375.real_count<3)throw std::runtime_error("type67 payload");double wav=delta_ev>0?12398.4016/delta_ev:0,tused=wav>0?std::max(input.temperature_k,2.8777e6/wav):input.temperature_k,tp=std::log10(std::max(tused,1e-300)),ups=std::max(0.0,r[0]+r[1]*tp+r[2]*tp*tp);collision_commit(ups,delta_ev,lower,upper);break;}
+                case 75:{if(!r||execution_v0682375.real_count<2)throw std::runtime_error("type75 payload");double rate=3.3e-11*std::pow(13.6/std::max(0.861707*t4,1e-48),1.5)*limited_exp(-r[1]/std::max(0.861707*t4,1e-48))*(r[0]/1e13)*(execution_v0682375.real_count>=3?r[2]:1.0);c.ans2=rate*cf_ne;break;}
+                case 79:{if(!r||execution_v0682375.real_count<5)throw std::runtime_error("type79 payload");double wav=std::abs(r[0]),f=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0){double aij=6.67e7*gl*f/std::max(gu,1e-48)/std::pow(wav*1e-4,2);if(f<=1.01e-12||wav>=1e9)aij=1e5;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*12398.4016/wav*kErgPerEv;out.spectral=execution_v0682375.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
+                case 81:{if(!r||execution_v0682375.real_count<1)throw std::runtime_error("type81 payload");collision_commit(r[0],delta_ev,lower,upper);break;}
+                case 82:{if(!r||execution_v0682375.real_count<4)throw std::runtime_error("type82 payload");double wav=std::abs(r[0]),f=r[2],aij=r[3],v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(execution_v0682375.atomic_mass_amu/t4,1e-48)),2));double sig=.02655*f*wav*1e-8/std::max(v,1e-48),energy=12398.4016/std::max(wav,1e-48);auto [epi,brem,n]=source_grid();double pump=0;if(epi&&brem&&n){int nb=type99_nbinc_fortran_value(energy,epi,n);if(nb>0&&nb<=static_cast<int>(n))pump=sig*brem[nb-1]*v/3e10;}double decay=aij*ptmp_sum;c.ans1=pump;c.ans2=decay;c.ans3=pump*energy*kErgPerEv;out.opakab=sig;out.spectral=execution_v0682375.line_index_one_based>0;out.line_energy_ev=energy;break;}
                 // Types 89, 96, and 97 are implemented in the current canonical ucalc.f90
                 // but are not enumerated in the requested Appendix-A / Chapter-12 snapshots;
                 // their semantics below therefore follow executable Fortran, not those tables.
-                case 89:{if(!r||record.real_count<3)throw std::runtime_error("type89 payload");double wav=std::abs(r[0]),aij=r[2],gu=lower.statistical_weight,gl=upper.statistical_weight,f=1e-16*aij*gu*wav*wav/(.667274*std::max(gl,1e-48)),v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;double energy=12398.4016/std::max(wav,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*energy*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;break;}
-                case 96:{if(!r||record.real_count<3)throw std::runtime_error("type96 payload");double rate=2.069e-3/std::pow(input.temperature_k,1.5)*limited_exp(-r[2]/std::max(0.861707*t4,1e-48))*r[1];c.ans2=rate*cf_ne;break;}
-                case 97:{if(!r||record.real_count<4)throw std::runtime_error("type97 payload");std::size_t ns=record.real_count/2;if(ns<2)break;double ekt=.861707*t4;std::size_t j=source_linear_hunt_generic(r,ns,ekt);double ups=r[ns+j]+(r[ns+j+1]-r[ns+j])*(ekt-r[j])/std::max(r[j+1]-r[j],1e-24);double th=delta_ev,gl=lower.statistical_weight,gu=upper.statistical_weight,cji=8.626e-8*ups/sqrt_t4/std::max(gu,1e-48),ex=limited_exp(-th/std::max(ekt,1e-48)),cij=cji*gu*ex/std::max(gl,1e-48);c.ans1=cij*cf_ne;double rinf=2.08e-22*gl/std::max(gu,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=c.ans1*rinf*cf_ne/std::max(ex,1e-300);c.ans5=c.ans2*th*kErgPerEv;c.ans6=c.ans1*th*kErgPerEv;break;}
+                case 89:{if(!r||execution_v0682375.real_count<3)throw std::runtime_error("type89 payload");double wav=std::abs(r[0]),aij=r[2],gu=lower.statistical_weight,gl=upper.statistical_weight,f=1e-16*aij*gu*wav*wav/(.667274*std::max(gl,1e-48)),v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(execution_v0682375.atomic_mass_amu/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;double energy=12398.4016/std::max(wav,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*energy*kErgPerEv;out.spectral=execution_v0682375.line_index_one_based>0;out.line_energy_ev=energy;break;}
+                case 96:{if(!r||execution_v0682375.real_count<3)throw std::runtime_error("type96 payload");double rate=2.069e-3/std::pow(input.temperature_k,1.5)*limited_exp(-r[2]/std::max(0.861707*t4,1e-48))*r[1];c.ans2=rate*cf_ne;break;}
+                case 97:{if(!r||execution_v0682375.real_count<4)throw std::runtime_error("type97 payload");std::size_t ns=execution_v0682375.real_count/2;if(ns<2)break;double ekt=.861707*t4;std::size_t j=source_linear_hunt_generic(r,ns,ekt);double ups=r[ns+j]+(r[ns+j+1]-r[ns+j])*(ekt-r[j])/std::max(r[j+1]-r[j],1e-24);double th=delta_ev,gl=lower.statistical_weight,gu=upper.statistical_weight,cji=8.626e-8*ups/sqrt_t4/std::max(gu,1e-48),ex=limited_exp(-th/std::max(ekt,1e-48)),cij=cji*gu*ex/std::max(gl,1e-48);c.ans1=cij*cf_ne;double rinf=2.08e-22*gl/std::max(gu,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=c.ans1*rinf*cf_ne/std::max(ex,1e-300);c.ans5=c.ans2*th*kErgPerEv;c.ans6=c.ans1*th*kErgPerEv;break;}
                 // Type 98 is the variable-length CHIANTI/Burgess-Tully effective
                 // collision-strength record listed in Appendix A; the transition-type
                 // integer selects the source scaling used by the general BT evaluator.
-                case 98:{if(!r||!ints||record.real_count<5||record.int_count<2)throw std::runtime_error("type98 payload");std::size_t n=(record.real_count-3)/2;int k=static_cast<int>(ints[record.int_count-2]);double ups=source_bt_general_upsilon_generic(k,r[0],r[2],r+3,r+3+n,n,input.temperature_k);collision_commit(ups,delta_ev,lower,upper);break;}
-                case 101:{if(!r||record.real_count<2)throw std::runtime_error("type101 payload");std::size_t nt=record.real_count/2;double ups=0;if(nt==1)ups=r[1];else{double lt=std::log10(input.temperature_k);std::size_t j=source_linear_hunt_generic(r,nt,lt);ups=r[nt+j]+(r[nt+j+1]-r[nt+j])*(lt-r[j])/std::max(r[j+1]-r[j],1e-24);}collision_commit(std::max(0.0,ups),delta_ev,lower,upper);break;}
-                case 102:{if(!r||!ints||record.real_count<7||record.int_count<4)throw std::runtime_error("type102 payload");int itype=static_cast<int>(ints[0]);if(itype<1||itype>8)break;static const int ind[8][9]={{1,2,3,4,0,0,0,5,0},{1,2,3,4,0,0,0,0,0},{0,0,1,2,3,0,0,0,4},{1,2,3,4,0,0,0,5,6},{1,2,3,4,0,0,0,0,5},{0,0,1,2,3,4,0,0,5},{0,0,0,1,2,3,4,0,5},{6,0,1,2,3,4,0,0,5}};double par[9]={};for(int j=0;j<9;++j)if(ind[itype-1][j])par[j]=r[ind[itype-1][j]];double eij=1000*r[0],x=eij/std::max(.861707*t4,1e-48),xr=x*(1+par[8]),en[6];en[0]=source_ee1expo_generic(xr);for(int n=1;n<6;++n)en[n]=(1-xr*en[n-1])/n;double omc=par[0]+xr*(par[1]*en[0]+par[2]*en[1]+2*par[3]*en[2]+6*par[4]*en[3]+24*par[5]*en[4]+120*par[6]*en[5])+par[7]*en[0];int nr=std::min(std::max(static_cast<int>(ints[1]),0),4);double omr=0;std::size_t start=11;for(int q=0;q<nr&&start+nr+q<record.real_count;++q)omr+=r[start+nr+q]*(r[start+q]*x)*limited_exp(-r[start+q]*x);collision_commit(omc+omr,eij,lower,upper);break;}
+                case 98:{if(!r||!ints||execution_v0682375.real_count<5||execution_v0682375.int_count<2)throw std::runtime_error("type98 payload");std::size_t n=(execution_v0682375.real_count-3)/2;int k=static_cast<int>(ints[execution_v0682375.int_count-2]);double ups=source_bt_general_upsilon_generic(k,r[0],r[2],r+3,r+3+n,n,input.temperature_k);collision_commit(ups,delta_ev,lower,upper);break;}
+                case 101:{if(!r||execution_v0682375.real_count<2)throw std::runtime_error("type101 payload");std::size_t nt=execution_v0682375.real_count/2;double ups=0;if(nt==1)ups=r[1];else{double lt=std::log10(input.temperature_k);std::size_t j=source_linear_hunt_generic(r,nt,lt);ups=r[nt+j]+(r[nt+j+1]-r[nt+j])*(lt-r[j])/std::max(r[j+1]-r[j],1e-24);}collision_commit(std::max(0.0,ups),delta_ev,lower,upper);break;}
+                case 102:{if(!r||!ints||execution_v0682375.real_count<7||execution_v0682375.int_count<4)throw std::runtime_error("type102 payload");int itype=static_cast<int>(ints[0]);if(itype<1||itype>8)break;static const int ind[8][9]={{1,2,3,4,0,0,0,5,0},{1,2,3,4,0,0,0,0,0},{0,0,1,2,3,0,0,0,4},{1,2,3,4,0,0,0,5,6},{1,2,3,4,0,0,0,0,5},{0,0,1,2,3,4,0,0,5},{0,0,0,1,2,3,4,0,5},{6,0,1,2,3,4,0,0,5}};double par[9]={};for(int j=0;j<9;++j)if(ind[itype-1][j])par[j]=r[ind[itype-1][j]];double eij=1000*r[0],x=eij/std::max(.861707*t4,1e-48),xr=x*(1+par[8]),en[6];en[0]=source_ee1expo_generic(xr);for(int n=1;n<6;++n)en[n]=(1-xr*en[n-1])/n;double omc=par[0]+xr*(par[1]*en[0]+par[2]*en[1]+2*par[3]*en[2]+6*par[4]*en[3]+24*par[5]*en[4]+120*par[6]*en[5])+par[7]*en[0];int nr=std::min(std::max(static_cast<int>(ints[1]),0),4);double omr=0;std::size_t start=11;for(int q=0;q<nr&&start+nr+q<execution_v0682375.real_count;++q)omr+=r[start+nr+q]*(r[start+q]*x)*limited_exp(-r[start+q]*x);collision_commit(omc+omr,eij,lower,upper);break;}
 
                 // Source phintfo families.  The sigma is built on the exact
                 // calc_hmc epim grid, then the common source integration is
@@ -9442,13 +9567,13 @@ EvaluatedRecord evaluate_record(
                 case 12: case 36: case 55: case 19: case 23: case 27: case 35: case 15: case 64: case 85: {
                     auto [epi,brem,n]=source_grid();(void)brem;if(!epi||n<3)throw std::runtime_error("generic bound-free requires live source grid");std::vector<double> sigma(n,0.0);double threshold=delta_ev,sw=1.0;bool zero_reverse=false;
                     if(dt==19){threshold=r[4];sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold){double z=std::log(epi[k]/std::max(threshold,1e-48));double alp=r[0]+z*(r[1]+z*(z*r[2]+z*r[3]));sigma[k]=1e-18*limited_exp(alp)*13.606/std::max(threshold,1e-48);}}
-                    else if(dt==23){threshold=std::max(lower.energy_ev,0.0);double z=std::max(static_cast<double>(element.element_z),1.0),nn=ints&&record.int_count?std::max<double>(ints[0],1.0):1.0,sg0=6.3e-18*nn/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
-                    else if(dt==27){threshold=std::abs(terminal.energy_ev-first.energy_ev);double z=std::max(r[0],1e-48);sw=first.statistical_weight;zero_reverse=record.rate_type==1;for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0){double zap=epi[k]/threshold-1,y=epi[k]/threshold,yy=std::max(std::sqrt(std::max(zap,0.0)),1e-4);sigma[k]=6.3e-18/(z*z)*std::pow(y,-4)*limited_exp(4-4*std::atan(yy)/yy)/(1-limited_exp(-6.2832/yy));}}
-                    else if(dt==35){threshold=r[0];std::size_t np=(record.real_count-1)/2;std::vector<double>xs(np),ys(np);for(std::size_t q=0;q<np;++q){ys[q]=r[1+2*q];xs[q]=r[2+2*q];}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&np){double ef=(epi[k]-threshold)/13.605692;if(ef<=xs.front())sigma[k]=ys.front();else if(ef>=xs.back())sigma[k]=ys.back();else{auto it=std::upper_bound(xs.begin(),xs.end(),ef);std::size_t j=static_cast<std::size_t>(it-xs.begin()-1);sigma[k]=ys[j]+(ys[j+1]-ys[j])*(ef-xs[j])/(xs[j+1]-xs[j]);}}}
-                    else if(dt==36||dt==12||dt==55){threshold=std::abs(upper.energy_ev-lower.energy_ev);double z=(dt==55)?static_cast<double>(element.element_z-record.ion_stage):static_cast<double>(element.element_z-record.ion_stage+1);z=std::max(z,1.0);double nq=(dt==55)?1.0:std::min<double>(10.0,ints&&record.int_count?ints[0]:1.0),sg0=6.3e-18*nq*nq/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
-                    else if(dt==15){int na=ints&&record.int_count>=5?std::max<int>(1,ints[record.int_count-5]):1;std::vector<double>bs;std::vector<std::array<double,11>>co;double d=0;threshold=0;for(int sh=0;sh<na;++sh){std::size_t off=15u*sh;if(off+13>=record.real_count)break;threshold=r[off];d=r[off+1];bs.push_back(r[off+2]);std::array<double,11>a{};for(int q=0;q<11;++q)a[q]=r[off+3+q];co.push_back(a);}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&!bs.empty()){double xx=epi[k]*1e-3-d;if(xx>0){std::size_t j=0;while(j+1<bs.size()&&xx>=bs[j])++j;double yy=std::log10(std::max(xx,1e-300)),tmp=0;for(int q=10;q>=0;--q)tmp=co[j][q]+yy*tmp;tmp=std::clamp(tmp,-50.0,24.0);sigma[k]=std::pow(10.0,tmp-24.0);}}}
-                    else if(dt==64){threshold=std::abs(upper.energy_ev-lower.energy_ev);int nq=ints&&record.int_count?std::max<int>(ints[0],1):1,l=ints&&record.int_count>1?std::max<int>(ints[1],0):0,charge=ints&&record.int_count>2?std::max<int>(ints[2],1):1;std::vector<double>er(n),smb(n);for(std::size_t k=0;k<n;++k){er[k]=std::max((epi[k]-threshold)/13.605692,0.0);smb[k]=source_hphotx_mb_generic(er[k],charge,nq,l);sigma[k]=smb[k]*1e-18;}sw=lower.statistical_weight;commit_phint(sigma,threshold,sw,false);c.ans2=type99_milne_alpha(er,smb,threshold/13.6,input.temperature_k)*sw;break;}
-                    else if(dt==85){int nmin=ints&&record.int_count?static_cast<int>(ints[0]):1,id3=ints&&record.int_count?static_cast<int>(ints[record.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);
+                    else if(dt==23){threshold=std::max(lower.energy_ev,0.0);double z=std::max(static_cast<double>(element.element_z),1.0),nn=ints&&execution_v0682375.int_count?std::max<double>(ints[0],1.0):1.0,sg0=6.3e-18*nn/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
+                    else if(dt==27){threshold=std::abs(terminal.energy_ev-first.energy_ev);double z=std::max(r[0],1e-48);sw=first.statistical_weight;zero_reverse=execution_v0682375.rate_type==1;for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0){double zap=epi[k]/threshold-1,y=epi[k]/threshold,yy=std::max(std::sqrt(std::max(zap,0.0)),1e-4);sigma[k]=6.3e-18/(z*z)*std::pow(y,-4)*limited_exp(4-4*std::atan(yy)/yy)/(1-limited_exp(-6.2832/yy));}}
+                    else if(dt==35){threshold=r[0];std::size_t np=(execution_v0682375.real_count-1)/2;std::vector<double>xs(np),ys(np);for(std::size_t q=0;q<np;++q){ys[q]=r[1+2*q];xs[q]=r[2+2*q];}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&np){double ef=(epi[k]-threshold)/13.605692;if(ef<=xs.front())sigma[k]=ys.front();else if(ef>=xs.back())sigma[k]=ys.back();else{auto it=std::upper_bound(xs.begin(),xs.end(),ef);std::size_t j=static_cast<std::size_t>(it-xs.begin()-1);sigma[k]=ys[j]+(ys[j+1]-ys[j])*(ef-xs[j])/(xs[j+1]-xs[j]);}}}
+                    else if(dt==36||dt==12||dt==55){threshold=std::abs(upper.energy_ev-lower.energy_ev);double z=(dt==55)?static_cast<double>(element.element_z-execution_v0682375.ion_stage):static_cast<double>(element.element_z-execution_v0682375.ion_stage+1);z=std::max(z,1.0);double nq=(dt==55)?1.0:std::min<double>(10.0,ints&&execution_v0682375.int_count?ints[0]:1.0),sg0=6.3e-18*nq*nq/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
+                    else if(dt==15){int na=ints&&execution_v0682375.int_count>=5?std::max<int>(1,ints[execution_v0682375.int_count-5]):1;std::vector<double>bs;std::vector<std::array<double,11>>co;double d=0;threshold=0;for(int sh=0;sh<na;++sh){std::size_t off=15u*sh;if(off+13>=execution_v0682375.real_count)break;threshold=r[off];d=r[off+1];bs.push_back(r[off+2]);std::array<double,11>a{};for(int q=0;q<11;++q)a[q]=r[off+3+q];co.push_back(a);}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&!bs.empty()){double xx=epi[k]*1e-3-d;if(xx>0){std::size_t j=0;while(j+1<bs.size()&&xx>=bs[j])++j;double yy=std::log10(std::max(xx,1e-300)),tmp=0;for(int q=10;q>=0;--q)tmp=co[j][q]+yy*tmp;tmp=std::clamp(tmp,-50.0,24.0);sigma[k]=std::pow(10.0,tmp-24.0);}}}
+                    else if(dt==64){threshold=std::abs(upper.energy_ev-lower.energy_ev);int nq=ints&&execution_v0682375.int_count?std::max<int>(ints[0],1):1,l=ints&&execution_v0682375.int_count>1?std::max<int>(ints[1],0):0,charge=ints&&execution_v0682375.int_count>2?std::max<int>(ints[2],1):1;std::vector<double>er(n),smb(n);for(std::size_t k=0;k<n;++k){er[k]=std::max((epi[k]-threshold)/13.605692,0.0);smb[k]=source_hphotx_mb_generic(er[k],charge,nq,l);sigma[k]=smb[k]*1e-18;}sw=lower.statistical_weight;commit_phint(sigma,threshold,sw,false);c.ans2=type99_milne_alpha(er,smb,threshold/13.6,input.temperature_k)*sw;break;}
+                    else if(dt==85){int nmin=ints&&execution_v0682375.int_count?static_cast<int>(ints[0]):1,id3=ints&&execution_v0682375.int_count?static_cast<int>(ints[execution_v0682375.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);
                         // 0.6.82.5 Fe Type-85 source-faithful post-phintfo rearrangement.
                         // source_phintfo_sigma_generic already returns the ordinary ucalc
                         // channel ordering used by the generic bound-free path.  The Type-85
@@ -9456,31 +9581,31 @@ EvaluatedRecord evaluate_record(
                         // reverse channels are zeroed and photoionization heating is taken
                         // from the negated ordinary ans3/ans5 slots.  Keep the 0.6.82.4
                         // energy-ordered endpoint ownership from xstar_atdb_runtime.cpp.
-                        c.ans1=ph.ans[0];c.ans2=0.0;c.ans3=0.0;c.ans4=-ph.ans[2];c.ans5=0.0;c.ans6=-ph.ans[4];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
+                        c.ans1=ph.ans[0];c.ans2=0.0;c.ans3=0.0;c.ans4=-ph.ans[2];c.ans5=0.0;c.ans6=-ph.ans[4];out.opakab=0;out.spectral=execution_v0682375.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=execution_v0682375.continuum_index_one_based;out.line_energy_ev=threshold;break;}
                     if (dt != 64 && dt != 85) {
                         commit_phint(sigma, threshold, sw, zero_reverse);
                     }
                     break;
                 }
                 case 70:{
-                    if(!r||!ints||record.int_count<5)throw std::runtime_error("type70 payload");
+                    if(!r||!ints||execution_v0682375.int_count<5)throw std::runtime_error("type70 payload");
                     constexpr std::int64_t kType70SourceIonIdentityMagicV068213 = 227;
-                    const bool has_source_tail = record.int_count >= 2 &&
-                        ints[record.int_count-1] == kType70SourceIonIdentityMagicV068213;
+                    const bool has_source_tail = execution_v0682375.int_count >= 2 &&
+                        ints[execution_v0682375.int_count-1] == kType70SourceIonIdentityMagicV068213;
                     const std::size_t source_int_count = has_source_tail
-                        ? record.int_count - 2u : record.int_count;
+                        ? execution_v0682375.int_count - 2u : execution_v0682375.int_count;
                     if (source_int_count < 5u) throw std::runtime_error("type70 source integer payload");
 
                     bool source_global_hydrogen_ion = false;
                     if (has_source_tail) {
-                        source_global_hydrogen_ion = ints[record.int_count-2] == 1;
+                        source_global_hydrogen_ion = ints[execution_v0682375.int_count-2] == 1;
                     } else {
                         // Compatibility fallback for older synthetic programs
                         // that predate the global-source-ion tail.  Hydrogen's
                         // first ion is the only physical source identity that
                         // can satisfy jkion.eq.1; never use the compact
-                        // per-element record.ion_index here.
-                        source_global_hydrogen_ion = element.element_z == 1 && record.ion_stage == 1;
+                        // per-element execution_v0682375.ion_index here.
+                        source_global_hydrogen_ion = element.element_z == 1 && execution_v0682375.ion_stage == 1;
                     }
 
                     // 0.6.82.30.8.14: literal ucalc.f90 label-70 ownership.
@@ -9500,7 +9625,7 @@ EvaluatedRecord evaluate_record(
                     int current_nlev = 0;
                     for (const auto& topo : program.lte_ion_topology) {
                         if (topo.element_index == element.element_index &&
-                            topo.ion_stage == record.ion_stage && topo.nlev > 0) {
+                            topo.ion_stage == execution_v0682375.ion_stage && topo.nlev > 0) {
                             current_nlev = topo.nlev;
                             break;
                         }
@@ -9514,11 +9639,11 @@ EvaluatedRecord evaluate_record(
                         : raw_source_bound_local;
                     for (const auto& level : program.lte_levels) {
                         if (level.element_index != element.element_index) continue;
-                        if (level.ion_stage == record.ion_stage) {
+                        if (level.ion_stage == execution_v0682375.ion_stage) {
                             if (level.local_level == source_bound_local) source_bound = &level;
                             if (current_nlev > 0 && level.local_level == current_nlev) source_terminal = &level;
                         }
-                        if (source_final_level > 1 && level.ion_stage == record.ion_stage + 1 &&
+                        if (source_final_level > 1 && level.ion_stage == execution_v0682375.ion_stage + 1 &&
                             level.local_level == source_final_level) {
                             source_destination = &level;
                         }
@@ -9557,7 +9682,7 @@ EvaluatedRecord evaluate_record(
                     double density=input.hydrogen_density_cm3;
                     if(source_global_hydrogen_ion)density=std::min(density,1e8);
                     auto cal=source_calt70_generic(
-                        r,record.real_count,ints,source_int_count,
+                        r,execution_v0682375.real_count,ints,source_int_count,
                         input.temperature_k,density,threshold/13.6);
                     if(!cal.valid)break;
                     std::vector<double> sigma_cm2(cal.xs_mb.size(),0.0);
@@ -9585,14 +9710,14 @@ EvaluatedRecord evaluate_record(
                     c.ans6 = -ph.piht2 * scale;
                     out.generic_bound_free_offset_ryd_v0648120 = cal.e_ryd;
                     out.generic_bound_free_sigma_cm2_v0648120 = std::move(sigma_cm2);
-                    out.spectral = record.continuum_index_one_based > 0;
+                    out.spectral = execution_v0682375.continuum_index_one_based > 0;
                     out.bound_free_spectral = out.spectral;
-                    out.continuum_index_one_based = record.continuum_index_one_based;
+                    out.continuum_index_one_based = execution_v0682375.continuum_index_one_based;
                     out.line_energy_ev = threshold;
                     break;
                 }
                 case 92:{
-                    if (!r || !ints || record.real_count < 42 || record.int_count < 3) {
+                    if (!r || !ints || execution_v0682375.real_count < 42 || execution_v0682375.int_count < 3) {
                         throw std::runtime_error("type92 payload");
                     }
                     const int ct = static_cast<int>(ints[2]);
@@ -9610,11 +9735,11 @@ EvaluatedRecord evaluate_record(
                 }
                 default: throw std::runtime_error("v0.6.48.12.1 missing generic evaluator for data type "+std::to_string(dt));
             }
-            out.matrix_enabled=record.matrix_enabled;
+            out.matrix_enabled=execution_v0682375.matrix_enabled;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE74_DELTA_RESONANCE: {
-            if (!r || record.real_count < 3 || (record.real_count - 1) % 2 != 0) throw std::runtime_error("invalid type74 payload");
+            if (!r || execution_v0682375.real_count < 3 || (execution_v0682375.real_count - 1) % 2 != 0) throw std::runtime_error("invalid type74 payload");
             const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
             const double* full_energy_ev = has_dsec_radiation ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
             const double* full_bremsa = has_dsec_radiation ? input.dsec_bremsa : input.radiation_flux;
@@ -9631,7 +9756,7 @@ EvaluatedRecord evaluate_record(
             const double* source_energy_ev = reduced_energy_ev.data();
             const double* source_bremsa = reduced_bremsa.data();
             const std::size_t source_bin_count = reduced_energy_ev.size();
-            const std::size_t m = (record.real_count - 1) / 2;
+            const std::size_t m = (execution_v0682375.real_count - 1) / 2;
             const double xt = r[0];
             const double te = input.temperature_k * 1.38066e-16;
             const double ryk = 4.589343e10;
@@ -9652,7 +9777,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         default:
-            throw std::runtime_error("unsupported fixed-state opcode " + std::to_string(record.opcode));
+            throw std::runtime_error("unsupported fixed-state opcode " + std::to_string(execution_v0682375.opcode));
     }
     for (double value : {c.ans1, c.ans2, c.ans3, c.ans4, c.ans5, c.ans6}) {
         if (!std::isfinite(value)) throw std::runtime_error("non-finite evaluated rate");
@@ -9727,7 +9852,8 @@ void write_type49_identical_state_probe(
         probe_context.bound_free_cache = nullptr;
         probe_context.bound_free_perf = nullptr;
         const EvaluatedRecord evaluated = evaluate_record(
-            ctx.program, element, *target, probe_input, probe_context);
+            ctx.program, element, *target,
+            execution_record_v0682375(ctx.program, *target), probe_input, probe_context);
         if (!evaluated.bound_free_payload().type49_shadow_v0682374().valid || !evaluated.bound_free_payload().type49_shadow_v0682374().source_faithful_mode ||
             !evaluated.bound_free_payload().type49_shadow_v0682374().replacement_applied) {
             throw std::runtime_error("v0648123431113 target Type49 source-shadow re-evaluation invalid");
@@ -9763,6 +9889,7 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     const xstar_fixed_state_input_v1& input,
     const EvaluatedRecord& evaluated,
     const RateEvaluationContextV064894& rate_context) {
+    const auto& execution_v0682375 = execution_record_v0682375(program, record);
     if (rate_context.force_legacy_bound_free) {
         return record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
             ? evaluated.bound_free_payload().type49_calc_emis_shadow_v0682374() : evaluated.bound_free_payload().type53_calc_emis_shadow_v0682374();
@@ -9770,20 +9897,20 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     Type53SourceShadow shadow{};
     if (record.opcode != XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
         record.opcode != XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) return shadow;
-    if (record.real_offset + record.real_count > program.reals.size()) return shadow;
-    const double* r = program.reals.data() + record.real_offset;
+    if (execution_v0682375.real_offset + execution_v0682375.real_count > program.reals.size()) return shadow;
+    const double* r = program.reals.data() + execution_v0682375.real_offset;
     const ElementRow scalar_dummy{};
     // Preserve source raw idest values on the record, but evaluate any compact
     // row fallback through the same terminal-row alias used by msolvelucy.
-    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
-    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
+    const int matrix_lower_row = record.matrix_enabled ? std::min(static_cast<int>(record.lower_row), element.n_rows) : 0;
+    const int matrix_upper_row = record.matrix_enabled ? std::min(static_cast<int>(record.upper_row), element.n_rows) : 0;
     const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
     const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
     Type53RecordContext record_context = evaluated.bound_free_payload().bound_free_record_context_v064895;
     const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
     if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
     const std::size_t pair_real_count = record_context.valid
-        ? record_context.pair_real_count : record.real_count;
+        ? record_context.pair_real_count : execution_v0682375.real_count;
     if (pair_real_count < 4 || pair_real_count % 2 != 0) return shadow;
     if (type49 && evaluated.bound_free_payload().bound_free_threshold_ev_v064895 <= 0.0) {
         return evaluated.bound_free_payload().type49_shadow_v0682374();
@@ -9798,7 +9925,7 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     full_input.dsec_bremsa = nullptr;
     full_input.dsec_radiation_bin_count = 0;
     const BoundFreePreparedGeometryV064895* prepared = prepared_bound_free_geometry(
-        program, record, full_input, evaluated.bound_free_payload().bound_free_threshold_ev_v064895,
+        program, record, execution_v0682375, full_input, evaluated.bound_free_payload().bound_free_threshold_ev_v064895,
         type49, type49, record_context.valid ? &record_context : nullptr,
         true, rate_context);
     xstar_element_contribution_v1 contribution{};
@@ -9828,21 +9955,22 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free_v06823614(
     const xstar_fixed_state_input_v1& input,
     const BoundFreeRevisitStateV06823614& revisit,
     const RateEvaluationContextV064894& rate_context) {
+    const auto& execution_v0682375 = execution_record_v0682375(program, record);
     Type53SourceShadow shadow{};
     if (record.opcode != XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
         record.opcode != XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) return shadow;
-    if (record.real_offset + record.real_count > program.reals.size()) return shadow;
-    const double* r = program.reals.data() + record.real_offset;
+    if (execution_v0682375.real_offset + execution_v0682375.real_count > program.reals.size()) return shadow;
+    const double* r = program.reals.data() + execution_v0682375.real_offset;
     const ElementRow scalar_dummy{};
-    const int matrix_lower_row = record.matrix_enabled ? std::min(record.lower_row, element.n_rows) : 0;
-    const int matrix_upper_row = record.matrix_enabled ? std::min(record.upper_row, element.n_rows) : 0;
+    const int matrix_lower_row = record.matrix_enabled ? std::min(static_cast<int>(record.lower_row), element.n_rows) : 0;
+    const int matrix_upper_row = record.matrix_enabled ? std::min(static_cast<int>(record.upper_row), element.n_rows) : 0;
     const ElementRow& lower = record.matrix_enabled ? row_at(element, matrix_lower_row) : scalar_dummy;
     const ElementRow& upper = record.matrix_enabled ? row_at(element, matrix_upper_row) : scalar_dummy;
     Type53RecordContext record_context = revisit.record_context;
     const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
     if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
     const std::size_t pair_real_count = record_context.valid
-        ? record_context.pair_real_count : record.real_count;
+        ? record_context.pair_real_count : execution_v0682375.real_count;
     if (pair_real_count < 4 || pair_real_count % 2 != 0) return shadow;
     if (type49 && revisit.threshold_ev <= 0.0) {
         shadow.valid = revisit.threshold_zero_fallback.valid;
@@ -9864,7 +9992,7 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free_v06823614(
     full_input.dsec_bremsa = nullptr;
     full_input.dsec_radiation_bin_count = 0;
     const BoundFreePreparedGeometryV064895* prepared = prepared_bound_free_geometry(
-        program, record, full_input, revisit.threshold_ev,
+        program, record, execution_v0682375, full_input, revisit.threshold_ev,
         type49, type49, record_context.valid ? &record_context : nullptr,
         true, rate_context);
     xstar_element_contribution_v1 contribution{};
@@ -10183,16 +10311,17 @@ void apply_type99_persistent_leveltemp_z1_z30(
         const ProgramRecord* record_ptr = evaluated_records[ordinal];
         if (!record_ptr) continue;
         const ProgramRecord& record = *record_ptr;
+        const auto& execution_v0682375 = execution_record_v0682375(program, record);
         EvaluatedRecord& item = evaluated[ordinal];
         auto& contribution = item.contribution;
         if (record.data_type == 99 &&
             contribution.ion_stage >= active.min_stage &&
             contribution.ion_stage <= active.max_stage) {
-            const double* payload = record.real_count
-                ? program.reals.data() + record.real_offset : nullptr;
-            const std::int64_t* ints = record.int_count
-                ? program.ints.data() + record.int_offset : nullptr;
-            if (!payload || !ints || record.int_count < 3) {
+            const double* payload = execution_v0682375.real_count
+                ? program.reals.data() + execution_v0682375.real_offset : nullptr;
+            const std::int64_t* ints = execution_v0682375.int_count
+                ? program.ints.data() + execution_v0682375.int_offset : nullptr;
+            if (!payload || !ints || execution_v0682375.int_count < 3) {
                 if (native_production_mode())
                     throw std::runtime_error("Type-99 persistent context requires payloads");
                 continue;
@@ -10206,7 +10335,7 @@ void apply_type99_persistent_leveltemp_z1_z30(
             const std::size_t core_real_count = static_cast<std::size_t>(
                 nden + ntem + nden * ntem + 2 * nxs);
             const auto context = parse_type99_persistent_leveltemp_context(
-                record, payload, ints, core_real_count);
+                execution_v0682375, payload, ints, core_real_count);
             if (!context.valid) {
                 if (native_production_mode()) {
                     throw std::runtime_error(
@@ -10252,12 +10381,12 @@ void apply_type99_persistent_leveltemp_z1_z30(
                 !(resolved.threshold_ev > 0.0)) {
                 throw std::runtime_error("Type-99 resolved energy/weight context is invalid");
             }
-            const ElementRow& lower = row_at(element, std::min(record.lower_row, element.n_rows));
-            const ElementRow& upper = row_at(element, std::min(record.upper_row, element.n_rows));
+            const ElementRow& lower = row_at(element, std::min(static_cast<int>(record.lower_row), element.n_rows));
+            const ElementRow& upper = row_at(element, std::min(static_cast<int>(record.upper_row), element.n_rows));
             xstar_element_contribution_v1 corrected = contribution;
             Type99SourceShadow corrected_shadow{};
             if (!evaluate_type99_source_faithful(
-                    record, payload, ints, lower, upper, input,
+                    execution_v0682375, payload, ints, lower, upper, input,
                     corrected, &corrected_shadow, &resolved)) {
                 throw std::runtime_error(
                     "Type-99 persistent leveltemp integral reevaluation failed");
@@ -10336,6 +10465,7 @@ CalcHmcIonEndpointsV06822934 calc_hmc_ion_endpoints_v06822934(
     const ElementProgram& element,
     const ProgramRecord& record,
     int nlev) {
+    const auto& execution_v0682375 = execution_record_v0682375(program, record);
     CalcHmcIonEndpointsV06822934 out;
     out.idest1 = source_idest_for_full_row(
         program, element, record.ion_stage, record.lower_row);
@@ -10343,15 +10473,15 @@ CalcHmcIonEndpointsV06822934 calc_hmc_ion_endpoints_v06822934(
         program, element, record.ion_stage, record.upper_row);
 
     const bool payload_ok =
-        record.int_offset + record.int_count <= program.ints.size();
-    const std::int64_t* ints = payload_ok && record.int_count > 0
-        ? program.ints.data() + record.int_offset : nullptr;
+        execution_v0682375.int_offset + execution_v0682375.int_count <= program.ints.size();
+    const std::int64_t* ints = payload_ok && execution_v0682375.int_count > 0
+        ? program.ints.data() + execution_v0682375.int_offset : nullptr;
 
     switch (record.data_type) {
         case 53:
             // Type-53 lowering keeps literal idest1 in lower_row and serializes
             // the UCalc destination idest2 as ints[1] in its v4 payload.
-            if (ints && record.int_count >= 4u) {
+            if (ints && execution_v0682375.int_count >= 4u) {
                 out.idest1 = source_idest_for_full_row(
                     program, element, record.ion_stage, record.lower_row);
                 out.idest2 = static_cast<int>(ints[1]);
@@ -10363,7 +10493,7 @@ CalcHmcIonEndpointsV06822934 calc_hmc_ion_endpoints_v06822934(
         case 59:
             // Type-52 is the rate-7 alias of UCalc label 59.  The lowered
             // payload stores idest1/idest2 verbatim at ints[3:5].
-            if (ints && record.int_count >= 5u) {
+            if (ints && execution_v0682375.int_count >= 5u) {
                 out.idest1 = static_cast<int>(ints[3]);
                 out.idest2 = static_cast<int>(ints[4]);
                 out.exact = true;
@@ -10373,7 +10503,7 @@ CalcHmcIonEndpointsV06822934 calc_hmc_ion_endpoints_v06822934(
         case 72:
             // 0.6.82.29.3.4 appends UCalc label-72's raw source pair after
             // the evaluator-owned [ground_row,parent_row] prefix.
-            if (ints && record.int_count >= 4u) {
+            if (ints && execution_v0682375.int_count >= 4u) {
                 out.idest1 = static_cast<int>(ints[2]);
                 out.idest2 = static_cast<int>(ints[3]);
                 out.exact = true;
@@ -10390,7 +10520,7 @@ CalcHmcIonEndpointsV06822934 calc_hmc_ion_endpoints_v06822934(
             break;
         case 99:
             // Type-99 persistent payload begins [idest1,nlev,idest2,...].
-            if (ints && record.int_count >= 3u) {
+            if (ints && execution_v0682375.int_count >= 3u) {
                 out.idest1 = static_cast<int>(ints[0]);
                 out.idest2 = static_cast<int>(ints[2]);
                 out.exact = true;
@@ -10460,6 +10590,7 @@ SourceLineEndpointOwnershipV0682293382 source_line_endpoint_ownership_v068229338
     const Program& program,
     const ElementProgram& element,
     const ProgramRecord& record) {
+    const auto& execution_v0682375 = execution_record_v0682375(program, record);
     SourceLineEndpointOwnershipV0682293382 out;
     out.caller_idest1 = source_idest_for_full_row(program, element, record.ion_stage, record.lower_row);
     out.caller_idest2 = source_idest_for_full_row(program, element, record.ion_stage, record.upper_row);
@@ -10469,8 +10600,8 @@ SourceLineEndpointOwnershipV0682293382 source_line_endpoint_ownership_v068229338
     out.ucalc_idest2 = out.caller_idest2;
 
     if (record.data_type == 54 && record.rate_type == 4 &&
-        record.int_offset + record.int_count <= program.ints.size() && record.int_count >= 10u) {
-        const auto* ints = program.ints.data() + record.int_offset;
+        execution_v0682375.int_offset + execution_v0682375.int_count <= program.ints.size() && execution_v0682375.int_count >= 10u) {
+        const auto* ints = program.ints.data() + execution_v0682375.int_offset;
         if (ints[9] == kType54DualEndpointLayoutMagicV0682293382) {
             out.dual_type54 = true;
             out.caller_idest1 = static_cast<int>(ints[5]);
@@ -10514,11 +10645,12 @@ double source_pprint4_elmn_wavelength_v0682293383(
     const Program& program,
     const ProgramRecord& record,
     double fallback_wavelength_a) {
+    const auto& execution_v0682375 = execution_record_v0682375(program, record);
     if (record.rate_type == 9 || record.rate_type == 14) return 0.0;
     if (record.data_type == 54 &&
-        record.real_count >= 1u &&
-        record.real_offset < program.reals.size()) {
-        const double source_rdat1 = program.reals[record.real_offset];
+        execution_v0682375.real_count >= 1u &&
+        execution_v0682375.real_offset < program.reals.size()) {
+        const double source_rdat1 = program.reals[execution_v0682375.real_offset];
         return std::isfinite(source_rdat1) ? source_rdat1 : 0.0;
     }
     return std::isfinite(fallback_wavelength_a) ? fallback_wavelength_a : 0.0;
@@ -11772,14 +11904,15 @@ bool native_bound_free_curve(const Program& program,
                              const EvaluatedRecord& evaluated,
                              NativeBoundFreeCurve& curve,
                              bool prefer_full_calc_emis_shadow = true) {
+    const auto& execution_v0682375 = execution_record_v0682375(program, record);
     curve = {};
-    if (!evaluated.bound_free_spectral || record.real_offset + record.real_count > program.reals.size()) return false;
-    const double* r = program.reals.data() + record.real_offset;
+    if (!evaluated.bound_free_spectral || execution_v0682375.real_offset + execution_v0682375.real_count > program.reals.size()) return false;
+    const double* r = program.reals.data() + execution_v0682375.real_offset;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE) {
-        if (record.int_offset + record.int_count > program.ints.size() || record.int_count < 7u) return false;
-        const auto* ints = program.ints.data() + record.int_offset;
+        if (execution_v0682375.int_offset + execution_v0682375.int_count > program.ints.size() || execution_v0682375.int_count < 7u) return false;
+        const auto* ints = program.ints.data() + execution_v0682375.int_offset;
         const std::size_t original_real_count = static_cast<std::size_t>(std::max<std::int64_t>(0, ints[0]));
-        if (original_real_count < 6u || original_real_count + 2u > record.real_count) return false;
+        if (original_real_count < 6u || original_real_count + 2u > execution_v0682375.real_count) return false;
         curve.threshold_ev = r[0];
         curve.type59_analytic = true;
         curve.type59_l2 = static_cast<int>(ints[1]);
@@ -11807,8 +11940,8 @@ bool native_bound_free_curve(const Program& program,
             prefer_full_calc_emis_shadow && calc_emis_shadow.valid ? calc_emis_shadow : base_shadow;
         const int pair_count = shadow.phextrap_input_pair_count > 0
             ? shadow.phextrap_input_pair_count
-            : static_cast<int>(record.real_count / 2);
-        if (pair_count < 2 || static_cast<std::size_t>(2 * pair_count) > record.real_count) return false;
+            : static_cast<int>(execution_v0682375.real_count / 2);
+        if (pair_count < 2 || static_cast<std::size_t>(2 * pair_count) > execution_v0682375.real_count) return false;
         curve.threshold_ev = shadow.threshold_ev > 0.0 ? shadow.threshold_ev : evaluated.line_energy_ev;
         curve.type49_semantics = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
         curve.apply_source_phextrap = curve.type49_semantics && shadow.phextrap_applied;
@@ -11822,13 +11955,13 @@ bool native_bound_free_curve(const Program& program,
         return curve.threshold_ev > 0.0;
     }
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE) {
-        if (record.int_offset + record.int_count > program.ints.size() || record.int_count < 3) return false;
-        const auto* ints = program.ints.data() + record.int_offset;
+        if (execution_v0682375.int_offset + execution_v0682375.int_count > program.ints.size() || execution_v0682375.int_count < 3) return false;
+        const auto* ints = program.ints.data() + execution_v0682375.int_offset;
         const int nden = static_cast<int>(ints[0]);
         const int ntem = static_cast<int>(ints[1]);
         const int nxs = static_cast<int>(ints[2]);
         const std::size_t offset = static_cast<std::size_t>(nden + ntem + nden * ntem);
-        if (nden <= 0 || ntem < 2 || nxs < 2 || offset + 2u * static_cast<std::size_t>(nxs) > record.real_count) return false;
+        if (nden <= 0 || ntem < 2 || nxs < 2 || offset + 2u * static_cast<std::size_t>(nxs) > execution_v0682375.real_count) return false;
         curve.threshold_ev = evaluated.type99_shadow_v06823615().threshold_ev;
         const double scale = evaluated.type99_shadow_v06823615().cross_section_scale;
         curve.offset_ryd.reserve(static_cast<std::size_t>(nxs));
@@ -11845,10 +11978,10 @@ bool native_bound_free_curve(const Program& program,
         if (record.element_index >= 0 && static_cast<std::size_t>(record.element_index) < program.elements.size())
             curve.generic_element_z = program.elements[static_cast<std::size_t>(record.element_index)].element_z;
         curve.generic_ion_stage = record.ion_stage;
-        curve.generic_reals.assign(r, r + record.real_count);
-        if (record.int_offset + record.int_count <= program.ints.size()) {
-            const auto* ii = program.ints.data() + record.int_offset;
-            curve.generic_ints.assign(ii, ii + record.int_count);
+        curve.generic_reals.assign(r, r + execution_v0682375.real_count);
+        if (execution_v0682375.int_offset + execution_v0682375.int_count <= program.ints.size()) {
+            const auto* ii = program.ints.data() + execution_v0682375.int_offset;
+            curve.generic_ints.assign(ii, ii + execution_v0682375.int_count);
         }
         if (record.data_type == 70 &&
             evaluated.generic_bound_free_offset_ryd_v0648120.size() >= 2u &&
@@ -13138,6 +13271,38 @@ int run_impl(
         legacy_bound_free_sidecar_bytes_v0682374 -
         sizeof(BoundFreeEvaluatedPayloadV06823087);
 
+    // 0.6.82.37.5: split the former 136-byte generic ProgramRecord into a
+    // compact cold publication/identity owner and a direct-indexed hot execution
+    // header.  The evaluator sees only the 56-byte hot representation while all
+    // canonical source ordering remains owned by Program::records.
+    constexpr std::uint64_t legacy_program_record_bytes_v0682375 = 136u;
+    constexpr std::uint64_t cold_program_record_bytes_v0682375 = sizeof(ProgramRecord);
+    constexpr std::uint64_t hot_program_record_bytes_v0682375 =
+        sizeof(ProgramRecordHotV0682375);
+    constexpr std::uint64_t total_program_record_bytes_v0682375 =
+        cold_program_record_bytes_v0682375 + hot_program_record_bytes_v0682375;
+    static_assert(sizeof(ProgramRecord) == 56u,
+        "0.6.82.37.5 cold ProgramRecord layout differs from the 56-byte contract");
+    static_assert(sizeof(ProgramRecordHotV0682375) == 56u,
+        "0.6.82.37.5 hot execution header differs from the 56-byte contract");
+    static_assert(total_program_record_bytes_v0682375 < legacy_program_record_bytes_v0682375,
+        "0.6.82.37.5 hot/cold split did not reduce generic record storage");
+    perf_foundation_v068231.program_record_count_v0682375 =
+        static_cast<std::uint64_t>(ctx.program.records.size());
+    perf_foundation_v068231.program_record_cold_bytes_v0682375 =
+        cold_program_record_bytes_v0682375;
+    perf_foundation_v068231.program_record_hot_bytes_v0682375 =
+        hot_program_record_bytes_v0682375;
+    perf_foundation_v068231.program_record_legacy_bytes_v0682375 =
+        legacy_program_record_bytes_v0682375;
+    perf_foundation_v068231.program_record_total_bytes_v0682375 =
+        total_program_record_bytes_v0682375;
+    perf_foundation_v068231.program_record_bytes_elided_per_record_v0682375 =
+        legacy_program_record_bytes_v0682375 - total_program_record_bytes_v0682375;
+    perf_foundation_v068231.program_record_bytes_elided_total_v0682375 =
+        perf_foundation_v068231.program_record_count_v0682375 *
+        perf_foundation_v068231.program_record_bytes_elided_per_record_v0682375;
+
     write_type49_identical_state_probe(
         ctx, input,
         type53_calc_emisab_workspace_v82_patch5181);
@@ -13201,13 +13366,15 @@ int run_impl(
         auto& preliminary_cache_v064812337 = ctx.scratch_v068231.preliminary_cache;
         preliminary_cache_v064812337.clear();
 
-        const auto evaluate_source_record = [&](const ProgramRecord& record) {
+        const auto evaluate_source_record = [&](
+            const ProgramRecord& record,
+            const ProgramRecordHotV0682375& execution_v0682375) {
             const auto rate_start = clock_type::now();
             try {
                 EvaluatedRecord item = evaluate_record(
-                    ctx.program, element, record, input, rate_context_v064894);
+                    ctx.program, element, record, execution_v0682375, input, rate_context_v064894);
                 ++stats.records_evaluated;
-                if (record.data_type >= 0 && record.data_type < static_cast<int>(perf_foundation_v068231.evaluated_records_by_type.size())) {
+                if (static_cast<std::size_t>(record.data_type) < perf_foundation_v068231.evaluated_records_by_type.size()) {
                     ++perf_foundation_v068231.evaluated_records_by_type[static_cast<std::size_t>(record.data_type)];
                 }
                 if (record.data_type == 56) ++stats.type56_records_evaluated;
@@ -13247,8 +13414,10 @@ int run_impl(
             const std::size_t ordinal = selection_v068237.ordinal;
             const std::size_t index = selection_v068237.record_index;
             const auto& record = ctx.program.records[index];
+            const auto& execution_v0682375 =
+                execution_record_by_index_v0682375(ctx.program, index);
             EvaluatedRecord preliminary_item_v064812337 =
-                evaluate_source_record(record);
+                evaluate_source_record(record, execution_v0682375);
             if (incremental_memory_telemetry_v06823615 &&
                 preliminary_item_v064812337.bound_free_payload_v06823087) {
                 ++preliminary_sidecar_count_incremental_v06823615;
@@ -13476,6 +13645,8 @@ int run_impl(
             const std::size_t ordinal = selection_v068237.ordinal;
             const std::size_t index = selection_v068237.record_index;
             const auto& record = ctx.program.records[index];
+            const auto& execution_v0682375 =
+                execution_record_by_index_v0682375(ctx.program, index);
             while (preliminary_cursor_v064812337 < preliminary_cache_v064812337.size() &&
                    preliminary_cache_v064812337[preliminary_cursor_v064812337].ordinal < ordinal) {
                 ++preliminary_cursor_v064812337;
@@ -13487,7 +13658,7 @@ int run_impl(
                     preliminary_cache_v064812337[preliminary_cursor_v064812337].evaluated);
                 ++preliminary_cursor_v064812337;
             } else {
-                item = evaluate_source_record(record);
+                item = evaluate_source_record(record, execution_v0682375);
             }
             // 0.6.82.30.8.6: these retained full-grid UCalc records are consumed
             // only by calc_emis/product publication. DSEC/root-finding calls set
@@ -13805,6 +13976,7 @@ int run_impl(
             for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
                 const ProgramRecord* pr = evaluated_records[k];
                 if (!pr || pr->rate_type != 7 || pr->continuum_index_one_based <= 0) continue;
+                const auto& pr_execution_v0682375 = execution_record_v0682375(ctx.program, *pr);
                 const auto& item = evaluated[k];
                 double rank_energy_ev = 0.0;
                 if (pr->data_type == 49 && item.bound_free_payload().type49_shadow_v0682374().valid)
@@ -13819,12 +13991,12 @@ int run_impl(
                     static_cast<std::int64_t>(pr->record));
                 source_errc_rank_energy_by_identity_v82_patch5205[identity] = rank_energy_ev;
                 double patch52082_identity_energy_ev = rank_energy_ev;
-                if (pr->data_type == 49 && pr->real_count >= 2 &&
-                    pr->real_offset < ctx.program.reals.size()) {
+                if (pr->data_type == 49 && pr_execution_v0682375.real_count >= 2 &&
+                    pr_execution_v0682375.real_offset < ctx.program.reals.size()) {
                     // Exact pre-5.20.9 behavior: identity-owned Type-49 setup energy
                     // used a double 13.598 literal and incorrectly imposed 0.1 eV.
                     patch52082_identity_energy_ev = std::max(
-                        0.1, ctx.program.reals[pr->real_offset] * 13.598);
+                        0.1, ctx.program.reals[pr_execution_v0682375.real_offset] * 13.598);
                 }
                 source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209[identity] =
                     patch52082_identity_energy_ev;
@@ -14787,6 +14959,7 @@ int run_impl(
         // product projection is deferred during the controller trajectory.
         for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
             const auto& source_record = *evaluated_records[k];
+            const auto& source_execution_v0682375 = execution_record_v0682375(ctx.program, source_record);
             if (source_record.data_type == 76 && input.radiation_bin_count > 1 &&
                 evaluated[k].line_energy_ev > 0.0) {
                 // Literal ucalc.f90 label 76.  nbmx is the source nbinc value;
@@ -14840,17 +15013,17 @@ int run_impl(
             if (defer_product_projection) continue;
             if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE &&
                 source_record.rate_type == 42 &&
-                source_record.real_offset + source_record.real_count <= ctx.program.reals.size() &&
-                source_record.int_offset + source_record.int_count <= ctx.program.ints.size()) {
-                const double* rr = ctx.program.reals.data() + source_record.real_offset;
-                const auto* ii = ctx.program.ints.data() + source_record.int_offset;
-                std::size_t pair_count = source_record.real_count / 2u;
-                if (source_record.int_count >= 1 && ii[0] >= 2) pair_count = static_cast<std::size_t>(ii[0]);
+                source_execution_v0682375.real_offset + source_execution_v0682375.real_count <= ctx.program.reals.size() &&
+                source_execution_v0682375.int_offset + source_execution_v0682375.int_count <= ctx.program.ints.size()) {
+                const double* rr = ctx.program.reals.data() + source_execution_v0682375.real_offset;
+                const auto* ii = ctx.program.ints.data() + source_execution_v0682375.int_offset;
+                std::size_t pair_count = source_execution_v0682375.real_count / 2u;
+                if (source_execution_v0682375.int_count >= 1 && ii[0] >= 2) pair_count = static_cast<std::size_t>(ii[0]);
                 const std::size_t pair_reals = 2u * pair_count;
-                if (pair_count >= 2u && pair_reals <= source_record.real_count) {
+                if (pair_count >= 2u && pair_reals <= source_execution_v0682375.real_count) {
                     NativeBoundFreeCurve type88_curve;
-                    type88_curve.threshold_ev = source_record.line_energy_ev;
-                    if (!(type88_curve.threshold_ev > 0.0) && pair_reals < source_record.real_count)
+                    type88_curve.threshold_ev = source_execution_v0682375.line_energy_ev;
+                    if (!(type88_curve.threshold_ev > 0.0) && pair_reals < source_execution_v0682375.real_count)
                         type88_curve.threshold_ev = std::max(0.0, rr[pair_reals]);
                     type88_curve.apply_source_phextrap = true;
                     type88_curve.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
@@ -14906,7 +15079,7 @@ int run_impl(
                         // as the fourth Type-88 payload integer.  Older compact
                         // fixtures fall back to the historical nlev row.
                         int calc_emis_upper_row_v82_patch52010 = source_record.upper_row;
-                        if (source_record.int_count >= 4u && ii[2] > 0 && ii[3] > 0) {
+                        if (source_execution_v0682375.int_count >= 4u && ii[2] > 0 && ii[3] > 0) {
                             calc_emis_upper_row_v82_patch52010 =
                                 source_record.lower_row - static_cast<int>(ii[2]) + static_cast<int>(ii[3]);
                         }
@@ -14953,7 +15126,7 @@ int run_impl(
                             : evaluated[k].bound_free_payload_const_v0682374().type53_shadow_v0682374();
                     const int base_pair_count_v0682373 = base_shadow_v0682373.phextrap_input_pair_count > 0
                         ? base_shadow_v0682373.phextrap_input_pair_count
-                        : static_cast<int>(source_record.real_count / 2u);
+                        : static_cast<int>(source_execution_v0682375.real_count / 2u);
                     deferred.emission_config.threshold_ev = base_shadow_v0682373.threshold_ev > 0.0
                         ? base_shadow_v0682373.threshold_ev : evaluated[k].line_energy_ev;
                     deferred.emission_config.apply_source_phextrap =
@@ -15740,7 +15913,7 @@ int run_impl(
                 if (found == retained_rate7_v82_patch52010.end() ||
                     pr.source_position > static_cast<std::int64_t>(found->second.source_position)) {
                     retained_rate7_v82_patch52010[key] = RetainedRate7SlotV82Patch52010{
-                        pr.continuum_index_one_based, pr.record,
+                        static_cast<int>(pr.continuum_index_one_based), pr.record,
                         static_cast<std::uint64_t>(pr.source_position)};
                 }
             }
@@ -18490,7 +18663,9 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
                     static_cast<std::uint32_t>(slot_v0682371);
                 ptr->bound_free_prepared_v064895.emplace_back();
                 ptr->bound_free_context_by_slot_v0682371.push_back(
-                    decode_bound_free_record_context_v0682371(ptr->program, record));
+                    decode_bound_free_record_context_v0682371(
+                        ptr->program, record,
+                        execution_record_by_index_v0682375(ptr->program, record_index_v068237)));
             }
             if (source_preliminary_rate_record(ptr->program, element, record, false)) {
                 plan_v068237.preliminary_source.push_back(RecordSelectionV068237{

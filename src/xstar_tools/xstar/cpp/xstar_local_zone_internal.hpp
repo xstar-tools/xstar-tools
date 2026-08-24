@@ -178,6 +178,16 @@ struct PerformanceFoundationV068231 {
     std::uint64_t bound_free_sidecar_legacy_bytes_v0682374 = 0u;
     std::uint64_t bound_free_sidecar_bytes_elided_per_sidecar_v0682374 = 0u;
     std::uint64_t bound_free_sidecar_peak_bytes_elided_v0682374 = 0u;
+    // 0.6.82.37.5: final .37 execution-representation pass.  The canonical
+    // source record remains the cold identity/publication owner while the
+    // evaluator consumes a compact direct-indexed hot execution header.
+    std::uint64_t program_record_count_v0682375 = 0u;
+    std::uint64_t program_record_cold_bytes_v0682375 = 0u;
+    std::uint64_t program_record_hot_bytes_v0682375 = 0u;
+    std::uint64_t program_record_legacy_bytes_v0682375 = 0u;
+    std::uint64_t program_record_total_bytes_v0682375 = 0u;
+    std::uint64_t program_record_bytes_elided_per_record_v0682375 = 0u;
+    std::uint64_t program_record_bytes_elided_total_v0682375 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

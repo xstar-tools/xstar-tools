@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.37.5 - compact hot execution header and final .37 representation pass - 2026-08-24
+
+- Close the `.37` execution-representation tranche with one final generic-record layout optimization, using accepted `.37.4` as the immediate performance baseline and reusing the expensive `.33.8` science baseline from the completed `.36.11` broad run.
+- Split the former 136-byte monolithic `ProgramRecord` into a 56-byte cold source/publication identity record plus a 56-byte source-order `ProgramRecordHotV0682375` execution header. The hot header owns validated compact payload offsets/counts, row/ion/type fields, line/continuum indices, matrix flag, and evaluator scalars; the cold record retains canonical source identity/publication ownership.
+- Use validated 32-bit payload offsets/line indices, 16-bit payload counts/row/ion indices, and 8-bit opcode/data/rate/stage flags. Reject lowering if a source record cannot be represented exactly by those validated compact ranges.
+- Pass the hot header directly from the existing canonical `record_index` selections into `evaluate_record()`, avoiding a generic-record lookup/dereference for payload and scalar access while leaving source ordering, selection order, rate arithmetic, matrix/controller behavior, and strict FP unchanged.
+- Preserve Type-50 numerical/profile construction unchanged; Type-50/spectral architecture is explicitly deferred to `.38`. Preserve `.37.4` bound-free shadow-family compaction and all earlier `.37/.36` ownership/work contracts.
+- Add `V0682375_*` layout/accounting telemetry and a broad-only qualification against accepted `.37.4`. Promotion requires exact science/ownership/work, RSS `< 4,072,714,240 B`, and total runtime within the established 0.5% nonregression band (`<= 1221.349955 s` for the accepted `.37.4` host result).
+- Public ABIs remain `60487 / 60488 / 6048110`; frozen science remains `0.6.48.12.3.45.3.3.8`.
+
 ## 0.6.82.37.4 - bound-free shadow-family compaction and broad-runtime nonregression gate - 2026-08-24
 
 - Formally accept `0.6.82.37.3`: exact science/ownership/work structure, peak RSS `4,579,049,472 B`, total time `1277.001732 s`, and fixed traversal `735.886955 s`. Its `1.004337x` runtime ratio versus accepted `.37` is inside the new 0.5% broad-host runtime nonregression band while preserving the ~1.05 GB `.37.2` memory reduction.
