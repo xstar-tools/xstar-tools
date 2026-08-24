@@ -188,6 +188,16 @@ struct PerformanceFoundationV068231 {
     std::uint64_t program_record_total_bytes_v0682375 = 0u;
     std::uint64_t program_record_bytes_elided_per_record_v0682375 = 0u;
     std::uint64_t program_record_bytes_elided_total_v0682375 = 0u;
+    // 0.6.82.38.1: accepted-boundary spectral lookup compaction.  These are
+    // observation-only counters for replacing repeated full ProgramRecord hash
+    // rebuilds and Type-49 linear contribution scans with the persistent dense
+    // record-index lookup populated in source order.
+    std::uint64_t spectral_record_index_bytes_peak_v0682381 = 0u;
+    std::uint64_t spectral_record_index_populated_peak_v0682381 = 0u;
+    std::uint64_t spectral_direct_record_lookups_v0682381 = 0u;
+    std::uint64_t spectral_direct_contribution_lookups_v0682381 = 0u;
+    std::uint64_t spectral_program_hash_rebuilds_elided_v0682381 = 0u;
+    std::uint64_t spectral_type49_linear_scans_elided_v0682381 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

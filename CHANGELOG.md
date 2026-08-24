@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.38.1 - spectral reconstruction direct-index lookup hotfix - 2026-08-24
+
+- Revises rejected `0.6.82.38` after host qualification: the dense Type-50 schedule reduced RSS and profile-kernel time but regressed all-fixed spectral time by 24.716874 s versus accepted `0.6.82.37.5`.
+- Retains the `.38` dense `int32` Type-50 schedule keyed by compiled `ProgramRecord` index (2,133,584 B in the broad reference case; zero legacy-cache bytes in normal production).
+- Adds a persistent dense `ProgramRecord -> spectral contribution` index rebuilt in canonical source order only for materialized spectral/publication calls.
+- Eliminates two production-time full-program hash-table rebuilds in the accepted-boundary spectral reconstruction and replaces Type-49 linear scans over the spectral stream with direct record-indexed lookup.
+- Reuses the validated `.37` binary source-identity search for cold `ProgramRecord` ownership; no rate/profile/rebin/accumulation arithmetic or source order is changed.
+- Adds `.38.1` telemetry and host qualification requiring exact science/ownership/work, retained dense-schedule compaction, zero normal-production legacy schedule fallback, and recovery of total/fixed-spectral runtime to the accepted `.37.5` nonregression bands.
+
 ## 0.6.82.38 - dense Type-50 schedule representation and .38 spectral-architecture start - 2026-08-24
 
 - Close the accepted `.37` execution-representation tranche at `0.6.82.37.5` after exact science/ownership/work acceptance, 4.051 GB peak RSS, and 1180.121766 s total time.

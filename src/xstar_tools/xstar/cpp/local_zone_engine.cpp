@@ -3977,6 +3977,12 @@ struct FixedStatePersistentScratchV068231 {
     std::vector<xstar_element_contribution_v1> thermal_only_contributions;
     std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
     std::vector<xstar_spectral_contribution_v1> spectral_contributions;
+    // 0.6.82.38.1: one-based spectral-contribution index keyed by the immutable
+    // compiled ProgramRecord index.  Zero means that this program record did
+    // not survive the source publication gates for the current fixed state.
+    // Capacity is retained across calls; values are rebuilt in canonical source
+    // order whenever the publication/spectral phase is materialized.
+    std::vector<std::uint32_t> spectral_index_by_record_v0682381;
     std::vector<double> all_populations;
     std::vector<double> thermal_population_stream;
     std::vector<double> thermal_populations;
@@ -4014,6 +4020,7 @@ struct FixedStatePersistentScratchV068231 {
         XSTAR_CAP_BYTES_V068231(thermal_only_contributions);
         XSTAR_CAP_BYTES_V068231(type95_self_loop_candidates);
         XSTAR_CAP_BYTES_V068231(spectral_contributions);
+        XSTAR_CAP_BYTES_V068231(spectral_index_by_record_v0682381);
         XSTAR_CAP_BYTES_V068231(all_populations);
         XSTAR_CAP_BYTES_V068231(thermal_population_stream);
         XSTAR_CAP_BYTES_V068231(thermal_populations);
@@ -4073,6 +4080,7 @@ struct FixedStatePersistentScratchV068231 {
         // 1: scientific contribution lists.
         add(out[1], contributions); add(out[1], thermal_only_contributions);
         add(out[1], type95_self_loop_candidates); add(out[1], spectral_contributions);
+        add(out[3], spectral_index_by_record_v0682381);
         // 2: full/population streams retained between evaluations.
         add(out[2], all_populations); add(out[2], thermal_population_stream);
         add(out[2], thermal_populations); add(out[2], incoming_leveltemp_backup);
@@ -13022,8 +13030,19 @@ int run_impl(
     thermal_population_stream.clear();
     std::size_t fixed_full_population_offset = 0;
     auto& spectral = ctx.scratch_v068231.spectral_contributions;
+    auto& spectral_index_by_record_v0682381 =
+        ctx.scratch_v068231.spectral_index_by_record_v0682381;
     if (spectral.capacity() > 0u) ++perf_foundation_v068231.spectral_workspace_reuses;
     spectral.clear();
+    if (!defer_product_projection) {
+        spectral_index_by_record_v0682381.assign(ctx.program.records.size(), 0u);
+        perf_foundation_v068231.spectral_record_index_bytes_peak_v0682381 = std::max(
+            perf_foundation_v068231.spectral_record_index_bytes_peak_v0682381,
+            static_cast<std::uint64_t>(spectral_index_by_record_v0682381.capacity()) *
+                sizeof(std::uint32_t));
+    } else {
+        spectral_index_by_record_v0682381.clear();
+    }
     // v0.6.48.12.3.21 diagnostic-only Type-50 source-gate accounting.
     // These counters observe the literal calc_emisab_ion endpoint gate; they
     // do not alter record evaluation, line selection, or profile execution.
@@ -15532,6 +15551,19 @@ int run_impl(
             // record before this calc_emisab abundance gate.  Do not rewrite it
             // here from only the subset that survives spectral publication.
             spectral.push_back(sc);
+            if (sc.reserved0 > 0) {
+                const std::size_t record_slot_v0682381 =
+                    static_cast<std::size_t>(sc.reserved0 - 1);
+                if (record_slot_v0682381 < spectral_index_by_record_v0682381.size() &&
+                    spectral_index_by_record_v0682381[record_slot_v0682381] == 0u &&
+                    spectral.size() <= static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+                    spectral_index_by_record_v0682381[record_slot_v0682381] =
+                        static_cast<std::uint32_t>(spectral.size());
+                    perf_foundation_v068231.spectral_record_index_populated_peak_v0682381 = std::max(
+                        perf_foundation_v068231.spectral_record_index_populated_peak_v0682381,
+                        static_cast<std::uint64_t>(spectral.size()));
+                }
+            }
         }
         }
     }
@@ -16525,13 +16557,13 @@ int run_impl(
                 type49_revisit_csv_v82_patch52082 << std::setprecision(17);
             }
 
-            std::unordered_map<std::int64_t,const ProgramRecord*>
-                type49_record_by_position_v82_patch52082;
-            type49_record_by_position_v82_patch52082.reserve(ctx.program.records.size());
-            for (const auto& source_record_v82_patch52082 : ctx.program.records)
-                type49_record_by_position_v82_patch52082[
-                    static_cast<std::int64_t>(source_record_v82_patch52082.source_position)] =
-                    &source_record_v82_patch52082;
+            // 0.6.82.38.1: .38 still rebuilt a 533k-entry unordered_map here
+            // at every accepted-boundary spectral reconstruction.  Program.records
+            // is already validated in strict source order, and .38 carries the
+            // compiled record index into every surviving spectral contribution.
+            // Reuse those immutable indices instead of allocating/hash-inserting
+            // the full program again.
+            ++perf_foundation_v068231.spectral_program_hash_rebuilds_elided_v0682381;
 
             std::size_t type49_candidates_v82_patch52082 = 0u;
             std::size_t type49_selected_v82_patch52082 = 0u;
@@ -16560,35 +16592,38 @@ int run_impl(
                         payload_v06823614.type49_calc_emis_shadow_v0682374());
                 }
 
-                const xstar_spectral_contribution_v1* spectral_item_v82_patch52082 = nullptr;
-                for (const auto& candidate_v82_patch52082 : spectral) {
-                    if (candidate_v82_patch52082.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE &&
-                        candidate_v82_patch52082.output_index == c.slot_one_based &&
-                        candidate_v82_patch52082.source_position == c.source_position &&
-                        candidate_v82_patch52082.record == c.record) {
-                        spectral_item_v82_patch52082 = &candidate_v82_patch52082;
-                        break;
-                    }
-                }
-                if (!spectral_item_v82_patch52082) continue;
-                const auto prit_v82_patch52082 = type49_record_by_position_v82_patch52082.find(
-                    static_cast<std::int64_t>(c.source_position));
+                const std::size_t record_index_v0682381 =
+                    find_record_index_by_identity_v068237(
+                        ctx.program, static_cast<std::uint64_t>(c.source_position), c.record);
+                ++perf_foundation_v068231.spectral_direct_record_lookups_v0682381;
+                if (record_index_v0682381 >= ctx.program.records.size() ||
+                    record_index_v0682381 >= spectral_index_by_record_v0682381.size()) continue;
+                const std::uint32_t spectral_one_based_v0682381 =
+                    spectral_index_by_record_v0682381[record_index_v0682381];
+                ++perf_foundation_v068231.spectral_type49_linear_scans_elided_v0682381;
+                if (spectral_one_based_v0682381 == 0u ||
+                    static_cast<std::size_t>(spectral_one_based_v0682381) > spectral.size()) continue;
+                const xstar_spectral_contribution_v1* spectral_item_v82_patch52082 =
+                    &spectral[static_cast<std::size_t>(spectral_one_based_v0682381 - 1u)];
+                ++perf_foundation_v068231.spectral_direct_contribution_lookups_v0682381;
+                if (spectral_item_v82_patch52082->kind != XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE ||
+                    spectral_item_v82_patch52082->output_index != c.slot_one_based ||
+                    spectral_item_v82_patch52082->source_position != c.source_position ||
+                    spectral_item_v82_patch52082->record != c.record) continue;
+                const ProgramRecord& source_record_v0682381 =
+                    ctx.program.records[record_index_v0682381];
                 const bool destination_valid_v82_patch52082 =
-                    prit_v82_patch52082 != type49_record_by_position_v82_patch52082.end() &&
-                    prit_v82_patch52082->second && prit_v82_patch52082->second->lower_row > 0;
+                    source_record_v0682381.lower_row > 0;
                 const auto consumer_v82_patch52082 = source_calc_emis_consumer(
                     c.slot_one_based, c.wavelength_a, true, destination_valid_v82_patch52082, source_ncbin,
                     input.radiation_energy_ev, continuum_capacity);
                 const bool selected_v82_patch52082 = consumer_v82_patch52082.actual_consumer;
                 if (selected_v82_patch52082) ++type49_selected_v82_patch52082;
                 if (selected_v82_patch52082 && !rate_context_v064894.force_legacy_bound_free) {
-                    const std::size_t record_index_v068237 =
-                        find_record_index_by_identity_v068237(
-                            ctx.program, static_cast<std::uint64_t>(c.source_position), c.record);
-                    if (record_index_v068237 >= ctx.program.records.size())
+                    if (record_index_v0682381 >= ctx.program.records.size())
                         throw std::runtime_error("9.5 selected Type49 record identity missing");
                     const auto& selected_record_v064895 =
-                        ctx.program.records[record_index_v068237];
+                        ctx.program.records[record_index_v0682381];
                     const auto element_it_v064895 = std::find_if(
                         ctx.program.elements.begin(), ctx.program.elements.end(),
                         [&](const ElementProgram& e) {
@@ -17253,15 +17288,12 @@ int run_impl(
         std::size_t rate42_rrc_records_v82_patch520 = 0u;
         std::vector<std::int64_t> rate42_rrc_record_list_v82_patch520;
         if (!defer_product_projection && source_calc_emis_selection_ready_v82_patch5206) {
-            std::map<std::pair<std::uint64_t,std::int64_t>,int> rrc_slot_by_identity_v82_patch520;
-            for (const auto& c : spectral) {
-                if (c.kind != XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE || c.output_index <= 0) continue;
-                rrc_slot_by_identity_v82_patch520[{c.source_position, c.record}] = c.output_index;
-            }
-            std::unordered_map<std::int64_t,const ProgramRecord*> record_by_source_position_v82_patch520;
-            record_by_source_position_v82_patch520.reserve(ctx.program.records.size());
-            for (const auto& source_record : ctx.program.records)
-                record_by_source_position_v82_patch520[static_cast<std::int64_t>(source_record.source_position)] = &source_record;
+            // 0.6.82.38.1: the selected RRC replay previously rebuilt both
+            // an identity map over the spectral stream and a full 533k-entry
+            // ProgramRecord hash table.  The dense record->spectral index built
+            // above carries exactly the same publication membership and output
+            // slot, while Program.records remains the canonical cold owner.
+            ++perf_foundation_v068231.spectral_program_hash_rebuilds_elided_v0682381;
             const char* opacity_attribution_dir_env =
                 std::getenv("XSTAR_V82_PATCH5201732_CPP_ATTRIBUTION_DIR");
             const bool attribution_v82_patch5201732 =
@@ -17289,34 +17321,51 @@ int run_impl(
             };
             std::size_t selected_order_v82_patch52017381 = 0u;
             for (const auto& deferred : deferred_rrc_records_v82_patch520) {
-                const auto rit = record_by_source_position_v82_patch520.find(
-                    static_cast<std::int64_t>(deferred.source_position));
-                if (rit == record_by_source_position_v82_patch520.end() || !rit->second) continue;
+                const std::size_t record_index_v0682381 =
+                    find_record_index_by_identity_v068237(
+                        ctx.program, deferred.source_position, deferred.record);
+                ++perf_foundation_v068231.spectral_direct_record_lookups_v0682381;
+                if (record_index_v0682381 >= ctx.program.records.size() ||
+                    record_index_v0682381 >= spectral_index_by_record_v0682381.size()) continue;
+                const ProgramRecord* source_record_v0682381 =
+                    &ctx.program.records[record_index_v0682381];
+                const std::uint32_t spectral_one_based_v0682381 =
+                    spectral_index_by_record_v0682381[record_index_v0682381];
+                const xstar_spectral_contribution_v1* spectral_item_v0682381 = nullptr;
+                if (spectral_one_based_v0682381 > 0u &&
+                    static_cast<std::size_t>(spectral_one_based_v0682381) <= spectral.size()) {
+                    spectral_item_v0682381 =
+                        &spectral[static_cast<std::size_t>(spectral_one_based_v0682381 - 1u)];
+                    ++perf_foundation_v068231.spectral_direct_contribution_lookups_v0682381;
+                }
                 if (!deferred.source_rate42_type88) {
                     // Literal calc_emis_ion rank gating applies to rate-7
                     // RRC consumers only.  Crucially, selection is local to
                     // ncbin(:,nb1) for this exact record, not the flattened
                     // union of slots selected in any bin.
-                    if (deferred.rate_type != 7) continue;
-                    const auto it = rrc_slot_by_identity_v82_patch520.find({deferred.source_position, deferred.record});
-                    if (it == rrc_slot_by_identity_v82_patch520.end()) continue;
+                    if (deferred.rate_type != 7 || !spectral_item_v0682381 ||
+                        spectral_item_v0682381->kind != XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE ||
+                        spectral_item_v0682381->output_index <= 0 ||
+                        spectral_item_v0682381->source_position != deferred.source_position ||
+                        spectral_item_v0682381->record != deferred.record) continue;
+                    const int rrc_slot_v0682381 = spectral_item_v0682381->output_index;
                     const double rank_energy_ev_v82_patch5209 =
                         source_errc_rank_energy_for_slot(
-                            it->second, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
+                            rrc_slot_v0682381, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
                     const double errc_wavelength_a_v82_patch5209 = rank_energy_ev_v82_patch5209 > 0.0
                         ? local_zone_source_real_literal(12398.4016) /
                             std::max(1.0e-34, rank_energy_ev_v82_patch5209)
                         : 0.0;
-                    const bool destination_valid_v82_patch5208 = rit->second->lower_row > 0;
+                    const bool destination_valid_v82_patch5208 = source_record_v0682381->lower_row > 0;
                     const auto consumer_v82_patch5208 = source_calc_emis_consumer(
-                        it->second, errc_wavelength_a_v82_patch5209, true, destination_valid_v82_patch5208,
+                        rrc_slot_v0682381, errc_wavelength_a_v82_patch5209, true, destination_valid_v82_patch5208,
                         source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                     if (!consumer_v82_patch5208.actual_consumer) continue;
                 }
                 if (attribution_v82_patch5201732) {
                     std::vector<double> contribution(continuum_capacity, 0.0);
                     accumulate_native_bound_free_opacity_from_abundances(
-                        deferred.opacity_curve, *rit->second, deferred.lower_abundance, input,
+                        deferred.opacity_curve, *source_record_v0682381, deferred.lower_abundance, input,
                         contribution);
                     const auto mapped_v82_patch5201732 = phint53_grid_map(
                         deferred.opacity_curve, input.radiation_energy_ev, static_cast<int>(continuum_capacity));
@@ -17361,9 +17410,9 @@ int run_impl(
                         << source_sequence_v82_patch511 << ','
                         << attribution_record_order_v82_patch5201732 << ','
                         << deferred.source_position << ',' << deferred.record << ','
-                        << rit->second->data_type << ',' << rit->second->rate_type << ','
-                        << element_z_for_index(rit->second->element_index) << ','
-                        << rit->second->ion_stage << ',' << rit->second->continuum_index_one_based << ','
+                        << source_record_v0682381->data_type << ',' << source_record_v0682381->rate_type << ','
+                        << element_z_for_index(source_record_v0682381->element_index) << ','
+                        << source_record_v0682381->ion_stage << ',' << source_record_v0682381->continuum_index_one_based << ','
                         << deferred.opacity_curve.threshold_ev << ',' << deferred.lower_abundance << ','
                         << deferred.upper_abundance << ',' << density_v82_patch5201732 << ','
                         << deferred.opacity_curve.offset_ryd.size() << ','
@@ -17380,7 +17429,7 @@ int run_impl(
                         << hex_u64(binary64_sequence_fnv1a(shape)) << "\n";
                 }
                 accumulate_native_bound_free_opacity_from_abundances(
-                    deferred.opacity_curve, *rit->second, deferred.lower_abundance, input,
+                    deferred.opacity_curve, *source_record_v0682381, deferred.lower_abundance, input,
                     heatt_bound_free_opacity);
 
                 // v82 patch 5.20.17.3.8.1 diagnostic-only: capture the exact
@@ -17403,13 +17452,13 @@ int run_impl(
                 // rank/consumer schedule and keep all scalar evaluation, but
                 // make its selected rccemis side effect source-zero.
                 const bool type99_source_zero_rccemis_v82_patch5201739 =
-                    rit->second->data_type == 99 ||
-                    rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
+                    source_record_v0682381->data_type == 99 ||
+                    source_record_v0682381->opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
                 if (type99_source_zero_rccemis_v82_patch5201739) {
                     ++type99_source_zero_rrc_records_v82_patch5201739;
                 } else {
                     accumulate_native_bound_free_rrc_from_abundances(
-                        deferred.opacity_curve, deferred.emission_config, &deferred.rrc_shadow, *rit->second, deferred.lower_abundance,
+                        deferred.opacity_curve, deferred.emission_config, &deferred.rrc_shadow, *source_record_v0682381, deferred.lower_abundance,
                         deferred.upper_abundance, input, heatt_rrc_continuum_emission);
                 }
                 const double bin1_after_out_v82_patch52017381 =
@@ -17433,14 +17482,14 @@ int run_impl(
                 double ptmp2_v82_patch52017381 = 0.0;
                 double tau_in_v82_patch52017381 = 0.0;
                 double tau_out_v82_patch52017381 = 0.0;
-                if (rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
+                if (source_record_v0682381->opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
                     rnist_v82_patch52017381 = deferred.rrc_shadow.rnist;
                     ptmp1_v82_patch52017381 = 0.5 * (1.0 - covering_v82_patch52017381);
                     ptmp2_v82_patch52017381 = 0.5 * (1.0 + covering_v82_patch52017381);
-                } else if (rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
-                           rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
+                } else if (source_record_v0682381->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
+                           source_record_v0682381->opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
                     const Type53SourceShadow* shadow_v82_patch52017381 =
-                        rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+                        source_record_v0682381->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
                             ? &deferred.rrc_shadow : &deferred.rrc_shadow;
                     rnist_v82_patch52017381 = shadow_v82_patch52017381->rnist;
                     ptmp1_v82_patch52017381 = covering_v82_patch52017381 >= 1.0 - 1.0e-15
@@ -17451,7 +17500,7 @@ int run_impl(
                         ? 1.0 : (shadow_v82_patch52017381->valid
                             ? std::max(0.0, shadow_v82_patch52017381->ptmp2)
                             : 0.5 * (1.0 - covering_v82_patch52017381) + covering_v82_patch52017381);
-                    const int ci_v82_patch52017381 = rit->second->continuum_index_one_based;
+                    const int ci_v82_patch52017381 = source_record_v0682381->continuum_index_one_based;
                     if (ci_v82_patch52017381 > 0 &&
                         static_cast<std::size_t>(ci_v82_patch52017381) <= input.continuum_tau_count &&
                         input.continuum_tau_in && input.continuum_tau_out) {
@@ -17475,11 +17524,11 @@ int run_impl(
                 }
                 write_selected_rrc_bin1_record(
                     source_sequence_v82_patch511, selected_order_v82_patch52017381,
-                    deferred.source_position, deferred.record, rit->second->data_type,
-                    rit->second->rate_type,
-                    element_z_for_index(rit->second->element_index),
-                    rit->second->ion_stage, rit->second->lower_row, rit->second->upper_row,
-                    rit->second->continuum_index_one_based, deferred.source_rate42_type88,
+                    deferred.source_position, deferred.record, source_record_v0682381->data_type,
+                    source_record_v0682381->rate_type,
+                    element_z_for_index(source_record_v0682381->element_index),
+                    source_record_v0682381->ion_stage, source_record_v0682381->lower_row, source_record_v0682381->upper_row,
+                    source_record_v0682381->continuum_index_one_based, deferred.source_rate42_type88,
                     deferred.emission_config.threshold_ev, emission_nb1_v82_patch52017381,
                     emission_klmax_v82_patch52017381, deferred.lower_abundance,
                     deferred.upper_abundance, rnist_v82_patch52017381,
