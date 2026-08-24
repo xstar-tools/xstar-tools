@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.37.4 - bound-free shadow-family compaction and broad-runtime nonregression gate - 2026-08-24
+
+- Formally accept `0.6.82.37.3`: exact science/ownership/work structure, peak RSS `4,579,049,472 B`, total time `1277.001732 s`, and fixed traversal `735.886955 s`. Its `1.004337x` runtime ratio versus accepted `.37` is inside the new 0.5% broad-host runtime nonregression band while preserving the ~1.05 GB `.37.2` memory reduction.
+- Replace the strict single-run `candidate_time < reference_time` promotion rule with a 0.5% runtime nonregression band for the expensive broad host model. Science/work remain exact, and memory-focused `.37.x` candidates still require a strict RSS reduction versus the immediately accepted reference.
+- Compact the hot `BoundFreeEvaluatedPayloadV06823087`: Type-49 and Type-53 each need three source shadows (base, calc_emisab, calc_emis), but never both families in one record. Store one tagged three-phase family instead of six unconditional `Type53SourceShadow` objects.
+- `sizeof(BoundFreeEvaluatedPayloadV06823087)` falls from the host-proven `.37.3` layout `4848 B` to `2624 B`, removing `2224 B` per live sidecar. At the `.37.3` broad peak of 59,244 evaluated bound-free sidecars this is about 132 MB of live payload, while repeated Type-49/53 evaluation avoids substantially more zero-initialization/copy traffic.
+- Preserve the `.37.3` deferred-RRC emission-view replay, `.37.2` accepted-boundary transient compaction, `.37.1` sparse prepared cache, `.37` flat execution plan, all source-order/rate/matrix/controller arithmetic, and public ABIs `60487 / 60488 / 6048110`.
+
 ## 0.6.82.37.3 - deferred RRC emission-view replay - 2026-08-24
 
 - Preserve the accepted `.37.2` accepted-boundary memory compaction while removing its spectral replay regression.

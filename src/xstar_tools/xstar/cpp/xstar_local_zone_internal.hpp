@@ -173,6 +173,11 @@ struct PerformanceFoundationV068231 {
     std::uint64_t deferred_rrc_temp_curve_sample_bytes_elided_peak_v0682373 = 0u;
     std::uint64_t deferred_rrc_opacity_source_pairs_peak_v0682373 = 0u;
     std::uint64_t deferred_rrc_emission_source_pairs_peak_v0682373 = 0u;
+    // 0.6.82.37.4: mutually exclusive Type-49/53 shadow-family compaction.
+    std::uint64_t bound_free_sidecar_bytes_v0682374 = 0u;
+    std::uint64_t bound_free_sidecar_legacy_bytes_v0682374 = 0u;
+    std::uint64_t bound_free_sidecar_bytes_elided_per_sidecar_v0682374 = 0u;
+    std::uint64_t bound_free_sidecar_peak_bytes_elided_v0682374 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 
