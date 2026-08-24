@@ -11456,6 +11456,12 @@ double type59_curve_sigma_cm2(const NativeBoundFreeCurve& curve, double energy_e
     return std::isfinite(sigma) ? std::max(0.0, sigma) : 0.0;
 }
 
+struct BoundFreeEmissionConfigV0682372 {
+    double threshold_ev = 0.0;
+    bool apply_source_phextrap = false;
+    int phextrap_max_points = 0;
+};
+
 struct Phint53GridMapV82Patch57 {
     std::vector<double> sgbar;
     int nb1_zero_based = -1;
@@ -11536,15 +11542,28 @@ void phextrap_source(const NativeBoundFreeCurve& curve,
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
 Phint53GridMapV82Patch57 phint53_grid_map(
-    const NativeBoundFreeCurve& curve, const double* epi, int ncn2) {
+    const NativeBoundFreeCurve& curve, const double* epi, int ncn2,
+    const BoundFreeEmissionConfigV0682372* replay_config_v0682372 = nullptr) {
     Phint53GridMapV82Patch57 out;
+    const double threshold_ev_v0682372 = replay_config_v0682372
+        ? replay_config_v0682372->threshold_ev : curve.threshold_ev;
+    const bool apply_phextrap_v0682372 = replay_config_v0682372
+        ? replay_config_v0682372->apply_source_phextrap : curve.apply_source_phextrap;
+    const int phextrap_max_points_v0682372 = replay_config_v0682372
+        ? replay_config_v0682372->phextrap_max_points : curve.phextrap_max_points;
     if (!epi || ncn2 < 3 || curve.offset_ryd.size() < 2 ||
-        curve.offset_ryd.size() != curve.sigma_cm2.size() || !(curve.threshold_ev > 0.0)) return out;
+        curve.offset_ryd.size() != curve.sigma_cm2.size() || !(threshold_ev_v0682372 > 0.0)) return out;
     std::vector<double> energy_ryd = curve.offset_ryd;
     std::vector<double> sigma_cm2 = curve.sigma_cm2;
     const std::size_t before = energy_ryd.size();
-    phextrap_source(curve, ncn2, energy_ryd, sigma_cm2);
-    out.phextrap_applied = curve.apply_source_phextrap && energy_ryd.size() != before;
+    if (apply_phextrap_v0682372) {
+        NativeBoundFreeCurve replay_curve_v0682372;
+        replay_curve_v0682372.threshold_ev = threshold_ev_v0682372;
+        replay_curve_v0682372.apply_source_phextrap = true;
+        replay_curve_v0682372.phextrap_max_points = phextrap_max_points_v0682372;
+        phextrap_source(replay_curve_v0682372, ncn2, energy_ryd, sigma_cm2);
+    }
+    out.phextrap_applied = apply_phextrap_v0682372 && energy_ryd.size() != before;
     const int ntmp = static_cast<int>(std::min(energy_ryd.size(), sigma_cm2.size()));
     if (ntmp < 2) return out;
     out.effective_pair_count = ntmp;
@@ -11555,7 +11574,7 @@ Phint53GridMapV82Patch57 phint53_grid_map(
     std::vector<double> xs(static_cast<std::size_t>(ntmp), 0.0);
     std::vector<double> ys(static_cast<std::size_t>(ntmp), 0.0);
     for (int j = 0; j < ntmp; ++j) {
-        xs[static_cast<std::size_t>(j)] = curve.threshold_ev +
+        xs[static_cast<std::size_t>(j)] = threshold_ev_v0682372 +
             energy_ryd[static_cast<std::size_t>(j)] * kType53RydEv;
         ys[static_cast<std::size_t>(j)] = std::max(0.0, sigma_cm2[static_cast<std::size_t>(j)]);
     }
@@ -11739,6 +11758,12 @@ bool native_bound_free_curve(const Program& program,
 
 double effective_spectral_covering_fraction(const xstar_fixed_state_input_v1& input);
 
+// 0.6.82.37.2: the deferred calc_emis replay used to retain two independent
+// NativeBoundFreeCurve sample vectors plus a full EvaluatedRecord for every
+// selected bound-free record.  The later replay needs one immutable sample
+// surface, the emission-specific threshold/phextrap metadata, and one selected
+// Type-49/53 source shadow.  Keep exactly those owners so the accepted-boundary
+// traversal payload can die before continuum/spectral projection.
 struct DeferredRrcRecordV82Patch520 {
     std::uint64_t source_position = 0u;
     std::int64_t record = 0;
@@ -11746,8 +11771,8 @@ struct DeferredRrcRecordV82Patch520 {
     bool source_rate42_type88 = false;
     double type88_rnist = 0.0;
     NativeBoundFreeCurve opacity_curve;
-    NativeBoundFreeCurve emission_curve;
-    EvaluatedRecord evaluated;
+    BoundFreeEmissionConfigV0682372 emission_config;
+    Type53SourceShadow rrc_shadow;
     double lower_abundance = 0.0;
     double upper_abundance = 0.0;
 };
@@ -11826,7 +11851,8 @@ Type88StaleOpakabV82Patch52010 source_type88_stale_opakab(
 // XSTAR-FUNCTION-COMMENT-END
 void accumulate_native_bound_free_rrc_from_abundances(
     const NativeBoundFreeCurve& curve,
-    const EvaluatedRecord& evaluated,
+    const BoundFreeEmissionConfigV0682372& emission_config_v0682372,
+    const Type53SourceShadow* rrc_shadow_v0682372,
     const ProgramRecord& record,
     double lower_abundance,
     double upper_abundance,
@@ -11840,26 +11866,26 @@ void accumulate_native_bound_free_rrc_from_abundances(
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
         const auto mapped = phint53_grid_map(
-            curve, input.radiation_energy_ev, static_cast<int>(n));
-        if (!mapped.valid || !(evaluated.bound_free_payload().type53_shadow.rnist > 0.0)) return;
+            curve, input.radiation_energy_ev, static_cast<int>(n), &emission_config_v0682372);
+        if (!mapped.valid || !((rrc_shadow_v0682372 ? rrc_shadow_v0682372->rnist : 0.0) > 0.0)) return;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
         const double covering = effective_spectral_covering_fraction(input);
         const double ptmp1 = 0.5 * (1.0 - covering);
         const double ptmp2 = 0.5 * (1.0 + covering);
-        double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
+        double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - emission_config_v0682372.threshold_ev) /
             std::max(bktm, 1.0e-300);
         for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based &&
              kl + 1 < static_cast<int>(n); ++kl) {
             const double sgtpp = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl + 1)]);
             const double previous_exptst = exptst;
             const double epiip = input.radiation_energy_ev[static_cast<std::size_t>(kl + 1)];
-            exptst = (epiip - curve.threshold_ev) / std::max(bktm, 1.0e-300);
+            exptst = (epiip - emission_config_v0682372.threshold_ev) / std::max(bktm, 1.0e-300);
             if (previous_exptst < 200.0 && sgtpp > 0.0 && upper_abundance > 0.0 &&
                 density > 0.0 && epiip > 0.0) {
                 const double exptmpp = type53_expo(-exptst);
                 const double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
-                const double common = upper_abundance * density * evaluated.bound_free_payload().type53_shadow.rnist *
+                const double common = upper_abundance * density * (rrc_shadow_v0682372 ? rrc_shadow_v0682372->rnist : 0.0) *
                     bbnurjp * sgtpp * exptmpp;
                 rccemis[static_cast<std::size_t>(kl)] += common * ptmp1;
                 rccemis[n + static_cast<std::size_t>(kl)] += common * ptmp2;
@@ -11869,7 +11895,7 @@ void accumulate_native_bound_free_rrc_from_abundances(
     }
     if (type49_or_53) {
         const auto mapped = phint53_grid_map(
-            curve, input.radiation_energy_ev, static_cast<int>(n));
+            curve, input.radiation_energy_ev, static_cast<int>(n), &emission_config_v0682372);
         if (!mapped.valid) return;
         // v82 patch 5.20.15.1: the output-metadata cache now preserves the
         // literal Type-49 xstarsetup rank coordinate, so the regenerated
@@ -11880,8 +11906,7 @@ void accumulate_native_bound_free_rrc_from_abundances(
         //         +2*pescv(tauc(1,kkkl)+tauc(2,kkkl))*cfrac
         // Keep the 5.20.14.9 dual curve ownership untouched: curve here is
         // still the dedicated emission curve, not the full opacity curve.
-        const Type53SourceShadow* shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
-            ? &evaluated.bound_free_payload().type49_shadow : &evaluated.bound_free_payload().type53_shadow;
+        const Type53SourceShadow* shadow = rrc_shadow_v0682372;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
         const double covering = effective_spectral_covering_fraction(input);
@@ -11903,14 +11928,14 @@ void accumulate_native_bound_free_rrc_from_abundances(
             ptmp2 = pescv_source(tau2) * (1.0 - covering) +
                 2.0 * pescv_source(tau1 + tau2) * covering;
         }
-        double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
+        double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - emission_config_v0682372.threshold_ev) /
             std::max(bktm, 1.0e-300);
         for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based &&
              kl + 1 < static_cast<int>(n); ++kl) {
             const double sgtpp = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl + 1)]);
             const double previous_exptst = exptst;
             const double epiip = input.radiation_energy_ev[static_cast<std::size_t>(kl + 1)];
-            exptst = (epiip - curve.threshold_ev) / std::max(bktm, 1.0e-300);
+            exptst = (epiip - emission_config_v0682372.threshold_ev) / std::max(bktm, 1.0e-300);
             if (shadow && shadow->valid && shadow->rnist > 0.0 && previous_exptst < 200.0 &&
                 sgtpp > 0.0 && upper_abundance > 0.0 && density > 0.0 && epiip > 0.0) {
                 const double exptmpp = type53_expo(-exptst);
@@ -12718,6 +12743,29 @@ int run_impl(
     const bool retain_element_diagnostics_v06823087 =
         !defer_product_projection || !native_production_v064897 ||
         force_element_diagnostics_v06823087;
+    // 0.6.82.37.2: accepted-boundary production still needs the compact
+    // publication surface (element thermal totals, final stage fractions,
+    // active post-mapback populations, and pprint gamma/alpha ownership), but
+    // not the large forensic preliminary/contribution/solve-trace package.
+    // Preserve the historical rich package automatically for explicit
+    // qualification/attribution modes.
+    const auto diagnostic_env_v0682372 = [](const char* name) {
+        const char* value = std::getenv(name);
+        return value && *value && std::string(value) != "0";
+    };
+    const bool rich_element_diagnostic_request_v0682372 =
+        environment_flag("XSTAR_QUALIFICATION_REPLACEMENT") ||
+        diagnostic_env_v0682372("XSTAR_ALL_ELEMENT_FIXED_PARITY_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V0648123350_ATTRIBUTION_DIR") ||
+        diagnostic_env_v0682372("XSTAR_FE_CALL1_MATRIX_DIAG_DIR") ||
+        diagnostic_env_v0682372("XSTAR_FE_CALL1_THERMAL_DIAG_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V06481235_O7_CALL1_ATTRIBUTION_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V06481238_O7_STATE_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V06481221_CA_ATTRIBUTION_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V0648118_C_SOLVE_ATTRIBUTION_DIR");
+    const bool retain_rich_element_payload_v0682372 =
+        !native_production_v064897 || force_element_diagnostics_v06823087 ||
+        rich_element_diagnostic_request_v0682372;
     // Fail closed against a stale accepted-boundary snapshot if this
     // evaluation exits before the exact source workspaces are committed.
     ctx.last_source_workspaces_valid_v064894 = false;
@@ -12796,6 +12844,8 @@ int run_impl(
     // publishing unselected Type49/53/88 continuum emission.
     std::vector<double> native_type76_continuum_emission(2 * input.radiation_bin_count, 0.0);
     std::vector<DeferredRrcRecordV82Patch520> deferred_rrc_records_v82_patch520;
+    std::uint64_t deferred_rrc_duplicate_sample_bytes_elided_v0682372 = 0u;
+    std::uint64_t deferred_rrc_bound_free_payloads_elided_v0682372 = 0u;
     // v82 patch 5.11: comparison-only producer attribution for the accepted
     // call-2/final sequence-59 opacity.  The environment path is owned by the
     // standalone diagnostic harness; production arrays and source order are
@@ -13971,7 +14021,7 @@ int run_impl(
             (all_element_solve_response || all_element_solve_system ||
              (helium_solve_response && element.element_z == 2)) &&
             !native_production_v064897;
-        if (capture_element_solve_response) {
+        if (capture_element_solve_response && retain_rich_element_payload_v0682372) {
             ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY;
         }
         if (return_element_matrices_v0682363) {
@@ -14460,19 +14510,29 @@ int run_impl(
 
         if (retain_element_diagnostics_v06823087) {
         NativeElementDiagnostic element_diagnostic;
-        element_diagnostic.committed_contributions = contributions;
-        element_diagnostic.canonical_thermal_terms = canonical_thermal_ledger.terms;
-        element_diagnostic.canonical_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
-        element_diagnostic.element_thermal_ledger_fingerprint = element_consumed_thermal_ledger_fingerprint;
-        element_diagnostic.fixed_state_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
-        element_diagnostic.canonical_thermal_ledger_shared =
-            element_consumed_thermal_ledger_fingerprint == canonical_thermal_ledger.fingerprint;
         element_diagnostic.element_index = element.element_index;
         element_diagnostic.element_z = element.element_z;
         element_diagnostic.abundance = element.abundance;
-        element_diagnostic.preliminary = preliminary;
-        element_diagnostic.active = active;
-        element_diagnostic.full_populations = full_populations;
+        if (retain_rich_element_payload_v0682372) {
+            element_diagnostic.committed_contributions = contributions;
+            element_diagnostic.canonical_thermal_terms = canonical_thermal_ledger.terms;
+            element_diagnostic.canonical_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
+            element_diagnostic.element_thermal_ledger_fingerprint = element_consumed_thermal_ledger_fingerprint;
+            element_diagnostic.fixed_state_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
+            element_diagnostic.canonical_thermal_ledger_shared =
+                element_consumed_thermal_ledger_fingerprint == canonical_thermal_ledger.fingerprint;
+            element_diagnostic.preliminary = preliminary;
+            element_diagnostic.active = active;
+            element_diagnostic.full_populations = full_populations;
+        } else {
+            // Avoid copying ActiveElementView::element (including its full row
+            // vector).  The production publication consumers require only the
+            // compact source row window.
+            element_diagnostic.active.full_row_start = active.full_row_start;
+            element_diagnostic.active.full_row_end = active.full_row_end;
+            element_diagnostic.active.min_stage = active.min_stage;
+            element_diagnostic.active.max_stage = active.max_stage;
+        }
         element_diagnostic.final_stage_fractions.assign(static_cast<std::size_t>(element.element_z + 1), 0.0);
         for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
             const int stage = active.min_stage + ion_slot;
@@ -14487,8 +14547,10 @@ int run_impl(
                 static_cast<std::size_t>(continuum_stage - 1)] =
                 fully_stripped_fraction;
         }
-        element_diagnostic.thermal_compact_populations = thermal_populations;
-        element_diagnostic.thermal_compact_population_closure_applied = element_thermal_compact_closure_applied;
+        if (retain_rich_element_payload_v0682372) {
+            element_diagnostic.thermal_compact_populations = thermal_populations;
+            element_diagnostic.thermal_compact_population_closure_applied = element_thermal_compact_closure_applied;
+        }
         // 0.6.82.36.6: accepted-boundary/final publication consumes the final
         // compact active populations independently of the optional all-element
         // solve-response trace (notably pprint(4) endpoint-abundance replay).
@@ -14500,11 +14562,14 @@ int run_impl(
         element_diagnostic.cooling = element_cooling;
         element_diagnostic.heating2 = element_heating2;
         element_diagnostic.cooling2 = element_cooling2;
-        element_diagnostic.normalization = eout.normalization;
-        element_diagnostic.normalization_error = eout.normalization_error;
-        element_diagnostic.max_relative_row_residual = eout.max_relative_row_residual;
-        element_diagnostic.records_constructed = eout.records_constructed;
-        element_diagnostic.terms_constructed = eout.terms_constructed;
+        if (retain_rich_element_payload_v0682372) {
+            element_diagnostic.normalization = eout.normalization;
+            element_diagnostic.normalization_error = eout.normalization_error;
+            element_diagnostic.max_relative_row_residual = eout.max_relative_row_residual;
+            element_diagnostic.records_constructed = eout.records_constructed;
+            element_diagnostic.terms_constructed = eout.terms_constructed;
+        }
+        // Required by the accepted pprint(7)/publication bridge.
         element_diagnostic.level_gamma = buffers.gamma;
         element_diagnostic.level_alpha = buffers.alpha;
         element_diagnostic.level_igammamax = buffers.igamma;
@@ -14682,9 +14747,16 @@ int run_impl(
                         deferred.rate_type = source_record.rate_type;
                         deferred.source_rate42_type88 = true;
                         deferred.type88_rnist = rnist;
-                        deferred.opacity_curve = type88_curve;
-                        deferred.emission_curve = std::move(type88_curve);
-                        deferred.evaluated = std::move(type88_eval);
+                        deferred_rrc_duplicate_sample_bytes_elided_v0682372 +=
+                            static_cast<std::uint64_t>(type88_curve.offset_ryd.capacity() +
+                                                       type88_curve.sigma_cm2.capacity()) * sizeof(double);
+                        if (type88_eval.bound_free_payload_v06823087)
+                            ++deferred_rrc_bound_free_payloads_elided_v0682372;
+                        deferred.opacity_curve = std::move(type88_curve);
+                        deferred.emission_config.threshold_ev = deferred.opacity_curve.threshold_ev;
+                        deferred.emission_config.apply_source_phextrap = deferred.opacity_curve.apply_source_phextrap;
+                        deferred.emission_config.phextrap_max_points = deferred.opacity_curve.phextrap_max_points;
+                        deferred.rrc_shadow = type88_eval.bound_free_payload().type53_shadow;
                         deferred.lower_abundance = source_post_mapback_population_for_full_row(
                             active, buffers.populations, source_record.lower_row) * active.element.abundance;
                         // calc_emis_ion computes rate-42 abund2 from the raw
@@ -14720,13 +14792,28 @@ int run_impl(
                 // calc_emis curve is required by opakc/dpthc; the base curve
                 // remains the stable emission owner until 5.20.15 corrects the
                 // retained tauc workspace and re-enables literal pescv(tauc).
-                deferred.opacity_curve = curve;
+                deferred.opacity_curve = std::move(curve);
                 NativeBoundFreeCurve emission_curve_v82_patch520149;
                 if (!native_bound_free_curve(ctx.program, source_record, evaluated[k],
-                        emission_curve_v82_patch520149, false))
-                    emission_curve_v82_patch520149 = curve;
-                deferred.emission_curve = std::move(emission_curve_v82_patch520149);
-                deferred.evaluated = evaluated[k];
+                        emission_curve_v82_patch520149, false)) {
+                    deferred.emission_config.threshold_ev = deferred.opacity_curve.threshold_ev;
+                    deferred.emission_config.apply_source_phextrap = deferred.opacity_curve.apply_source_phextrap;
+                    deferred.emission_config.phextrap_max_points = deferred.opacity_curve.phextrap_max_points;
+                } else {
+                    deferred.emission_config.threshold_ev = emission_curve_v82_patch520149.threshold_ev;
+                    deferred.emission_config.apply_source_phextrap = emission_curve_v82_patch520149.apply_source_phextrap;
+                    deferred.emission_config.phextrap_max_points = emission_curve_v82_patch520149.phextrap_max_points;
+                }
+                deferred_rrc_duplicate_sample_bytes_elided_v0682372 +=
+                    static_cast<std::uint64_t>(emission_curve_v82_patch520149.offset_ryd.capacity() +
+                                               emission_curve_v82_patch520149.sigma_cm2.capacity()) * sizeof(double);
+                if (evaluated[k].bound_free_payload_v06823087)
+                    ++deferred_rrc_bound_free_payloads_elided_v0682372;
+                if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE)
+                    deferred.rrc_shadow = evaluated[k].bound_free_payload().type49_shadow;
+                else if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE ||
+                         source_record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE)
+                    deferred.rrc_shadow = evaluated[k].bound_free_payload().type53_shadow;
                 deferred.lower_abundance = source_post_mapback_population_for_full_row(
                     active, buffers.populations, source_record.lower_row) * active.element.abundance;
                 deferred.upper_abundance = source_post_mapback_population_for_full_row(
@@ -15087,6 +15174,58 @@ int run_impl(
         }
     }
     stats.traversal_seconds += elapsed(traversal_start);
+
+    // 0.6.82.37.2: the deferred spectral replay now owns only its compact
+    // source shadow and one curve sample surface.  Once element traversal is
+    // complete, the preliminary/evaluated traversal records are dead.  Clear
+    // them before continuum/spectral construction so their bound-free sidecars
+    // cannot overlap the accepted-boundary projection peak.  Vector capacity is
+    // deliberately retained for the next fixed-state call.
+    if (!defer_product_projection && native_production_v064897) {
+        perf_foundation_v068231.compact_element_diagnostic_count_peak_v0682372 = std::max(
+            perf_foundation_v068231.compact_element_diagnostic_count_peak_v0682372,
+            static_cast<std::uint64_t>(retain_rich_element_payload_v0682372 ? 0u : ctx.last_element_diagnostics.size()));
+        perf_foundation_v068231.consumed_evaluated_records_cleared_peak_v0682372 = std::max(
+            perf_foundation_v068231.consumed_evaluated_records_cleared_peak_v0682372,
+            static_cast<std::uint64_t>(ctx.scratch_v068231.evaluated.size()));
+        perf_foundation_v068231.consumed_preliminary_records_cleared_peak_v0682372 = std::max(
+            perf_foundation_v068231.consumed_preliminary_records_cleared_peak_v0682372,
+            static_cast<std::uint64_t>(ctx.scratch_v068231.preliminary_cache.size()));
+
+        std::uint64_t deferred_sample_bytes_v0682372 = 0u;
+        for (const auto& deferred_v0682372 : deferred_rrc_records_v82_patch520) {
+            deferred_sample_bytes_v0682372 +=
+                static_cast<std::uint64_t>(deferred_v0682372.opacity_curve.offset_ryd.capacity() +
+                                           deferred_v0682372.opacity_curve.sigma_cm2.capacity()) * sizeof(double);
+        }
+        perf_foundation_v068231.deferred_rrc_count_peak_v0682372 = std::max(
+            perf_foundation_v068231.deferred_rrc_count_peak_v0682372,
+            static_cast<std::uint64_t>(deferred_rrc_records_v82_patch520.size()));
+        perf_foundation_v068231.deferred_rrc_inline_bytes_peak_v0682372 = std::max(
+            perf_foundation_v068231.deferred_rrc_inline_bytes_peak_v0682372,
+            static_cast<std::uint64_t>(deferred_rrc_records_v82_patch520.capacity()) * sizeof(DeferredRrcRecordV82Patch520));
+        perf_foundation_v068231.deferred_rrc_sample_bytes_peak_v0682372 = std::max(
+            perf_foundation_v068231.deferred_rrc_sample_bytes_peak_v0682372, deferred_sample_bytes_v0682372);
+        perf_foundation_v068231.deferred_rrc_duplicate_sample_bytes_elided_peak_v0682372 = std::max(
+            perf_foundation_v068231.deferred_rrc_duplicate_sample_bytes_elided_peak_v0682372,
+            deferred_rrc_duplicate_sample_bytes_elided_v0682372);
+        perf_foundation_v068231.deferred_rrc_evaluated_inline_bytes_elided_peak_v0682372 = std::max(
+            perf_foundation_v068231.deferred_rrc_evaluated_inline_bytes_elided_peak_v0682372,
+            static_cast<std::uint64_t>(deferred_rrc_records_v82_patch520.size()) * sizeof(EvaluatedRecord));
+        perf_foundation_v068231.deferred_rrc_bound_free_payload_bytes_elided_peak_v0682372 = std::max(
+            perf_foundation_v068231.deferred_rrc_bound_free_payload_bytes_elided_peak_v0682372,
+            deferred_rrc_bound_free_payloads_elided_v0682372 * sizeof(BoundFreeEvaluatedPayloadV06823087));
+
+        ctx.scratch_v068231.preliminary_evaluated.clear();
+        ctx.scratch_v068231.preliminary_records.clear();
+        ctx.scratch_v068231.evaluated_records.clear();
+        ctx.scratch_v068231.evaluated.clear();
+        ctx.scratch_v068231.preliminary_cache.clear();
+        ctx.scratch_v068231.contributions.clear();
+        ctx.scratch_v068231.thermal_only_contributions.clear();
+        ctx.scratch_v068231.type95_self_loop_candidates.clear();
+    }
+
     ctx.last_thermal_population_count = thermal_population_stream.size();
     ctx.last_thermal_population_fingerprint = binary64_sequence_fnv1a(thermal_population_stream);
 
@@ -16896,7 +17035,7 @@ int run_impl(
                     ++type99_source_zero_rrc_records_v82_patch5201739;
                 } else {
                     accumulate_native_bound_free_rrc_from_abundances(
-                        deferred.emission_curve, deferred.evaluated, *rit->second, deferred.lower_abundance,
+                        deferred.opacity_curve, deferred.emission_config, &deferred.rrc_shadow, *rit->second, deferred.lower_abundance,
                         deferred.upper_abundance, input, heatt_rrc_continuum_emission);
                 }
                 const double bin1_after_out_v82_patch52017381 =
@@ -16907,8 +17046,8 @@ int run_impl(
                         ? 0.0 : heatt_rrc_continuum_emission[continuum_capacity];
 
                 const auto emission_map_v82_patch52017381 = phint53_grid_map(
-                    deferred.emission_curve, input.radiation_energy_ev,
-                    static_cast<int>(continuum_capacity));
+                    deferred.opacity_curve, input.radiation_energy_ev,
+                    static_cast<int>(continuum_capacity), &deferred.emission_config);
                 const int emission_nb1_v82_patch52017381 = emission_map_v82_patch52017381.valid
                     ? emission_map_v82_patch52017381.nb1_zero_based + 1 : 0;
                 const int emission_klmax_v82_patch52017381 = emission_map_v82_patch52017381.valid
@@ -16921,14 +17060,14 @@ int run_impl(
                 double tau_in_v82_patch52017381 = 0.0;
                 double tau_out_v82_patch52017381 = 0.0;
                 if (rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
-                    rnist_v82_patch52017381 = deferred.evaluated.bound_free_payload().type53_shadow.rnist;
+                    rnist_v82_patch52017381 = deferred.rrc_shadow.rnist;
                     ptmp1_v82_patch52017381 = 0.5 * (1.0 - covering_v82_patch52017381);
                     ptmp2_v82_patch52017381 = 0.5 * (1.0 + covering_v82_patch52017381);
                 } else if (rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
                            rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
                     const Type53SourceShadow* shadow_v82_patch52017381 =
                         rit->second->opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
-                            ? &deferred.evaluated.bound_free_payload().type49_shadow : &deferred.evaluated.bound_free_payload().type53_shadow;
+                            ? &deferred.rrc_shadow : &deferred.rrc_shadow;
                     rnist_v82_patch52017381 = shadow_v82_patch52017381->rnist;
                     ptmp1_v82_patch52017381 = covering_v82_patch52017381 >= 1.0 - 1.0e-15
                         ? 0.0 : (shadow_v82_patch52017381->valid
@@ -16967,7 +17106,7 @@ int run_impl(
                     element_z_for_index(rit->second->element_index),
                     rit->second->ion_stage, rit->second->lower_row, rit->second->upper_row,
                     rit->second->continuum_index_one_based, deferred.source_rate42_type88,
-                    deferred.emission_curve.threshold_ev, emission_nb1_v82_patch52017381,
+                    deferred.emission_config.threshold_ev, emission_nb1_v82_patch52017381,
                     emission_klmax_v82_patch52017381, deferred.lower_abundance,
                     deferred.upper_abundance, rnist_v82_patch52017381,
                     ptmp1_v82_patch52017381, ptmp2_v82_patch52017381,

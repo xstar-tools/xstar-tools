@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.37.2 - accepted-boundary transient compaction - 2026-08-24
+
+- Records the host rejection of `0.6.82.37.1`: exact science/ownership/work remained ACCEPT and RSS fell by 74,203,136 bytes versus accepted `.37`, but total runtime regressed by 1.2069%, so `.37.1` is not promoted.
+- Uses the host `top` trace plus fixed-state RSS telemetry to target the repeated accepted-boundary transient: RSS rises from about 3.27 GB before exact fixed-state recompute to about 5.38 GB after recompute, then falls after zone publication/allocator trim.
+- Keeps the accepted-boundary exact recomputation contract frozen; no boundary-reuse shortcut is re-enabled.
+- In normal native production, retains only the element diagnostic fields required by publication (element identity/abundance, active row window, final stage fractions, active final populations, gamma/alpha dominant-record state, and thermal totals). Rich preliminary/contribution/solve-trace diagnostics remain available automatically for explicit qualification/attribution modes.
+- Compacts deferred bound-free/RRC replay ownership: one curve sample surface is retained per deferred record, while emission-specific threshold/phextrap metadata and one selected Type-49/53 source shadow replace the second curve sample copy plus retained full `EvaluatedRecord`. Replay source order and formulas are unchanged.
+- Clears consumed preliminary/evaluated traversal records before continuum/spectral construction while retaining vector capacity for reuse, allowing bound-free sidecar payloads to die before later projection allocations.
+- Adds `V0682372_*` ownership telemetry for compact element diagnostics, early traversal release, deferred-RRC retained bytes, and bytes elided from the historical deferred representation.
+- Public C/fixed-state/production-zone ABIs remain frozen at 60487 / 60488 / 6048110; strict floating-point/source-order contracts remain unchanged.
+
 ## 0.6.82.37.1 - sparse bound-free execution slice - 2026-08-24
 
 - Continue the accepted `.37` compiled execution-plan architecture with the first rate-family-specific sparse execution slice.
