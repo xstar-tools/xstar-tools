@@ -141,6 +141,15 @@ struct PerformanceFoundationV068231 {
     std::uint64_t evaluated_scan_records_elided_v06823615 = 0u;
     std::uint64_t incremental_memory_telemetry_calls_v06823615 = 0u;
     std::uint64_t deep_memory_telemetry_calls_v06823615 = 0u;
+    // 0.6.82.37: phase-1 compiled execution-plan telemetry.  These fields
+    // measure the flat source-order index representation and direct-selection
+    // traffic only; they do not participate in scientific decisions.
+    std::uint64_t execution_plan_records_v068237 = 0u;
+    std::uint64_t execution_plan_elements_v068237 = 0u;
+    std::uint64_t execution_plan_index_bytes_v068237 = 0u;
+    std::uint64_t execution_plan_preliminary_entries_v068237 = 0u;
+    std::uint64_t direct_selection_records_v068237 = 0u;
+    std::uint64_t identity_map_entries_elided_v068237 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

@@ -352,6 +352,17 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t allocator_trim_rss_after_peak_v06823612 = 0u;
     std::uint64_t allocator_trim_rss_reduction_total_v06823612 = 0u;
     std::uint64_t allocator_trim_rss_reduction_peak_v06823612 = 0u;
+    // 0.6.82.37: once the fixed-state context has compiled/copied the immutable
+    // numeric execution payload, the standalone publication owner does not
+    // consume these source vectors again. Release that duplicate execution
+    // payload and report the exact capacity returned.
+    std::uint64_t source_execution_payload_bytes_released_v068237 = 0u;
+    std::uint64_t source_reals_bytes_released_v068237 = 0u;
+    std::uint64_t source_ints_bytes_released_v068237 = 0u;
+    std::uint64_t source_execution_metadata_bytes_released_v068237 = 0u;
+    std::uint64_t rss_before_source_payload_release_v068237 = 0u;
+    std::uint64_t rss_after_source_payload_release_v068237 = 0u;
+    bool source_execution_payload_retained_forensic_v068237 = false;
     // 0.6.82.35.2: glibc allocator snapshots paired with key RSS phases.
     std::uint64_t heap_after_atdb_uordblks_v0682352 = 0u;
     std::uint64_t heap_after_atdb_hblkhd_v0682352 = 0u;
@@ -19398,7 +19409,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
     const xstar_atdb_runtime::ResolvedAtomicData& atomic,
-    const xstar_atdb_runtime::ProgramStorage& program,
+    xstar_atdb_runtime::ProgramStorage& program,
     double& elapsed_seconds,
     std::size_t& evaluation_count) {
     const auto started = std::chrono::steady_clock::now();
@@ -19435,6 +19446,64 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         if (info.unsupported_record_count != 0 || info.record_count == 0 || info.population_rows == 0) {
             throw std::runtime_error("in-memory ATDB program is incomplete");
         }
+
+        // 0.6.82.37: the fixed-state context now owns the compiled execution
+        // copy of reals/ints/LTE execution topology.  The standalone retains
+        // ProgramStorage for publication identities, rows, and record metadata,
+        // none of which reads these numeric execution payload vectors again.
+        // Release the duplicate source owner before controller/radial work.
+        const std::uint64_t source_reals_bytes_v068237 =
+            static_cast<std::uint64_t>(program.reals.capacity()) * sizeof(double);
+        const std::uint64_t source_ints_bytes_v068237 =
+            static_cast<std::uint64_t>(program.ints.capacity()) * sizeof(std::int64_t);
+        const std::uint64_t source_execution_metadata_bytes_v068237 =
+            static_cast<std::uint64_t>(program.lte_ion_topology.capacity()) *
+                sizeof(xstar_fixed_lte_ion_topology_v1) +
+            static_cast<std::uint64_t>(program.lte_levels.capacity()) *
+                sizeof(xstar_fixed_lte_level_v1) +
+            static_cast<std::uint64_t>(program.unsupported_data_types.capacity()) * sizeof(int);
+        const std::uint64_t source_execution_payload_bytes_v068237 =
+            source_reals_bytes_v068237 + source_ints_bytes_v068237 +
+            source_execution_metadata_bytes_v068237;
+        // The opt-in Ca XIII Type-49 forensic writer reads the original real
+        // payload later in the radial lifetime. Preserve that legacy forensic
+        // surface exactly when requested; normal native production releases the
+        // duplicate source owner after the fixed context has copied it.
+        const char* ca13_forensic_dir_v068237 =
+            std::getenv("XSTAR_V0648123431112_CA13_TYPE49_DIR");
+        const bool retain_source_execution_payload_v068237 =
+            ca13_forensic_dir_v068237 && *ca13_forensic_dir_v068237;
+        if (g_performance_v064890) {
+            g_performance_v064890->rss_before_source_payload_release_v068237 =
+                current_rss_bytes_v068233();
+            g_performance_v064890->source_execution_payload_retained_forensic_v068237 =
+                retain_source_execution_payload_v068237;
+            if (!retain_source_execution_payload_v068237) {
+                g_performance_v064890->source_reals_bytes_released_v068237 =
+                    source_reals_bytes_v068237;
+                g_performance_v064890->source_ints_bytes_released_v068237 =
+                    source_ints_bytes_v068237;
+                g_performance_v064890->source_execution_metadata_bytes_released_v068237 =
+                    source_execution_metadata_bytes_v068237;
+                g_performance_v064890->source_execution_payload_bytes_released_v068237 =
+                    source_execution_payload_bytes_v068237;
+            }
+        }
+        if (!retain_source_execution_payload_v068237) {
+            std::vector<double>().swap(program.reals);
+            std::vector<std::int64_t>().swap(program.ints);
+            std::vector<xstar_fixed_lte_ion_topology_v1>().swap(program.lte_ion_topology);
+            std::vector<xstar_fixed_lte_level_v1>().swap(program.lte_levels);
+            std::vector<int>().swap(program.unsupported_data_types);
+#if defined(__GLIBC__)
+            if (source_execution_payload_bytes_v068237 > 0u) ::malloc_trim(0);
+#endif
+        }
+        if (g_performance_v064890) {
+            g_performance_v064890->rss_after_source_payload_release_v068237 =
+                current_rss_bytes_v068233();
+        }
+
         RadiationField radiation = read_general_standalone_radiation(options, params);
         if (radiation.energy_ev.size() != static_cast<std::size_t>(params.ncn2)) {
             throw std::runtime_error("native continuum grid does not match parameters ncn2");
@@ -22185,6 +22254,14 @@ void emit_controller_performance_instrumentation(
             << "V06823615_EVALUATED_SCAN_RECORDS_ELIDED=" << perf.foundation_v068231.evaluated_scan_records_elided_v06823615 << "\n"
             << "V06823615_INCREMENTAL_MEMORY_TELEMETRY_CALLS=" << perf.foundation_v068231.incremental_memory_telemetry_calls_v06823615 << "\n"
             << "V06823615_DEEP_MEMORY_TELEMETRY_CALLS=" << perf.foundation_v068231.deep_memory_telemetry_calls_v06823615 << "\n"
+            << "V068237_EXECUTION_PLAN_MODE=FLAT_SOURCE_ORDER_DIRECT_RECORD_INDEX\n"
+            << "V068237_EXECUTION_PLAN_RECORDS=" << perf.foundation_v068231.execution_plan_records_v068237 << "\n"
+            << "V068237_EXECUTION_PLAN_ELEMENTS=" << perf.foundation_v068231.execution_plan_elements_v068237 << "\n"
+            << "V068237_EXECUTION_PLAN_INDEX_BYTES=" << perf.foundation_v068231.execution_plan_index_bytes_v068237 << "\n"
+            << "V068237_EXECUTION_PLAN_PRELIMINARY_ENTRIES=" << perf.foundation_v068231.execution_plan_preliminary_entries_v068237 << "\n"
+            << "V068237_DIRECT_SELECTION_RECORDS=" << perf.foundation_v068231.direct_selection_records_v068237 << "\n"
+            << "V068237_RECORD_IDENTITY_LOOKUP_MODE=BINARY_SEARCH_SOURCE_ORDER\n"
+            << "V068237_IDENTITY_MAP_ENTRIES_ELIDED=" << perf.foundation_v068231.identity_map_entries_elided_v068237 << "\n"
             << "V0682352_PERSISTENT_CONTINUUM_BYTES=" << perf.foundation_v068231.persistent_continuum_bytes << "\n"
             << "V0682351_CPP_ELEMENT_SOLVE_CALLS=" << perf.foundation_v068231.element_solve_calls << "\n"
             << "V0682351_CPP_MATRIX_ROWS_SUM=" << perf.foundation_v068231.matrix_rows_sum << "\n"
@@ -22265,6 +22342,16 @@ void emit_controller_performance_instrumentation(
             << "V06823612_ALLOCATOR_TRIM_RSS_AFTER_PEAK=" << perf.allocator_trim_rss_after_peak_v06823612 << "\n"
             << "V06823612_ALLOCATOR_TRIM_RSS_REDUCTION_TOTAL=" << perf.allocator_trim_rss_reduction_total_v06823612 << "\n"
             << "V06823612_ALLOCATOR_TRIM_RSS_REDUCTION_PEAK=" << perf.allocator_trim_rss_reduction_peak_v06823612 << "\n"
+            << "V068237_SOURCE_EXECUTION_PAYLOAD_MODE="
+            << (perf.source_execution_payload_retained_forensic_v068237
+                    ? "RETAIN_RICH_FORENSIC"
+                    : "RELEASE_AFTER_FIXED_CONTEXT_COMPILE") << "\n"
+            << "V068237_SOURCE_EXECUTION_PAYLOAD_BYTES_RELEASED=" << perf.source_execution_payload_bytes_released_v068237 << "\n"
+            << "V068237_SOURCE_REALS_BYTES_RELEASED=" << perf.source_reals_bytes_released_v068237 << "\n"
+            << "V068237_SOURCE_INTS_BYTES_RELEASED=" << perf.source_ints_bytes_released_v068237 << "\n"
+            << "V068237_SOURCE_EXECUTION_METADATA_BYTES_RELEASED=" << perf.source_execution_metadata_bytes_released_v068237 << "\n"
+            << "V068237_RSS_BEFORE_SOURCE_PAYLOAD_RELEASE_BYTES=" << perf.rss_before_source_payload_release_v068237 << "\n"
+            << "V068237_RSS_AFTER_SOURCE_PAYLOAD_RELEASE_BYTES=" << perf.rss_after_source_payload_release_v068237 << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
             << "V0682352_HEAP_AFTER_ATDB_UORDBLKS_BYTES=" << perf.heap_after_atdb_uordblks_v0682352 << "\n"

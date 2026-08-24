@@ -1824,8 +1824,18 @@ BoundFreeRevisitStateV06823614 compact_bound_free_revisit_v06823614(
     return out;
 }
 
+// 0.6.82.37: direct-index selection entry compiled once from canonical linked
+// source order.  Keeping the source ordinal preserves the pass-1/pass-2 merge
+// contract while the global record index removes a dependent traversal-vector
+// lookup from every selected record evaluation.
+struct RecordSelectionV068237 {
+    std::uint32_t ordinal = 0u;
+    std::uint32_t record_index = 0u;
+};
+
 struct PreliminaryCachedRecordV064812337 {
-    std::size_t ordinal = 0u;
+    std::uint32_t ordinal = 0u;
+    std::uint32_t record_index = 0u;
     EvaluatedRecord evaluated{};
 };
 
@@ -4048,33 +4058,27 @@ struct xstar_fixed_state_context_impl {
     // retained between calls.
     FixedStatePersistentScratchV068231 scratch_v068231;
     xstar_local_zone_internal::PerformanceFoundationV068231 perf_foundation_v068231{};
-    // v0.6.48.9.4: immutable linked-record traversal is validated once when
-    // the context is created and stored as contiguous record indices.  The
-    // source order is unchanged; repeated DSEC evaluations no longer rebuild
-    // a whole-program visited bitmap or chase/validate the same links.
-    std::vector<std::vector<int>> traversal_record_indices_v064894;
-    // v0.6.48.12.3.40: immutable source-order selection metadata.  The
-    // two-pass engine used to rescan every lowered record on every evaluation
-    // merely to rediscover the small preliminary family and the active/pass-2
-    // ownership set.  Cache the preliminary ordinals for both supported Type7
-    // compatibility modes, cache per-element data-type counts for exact stats,
-    // and memoize source-order pass-2 ordinals by active stage window.
-    // Numerical rate evaluation, record eligibility, and source order are
-    // unchanged; this cache contains only immutable record ordinals.
-    struct TraversalSelectionCacheV064812340 {
-        std::vector<std::size_t> preliminary_ordinals_source;
-        std::vector<std::size_t> preliminary_ordinals_legacy;
-        std::map<int, std::uint64_t> data_type_counts;
-        std::map<std::pair<int,int>, std::vector<std::size_t>> pass2_ordinals_by_window;
+    // 0.6.82.37: compile the validated linked ATDB traversal into one flat
+    // source-order execution-index array.  Per-element plans store direct
+    // {source ordinal, global record index} selections, so the hot DSEC path no
+    // longer walks vector<vector<int>> metadata and then performs a second
+    // ordinal->record-index lookup for every preliminary/pass-2 record.
+    struct ElementExecutionPlanV068237 {
+        std::size_t flat_begin = 0u;
+        std::size_t record_count = 0u;
+        std::vector<RecordSelectionV068237> preliminary_source;
+        std::vector<RecordSelectionV068237> preliminary_legacy;
+        std::vector<std::pair<int,std::uint64_t>> data_type_counts;
+        std::map<std::pair<int,int>, std::vector<RecordSelectionV068237>>
+            pass2_by_window;
     };
-    std::vector<TraversalSelectionCacheV064812340> traversal_selection_cache_v064812340;
+    std::vector<std::uint32_t> flat_record_indices_v068237;
+    std::vector<ElementExecutionPlanV068237> element_execution_plan_v068237;
     // v0.6.48.9.5: prepared Type49/53 bound-free geometry, indexed by the
     // immutable program-record index.  Reduced/full grids have separate
     // caches because Type49 phextrap owns different caller capacities.
     std::vector<BoundFreePreparedRecordCacheV064895> bound_free_prepared_v064895;
     BoundFreePerfCountersV064895 bound_free_perf_v064895{};
-    std::map<std::pair<std::uint64_t,std::uint64_t>,std::size_t>
-        record_index_by_identity_v064895;
     xstar_element_engine_context* element_context = nullptr;
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
@@ -4458,6 +4462,24 @@ Program load_program(const std::string& directory) {
 // Purpose: Validate the invariants required by validate program; reject malformed dimensions, pointers, or state before scientific kernels are entered.
 // Reference context: Implementation/safety helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
+// 0.6.82.37: Program.records is validated in strictly increasing source_position
+// order.  Cold/publication identity lookups therefore use cache-friendly binary
+// search instead of retaining a node-based std::map for every executable record.
+std::size_t find_record_index_by_identity_v068237(
+    const Program& program, std::uint64_t source_position, std::int64_t record) {
+    const auto it = std::lower_bound(
+        program.records.begin(), program.records.end(), source_position,
+        [](const ProgramRecord& candidate, std::uint64_t wanted) {
+            return static_cast<std::uint64_t>(candidate.source_position) < wanted;
+        });
+    if (it == program.records.end() ||
+        static_cast<std::uint64_t>(it->source_position) != source_position ||
+        it->record != record) {
+        return program.records.size();
+    }
+    return static_cast<std::size_t>(it - program.records.begin());
+}
+
 void validate_program(Program& p) {
     if (p.id.empty()) throw std::runtime_error("program_id missing");
     if (p.elements.empty()) throw std::runtime_error("program contains no elements");
@@ -12942,7 +12964,12 @@ int run_impl(
         residual_audit_v064812339.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
         residual_audit_v064812339.element_z = element.element_z;
         residual_audit_v064812339.full_row_count = static_cast<std::size_t>(element.n_rows);
-        residual_audit_v064812339.full_record_count = ctx.traversal_record_indices_v064894[element_slot_v064894].size();
+        auto& execution_plan_v068237 =
+            ctx.element_execution_plan_v068237[element_slot_v064894];
+        const std::uint32_t* traversal_indices_v068237 =
+            ctx.flat_record_indices_v068237.data() + execution_plan_v068237.flat_begin;
+        const std::size_t traversal_count_v068237 = execution_plan_v068237.record_count;
+        residual_audit_v064812339.full_record_count = traversal_count_v068237;
         TraversalSelectionAuditV064812340 traversal_audit_v064812340;
         traversal_audit_v064812340.call_index = residual_audit_v064812339.call_index;
         traversal_audit_v064812340.source_sequence = residual_audit_v064812339.source_sequence;
@@ -12964,8 +12991,6 @@ int run_impl(
             ctx.source_leveltemp_energy_workspace_v06481231.end());
         perf_foundation_v068231.level_population_scratch_seconds +=
             elapsed(level_population_scratch_started_v068231);
-        const auto& traversal_order_v064894 =
-            ctx.traversal_record_indices_v064894[element_slot_v064894];
         ++stats.elements_attempted;
         // 0.6.48.12.3.15: reproduce the calc_hmc_element two-pass ownership
         // without evaluating the complete per-ion body before mml/mmu is known.
@@ -13004,15 +13029,13 @@ int run_impl(
             }
         };
 
-        auto& traversal_selection_v064812340 =
-            ctx.traversal_selection_cache_v064812340[element_slot_v064894];
-        const auto& preliminary_ordinals_v064812340 =
+        const auto& preliminary_selections_v068237 =
             ctx.preliminary_type7_legacy_compat_v06481171
-                ? traversal_selection_v064812340.preliminary_ordinals_legacy
-                : traversal_selection_v064812340.preliminary_ordinals_source;
-        if (preliminary_cache_v064812337.capacity() < preliminary_ordinals_v064812340.size()) {
+                ? execution_plan_v068237.preliminary_legacy
+                : execution_plan_v068237.preliminary_source;
+        if (preliminary_cache_v064812337.capacity() < preliminary_selections_v068237.size()) {
             const auto allocation_started_v064812337 = clock_type::now();
-            preliminary_cache_v064812337.reserve(preliminary_ordinals_v064812340.size());
+            preliminary_cache_v064812337.reserve(preliminary_selections_v068237.size());
             sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
             ++perf_foundation_v068231.preliminary_cache_capacity_growths;
         } else if (preliminary_cache_v064812337.capacity() > 0u) {
@@ -13022,16 +13045,17 @@ int run_impl(
         // repeated metadata walk over every lowered record.  The linked order
         // was already validated at context construction and the static
         // data-type multiplicities are cached alongside it.
-        stats.records_seen += traversal_order_v064894.size();
-        stats.linked_hops += traversal_order_v064894.size();
-        for (const auto& item_v064812340 : traversal_selection_v064812340.data_type_counts) {
-            ctx.visited_data_types[item_v064812340.first] += item_v064812340.second;
+        stats.records_seen += traversal_count_v068237;
+        stats.linked_hops += traversal_count_v068237;
+        for (const auto& item_v068237 : execution_plan_v068237.data_type_counts) {
+            ctx.visited_data_types[item_v068237.first] += item_v068237.second;
         }
         stats.visited_data_types = ctx.visited_data_types.size();
         std::uint64_t preliminary_sidecar_count_incremental_v06823615 = 0u;
-        for (const std::size_t ordinal : preliminary_ordinals_v064812340) {
-            const int index = traversal_order_v064894[ordinal];
-            const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
+        for (const auto& selection_v068237 : preliminary_selections_v068237) {
+            const std::size_t ordinal = selection_v068237.ordinal;
+            const std::size_t index = selection_v068237.record_index;
+            const auto& record = ctx.program.records[index];
             EvaluatedRecord preliminary_item_v064812337 =
                 evaluate_source_record(record);
             if (incremental_memory_telemetry_v06823615 &&
@@ -13042,13 +13066,15 @@ int run_impl(
                 preliminary_cache_v064812337.capacity();
             const auto allocation_started_v064812337 = clock_type::now();
             preliminary_cache_v064812337.push_back(
-                PreliminaryCachedRecordV064812337{ordinal, std::move(preliminary_item_v064812337)});
+                PreliminaryCachedRecordV064812337{
+                    static_cast<std::uint32_t>(ordinal), static_cast<std::uint32_t>(index),
+                    std::move(preliminary_item_v064812337)});
             if (preliminary_cache_v064812337.capacity() != capacity_before_v064812337) {
                 sparse_cache_allocation_seconds_v064812337 +=
                     elapsed(allocation_started_v064812337);
             }
         }
-        if (traversal_order_v064894.size() !=
+        if (traversal_count_v068237 !=
             static_cast<std::size_t>(std::max(element.record_count, 0))) {
             throw std::runtime_error("prepared traversal count differs from declared record_count");
         }
@@ -13066,10 +13092,9 @@ int run_impl(
             sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
         }
         for (const auto& cached_v064812337 : preliminary_cache_v064812337) {
-            const int index = traversal_order_v064894[cached_v064812337.ordinal];
             preliminary_evaluated_v064812315.push_back(&cached_v064812337.evaluated);
             preliminary_records_v064812315.push_back(
-                &ctx.program.records[static_cast<std::size_t>(index)]);
+                &ctx.program.records[static_cast<std::size_t>(cached_v064812337.record_index)]);
         }
         {
             std::uint64_t count_v06823612 = preliminary_sidecar_count_incremental_v06823615;
@@ -13175,19 +13200,19 @@ int run_impl(
         // record on every DSEC evaluation.  The force-full qualification path
         // intentionally bypasses this cache.
         const auto active_pass2_count_started_v064812339 = clock_type::now();
-        const std::vector<std::size_t>* active_pass2_ordinals_v064812340 = nullptr;
+        const std::vector<RecordSelectionV068237>* active_pass2_selections_v068237 = nullptr;
         bool active_pass2_window_cache_hit_v064812340 = false;
         if (!force_full_record_traversal_v064812315) {
             const auto key_v064812340 = std::make_pair(active.min_stage, active.max_stage);
             auto found_v064812340 =
-                traversal_selection_v064812340.pass2_ordinals_by_window.find(key_v064812340);
-            if (found_v064812340 == traversal_selection_v064812340.pass2_ordinals_by_window.end()) {
-                std::vector<std::size_t> ordinals_v064812340;
-                ordinals_v064812340.reserve(traversal_order_v064894.size() / 4u + 1u);
+                execution_plan_v068237.pass2_by_window.find(key_v064812340);
+            if (found_v064812340 == execution_plan_v068237.pass2_by_window.end()) {
+                std::vector<RecordSelectionV068237> selections_v068237;
+                selections_v068237.reserve(traversal_count_v068237 / 4u + 1u);
                 for (std::size_t ordinal_v064812340 = 0;
-                     ordinal_v064812340 < traversal_order_v064894.size();
+                     ordinal_v064812340 < traversal_count_v068237;
                      ++ordinal_v064812340) {
-                    const int index_v064812340 = traversal_order_v064894[ordinal_v064812340];
+                    const std::uint32_t index_v064812340 = traversal_indices_v068237[ordinal_v064812340];
                     const auto& record_v064812340 =
                         ctx.program.records[static_cast<std::size_t>(index_v064812340)];
                     const bool active_stage_owned_v064812340 =
@@ -13199,35 +13224,39 @@ int run_impl(
                         record_v064812340.ion_stage <= 0;
                     if (active_stage_owned_v064812340 || source_global_setup_owner_v064812340 ||
                         structural_owner_v064812340) {
-                        ordinals_v064812340.push_back(ordinal_v064812340);
+                        selections_v068237.push_back(RecordSelectionV068237{
+                            static_cast<std::uint32_t>(ordinal_v064812340), index_v064812340});
                     }
                 }
                 found_v064812340 =
-                    traversal_selection_v064812340.pass2_ordinals_by_window.emplace(
-                        key_v064812340, std::move(ordinals_v064812340)).first;
+                    execution_plan_v068237.pass2_by_window.emplace(
+                        key_v064812340, std::move(selections_v068237)).first;
             } else {
                 active_pass2_window_cache_hit_v064812340 = true;
             }
-            active_pass2_ordinals_v064812340 = &found_v064812340->second;
+            active_pass2_selections_v068237 = &found_v064812340->second;
         }
         const std::size_t active_pass2_count_v064812337 =
             force_full_record_traversal_v064812315
-                ? traversal_order_v064894.size()
-                : active_pass2_ordinals_v064812340->size();
+                ? traversal_count_v068237
+                : active_pass2_selections_v068237->size();
+        perf_foundation_v068231.direct_selection_records_v068237 +=
+            static_cast<std::uint64_t>(preliminary_selections_v068237.size()) +
+            static_cast<std::uint64_t>(active_pass2_count_v064812337);
         residual_audit_v064812339.active_pass2_count_seconds = elapsed(active_pass2_count_started_v064812339);
         perf_foundation_v068231.record_preparation_seconds +=
             residual_audit_v064812339.active_view_seconds +
             residual_audit_v064812339.active_pass2_count_seconds;
-        traversal_audit_v064812340.preliminary_record_count = preliminary_ordinals_v064812340.size();
+        traversal_audit_v064812340.preliminary_record_count = preliminary_selections_v068237.size();
         traversal_audit_v064812340.active_pass2_count = active_pass2_count_v064812337;
         traversal_audit_v064812340.pass2_cache_hit = active_pass2_window_cache_hit_v064812340;
         traversal_audit_v064812340.pass2_cache_window_count =
-            traversal_selection_v064812340.pass2_ordinals_by_window.size();
+            execution_plan_v068237.pass2_by_window.size();
         traversal_audit_v064812340.pass2_cache_build_full_scan_records =
             (!force_full_record_traversal_v064812315 && !active_pass2_window_cache_hit_v064812340)
-                ? traversal_order_v064894.size() : 0u;
+                ? traversal_count_v068237 : 0u;
         traversal_audit_v064812340.optimized_metadata_scan_records =
-            preliminary_ordinals_v064812340.size() + active_pass2_count_v064812337 +
+            preliminary_selections_v068237.size() + active_pass2_count_v064812337 +
             traversal_audit_v064812340.pass2_cache_build_full_scan_records;
 
         const auto evaluated_record_started_v068231 = clock_type::now();
@@ -13252,9 +13281,10 @@ int run_impl(
         std::size_t preliminary_cursor_v064812337 = 0u;
         std::uint64_t evaluated_sidecar_count_incremental_v06823615 = 0u;
         std::uint64_t evaluated_generic_bf_capacity_incremental_v06823615 = 0u;
-        const auto evaluate_pass2_ordinal = [&](std::size_t ordinal) {
-            const int index = traversal_order_v064894[ordinal];
-            const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
+        const auto evaluate_pass2_selection_v068237 = [&](RecordSelectionV068237 selection_v068237) {
+            const std::size_t ordinal = selection_v068237.ordinal;
+            const std::size_t index = selection_v068237.record_index;
+            const auto& record = ctx.program.records[index];
             while (preliminary_cursor_v064812337 < preliminary_cache_v064812337.size() &&
                    preliminary_cache_v064812337[preliminary_cursor_v064812337].ordinal < ordinal) {
                 ++preliminary_cursor_v064812337;
@@ -13307,12 +13337,13 @@ int run_impl(
             evaluated_records.push_back(&record);
         };
         if (force_full_record_traversal_v064812315) {
-            for (std::size_t ordinal = 0; ordinal < traversal_order_v064894.size(); ++ordinal) {
-                evaluate_pass2_ordinal(ordinal);
+            for (std::size_t ordinal = 0; ordinal < traversal_count_v068237; ++ordinal) {
+                evaluate_pass2_selection_v068237(RecordSelectionV068237{
+                    static_cast<std::uint32_t>(ordinal), traversal_indices_v068237[ordinal]});
             }
         } else {
-            for (const std::size_t ordinal : *active_pass2_ordinals_v064812340) {
-                evaluate_pass2_ordinal(ordinal);
+            for (const auto& selection_v068237 : *active_pass2_selections_v068237) {
+                evaluate_pass2_selection_v068237(selection_v068237);
             }
         }
         perf_foundation_v068231.evaluated_record_seconds += std::max(
@@ -13370,11 +13401,11 @@ int run_impl(
         sparse_cache_audit_v064812337.element_z = element.element_z;
         sparse_cache_audit_v064812337.active_min_stage = active.min_stage;
         sparse_cache_audit_v064812337.active_max_stage = active.max_stage;
-        sparse_cache_audit_v064812337.full_record_count = traversal_order_v064894.size();
+        sparse_cache_audit_v064812337.full_record_count = traversal_count_v068237;
         sparse_cache_audit_v064812337.preliminary_record_count = preliminary_cache_v064812337.size();
         sparse_cache_audit_v064812337.active_pass2_count = active_pass2_count_v064812337;
         sparse_cache_audit_v064812337.dense_preliminary_baseline_bytes =
-            traversal_order_v064894.size() * sizeof(std::optional<EvaluatedRecord>);
+            traversal_count_v068237 * sizeof(std::optional<EvaluatedRecord>);
         sparse_cache_audit_v064812337.sparse_preliminary_reserved_bytes =
             preliminary_cache_v064812337.capacity() * sizeof(PreliminaryCachedRecordV064812337);
         sparse_cache_audit_v064812337.preliminary_pointer_reserved_bytes =
@@ -15526,11 +15557,10 @@ int run_impl(
         // because it contains live per-evaluation contributions.
         const auto pprint4_record_by_identity_v06823086 =
             [&](std::uint64_t source_position, std::int64_t record) -> const ProgramRecord* {
-                const auto it = ctx.record_index_by_identity_v064895.find({
-                    source_position, static_cast<std::uint64_t>(record)});
-                if (it == ctx.record_index_by_identity_v064895.end() ||
-                    it->second >= ctx.program.records.size()) return nullptr;
-                return &ctx.program.records[it->second];
+                const std::size_t record_index_v068237 =
+                    find_record_index_by_identity_v068237(ctx.program, source_position, record);
+                if (record_index_v068237 >= ctx.program.records.size()) return nullptr;
+                return &ctx.program.records[record_index_v068237];
             };
         if (!defer_product_projection) {
             for (const auto& source_spectral_v068229338 : spectral) {
@@ -15846,13 +15876,13 @@ int run_impl(
                         payload_v06823614.type53_calc_emis_shadow);
                 }
                 if (selected && !rate_context_v064894.force_legacy_bound_free) {
-                    const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
-                        static_cast<std::uint64_t>(c.source_position),
-                        static_cast<std::uint64_t>(c.record)});
-                    if (record_it_v064895 == ctx.record_index_by_identity_v064895.end())
+                    const std::size_t record_index_v068237 =
+                        find_record_index_by_identity_v068237(
+                            ctx.program, static_cast<std::uint64_t>(c.source_position), c.record);
+                    if (record_index_v068237 >= ctx.program.records.size())
                         throw std::runtime_error("9.5 selected Type53 record identity missing");
                     const auto& selected_record_v064895 =
-                        ctx.program.records[record_it_v064895->second];
+                        ctx.program.records[record_index_v068237];
                     const auto element_it_v064895 = std::find_if(
                         ctx.program.elements.begin(), ctx.program.elements.end(),
                         [&](const ElementProgram& e) {
@@ -16029,13 +16059,13 @@ int run_impl(
                 const bool selected_v82_patch52082 = consumer_v82_patch52082.actual_consumer;
                 if (selected_v82_patch52082) ++type49_selected_v82_patch52082;
                 if (selected_v82_patch52082 && !rate_context_v064894.force_legacy_bound_free) {
-                    const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
-                        static_cast<std::uint64_t>(c.source_position),
-                        static_cast<std::uint64_t>(c.record)});
-                    if (record_it_v064895 == ctx.record_index_by_identity_v064895.end())
+                    const std::size_t record_index_v068237 =
+                        find_record_index_by_identity_v068237(
+                            ctx.program, static_cast<std::uint64_t>(c.source_position), c.record);
+                    if (record_index_v068237 >= ctx.program.records.size())
                         throw std::runtime_error("9.5 selected Type49 record identity missing");
                     const auto& selected_record_v064895 =
-                        ctx.program.records[record_it_v064895->second];
+                        ctx.program.records[record_index_v068237];
                     const auto element_it_v064895 = std::find_if(
                         ctx.program.elements.begin(), ctx.program.elements.end(),
                         [&](const ElementProgram& e) {
@@ -18061,34 +18091,57 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     ptr->program = std::move(program);
     ptr->source_leveltemp_energy_workspace_v06481231.assign(
         kSourceLeveltempNdlV06481231, 0.0);
-    ptr->traversal_record_indices_v064894.reserve(ptr->program.elements.size());
-    ptr->traversal_selection_cache_v064812340.reserve(ptr->program.elements.size());
-    ptr->bound_free_prepared_v064895.resize(ptr->program.records.size());
-    for (std::size_t i = 0; i < ptr->program.records.size(); ++i) {
-        const auto& record = ptr->program.records[i];
-        ptr->record_index_by_identity_v064895[{
-            static_cast<std::uint64_t>(record.source_position),
-            static_cast<std::uint64_t>(record.record)}] = i;
+    if (ptr->program.records.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+        throw std::runtime_error("0.6.82.37 execution plan exceeds 32-bit record index capacity");
     }
+    ptr->flat_record_indices_v068237.reserve(ptr->program.records.size());
+    ptr->element_execution_plan_v068237.reserve(ptr->program.elements.size());
+    ptr->bound_free_prepared_v064895.resize(ptr->program.records.size());
+
+    // Build canonical linked source order once into a single flat array.  A
+    // generation-mark vector validates disjoint element chains without
+    // allocating/zeroing a full visited bitmap for every element.
+    std::vector<std::uint32_t> visited_generation_v068237(ptr->program.records.size(), 0u);
+    std::uint32_t visit_generation_v068237 = 0u;
     for (const auto& element : ptr->program.elements) {
-        std::vector<int> order;
-        order.reserve(static_cast<std::size_t>(std::max(element.record_count, 0)));
-        std::vector<unsigned char> visited(ptr->program.records.size(), 0u);
+        if (++visit_generation_v068237 == 0u) {
+            std::fill(visited_generation_v068237.begin(), visited_generation_v068237.end(), 0u);
+            visit_generation_v068237 = 1u;
+        }
+        xstar_fixed_state_context_impl::ElementExecutionPlanV068237 plan_v068237;
+        plan_v068237.flat_begin = ptr->flat_record_indices_v068237.size();
+        plan_v068237.record_count = static_cast<std::size_t>(std::max(element.record_count, 0));
+        plan_v068237.preliminary_source.reserve(plan_v068237.record_count / 16u + 1u);
+        plan_v068237.preliminary_legacy.reserve(plan_v068237.record_count / 16u + 1u);
+        std::map<int,std::uint64_t> data_type_counts_v068237;
+
         int index = element.record_head;
         int hops = 0;
         while (index >= 0) {
             if (index >= static_cast<int>(ptr->program.records.size())) {
                 throw std::runtime_error("linked traversal index out of range during context preparation");
             }
-            if (visited[static_cast<std::size_t>(index)]) {
+            const std::size_t record_index_v068237 = static_cast<std::size_t>(index);
+            if (visited_generation_v068237[record_index_v068237] == visit_generation_v068237) {
                 throw std::runtime_error("linked record cycle detected during context preparation");
             }
-            visited[static_cast<std::size_t>(index)] = 1u;
-            const auto& record = ptr->program.records[static_cast<std::size_t>(index)];
+            visited_generation_v068237[record_index_v068237] = visit_generation_v068237;
+            const auto& record = ptr->program.records[record_index_v068237];
             if (record.element_index != element.element_index) {
                 throw std::runtime_error("linked traversal crossed element boundary during context preparation");
             }
-            order.push_back(index);
+            const std::size_t ordinal_v068237 = static_cast<std::size_t>(hops);
+            const auto compact_index_v068237 = static_cast<std::uint32_t>(record_index_v068237);
+            ptr->flat_record_indices_v068237.push_back(compact_index_v068237);
+            ++data_type_counts_v068237[record.data_type];
+            if (source_preliminary_rate_record(ptr->program, element, record, false)) {
+                plan_v068237.preliminary_source.push_back(RecordSelectionV068237{
+                    static_cast<std::uint32_t>(ordinal_v068237), compact_index_v068237});
+            }
+            if (source_preliminary_rate_record(ptr->program, element, record, true)) {
+                plan_v068237.preliminary_legacy.push_back(RecordSelectionV068237{
+                    static_cast<std::uint32_t>(ordinal_v068237), compact_index_v068237});
+            }
             index = record.next_index;
             ++hops;
             if (hops > element.record_count + 1) {
@@ -18098,25 +18151,30 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
         if (hops != element.record_count) {
             throw std::runtime_error("linked traversal count differs from declared record_count during context preparation");
         }
-        xstar_fixed_state_context_impl::TraversalSelectionCacheV064812340 selection_v064812340;
-        selection_v064812340.preliminary_ordinals_source.reserve(order.size() / 16u + 1u);
-        selection_v064812340.preliminary_ordinals_legacy.reserve(order.size() / 16u + 1u);
-        for (std::size_t ordinal_v064812340 = 0; ordinal_v064812340 < order.size(); ++ordinal_v064812340) {
-            const auto& record_v064812340 =
-                ptr->program.records[static_cast<std::size_t>(order[ordinal_v064812340])];
-            ++selection_v064812340.data_type_counts[record_v064812340.data_type];
-            if (source_preliminary_rate_record(
-                    ptr->program, element, record_v064812340, false)) {
-                selection_v064812340.preliminary_ordinals_source.push_back(ordinal_v064812340);
-            }
-            if (source_preliminary_rate_record(
-                    ptr->program, element, record_v064812340, true)) {
-                selection_v064812340.preliminary_ordinals_legacy.push_back(ordinal_v064812340);
-            }
+        for (const auto& item_v068237 : data_type_counts_v068237) {
+            plan_v068237.data_type_counts.push_back(item_v068237);
         }
-        ptr->traversal_record_indices_v064894.push_back(std::move(order));
-        ptr->traversal_selection_cache_v064812340.push_back(std::move(selection_v064812340));
+        ptr->element_execution_plan_v068237.push_back(std::move(plan_v068237));
     }
+    if (ptr->flat_record_indices_v068237.size() != ptr->program.records.size()) {
+        throw std::runtime_error("0.6.82.37 flat execution plan does not cover every lowered record exactly once");
+    }
+    auto& perf_v068237 = ptr->perf_foundation_v068231;
+    perf_v068237.execution_plan_records_v068237 =
+        static_cast<std::uint64_t>(ptr->flat_record_indices_v068237.size());
+    perf_v068237.execution_plan_elements_v068237 =
+        static_cast<std::uint64_t>(ptr->element_execution_plan_v068237.size());
+    perf_v068237.execution_plan_index_bytes_v068237 =
+        static_cast<std::uint64_t>(ptr->flat_record_indices_v068237.capacity()) *
+        sizeof(std::uint32_t);
+    for (const auto& plan_v068237 : ptr->element_execution_plan_v068237) {
+        perf_v068237.execution_plan_preliminary_entries_v068237 +=
+            static_cast<std::uint64_t>(plan_v068237.preliminary_source.size());
+        perf_v068237.execution_plan_preliminary_entries_v068237 +=
+            static_cast<std::uint64_t>(plan_v068237.preliminary_legacy.size());
+    }
+    perf_v068237.identity_map_entries_elided_v068237 =
+        static_cast<std::uint64_t>(ptr->program.records.size());
     std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
     int rc = xstar_element_engine_context_create_v1(&ptr->element_context, error.data(), error.size());
     if (rc != 0) throw std::runtime_error(std::string("cannot create element context: ") + error.data());

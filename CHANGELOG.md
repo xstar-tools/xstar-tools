@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.37 - compiled flat execution-plan foundation - 2026-08-23
+
+- Formally close the `0.6.82.36` canonical-work-elimination tranche at accepted `.36.15`. The broad `multi_element_xi1_ne1e12` host return is exact for science/ownership/work structure, with peak RSS `6,218,616,832 B`, total time `1282.913787 s`, fixed traversal `741.542959 s`, and fixed spectral `392.579900 s`. The remaining `3,643,662,336 B` gap to the workstation FORTRAN RSS target is not treated as an unfinished canonical-gating problem.
+- Carry forward the `.35` work-equivalence conclusion: canonical FORTRAN and C++ perform matching high-level solver/controller work on the audited Fe case while C++ evaluates fewer atomic records. Remaining speed work therefore targets representation, indirection, branch density, copying, and memory bandwidth rather than deleting additional scientific loops.
+- Compile the already-validated linked ATDB traversal once into a single flat source-order array of 32-bit global record indices plus per-element execution plans. Preliminary and pass-2 selections retain exact source ordinals but also carry direct global record indices, removing a dependent ordinal-to-record lookup from every selected evaluation without changing source order or rate arithmetic.
+- Replace the retained node-based `(source_position, record) -> index` map with binary search over the already validated strictly increasing source-position record vector for cold/publication identity lookups.
+- After fixed-state context creation has copied/compiled the numeric ATDB execution payload, ordinary standalone production releases the duplicate source `reals`, `ints`, LTE execution topology/levels, and unsupported-data-type vectors and optionally returns allocator pages. The opt-in Ca XIII Type-49 forensic surface retains the historical source payload unchanged.
+- Add `.37` execution-plan and source-payload lifetime telemetry. Preserve all `.36.15` compact-record, `.36.14` revisit, `.36.13` `sgbar`, matrix-elision, publication-lifetime, and strict-FP policies unchanged.
+- Qualification remains broad-only with explicit `--case multi_element_xi1_ne1e12`, reuses the expensive `.33.8` baseline stored in the completed `.36.11` run, and compares incrementally against accepted `.36.15`. Phase-1 promotion requires exact science/work/ownership and improvement in both RSS and runtime versus `.36.15`.
+- Public ABIs remain `60487 / 6048110 / 60488`; frozen science remains `0.6.48.12.3.45.3.3.8`.
+
 ## 0.6.82.36.15 - compact hot evaluated-record diagnostics and production telemetry - 2026-08-23
 
 - Close the `.36.14` broad host return scientifically and structurally: exact science/ownership/work structure ACCEPT; `multi_element_xi1_ne1e12` peak RSS `6,824,124,416 -> 6,268,588,032 B` versus `.36.13` (about `556 MB` removed), but total runtime regressed `1253.745258 -> 1309.484549 s`. The memory reduction is retained, but `.36` remains open and this revision explicitly requires both memory and runtime non-regression/improvement.
