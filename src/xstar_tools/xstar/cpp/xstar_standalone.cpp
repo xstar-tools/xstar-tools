@@ -22651,6 +22651,18 @@ void emit_spectral_performance_instrumentation(
         &type50_small_a_farwing_points_v064812327, &type50_large_a_points_v064812327,
         &type50_inline_avx2_profiles_v064812327, &type50_inline_avx2_blocks_v064812327,
         &type50_inline_avx2_points_v064812327, &type50_inline_scalar_points_v064812327);
+    std::uint64_t type50_dense_hits_v068238 = 0u;
+    std::uint64_t type50_dense_misses_v068238 = 0u;
+    std::uint64_t type50_schedule_fallbacks_v068238 = 0u;
+    std::uint64_t type50_dense_cache_bytes_v068238 = 0u;
+    std::uint64_t type50_legacy_cache_bytes_v068238 = 0u;
+    std::uint64_t type50_grid_resets_v068238 = 0u;
+    double type50_dense_build_seconds_v068238 = 0.0;
+    xstar_spectral_type50_schedule_snapshot_v068238(
+        &type50_dense_hits_v068238, &type50_dense_misses_v068238,
+        &type50_schedule_fallbacks_v068238, &type50_dense_cache_bytes_v068238,
+        &type50_legacy_cache_bytes_v068238, &type50_grid_resets_v068238,
+        &type50_dense_build_seconds_v068238);
     std::uint64_t type50_prod_avx2_profiles_v064812328 = 0u;
     std::uint64_t type50_prod_scalar_profiles_v064812328 = 0u;
     std::uint64_t type50_prod_avx2_blocks_v064812328 = 0u;
@@ -22800,6 +22812,15 @@ void emit_spectral_performance_instrumentation(
             << "V064812327_TYPE50_SCHEDULE_CACHE_BYTES="<<type50_schedule_cache_bytes_v064812327<<"\n"
             << "V064812327_TYPE50_SCHEDULE_CACHED_EVENTS="<<type50_schedule_cached_events_v064812327<<"\n"
             << "V064812327_TYPE50_SCHEDULE_BUILD_SECONDS="<<type50_schedule_build_seconds_v064812327<<"\n"
+            << "V068238_TYPE50_SCHEDULE_MODE=DENSE_PROGRAM_RECORD_INDEX_INT32_ML1_LEGACY_SOURCE_POSITION_FALLBACK\n"
+            << "V068238_TYPE50_SCHEDULE_ENTRY_BYTES="<<sizeof(std::int32_t)<<"\n"
+            << "V068238_TYPE50_SCHEDULE_DENSE_HITS="<<type50_dense_hits_v068238<<"\n"
+            << "V068238_TYPE50_SCHEDULE_DENSE_MISSES="<<type50_dense_misses_v068238<<"\n"
+            << "V068238_TYPE50_SCHEDULE_FALLBACK_CALLS="<<type50_schedule_fallbacks_v068238<<"\n"
+            << "V068238_TYPE50_SCHEDULE_DENSE_CACHE_BYTES="<<type50_dense_cache_bytes_v068238<<"\n"
+            << "V068238_TYPE50_SCHEDULE_LEGACY_CACHE_BYTES="<<type50_legacy_cache_bytes_v068238<<"\n"
+            << "V068238_TYPE50_SCHEDULE_GRID_RESETS="<<type50_grid_resets_v068238<<"\n"
+            << "V068238_TYPE50_SCHEDULE_DENSE_BUILD_SECONDS="<<type50_dense_build_seconds_v068238<<"\n"
             << "V064812327_TYPE50_NCUT_1="<<type50_ncut_hist_v064812327[0]<<"\n"
             << "V064812327_TYPE50_NCUT_2="<<type50_ncut_hist_v064812327[1]<<"\n"
             << "V064812327_TYPE50_NCUT_3="<<type50_ncut_hist_v064812327[2]<<"\n"

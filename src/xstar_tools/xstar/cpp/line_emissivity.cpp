@@ -665,6 +665,14 @@ struct Type50GeometryCacheEntryV068232 {
 
 struct xstar_spectral_context {
     xstar_spectral_stats_v1 cumulative{};
+    // 0.6.82.38: normal production carries the canonical ProgramRecord
+    // index in xstar_spectral_contribution_v1::reserved0.  Cache only the
+    // prepared ml1 bin as a dense int32 table keyed by that compact index.
+    // The historical sparse source-position cache remains as a fallback for
+    // external/internal callers that do not provide the record index.
+    std::vector<std::int32_t> type50_ml1_by_record_v068238;
+    const double* type50_epi_v068238 = nullptr;
+    std::size_t type50_energy_count_v068238 = 0u;
     std::vector<Type50GeometryCacheEntryV068232> type50_geometry_by_source;
 };
 
@@ -678,6 +686,12 @@ thread_local std::uint64_t g_type50_geometry_cache_misses_v068232 = 0u;
 thread_local std::uint64_t g_type50_geometry_cache_uncached_v068232 = 0u;
 thread_local std::uint64_t g_type50_geometry_cache_peak_bytes_v068232 = 0u;
 thread_local double g_type50_geometry_cache_build_seconds_v068232 = 0.0;
+thread_local std::uint64_t g_type50_dense_schedule_hits_v068238 = 0u;
+thread_local std::uint64_t g_type50_dense_schedule_misses_v068238 = 0u;
+thread_local std::uint64_t g_type50_dense_schedule_fallbacks_v068238 = 0u;
+thread_local std::uint64_t g_type50_dense_schedule_peak_bytes_v068238 = 0u;
+thread_local std::uint64_t g_type50_dense_schedule_grid_resets_v068238 = 0u;
+thread_local double g_type50_dense_schedule_build_seconds_v068238 = 0.0;
 
 std::uint64_t double_bits_v068232(double value) {
     std::uint64_t bits = 0u;
@@ -726,22 +740,86 @@ int prepared_type50_ml1_v068232(
     ++g_type50_geometry_cache_misses_v068232;
     return ml1;
 }
+
+int prepared_type50_ml1_v068238(
+    xstar_spectral_context* context, std::int32_t record_slot_one_based,
+    std::int32_t record_count_hint, std::uint64_t source_position, double line_energy_ev,
+    const double* epi, std::size_t energy_count) {
+    if (!context || !epi || energy_count < 3u) {
+        ++g_type50_geometry_cache_uncached_v068232;
+        return -1;
+    }
+    if (record_slot_one_based <= 0) {
+        ++g_type50_dense_schedule_fallbacks_v068238;
+        return prepared_type50_ml1_v068232(
+            context, source_position, line_energy_ev, epi, energy_count);
+    }
+
+    if (context->type50_epi_v068238 != epi ||
+        context->type50_energy_count_v068238 != energy_count) {
+        std::fill(context->type50_ml1_by_record_v068238.begin(),
+                  context->type50_ml1_by_record_v068238.end(), 0);
+        context->type50_epi_v068238 = epi;
+        context->type50_energy_count_v068238 = energy_count;
+        ++g_type50_dense_schedule_grid_resets_v068238;
+    }
+
+    const std::size_t slot = static_cast<std::size_t>(record_slot_one_based - 1);
+    if (context->type50_ml1_by_record_v068238.capacity() == 0u && record_count_hint > 0) {
+        context->type50_ml1_by_record_v068238.reserve(
+            static_cast<std::size_t>(record_count_hint));
+        g_type50_dense_schedule_peak_bytes_v068238 = std::max<std::uint64_t>(
+            g_type50_dense_schedule_peak_bytes_v068238,
+            static_cast<std::uint64_t>(context->type50_ml1_by_record_v068238.capacity() *
+                sizeof(std::int32_t)));
+    }
+    if (context->type50_ml1_by_record_v068238.size() <= slot) {
+        context->type50_ml1_by_record_v068238.resize(slot + 1u, 0);
+        g_type50_dense_schedule_peak_bytes_v068238 = std::max<std::uint64_t>(
+            g_type50_dense_schedule_peak_bytes_v068238,
+            static_cast<std::uint64_t>(context->type50_ml1_by_record_v068238.capacity() *
+                sizeof(std::int32_t)));
+    }
+
+    const std::int32_t cached = context->type50_ml1_by_record_v068238[slot];
+    if (cached > 0) {
+        ++g_type50_dense_schedule_hits_v068238;
+        return static_cast<int>(cached);
+    }
+
+    const auto started = std::chrono::steady_clock::now();
+    int ml1 = -1;
+    const int rc = xstar_opacity_prepare_line_geometry_v068232(
+        line_energy_ev, epi, static_cast<int>(energy_count), &ml1);
+    g_type50_dense_schedule_build_seconds_v068238 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - started).count();
+    if (rc != 0 || ml1 <= 0 || ml1 > std::numeric_limits<std::int32_t>::max()) {
+        ++g_type50_geometry_cache_uncached_v068232;
+        return -1;
+    }
+    context->type50_ml1_by_record_v068238[slot] = static_cast<std::int32_t>(ml1);
+    ++g_type50_dense_schedule_misses_v068238;
+    return ml1;
+}
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Apply line profile dispatch to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
 static int apply_line_profile_dispatch(
-    xstar_spectral_context* context, std::uint64_t source_position,
-    double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
+    xstar_spectral_context* context, std::int32_t record_slot_one_based,
+    std::int32_t record_count_hint, std::uint64_t source_position, double optpp, double line_energy_ev,
+    double vturb_km_s, double temperature_1e4k,
     double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
     int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
     long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size) {
-    // 0.6.82.32 caches only the immutable first nbinc(line_energy, epi) result.
-    // The opacity kernel retains the complete accepted profile arithmetic and
-    // accumulation order and falls back to its historical public v1 path for
-    // non-standalone modes.
-    const int ml1_hint = prepared_type50_ml1_v068232(
-        context, source_position, line_energy_ev, epi, static_cast<std::size_t>(ncn2));
+    // 0.6.82.38 keeps the exact 0.6.82.32 prepared ml1 geometry but indexes
+    // normal production by the compact ProgramRecord slot carried in reserved0.
+    // This replaces the sparse source-position schedule with one int32 load on
+    // cache hits; the opacity/profile arithmetic and accumulation order remain
+    // unchanged.  Callers without a record slot use the frozen legacy cache.
+    const int ml1_hint = prepared_type50_ml1_v068238(
+        context, record_slot_one_based, record_count_hint, source_position,
+        line_energy_ev, epi, static_cast<std::size_t>(ncn2));
     return xstar_opacity_apply_line_profile_prepared_v068232(
         optpp, line_energy_ev, ml1_hint, vturb_km_s, temperature_1e4k, atomic_mass_amu,
         natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
@@ -962,6 +1040,12 @@ void xstar_spectral_type50_perf_reset_v064812327(void) {
     g_type50_geometry_cache_uncached_v068232 = 0u;
     g_type50_geometry_cache_peak_bytes_v068232 = 0u;
     g_type50_geometry_cache_build_seconds_v068232 = 0.0;
+    g_type50_dense_schedule_hits_v068238 = 0u;
+    g_type50_dense_schedule_misses_v068238 = 0u;
+    g_type50_dense_schedule_fallbacks_v068238 = 0u;
+    g_type50_dense_schedule_peak_bytes_v068238 = 0u;
+    g_type50_dense_schedule_grid_resets_v068238 = 0u;
+    g_type50_dense_schedule_build_seconds_v068238 = 0.0;
 }
 
 
@@ -1105,16 +1189,36 @@ void xstar_spectral_type50_perf_snapshot_v064812327(
         ncut_histogram, ncut_histogram_len, gaussian_points, small_a_core_points,
         small_a_farwing_points, large_a_points, inline_avx2_profiles,
         inline_avx2_blocks, inline_avx2_points, inline_scalar_points);
-    const std::uint64_t misses = g_type50_geometry_cache_misses_v068232;
-    const std::uint64_t hits = g_type50_geometry_cache_hits_v068232;
+    const std::uint64_t legacy_misses = g_type50_geometry_cache_misses_v068232;
+    const std::uint64_t legacy_hits = g_type50_geometry_cache_hits_v068232;
+    const std::uint64_t dense_misses = g_type50_dense_schedule_misses_v068238;
+    const std::uint64_t dense_hits = g_type50_dense_schedule_hits_v068238;
+    const std::uint64_t misses = dense_misses + legacy_misses;
+    const std::uint64_t hits = dense_hits + legacy_hits;
     if (schedule_profiles) *schedule_profiles = hits + misses;
     if (cache_hits) *cache_hits = hits;
     if (cache_misses) *cache_misses = misses;
     if (cache_uncached) *cache_uncached = g_type50_geometry_cache_uncached_v068232;
     if (distinct_cached_keys) *distinct_cached_keys = misses;
-    if (cache_bytes) *cache_bytes = g_type50_geometry_cache_peak_bytes_v068232;
+    if (cache_bytes) *cache_bytes =
+        g_type50_dense_schedule_peak_bytes_v068238 + g_type50_geometry_cache_peak_bytes_v068232;
     if (cached_events) *cached_events = hits;
-    if (schedule_build_seconds) *schedule_build_seconds = g_type50_geometry_cache_build_seconds_v068232;
+    if (schedule_build_seconds) *schedule_build_seconds =
+        g_type50_dense_schedule_build_seconds_v068238 + g_type50_geometry_cache_build_seconds_v068232;
+}
+
+extern "C" void xstar_spectral_type50_schedule_snapshot_v068238(
+    std::uint64_t* dense_hits, std::uint64_t* dense_misses,
+    std::uint64_t* fallback_calls, std::uint64_t* dense_cache_bytes,
+    std::uint64_t* legacy_cache_bytes, std::uint64_t* grid_resets,
+    double* dense_build_seconds) {
+    if (dense_hits) *dense_hits = g_type50_dense_schedule_hits_v068238;
+    if (dense_misses) *dense_misses = g_type50_dense_schedule_misses_v068238;
+    if (fallback_calls) *fallback_calls = g_type50_dense_schedule_fallbacks_v068238;
+    if (dense_cache_bytes) *dense_cache_bytes = g_type50_dense_schedule_peak_bytes_v068238;
+    if (legacy_cache_bytes) *legacy_cache_bytes = g_type50_geometry_cache_peak_bytes_v068232;
+    if (grid_resets) *grid_resets = g_type50_dense_schedule_grid_resets_v068238;
+    if (dense_build_seconds) *dense_build_seconds = g_type50_dense_schedule_build_seconds_v068238;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -1371,7 +1475,8 @@ int xstar_spectral_apply_contributions_v1(
                             workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                             opacity_error, sizeof(opacity_error))
                         : apply_line_profile_dispatch(
-                            context, c.source_position, c.opakab * c.abundance_lower * c.hydrogen_density,
+                            context, c.reserved0, c.reserved1, c.source_position,
+                            c.opakab * c.abundance_lower * c.hydrogen_density,
                             c.line_energy_eV, c.turbulent_velocity_km_s,
                             c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                             seed, seed_radius, workspace->epi_eV,
@@ -1479,7 +1584,8 @@ int xstar_spectral_apply_contributions_v1(
                     workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                     opacity_error, sizeof(opacity_error))
                 : apply_line_profile_dispatch(
-                    context, c.source_position, opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
+                    context, c.reserved0, c.reserved1, c.source_position, opakb1, c.line_energy_eV,
+                    c.turbulent_velocity_km_s,
                     c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                     seed, seed_radius, workspace->epi_eV, static_cast<int>(workspace->energy_count),
                     workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,

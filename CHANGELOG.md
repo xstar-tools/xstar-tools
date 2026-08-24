@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.38 - dense Type-50 schedule representation and .38 spectral-architecture start - 2026-08-24
+
+- Close the accepted `.37` execution-representation tranche at `0.6.82.37.5` after exact science/ownership/work acceptance, 4.051 GB peak RSS, and 1180.121766 s total time.
+- Start `.38` with the Type-50/spectral schedule representation while preserving all Type-50 profile/rebin arithmetic and source accumulation order.
+- Carry the immutable compiled `ProgramRecord` index through the existing `xstar_spectral_contribution_v1::reserved0` field (one-based; zero retains legacy fallback semantics), without changing the contribution ABI layout.
+- Replace the normal-production sparse source-position geometry cache with a dense `int32_t` `ml1` table keyed by compiled record index. The prior `.37.5` broad run reported 152,705,360 B for the sparse schedule cache; the dense table is expected to be only a few MiB.
+- Keep the historical source-position geometry cache as an exact fallback for external/legacy callers that do not supply the compiled record index.
+- Invalidate the dense schedule only when the continuum-grid pointer/count changes; line/profile numerical formulas, Type-50 AVX2/scalar kernels, profile/rebin traversal, opakc update ordering, and strict FP policy are unchanged.
+- Add `V068238_TYPE50_SCHEDULE_*` telemetry and a `.38` host qualification that reuses the completed `.36.11` `.33.8` baseline and compares incrementally against accepted `.37.5`.
+
 ## 0.6.82.37.5 - compact hot execution header and final .37 representation pass - 2026-08-24
 
 - Close the `.37` execution-representation tranche with one final generic-record layout optimization, using accepted `.37.4` as the immediate performance baseline and reusing the expensive `.33.8` science baseline from the completed `.36.11` broad run.

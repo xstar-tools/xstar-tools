@@ -15250,6 +15250,25 @@ int run_impl(
             sc.source_position = static_cast<std::uint64_t>(rec.source_position);
             sc.record = rec.record;
             const auto* source_record = k < evaluated_records.size() ? evaluated_records[k] : nullptr;
+            // 0.6.82.38: carry the immutable compiled ProgramRecord index in
+            // the existing reserved0 ABI slot.  The spectral engine uses this
+            // one-based dense key for Type-50 line-geometry schedule lookup,
+            // avoiding the sparse multi-million-entry source-position table.
+            // Zero remains the legacy/external-caller fallback sentinel.
+            if (source_record) {
+                const std::ptrdiff_t record_index_v068238 =
+                    source_record - ctx.program.records.data();
+                if (record_index_v068238 >= 0 &&
+                    static_cast<std::size_t>(record_index_v068238) < ctx.program.records.size() &&
+                    static_cast<std::uint64_t>(record_index_v068238) + 1u <=
+                        static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())) {
+                    sc.reserved0 = static_cast<std::int32_t>(record_index_v068238 + 1);
+                    if (ctx.program.records.size() <=
+                        static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+                        sc.reserved1 = static_cast<std::int32_t>(ctx.program.records.size());
+                    }
+                }
+            }
             const int exact_line_index = source_record ? source_record->line_index_one_based : 0;
             const int exact_continuum_index = source_record ? source_record->continuum_index_one_based :
                 evaluated[k].continuum_index_one_based;

@@ -49,7 +49,12 @@ typedef struct xstar_spectral_contribution_v1 {
     int32_t data_type;
     int32_t output_index;
     int32_t bin_one_based;
+    /* 0.6.82.38 internal production hint: one-based compiled ProgramRecord
+       index for dense Type-50 schedule lookup; zero preserves legacy fallback.
+       Field width/layout are unchanged. */
     int32_t reserved0;
+    /* 0.6.82.38 internal production hint: total compiled ProgramRecord count
+       used only to reserve the dense schedule domain; zero is valid fallback. */
     int32_t reserved1;
     double ptmp1;
     double ptmp2;
@@ -181,6 +186,10 @@ void xstar_spectral_type50_perf_snapshot_v064812327(
     uint64_t* small_a_farwing_points, uint64_t* large_a_points,
     uint64_t* inline_avx2_profiles, uint64_t* inline_avx2_blocks,
     uint64_t* inline_avx2_points, uint64_t* inline_scalar_points);
+void xstar_spectral_type50_schedule_snapshot_v068238(
+    uint64_t* dense_hits, uint64_t* dense_misses, uint64_t* fallback_calls,
+    uint64_t* dense_cache_bytes, uint64_t* legacy_cache_bytes,
+    uint64_t* grid_resets, double* dense_build_seconds);
 void xstar_spectral_type50_perf_reset_v064812328(void);
 void xstar_spectral_type50_perf_snapshot_v064812328(
     uint64_t* prod_avx2_profiles, uint64_t* prod_scalar_profiles,
