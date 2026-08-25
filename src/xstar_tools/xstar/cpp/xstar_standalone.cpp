@@ -24,6 +24,18 @@
 #include "xstar_production_zone_bridge.h"
 
 #include "xstar_constants.h"
+
+#ifndef XSTAR_V068240_BUILD_PROFILE
+#define XSTAR_V068240_BUILD_PROFILE "portable-o3"
+#endif
+
+#if defined(__clang__)
+#define XSTAR_V068240_COMPILER_FAMILY "CLANG"
+#elif defined(__GNUC__)
+#define XSTAR_V068240_COMPILER_FAMILY "GCC"
+#else
+#define XSTAR_V068240_COMPILER_FAMILY "OTHER"
+#endif
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -22065,6 +22077,27 @@ void emit_controller_performance_instrumentation(
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
+            << "V068240_COMPILER_CPU_POLICY=MEASUREMENT_ONLY_STRICT_FP_NO_NEW_SCIENCE_WORK\n"
+            << "V068240_BUILD_PROFILE=" << XSTAR_V068240_BUILD_PROFILE << "\n"
+            << "V068240_COMPILER_FAMILY=" << XSTAR_V068240_COMPILER_FAMILY << "\n"
+            << "V068240_COMPILER_VERSION_MAJOR="
+#if defined(__clang__)
+            << __clang_major__
+#elif defined(__GNUC__)
+            << __GNUC__
+#else
+            << 0
+#endif
+            << "\n"
+            << "V068240_COMPILER_VERSION_MINOR="
+#if defined(__clang__)
+            << __clang_minor__
+#elif defined(__GNUC__)
+            << __GNUC_MINOR__
+#else
+            << 0
+#endif
+            << "\n"
             << "V064890_PERF_POLICY=MEASUREMENT_ONLY_NO_SCIENCE_CHANGE\n"
             << "V064890_PERF_ATDB_LOWERING_SECONDS=" << lowering_seconds << "\n"
             << "V064890_PERF_CONTROLLER_SECONDS=" << controller_seconds << "\n";

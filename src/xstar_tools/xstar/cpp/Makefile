@@ -7,25 +7,60 @@ OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
 THERMAL_STRICT_FP_FLAGS ?= -ffp-contract=off
 ELEMENT_STRICT_FP_FLAGS ?= -ffp-contract=off
 
-# v0.6.48.9.7 compiler-evaluation controls.  These are intentionally opt-in
-# until the exact-product host qualifier accepts a build.  PGO and native ISA
-# selection do not relax IEEE semantics: -ffast-math remains forbidden and
-# the source-critical opacity/thermal/element translation units retain their
-# explicit -ffp-contract=off flags below.
+# v0.6.82.40 compiler/CPU experiment controls.  The default profile is
+# deliberately equivalent to the accepted 0.6.82.39.2 portable -O3 build.
+# Every non-default control is opt-in and must pass exact science/work/RSS
+# qualification before it can be promoted.  These controls never enable
+# -ffast-math, and the source-critical translation units retain the explicit
+# -ffp-contract=off flags below.
+#
+# The historical v0.6.48.9.7 variables remain accepted as compatibility aliases
+# so older host scripts do not silently change behavior.
 V064897_PGO_MODE ?= off
 V064897_PROFILE_DIR ?= $(CURDIR)/.v064897_pgo
 V064897_NATIVE ?= 0
-ifeq ($(V064897_PGO_MODE),generate)
-  override CXXFLAGS += -fprofile-generate=$(V064897_PROFILE_DIR)
+
+V068240_OPT_LEVEL ?= 3
+V068240_LTO ?= 0
+V068240_PGO_MODE ?= $(V064897_PGO_MODE)
+V068240_PROFILE_DIR ?= $(if $(filter-out $(CURDIR)/.v064897_pgo,$(V064897_PROFILE_DIR)),$(V064897_PROFILE_DIR),$(CURDIR)/.v068240_pgo)
+V068240_NATIVE ?= $(V064897_NATIVE)
+V068240_BUILD_PROFILE ?= portable-o3
+
+ifeq ($(filter $(V068240_OPT_LEVEL),2 3),)
+  $(error v0.6.82.40 supports V068240_OPT_LEVEL=2 or 3)
 endif
-ifeq ($(V064897_PGO_MODE),use)
-  override CXXFLAGS += -fprofile-use=$(V064897_PROFILE_DIR) -fprofile-correction
+ifeq ($(filter $(V068240_PGO_MODE),off generate use),)
+  $(error v0.6.82.40 supports V068240_PGO_MODE=off, generate, or use)
 endif
-ifeq ($(V064897_NATIVE),1)
+ifeq ($(filter $(V068240_LTO),0 1),)
+  $(error v0.6.82.40 supports V068240_LTO=0 or 1)
+endif
+ifeq ($(filter $(V068240_NATIVE),0 1),)
+  $(error v0.6.82.40 supports V068240_NATIVE=0 or 1)
+endif
+
+# Last optimization flag wins, so this safely overrides the historical -O3 in
+# the default CXXFLAGS while preserving callers that add unrelated flags.
+override CXXFLAGS += -O$(V068240_OPT_LEVEL)
+ifeq ($(V068240_LTO),1)
+  override CXXFLAGS += -flto
+endif
+ifeq ($(V068240_PGO_MODE),generate)
+  override CXXFLAGS += -fprofile-generate=$(V068240_PROFILE_DIR)
+endif
+ifeq ($(V068240_PGO_MODE),use)
+  override CXXFLAGS += -fprofile-use=$(V068240_PROFILE_DIR) -fprofile-correction
+endif
+ifeq ($(V068240_NATIVE),1)
   override CXXFLAGS += -march=native
 endif
+override CPPFLAGS += -DXSTAR_V068240_BUILD_PROFILE=\"$(V068240_BUILD_PROFILE)\"
 ifneq ($(findstring -ffast-math,$(CXXFLAGS)),)
-  $(error v0.6.48.9.7 rejects -ffast-math)
+  $(error v0.6.82.40 rejects -ffast-math)
+endif
+ifneq ($(findstring -Ofast,$(CXXFLAGS)),)
+  $(error v0.6.82.40 rejects -Ofast)
 endif
 
 COMMON_LIBS ?= -ldl -pthread
@@ -58,7 +93,7 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.82.39.2
+PACKAGE_VERSION ?= 0.6.82.40
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16.5
@@ -183,6 +218,13 @@ print-config:
 	@echo V064897_PGO_MODE=$(V064897_PGO_MODE)
 	@echo V064897_PROFILE_DIR=$(V064897_PROFILE_DIR)
 	@echo V064897_NATIVE=$(V064897_NATIVE)
+	@echo V068240_OPT_LEVEL=$(V068240_OPT_LEVEL)
+	@echo V068240_LTO=$(V068240_LTO)
+	@echo V068240_PGO_MODE=$(V068240_PGO_MODE)
+	@echo V068240_PROFILE_DIR=$(V068240_PROFILE_DIR)
+	@echo V068240_NATIVE=$(V068240_NATIVE)
+	@echo V068240_BUILD_PROFILE=$(V068240_BUILD_PROFILE)
+	@echo V068240_CXXFLAGS=$(CXXFLAGS)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
 	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)
 	@echo PACKAGE_VERSION=$(PACKAGE_VERSION)

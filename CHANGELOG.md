@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40 - compiler and CPU optimization experiment framework - 2026-08-25
+
+- Starts the compiler/code-generation phase from accepted `0.6.82.39.2`. The `.39.2` broad host result is frozen as the source baseline: exact science/ownership/work, `3,828,912,128 B` peak RSS, `1025.784166 s` internal total, and Type-50 work `2,600,785` profiles / `14,623,981,466` updated bins.
+- Closes the `.39` retained-state campaign without proceeding to recomputation-based `sgbar` eviction. Future memory changes must preserve or reduce scientific work and runtime; full/reduced bound-free geometry reuse counts stay frozen during `.40` compiler experiments.
+- Replaces the old ad-hoc v0.6.48.9.7 compiler experiment knobs with versioned `.40` controls while keeping the historical variable names as compatibility aliases. The default `portable-o3` profile remains equivalent to the accepted `.39.2` GCC `-O3` build.
+- Adds controlled `V068240_*` build knobs for O2/O3, LTO, native ISA selection, and GCC PGO. `-ffast-math` and `-Ofast` are explicitly rejected; source-critical translation units retain `-ffp-contract=off`.
+- Adds compiler/build provenance markers to the performance stream without changing scientific arithmetic or public products.
+- Adds `run_compiler_cpu_host_0_6_82_40.py`, a cost-tiered same-host experiment harness: Fe first, C5 second, broad milestone-only. It compares exact science products, raw FITS HDU payloads, normalized STEP rows, frozen work counters, RSS, and timing across GCC/Clang/O2/O3/LTO/native profiles. GCC PGO is supported with Fe+C5 training before target measurement.
+- No branch hints, alias assumptions, hand SIMD, changed cutoffs, reordered accumulation, or new recomputation are introduced in this first `.40` candidate. Such source-level changes require evidence from the build-profile sweep and the same exact-product/work gates.
+
 ## 0.6.82.39.2 - phase-transfer actual vector capacity and spectral owner deduplication - 2026-08-24
 
 - Builds on scientifically exact `0.6.82.39.1`, whose host return kept `.38.3` speed but missed the RSS gate because logical record compaction retained vector capacity and released zero bound-free sidecars.
