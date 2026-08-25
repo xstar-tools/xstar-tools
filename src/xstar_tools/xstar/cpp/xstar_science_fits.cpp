@@ -624,7 +624,7 @@ std::vector<RecordDiag> read_record_diagnostics(
             r.lower_row = source.lower_row;
             r.upper_row = source.upper_row;
             r.spectral = source.spectral;
-            r.ans = source.ans;
+            std::copy(std::begin(source.ans), std::end(source.ans), r.ans.begin());
             r.line_energy_ev = source.line_energy_ev;
             r.atomic_mass_amu = source.atomic_mass_amu;
             r.density_scale = source.density_scale;

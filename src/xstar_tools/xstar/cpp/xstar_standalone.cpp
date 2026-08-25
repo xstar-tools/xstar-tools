@@ -343,6 +343,10 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t abi_record_rows_capacity_bytes_peak_v06823611 = 0u;
     std::uint64_t snapshot_record_rows_capacity_bytes_peak_v06823611 = 0u;
     std::uint64_t native_compact_record_release_bytes_peak_v06823611 = 0u;
+    // 0.6.82.38.3: direct ownership transfer of the frozen ABI record-row
+    // vector into the retained snapshot removes the second per-record vector.
+    std::uint64_t record_product_owner_transfers_v0682383 = 0u;
+    std::uint64_t record_product_copy_bytes_elided_peak_v0682383 = 0u;
     // 0.6.82.36.12: glibc arena-return checkpoints. These are memory-lifetime
     // diagnostics only; malloc_trim does not change any retained scientific
     // object, source order, or floating-point arithmetic.
@@ -15986,49 +15990,23 @@ void attach_native_product_diagnostics(
             current_rss_bytes_v068233());
     }
 
-    snapshot.record_product_diagnostics.clear();
-    snapshot.record_product_diagnostics.reserve(record_rows.size());
-    for (const auto& row : record_rows) {
-        xstar_run_state::RecordProductDiagnosticState out;
-        out.source_position = row.source_position;
-        out.record = row.record;
-        out.element_index = row.element_index;
-        out.element_z = row.element_z;
-        out.data_type = row.data_type;
-        out.rate_type = row.rate_type;
-        out.ion_stage = row.ion_stage;
-        out.lower_row = row.lower_row;
-        out.upper_row = row.upper_row;
-        out.spectral = row.spectral != 0u;
-        std::copy(std::begin(row.ans), std::end(row.ans), out.ans.begin());
-        out.line_energy_ev = row.line_energy_ev;
-        out.atomic_mass_amu = row.atomic_mass_amu;
-        out.density_scale = row.density_scale;
-        out.natural_width_ev = row.natural_width_ev;
-        out.opakab = row.opakab;
-        out.type50_valid = row.type50_valid != 0u;
-        out.type50_line_index_one_based = row.type50_line_index_one_based;
-        out.type50_wavelength_a = row.type50_wavelength_a;
-        out.type50_ptmp1 = row.type50_ptmp1;
-        out.type50_ptmp2 = row.type50_ptmp2;
-        out.type50_tau_in = row.type50_tau_in;
-        out.type50_tau_out = row.type50_tau_out;
-        out.type53_valid = row.type53_valid != 0u;
-        out.type49_valid = row.type49_valid != 0u;
-        out.type99_valid = row.type99_valid != 0u;
-        out.continuum_index_one_based = row.continuum_index_one_based;
-        out.type53_threshold_ev = row.type53_threshold_ev;
-        out.type53_base_threshold_ev = row.type53_base_threshold_ev;
-        out.type49_threshold_ev = row.type49_threshold_ev;
-        out.type99_threshold_ev = row.type99_threshold_ev;
-        out.threshold_abs_sigma_cm2 = row.threshold_abs_sigma_cm2;
-        out.threshold_stimulated_sigma_cm2 = row.threshold_stimulated_sigma_cm2;
-        out.type53_ptmp1 = row.type53_ptmp1;
-        out.type53_ptmp2 = row.type53_ptmp2;
-        out.type53_tau_in = row.type53_tau_in;
-        out.type53_tau_out = row.type53_tau_out;
-        snapshot.record_product_diagnostics.push_back(std::move(out));
+    // 0.6.82.38.3: the standalone snapshot now owns the exact frozen ABI
+    // record rows directly.  The previous publication path allocated a second
+    // 272-byte internal row for every record and copied the already-complete
+    // ABI rows into it, briefly overlapping ~105 MB + ~102 MB.  The ABI row
+    // contains the identical publication fields, so transfer the vector owner
+    // instead.  This is ownership-only: no record ordering, values, gates, or
+    // public ABI layout change.
+    if (g_performance_v064890) {
+        constexpr std::uint64_t legacy_snapshot_row_bytes_v0682383 = 272u;
+        const auto elided_v0682383 = static_cast<std::uint64_t>(record_rows.capacity()) *
+            legacy_snapshot_row_bytes_v0682383;
+        g_performance_v064890->record_product_copy_bytes_elided_peak_v0682383 = std::max(
+            g_performance_v064890->record_product_copy_bytes_elided_peak_v0682383,
+            elided_v0682383);
+        ++g_performance_v064890->record_product_owner_transfers_v0682383;
     }
+    snapshot.record_product_diagnostics = std::move(record_rows);
     if (g_performance_v064890) {
         const auto bytes_v06823611 = static_cast<std::uint64_t>(snapshot.record_product_diagnostics.capacity()) *
             sizeof(xstar_run_state::RecordProductDiagnosticState);
@@ -22377,6 +22355,10 @@ void emit_controller_performance_instrumentation(
             << "V06823611_HEAP_AFTER_ZONE_PUBLICATION_FORDBLKS_PEAK=" << perf.heap_after_zone_publication_fordblks_peak_v06823611 << "\n"
             << "V06823611_ABI_RECORD_ROWS_CAPACITY_BYTES_PEAK=" << perf.abi_record_rows_capacity_bytes_peak_v06823611 << "\n"
             << "V06823611_SNAPSHOT_RECORD_ROWS_CAPACITY_BYTES_PEAK=" << perf.snapshot_record_rows_capacity_bytes_peak_v06823611 << "\n"
+            << "V0682383_RECORD_PRODUCT_SNAPSHOT_MODE=FROZEN_ABI_ROW_OWNER_TRANSFER_NO_SECOND_VECTOR\n"
+            << "V0682383_RECORD_PRODUCT_SNAPSHOT_ROW_BYTES=" << sizeof(xstar_run_state::RecordProductDiagnosticState) << "\n"
+            << "V0682383_RECORD_PRODUCT_OWNER_TRANSFERS=" << perf.record_product_owner_transfers_v0682383 << "\n"
+            << "V0682383_RECORD_PRODUCT_COPY_BYTES_ELIDED_PEAK=" << perf.record_product_copy_bytes_elided_peak_v0682383 << "\n"
             << "V06823611_NATIVE_COMPACT_RECORD_RELEASE_BYTES_PEAK=" << perf.native_compact_record_release_bytes_peak_v06823611 << "\n"
             << "V06823612_ALLOCATOR_TRIM_MODE=GLIBC_ACCEPTED_BOUNDARY_AND_ZONE_CHECKPOINTS\n"
             << "V06823612_ALLOCATOR_TRIM_CALLS=" << perf.allocator_trim_calls_v06823612 << "\n"

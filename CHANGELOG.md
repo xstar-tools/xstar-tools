@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.38.3 - record-product snapshot owner transfer - 2026-08-24
+
+- Keeps the exact `.38.2` Type-50 localized-core and AVX2 offset-cursor speed path unchanged.
+- Addresses the `.38.2` host RSS rejection (3,970,400,256 B vs the 3,965,475,164 B gate) without changing science arithmetic.
+- Removes the publication-time duplicate record-row representation: the frozen 280-byte C ABI record vector is now moved directly into retained snapshot ownership instead of allocating/copying a second 272-byte row vector.
+- Preserves C API/fixed-state/production/spectral ABIs and source order.
+- Adds observation-only `V0682383_RECORD_PRODUCT_*` telemetry for owner transfers and eliminated duplicate-copy capacity.
+
 ## 0.6.82.38.2 - exact Type-50 core localization and AVX2 offset cursor - 2026-08-24
 
 - Accept the host-qualified `0.6.82.38.1` spectral direct-index repair for `multi_element_xi1_ne1e12`: science/ownership/work ACCEPT, total `1051.731587 s`, fixed spectral `263.485125 s`, Type-50 profile `153.095704 s`, and peak RSS `3,945,746,432 B`.  Relative to accepted `.37.5`, total fell by `128.390179 s` and fixed spectral by `125.648216 s`; `.38` dense Type-50 schedule storage remains `2,133,584 B` with zero legacy-cache bytes.
