@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 0.6.82.40.2.6 - Type-53 production legacy-prepass elision - 2026-08-25
+
+- Single-change CPU optimization following the completed `.40.2.5` family audit.
+- In ordinary native production, a Type-53 record with a valid lowered source
+  context now skips the historical generic photo/heat prepass because the
+  canonical source-faithful Type-53 result is always the committed owner later
+  in the same record evaluation.
+- Non-production/fallback execution, explicit promotion-audit output, and the
+  `XSTAR_V06824026_FORCE_TYPE53_LEGACY_PREPASS=1` qualification control retain
+  the legacy loop byte-for-byte.
+- Adds counters for executed/elided Type-53 prepass calls and pair
+  interpolations so the host sweep can prove exactly how much work is removed.
+- Adds a narrow `rlogxi=-3,+1,+4` same-binary A/B host runner.  Both the elided
+  path and forced-legacy control must independently preserve canonical Phase-A
+  science and STEP output.  Broad Phase C remains blocked.
+- No Type-53 source-faithful arithmetic, ATDB traversal, solver/controller
+  behavior, accumulation order, public output schema, ABI, or physical cutoff
+  changes.
+
 ## 0.6.82.40.2.5 - narrow low-ionization family timing and unique-residency audit - 2026-08-25
 
 - Keeps the completed `.40.2.4` activation result frozen and adds diagnostic-only

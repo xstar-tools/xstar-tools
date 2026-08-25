@@ -22480,6 +22480,18 @@ void emit_controller_performance_instrumentation(
                     << perf.foundation_v068231.ion_prepared_cache_bytes_by_type_v06824025[dt_index_v06824025] << "\n";
             }
         }
+        // 0.6.82.40.2.6: prove the single Type-53 production change.
+        // Native production should elide the generic legacy photo/heat loop
+        // whenever the lowered source-faithful context is valid; explicit
+        // qualification forcing retains the historical loop unchanged.
+        out << "V06824026_TYPE53_LEGACY_PREPASS_EXECUTED_CALLS="
+            << perf.foundation_v068231.type53_legacy_prepass_executed_calls_v06824026 << "\n"
+            << "V06824026_TYPE53_LEGACY_PREPASS_ELIDED_CALLS="
+            << perf.foundation_v068231.type53_legacy_prepass_elided_calls_v06824026 << "\n"
+            << "V06824026_TYPE53_LEGACY_PAIR_INTERPOLATIONS_EXECUTED="
+            << perf.foundation_v068231.type53_legacy_pair_interpolations_executed_v06824026 << "\n"
+            << "V06824026_TYPE53_LEGACY_PAIR_INTERPOLATIONS_ELIDED="
+            << perf.foundation_v068231.type53_legacy_pair_interpolations_elided_v06824026 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

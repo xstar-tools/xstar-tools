@@ -7619,6 +7619,9 @@ struct RateEvaluationContextV064894 {
     const std::vector<std::uint32_t>* bound_free_slot_by_record_v0682371 = nullptr;
     const std::vector<Type53RecordContext>* bound_free_context_by_slot_v0682371 = nullptr;
     BoundFreePerfCountersV064895* bound_free_perf = nullptr;
+    // 0.6.82.40.2.6 observation counters are kept in the already-private
+    // performance foundation; this pointer never escapes the fixed context.
+    xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v06824026 = nullptr;
     bool force_legacy_bound_free = false;
     std::uint64_t reduced_energy_hash = 0;
     std::uint64_t full_energy_hash = 0;
@@ -7991,26 +7994,52 @@ EvaluatedRecord evaluate_record(
             const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : execution_v0682375.real_count;
             const std::size_t n = pair_real_count / 2;
             const double threshold = std::max(record_context.valid ? record_context.threshold_ev : delta_ev, 1.0e-12);
-            double photo = 0.0;
-            double heat = 0.0;
-            for (std::size_t k = 0; k < n; ++k) {
-                const double e = threshold + r[2 * k] * kRydEv;
-                const double sigma = std::max(0.0, r[2 * k + 1]);
-                const double flux = interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e);
-                photo += flux * sigma;
-                heat += flux * sigma * std::max(0.0, e - threshold) * kErgPerEv;
+
+            // 0.6.82.40.2.6: native production with a valid lowered Type-53
+            // context always commits evaluate_type53_source_integral below.
+            // The historical generic photo/heat loop was therefore pure
+            // diagnostic prework in that path, including one upper_bound-based
+            // interpolation per energy/sigma pair.  Preserve it byte-for-byte
+            // for non-production/fallback runs and explicit audit forcing.
+            const char* promotion_audit_path_v06824026 =
+                std::getenv("XSTAR_V0648119_C_TYPE53_PROMOTION_AUDIT_PATH");
+            const bool explicit_legacy_audit_v06824026 =
+                environment_flag("XSTAR_V06824026_FORCE_TYPE53_LEGACY_PREPASS") ||
+                (promotion_audit_path_v06824026 && *promotion_audit_path_v06824026);
+            const bool execute_legacy_prepass_v06824026 =
+                !native_production_mode() || !record_context.valid || explicit_legacy_audit_v06824026;
+            std::array<double,6> legacy_type53_ans{};
+            if (execute_legacy_prepass_v06824026) {
+                double photo = 0.0;
+                double heat = 0.0;
+                for (std::size_t k = 0; k < n; ++k) {
+                    const double e = threshold + r[2 * k] * kRydEv;
+                    const double sigma = std::max(0.0, r[2 * k + 1]);
+                    const double flux = interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e);
+                    photo += flux * sigma;
+                    heat += flux * sigma * std::max(0.0, e - threshold) * kErgPerEv;
+                }
+                photo /= static_cast<double>(n);
+                heat /= static_cast<double>(n);
+                const double ratio = lower.statistical_weight / std::max(upper.statistical_weight, 1.0e-300);
+                const double recomb = 2.08e-22 * ratio * ne / std::max(t4 * sqrt_t4, 1.0e-300) * limited_exp(threshold / std::max(kt_ev, 1.0e-300)) * std::max(photo, 1.0e-60);
+                c.ans1 = photo;
+                c.ans2 = recomb;
+                c.ans3 = -recomb * threshold * kErgPerEv;
+                c.ans4 = -heat;
+                c.ans5 = recomb * threshold * kErgPerEv;
+                c.ans6 = heat;
+                legacy_type53_ans = {{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6}};
+                if (rate_context.perf_foundation_v06824026) {
+                    ++rate_context.perf_foundation_v06824026->type53_legacy_prepass_executed_calls_v06824026;
+                    rate_context.perf_foundation_v06824026->type53_legacy_pair_interpolations_executed_v06824026 +=
+                        static_cast<std::uint64_t>(n);
+                }
+            } else if (rate_context.perf_foundation_v06824026) {
+                ++rate_context.perf_foundation_v06824026->type53_legacy_prepass_elided_calls_v06824026;
+                rate_context.perf_foundation_v06824026->type53_legacy_pair_interpolations_elided_v06824026 +=
+                    static_cast<std::uint64_t>(n);
             }
-            photo /= static_cast<double>(n);
-            heat /= static_cast<double>(n);
-            const double ratio = lower.statistical_weight / std::max(upper.statistical_weight, 1.0e-300);
-            const double recomb = 2.08e-22 * ratio * ne / std::max(t4 * sqrt_t4, 1.0e-300) * limited_exp(threshold / std::max(kt_ev, 1.0e-300)) * std::max(photo, 1.0e-60);
-            c.ans1 = photo;
-            c.ans2 = recomb;
-            c.ans3 = -recomb * threshold * kErgPerEv;
-            c.ans4 = -heat;
-            c.ans5 = recomb * threshold * kErgPerEv;
-            c.ans6 = heat;
-            const std::array<double,6> legacy_type53_ans{{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6}};
             // 0.6.82.13: normal native production follows the generic FORTRAN
             // Type-53 path for every element.  The historical He row-46
             // captured oracle is retained only for explicit non-production
@@ -13451,6 +13480,7 @@ int run_impl(
     rate_context_v064894.bound_free_context_by_slot_v0682371 =
         &ctx.bound_free_context_by_slot_v0682371;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
+    rate_context_v064894.perf_foundation_v06824026 = &perf_foundation_v068231;
     const bool use_compact_bound_free_revisit_v06823614 =
         native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
         !environment_flag("XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT");

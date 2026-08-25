@@ -280,6 +280,15 @@ struct PerformanceFoundationV068231 {
     std::array<std::uint64_t, 111> ion_unique_payload_page_bytes_by_type_v06824025{};
     std::array<std::uint64_t, 111> ion_unique_resident_payload_page_bytes_by_type_v06824025{};
     std::array<std::uint64_t, 111> ion_prepared_cache_bytes_by_type_v06824025{};
+
+    // 0.6.82.40.2.6: production Type-53 legacy-prepass elision.  The
+    // source-faithful Type-53 evaluator is the committed native-production
+    // owner whenever a lowered record context is valid.  Count the generic
+    // legacy pair loop only for explicit forensic/fallback execution.
+    std::uint64_t type53_legacy_prepass_executed_calls_v06824026 = 0u;
+    std::uint64_t type53_legacy_prepass_elided_calls_v06824026 = 0u;
+    std::uint64_t type53_legacy_pair_interpolations_executed_v06824026 = 0u;
+    std::uint64_t type53_legacy_pair_interpolations_elided_v06824026 = 0u;
 };
 
 void capture_performance_foundation_v068231(
