@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.2 - ionization-regime ATDB activation audit - 2026-08-25
+
+- Replaced the planned generic four-way HMC timing split with a measurement-only data-type/rate-type activation census across the fixed H+He+C `rlogxi=-3,+1,+4` sweep.
+- The full XSTAR atomic-data catalog is descriptive only and is **not** an implementation expectation.  The audit keeps `FORTRAN_ACTIVE`, the exact C++ `kActiveTypes` implementation set, and `CPP_ACTIVE` separate and compares/ranks only labels actually observed in FORTRAN or C++.
+- Added generic FORTRAN `ucalc` counters by data type, rate type, and `(data type, rate type)` pair, plus `ans1/ans2` nonzero counts and absolute accumulated source-rate magnitudes.  No clock is placed inside `ucalc`.
+- Added corresponding C++ `evaluate_record` activation counters plus matrix, spectral, bound-free-payload, and payload-value-touch telemetry by observed data type.
+- Phase-A stock timing/RSS remains authoritative; `.40.2.2` diagnostic runs are used only to explain which atomic-process mix amplifies the low-ionization cost and modest RSS increase.
+- Phase C broad confirmation remains blocked until the activation matrix is reviewed and the narrow timing/locality target for the next revision is chosen.
+
 ## 0.6.82.40.2.1 - ionization-audit parser/resume hotfix - 2026-08-25
 
 - Fix the Phase-A audit parser so FORTRAN scientific-format timer markers with padding after `=` (for example `KEY=  8.88E+01`) are accepted.

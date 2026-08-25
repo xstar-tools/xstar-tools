@@ -22405,6 +22405,54 @@ void emit_controller_performance_instrumentation(
             << "V0682351_CPP_EVAL_TYPE86=" << perf.foundation_v068231.evaluated_records_by_type[86] << "\n"
             << "V0682351_CPP_EVAL_TYPE88=" << perf.foundation_v068231.evaluated_records_by_type[88] << "\n"
             << "V0682351_CPP_EVAL_TYPE99=" << perf.foundation_v068231.evaluated_records_by_type[99] << "\n";
+        // 0.6.82.40.2.2: emit only actually evaluated labels.  The complete
+        // XSTAR catalog is descriptive, not a C++ implementation requirement.
+        for (std::size_t dt_v06824022 = 0;
+             dt_v06824022 < perf.foundation_v068231.evaluated_records_by_type.size();
+             ++dt_v06824022) {
+            const auto calls_v06824022 = perf.foundation_v068231.evaluated_records_by_type[dt_v06824022];
+            if (calls_v06824022 == 0u) continue;
+            out << "V06824022_CPP_DT" << dt_v06824022 << "_CALLS=" << calls_v06824022 << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_ANS1_NONZERO="
+                << perf.foundation_v068231.ans1_nonzero_by_type_v06824022[dt_v06824022] << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_ANS2_NONZERO="
+                << perf.foundation_v068231.ans2_nonzero_by_type_v06824022[dt_v06824022] << "\n"
+                << std::setprecision(17)
+                << "V06824022_CPP_DT" << dt_v06824022 << "_ANS1_ABS_SUM="
+                << perf.foundation_v068231.ans1_abs_sum_by_type_v06824022[dt_v06824022] << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_ANS2_ABS_SUM="
+                << perf.foundation_v068231.ans2_abs_sum_by_type_v06824022[dt_v06824022] << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_MATRIX_CALLS="
+                << perf.foundation_v068231.matrix_records_by_type_v06824022[dt_v06824022] << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_SPECTRAL_CALLS="
+                << perf.foundation_v068231.spectral_records_by_type_v06824022[dt_v06824022] << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_BOUND_FREE_PAYLOAD_CALLS="
+                << perf.foundation_v068231.bound_free_records_by_type_v06824022[dt_v06824022] << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_REAL_VALUES="
+                << perf.foundation_v068231.real_payload_values_by_type_v06824022[dt_v06824022] << "\n"
+                << "V06824022_CPP_DT" << dt_v06824022 << "_INT_VALUES="
+                << perf.foundation_v068231.int_payload_values_by_type_v06824022[dt_v06824022] << "\n";
+        }
+        for (std::size_t rt_v06824022 = 0;
+             rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
+             ++rt_v06824022) {
+            const auto calls_v06824022 = perf.foundation_v068231.evaluated_records_by_rate_type_v06824022[rt_v06824022];
+            if (calls_v06824022 == 0u) continue;
+            out << "V06824022_CPP_RT" << rt_v06824022 << "_CALLS=" << calls_v06824022 << "\n";
+        }
+        for (std::size_t dt_v06824022 = 0;
+             dt_v06824022 < perf.foundation_v068231.evaluated_records_by_type_rate_v06824022.size();
+             ++dt_v06824022) {
+            for (std::size_t rt_v06824022 = 0;
+                 rt_v06824022 < perf.foundation_v068231.evaluated_records_by_type_rate_v06824022[dt_v06824022].size();
+                 ++rt_v06824022) {
+                const auto calls_v06824022 =
+                    perf.foundation_v068231.evaluated_records_by_type_rate_v06824022[dt_v06824022][rt_v06824022];
+                if (calls_v06824022 == 0u) continue;
+                out << "V06824022_CPP_PAIR_DT" << dt_v06824022 << "_RT" << rt_v06824022
+                    << "_CALLS=" << calls_v06824022 << "\n";
+            }
+        }
         const std::uint64_t peak_rss_v068231 = peak_rss_bytes_v068231();
         out << "V068231_PERF_PEAK_RSS_BYTES=" << peak_rss_v068231 << "\n"
             << "V068231_PERF_PEAK_RSS_MIB=" << (static_cast<double>(peak_rss_v068231) / (1024.0 * 1024.0)) << "\n"

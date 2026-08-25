@@ -13579,7 +13579,31 @@ int run_impl(
                     ctx.program, element, record, execution_v0682375, input, rate_context_v064894);
                 ++stats.records_evaluated;
                 if (static_cast<std::size_t>(record.data_type) < perf_foundation_v068231.evaluated_records_by_type.size()) {
-                    ++perf_foundation_v068231.evaluated_records_by_type[static_cast<std::size_t>(record.data_type)];
+                    const std::size_t dt_v06824022 = static_cast<std::size_t>(record.data_type);
+                    ++perf_foundation_v068231.evaluated_records_by_type[dt_v06824022];
+                    perf_foundation_v068231.real_payload_values_by_type_v06824022[dt_v06824022] +=
+                        static_cast<std::uint64_t>(execution_v0682375.real_count);
+                    perf_foundation_v068231.int_payload_values_by_type_v06824022[dt_v06824022] +=
+                        static_cast<std::uint64_t>(execution_v0682375.int_count);
+                    if (item.contribution.ans1 != 0.0)
+                        ++perf_foundation_v068231.ans1_nonzero_by_type_v06824022[dt_v06824022];
+                    if (item.contribution.ans2 != 0.0)
+                        ++perf_foundation_v068231.ans2_nonzero_by_type_v06824022[dt_v06824022];
+                    perf_foundation_v068231.ans1_abs_sum_by_type_v06824022[dt_v06824022] +=
+                        std::abs(item.contribution.ans1);
+                    perf_foundation_v068231.ans2_abs_sum_by_type_v06824022[dt_v06824022] +=
+                        std::abs(item.contribution.ans2);
+                    if (item.matrix_enabled)
+                        ++perf_foundation_v068231.matrix_records_by_type_v06824022[dt_v06824022];
+                    if (item.spectral)
+                        ++perf_foundation_v068231.spectral_records_by_type_v06824022[dt_v06824022];
+                    if (item.bound_free_payload_v06823087)
+                        ++perf_foundation_v068231.bound_free_records_by_type_v06824022[dt_v06824022];
+                    if (record.rate_type <= 110) {
+                        const std::size_t rt_v06824022 = static_cast<std::size_t>(record.rate_type);
+                        ++perf_foundation_v068231.evaluated_records_by_rate_type_v06824022[rt_v06824022];
+                        ++perf_foundation_v068231.evaluated_records_by_type_rate_v06824022[dt_v06824022][rt_v06824022];
+                    }
                 }
                 if (record.data_type == 56) ++stats.type56_records_evaluated;
                 stats.rate_seconds += elapsed(rate_start);

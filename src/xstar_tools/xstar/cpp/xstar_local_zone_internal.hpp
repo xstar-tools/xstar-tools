@@ -245,7 +245,22 @@ struct PerformanceFoundationV068231 {
     std::uint64_t rss_before_post_spectral_release_peak_v0682392 = 0u;
     std::uint64_t rss_after_post_spectral_release_peak_v0682392 = 0u;
     std::uint64_t rss_post_spectral_release_reduction_peak_v0682392 = 0u;
-    std::array<std::uint64_t, 103> evaluated_records_by_type{};
+    // 0.6.82.40.2.2: observation-only ATDB activation census.  The full
+    // catalog is not an expectation: counters are emitted only for labels
+    // actually evaluated by the canonical/C++ paths.  0..110 matches the
+    // diagnostic FORTRAN array and safely contains the current native labels.
+    std::array<std::uint64_t, 111> evaluated_records_by_type{};
+    std::array<std::uint64_t, 111> evaluated_records_by_rate_type_v06824022{};
+    std::array<std::array<std::uint64_t, 111>, 111> evaluated_records_by_type_rate_v06824022{};
+    std::array<std::uint64_t, 111> ans1_nonzero_by_type_v06824022{};
+    std::array<std::uint64_t, 111> ans2_nonzero_by_type_v06824022{};
+    std::array<double, 111> ans1_abs_sum_by_type_v06824022{};
+    std::array<double, 111> ans2_abs_sum_by_type_v06824022{};
+    std::array<std::uint64_t, 111> matrix_records_by_type_v06824022{};
+    std::array<std::uint64_t, 111> spectral_records_by_type_v06824022{};
+    std::array<std::uint64_t, 111> bound_free_records_by_type_v06824022{};
+    std::array<std::uint64_t, 111> real_payload_values_by_type_v06824022{};
+    std::array<std::uint64_t, 111> int_payload_values_by_type_v06824022{};
 };
 
 void capture_performance_foundation_v068231(
