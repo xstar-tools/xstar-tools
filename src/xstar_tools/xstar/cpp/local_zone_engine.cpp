@@ -180,7 +180,42 @@ void sample_fixed_phase_rss_v068239(
     if (phase_peak) *phase_peak = std::max(*phase_peak, rss);
 }
 
+// 0.6.82.39.2: capacity-only lifetime helpers.  The source values are already
+// dead at each call site; these helpers only change which vector owns the
+// allocation.  They never inspect or modify scientific values.
+template <typename T>
+std::uint64_t vector_capacity_bytes_v0682392(const std::vector<T>& values) {
+    return static_cast<std::uint64_t>(values.capacity()) * sizeof(T);
+}
 
+template <typename T>
+std::uint64_t release_vector_capacity_v0682392(std::vector<T>& values) {
+    const std::uint64_t bytes = vector_capacity_bytes_v0682392(values);
+    std::vector<T>().swap(values);
+    return bytes;
+}
+
+template <typename T>
+std::array<std::uint64_t,2> transfer_larger_capacity_v0682392(
+    std::vector<T>& construction,
+    std::vector<T>& stale_retained) {
+    construction.clear();
+    stale_retained.clear();
+    if (stale_retained.capacity() > construction.capacity())
+        construction.swap(stale_retained);
+    const std::uint64_t transferred = vector_capacity_bytes_v0682392(construction);
+    const std::uint64_t released = release_vector_capacity_v0682392(stale_retained);
+    return {{transferred, released}};
+}
+
+void record_rss_release_v0682392(
+    std::uint64_t before, std::uint64_t after,
+    std::uint64_t& before_peak, std::uint64_t& after_peak,
+    std::uint64_t& reduction_peak) {
+    before_peak = std::max(before_peak, before);
+    after_peak = std::max(after_peak, after);
+    if (before > after) reduction_peak = std::max(reduction_peak, before - after);
+}
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement elapsed as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
@@ -4063,6 +4098,14 @@ struct FixedStatePersistentScratchV068231 {
     std::vector<double> spectral_fline;
     std::vector<double> spectral_flinel;
     std::vector<double> spectral_seeds;
+    // 0.6.82.39.2: construction owners paired one-to-one with retained
+    // accepted-boundary source workspaces.  Capacity is transferred from the
+    // stale retained snapshot into these buffers before construction and
+    // transferred back after commit, eliminating the old/new double owner.
+    std::vector<double> spectral_opakc_exact_v0682392;
+    std::vector<double> spectral_pprint4_flinel_v0682392;
+    std::vector<double> spectral_elum_v0682392;
+    std::vector<double> spectral_line_profile_workspace_v0682392;
     ElementBuffers element_buffers;
     SourceContinuumWorkspace reduced_continuum;
     bool reduced_continuum_geometry_valid = false;
@@ -4101,6 +4144,10 @@ struct FixedStatePersistentScratchV068231 {
         XSTAR_CAP_BYTES_V068231(spectral_fline);
         XSTAR_CAP_BYTES_V068231(spectral_flinel);
         XSTAR_CAP_BYTES_V068231(spectral_seeds);
+        XSTAR_CAP_BYTES_V068231(spectral_opakc_exact_v0682392);
+        XSTAR_CAP_BYTES_V068231(spectral_pprint4_flinel_v0682392);
+        XSTAR_CAP_BYTES_V068231(spectral_elum_v0682392);
+        XSTAR_CAP_BYTES_V068231(spectral_line_profile_workspace_v0682392);
         XSTAR_CAP_BYTES_V068231(reduced_continuum.epim);
         XSTAR_CAP_BYTES_V068231(reduced_continuum.bremsam);
         XSTAR_CAP_BYTES_V068231(reduced_continuum.bremsmap_index_one_based);
@@ -4154,6 +4201,10 @@ struct FixedStatePersistentScratchV068231 {
         add(out[3], spectral_rccemis); add(out[3], spectral_line_profile_opacity);
         add(out[3], spectral_opakcont); add(out[3], spectral_fline);
         add(out[3], spectral_flinel); add(out[3], spectral_seeds);
+        add(out[3], spectral_opakc_exact_v0682392);
+        add(out[3], spectral_pprint4_flinel_v0682392);
+        add(out[3], spectral_elum_v0682392);
+        add(out[3], spectral_line_profile_workspace_v0682392);
         // 4: per-element solver/matrix workspaces.
         add(out[4], element_buffers.superlevels); add(out[4], element_buffers.ions);
         add(out[4], element_buffers.initial); add(out[4], element_buffers.populations);
@@ -13098,6 +13149,59 @@ int run_impl(
     ctx.last_source_workspaces_valid_v064894 = false;
     ctx.last_source_workspace_flags_v064894 = 0u;
     if (!source_workspaces) ctx.last_source_lte_populations_v064894.clear();
+
+    // 0.6.82.39.2: ordinary accepted-boundary production no longer keeps two
+    // complete spectral-workspace capacities alive.  The previous retained
+    // source snapshot is invalid at this point and this call will replace it,
+    // so transfer the larger of each stale-retained/construction capacity into
+    // the construction owner and free the duplicate.  Explicit forensic and
+    // provenance modes preserve their historical ownership surfaces.
+    const bool phase_transfer_capacity_v0682392 =
+        native_production_v064897 && !defer_product_projection &&
+        !explicit_rich_element_forensic_request_v0682391 &&
+        !retain_record_provenance_v064897;
+    if (phase_transfer_capacity_v0682392) {
+        const std::uint64_t rss_before_v0682392 = current_rss_bytes_v068239();
+        std::uint64_t transferred_v0682392 = 0u;
+        std::uint64_t released_v0682392 = 0u;
+        auto transfer_v0682392 = [&](auto& construction, auto& stale_retained) {
+            const auto result_v0682392 =
+                transfer_larger_capacity_v0682392(construction, stale_retained);
+            transferred_v0682392 += result_v0682392[0];
+            released_v0682392 += result_v0682392[1];
+        };
+        auto& scratch_v0682392 = ctx.scratch_v068231;
+        transfer_v0682392(scratch_v0682392.spectral_rcem, ctx.last_source_rcem_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_oplin, ctx.last_source_oplin_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_cemab, ctx.last_source_cemab_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_cabab, ctx.last_source_cabab_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_opakab, ctx.last_source_opakab_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_rccemis, ctx.last_source_rccemis_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_opakc_exact_v0682392, ctx.last_source_opakc_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_opakcont, ctx.last_source_opakcont_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_fline, ctx.last_source_fline_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_flinel, ctx.last_source_flinel_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_pprint4_flinel_v0682392,
+                          ctx.last_source_pprint4_flinel_v068229331);
+        transfer_v0682392(scratch_v0682392.spectral_elum_v0682392, ctx.last_source_elum_v064894);
+        transfer_v0682392(scratch_v0682392.spectral_line_profile_workspace_v0682392,
+                          ctx.last_source_line_profile_workspace_v064894);
+        ++perf_foundation_v068231.spectral_owner_transfer_calls_v0682392;
+        perf_foundation_v068231.spectral_duplicate_capacity_released_peak_bytes_v0682392 = std::max(
+            perf_foundation_v068231.spectral_duplicate_capacity_released_peak_bytes_v0682392,
+            released_v0682392);
+        perf_foundation_v068231.spectral_duplicate_capacity_released_total_bytes_v0682392 +=
+            released_v0682392;
+        perf_foundation_v068231.spectral_capacity_transferred_peak_bytes_v0682392 = std::max(
+            perf_foundation_v068231.spectral_capacity_transferred_peak_bytes_v0682392,
+            transferred_v0682392);
+        const std::uint64_t rss_after_v0682392 = current_rss_bytes_v068239();
+        record_rss_release_v0682392(
+            rss_before_v0682392, rss_after_v0682392,
+            perf_foundation_v068231.rss_before_spectral_transfer_peak_v0682392,
+            perf_foundation_v068231.rss_after_spectral_transfer_peak_v0682392,
+            perf_foundation_v068231.rss_spectral_transfer_reduction_peak_v0682392);
+    }
     output.electron_fraction_xee = 0.0;
     output.elcter = 0.0;
     ctx.last_preclosure_electron_fraction = 0.0;
@@ -15782,14 +15886,39 @@ int run_impl(
             perf_foundation_v068231.deferred_rrc_emission_source_pairs_peak_v0682373,
             deferred_rrc_emission_source_pairs_v0682373);
 
-        ctx.scratch_v068231.preliminary_evaluated.clear();
-        ctx.scratch_v068231.preliminary_records.clear();
-        ctx.scratch_v068231.evaluated_records.clear();
-        ctx.scratch_v068231.evaluated.clear();
-        ctx.scratch_v068231.preliminary_cache.clear();
-        ctx.scratch_v068231.contributions.clear();
-        ctx.scratch_v068231.thermal_only_contributions.clear();
-        ctx.scratch_v068231.type95_self_loop_candidates.clear();
+        if (phase_transfer_capacity_v0682392) {
+            const std::uint64_t rss_before_v0682392 = current_rss_bytes_v068239();
+            std::uint64_t released_v0682392 = 0u;
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.preliminary_evaluated);
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.preliminary_records);
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.evaluated_records);
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.evaluated);
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.preliminary_cache);
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.contributions);
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.thermal_only_contributions);
+            released_v0682392 += release_vector_capacity_v0682392(ctx.scratch_v068231.type95_self_loop_candidates);
+            ++perf_foundation_v068231.phase_capacity_release_calls_v0682392;
+            perf_foundation_v068231.traversal_capacity_released_peak_bytes_v0682392 = std::max(
+                perf_foundation_v068231.traversal_capacity_released_peak_bytes_v0682392,
+                released_v0682392);
+            perf_foundation_v068231.traversal_capacity_released_total_bytes_v0682392 +=
+                released_v0682392;
+            const std::uint64_t rss_after_v0682392 = current_rss_bytes_v068239();
+            record_rss_release_v0682392(
+                rss_before_v0682392, rss_after_v0682392,
+                perf_foundation_v068231.rss_before_traversal_release_peak_v0682392,
+                perf_foundation_v068231.rss_after_traversal_release_peak_v0682392,
+                perf_foundation_v068231.rss_traversal_release_reduction_peak_v0682392);
+        } else {
+            ctx.scratch_v068231.preliminary_evaluated.clear();
+            ctx.scratch_v068231.preliminary_records.clear();
+            ctx.scratch_v068231.evaluated_records.clear();
+            ctx.scratch_v068231.evaluated.clear();
+            ctx.scratch_v068231.preliminary_cache.clear();
+            ctx.scratch_v068231.contributions.clear();
+            ctx.scratch_v068231.thermal_only_contributions.clear();
+            ctx.scratch_v068231.type95_self_loop_candidates.clear();
+        }
     }
 
     ctx.last_thermal_population_count = thermal_population_stream.size();
@@ -15981,6 +16110,11 @@ int run_impl(
         auto& fline = ctx.scratch_v068231.spectral_fline;
         auto& flinel = ctx.scratch_v068231.spectral_flinel;
         auto& seeds = ctx.scratch_v068231.spectral_seeds;
+        auto& opakc_exact_v0682392 = ctx.scratch_v068231.spectral_opakc_exact_v0682392;
+        auto& pprint4_flinel_v068229334 = ctx.scratch_v068231.spectral_pprint4_flinel_v0682392;
+        auto& elum_v0682392 = ctx.scratch_v068231.spectral_elum_v0682392;
+        auto& profiled_v0682392 = ctx.scratch_v068231.spectral_line_profile_workspace_v0682392;
+        std::uint64_t post_spectral_capacity_released_v0682392 = 0u;
         if (rcem.capacity() > 0u) ++perf_foundation_v068231.spectral_workspace_reuses;
         rcem.assign(2 * line_capacity, 0.0);
         oplin.assign(line_capacity, 0.0);
@@ -17063,7 +17197,7 @@ int run_impl(
         // frozen here because HEATT/transport consume them.  Build a separate
         // source-faithful per-evaluation delta solely for pprint(4); the
         // standalone controller accumulates that delta across the pass.
-        std::vector<double> pprint4_flinel_v068229334(continuum_capacity, 0.0);
+        pprint4_flinel_v068229334.assign(continuum_capacity, 0.0);
         const char* pprint4_provenance_path_v068229338 =
             std::getenv("XSTAR_V0682293384_PPRINT4_FLINEL_PROVENANCE_PATH");
         if (!(pprint4_provenance_path_v068229338 && *pprint4_provenance_path_v068229338))
@@ -17405,8 +17539,12 @@ int run_impl(
         }
 
         const std::size_t nlines=spectral.size();
-        std::vector<double> dpthc(continuum_capacity,0.0), original(5*continuum_capacity,0.0), profiled(5*continuum_capacity,0.0);
-        std::vector<double> elum(2*nlines,0.0), wavelength(nlines,0.0), mass(nlines,1.0), natural_rate(nlines,0.0), auger_width(nlines,0.0), auger_rate(nlines,0.0);
+        std::vector<double> dpthc(continuum_capacity,0.0), original(5*continuum_capacity,0.0);
+        profiled_v0682392.assign(5*continuum_capacity, 0.0);
+        elum_v0682392.assign(2*nlines, 0.0);
+        auto& profiled = profiled_v0682392;
+        auto& elum = elum_v0682392;
+        std::vector<double> wavelength(nlines,0.0), mass(nlines,1.0), natural_rate(nlines,0.0), auger_width(nlines,0.0), auger_rate(nlines,0.0);
         std::vector<long long> slot(nlines,0), dtype(nlines,50);
         for (std::size_t j=0;j<nlines;++j) {
             const auto& c=spectral[j];
@@ -17433,6 +17571,17 @@ int run_impl(
                 natural_rate.data(),auger_width.data(),auger_rate.data(),profiled.data(),profile_stats.data(),
                 profile_error.data(),profile_error.size());
             if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
+        }
+        if (phase_transfer_capacity_v0682392) {
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(dpthc);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(original);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(wavelength);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(mass);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(natural_rate);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(auger_width);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(auger_rate);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(slot);
+            post_spectral_capacity_released_v0682392 += release_vector_capacity_v0682392(dtype);
         }
 
         // v82 patch 5.20.6: literal calc_emis_all resets both public opakc
@@ -18347,11 +18496,38 @@ int run_impl(
             }
         }
 
+        if (phase_transfer_capacity_v0682392) {
+            const std::uint64_t rss_before_v0682392 = current_rss_bytes_v068239();
+            post_spectral_capacity_released_v0682392 +=
+                release_vector_capacity_v0682392(ctx.scratch_v068231.spectral_contributions);
+            post_spectral_capacity_released_v0682392 +=
+                release_vector_capacity_v0682392(ctx.scratch_v068231.spectral_index_by_record_v0682381);
+            post_spectral_capacity_released_v0682392 +=
+                release_vector_capacity_v0682392(ctx.scratch_v068231.spectral_seeds);
+            post_spectral_capacity_released_v0682392 +=
+                release_vector_capacity_v0682392(heatt_bound_free_opacity);
+            post_spectral_capacity_released_v0682392 +=
+                release_vector_capacity_v0682392(heatt_rrc_continuum_emission);
+            ++perf_foundation_v068231.post_spectral_capacity_release_calls_v0682392;
+            perf_foundation_v068231.post_spectral_capacity_released_peak_bytes_v0682392 = std::max(
+                perf_foundation_v068231.post_spectral_capacity_released_peak_bytes_v0682392,
+                post_spectral_capacity_released_v0682392);
+            perf_foundation_v068231.post_spectral_capacity_released_total_bytes_v0682392 +=
+                post_spectral_capacity_released_v0682392;
+            const std::uint64_t rss_after_v0682392 = current_rss_bytes_v068239();
+            record_rss_release_v0682392(
+                rss_before_v0682392, rss_after_v0682392,
+                perf_foundation_v068231.rss_before_post_spectral_release_peak_v0682392,
+                perf_foundation_v068231.rss_after_post_spectral_release_peak_v0682392,
+                perf_foundation_v068231.rss_post_spectral_release_reduction_peak_v0682392);
+        }
+
         // Capture the exact combined continuum+line opacity before the
         // public-product reduction.  v0.6.48.9.4 retains this even when the
         // DSEC caller has deferred public projection, because the exact source
         // ingredients have already been computed at this point.
-        std::vector<double> opakc_exact(continuum_capacity, 0.0);
+        opakc_exact_v0682392.assign(continuum_capacity, 0.0);
+        auto& opakc_exact = opakc_exact_v0682392;
         for (std::size_t k = 0; k < continuum_capacity; ++k) {
             const double continuum_value = std::isfinite(output.opacity[k]) && output.opacity[k] > 0.0
                 ? output.opacity[k] : 0.0;
@@ -18450,13 +18626,13 @@ int run_impl(
         ctx.last_source_cabab_v064894.swap(cabab);
         ctx.last_source_opakab_v064894.swap(opakab);
         ctx.last_source_rccemis_v064894.swap(rccemis);
-        ctx.last_source_opakc_v064894 = std::move(opakc_exact);
+        ctx.last_source_opakc_v064894.swap(opakc_exact_v0682392);
         ctx.last_source_opakcont_v064894.swap(opakcont);
         ctx.last_source_fline_v064894.swap(fline);
         ctx.last_source_flinel_v064894.swap(flinel);
-        ctx.last_source_pprint4_flinel_v068229331 = std::move(pprint4_flinel_v068229334);
-        ctx.last_source_elum_v064894 = std::move(elum);
-        ctx.last_source_line_profile_workspace_v064894 = std::move(profiled);
+        ctx.last_source_pprint4_flinel_v068229331.swap(pprint4_flinel_v068229334);
+        ctx.last_source_elum_v064894.swap(elum_v0682392);
+        ctx.last_source_line_profile_workspace_v064894.swap(profiled_v0682392);
         ctx.last_source_native_line_count_v064894 = ctx.program.native_line_count;
         ctx.last_source_native_continuum_count_v064894 = ctx.program.native_continuum_count;
         ctx.last_source_workspace_flags_v064894 =

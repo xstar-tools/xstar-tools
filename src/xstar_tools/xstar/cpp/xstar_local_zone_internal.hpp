@@ -223,6 +223,28 @@ struct PerformanceFoundationV068231 {
     std::uint64_t fixed_phase_rss_after_buffers_peak_v068239 = 0u;
     std::uint64_t fixed_phase_rss_after_solve_peak_v068239 = 0u;
     std::uint64_t fixed_phase_rss_after_mapback_peak_v068239 = 0u;
+    // 0.6.82.39.2: actual capacity lifetime transfer/release.  These fields
+    // are observation-only and quantify storage ownership removed from later
+    // accepted-boundary phases; no scientific arithmetic depends on them.
+    std::uint64_t phase_capacity_release_calls_v0682392 = 0u;
+    std::uint64_t traversal_capacity_released_peak_bytes_v0682392 = 0u;
+    std::uint64_t traversal_capacity_released_total_bytes_v0682392 = 0u;
+    std::uint64_t spectral_owner_transfer_calls_v0682392 = 0u;
+    std::uint64_t spectral_duplicate_capacity_released_peak_bytes_v0682392 = 0u;
+    std::uint64_t spectral_duplicate_capacity_released_total_bytes_v0682392 = 0u;
+    std::uint64_t spectral_capacity_transferred_peak_bytes_v0682392 = 0u;
+    std::uint64_t post_spectral_capacity_release_calls_v0682392 = 0u;
+    std::uint64_t post_spectral_capacity_released_peak_bytes_v0682392 = 0u;
+    std::uint64_t post_spectral_capacity_released_total_bytes_v0682392 = 0u;
+    std::uint64_t rss_before_traversal_release_peak_v0682392 = 0u;
+    std::uint64_t rss_after_traversal_release_peak_v0682392 = 0u;
+    std::uint64_t rss_traversal_release_reduction_peak_v0682392 = 0u;
+    std::uint64_t rss_before_spectral_transfer_peak_v0682392 = 0u;
+    std::uint64_t rss_after_spectral_transfer_peak_v0682392 = 0u;
+    std::uint64_t rss_spectral_transfer_reduction_peak_v0682392 = 0u;
+    std::uint64_t rss_before_post_spectral_release_peak_v0682392 = 0u;
+    std::uint64_t rss_after_post_spectral_release_peak_v0682392 = 0u;
+    std::uint64_t rss_post_spectral_release_reduction_peak_v0682392 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

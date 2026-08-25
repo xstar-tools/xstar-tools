@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.39.2 - phase-transfer actual vector capacity and spectral owner deduplication - 2026-08-24
+
+- Builds on scientifically exact `0.6.82.39.1`, whose host return kept `.38.3` speed but missed the RSS gate because logical record compaction retained vector capacity and released zero bound-free sidecars.
+- After deferred RRC/spectral consumers have captured the accepted-boundary state, ordinary native production now destroys the dead capacities of preliminary/evaluated traversal vectors and matrix-only contribution vectors instead of only calling `.clear()`.
+- Eliminates the accepted-boundary spectral double owner: once the previous `last_source_*` snapshot is invalidated, its capacities are transferred into the next construction workspaces and any duplicate capacity is released. Completed buffers are transferred back into `last_source_*` without a second simultaneous owner.
+- Extends the same ownership transfer to exact `opakc`, option-4 `flinel`, `elum`, and line-profile workspaces that were previously rebuilt as fresh local vectors while the prior retained snapshot remained allocated.
+- Releases binemis-only temporary line arrays and dead spectral-contribution/index/seed and selected-RRC construction capacities before the later retained-snapshot/publication phases. No rate, profile, matrix, solver, controller, transport, spectral arithmetic, source order, or public ABI is changed.
+- Adds `V0682392_*` capacity-transfer/release and RSS telemetry so host qualification can distinguish bytes logically discarded, bytes of actual vector capacity released, owner-transfer reuse, and measured resident-set response.
+- Formal promotion remains unchanged: exact science/ownership/work, active `.39/.39.1/.39.2` lifetime mechanisms, RSS strictly below accepted `.38.1` (`3,945,746,432 B`), and total/fixed-spectral/Type-50 time within 0.5% of rejected-but-faster `.38.3`. If `.39.2` still misses RSS, `.39.3` is reserved for full/reduced `sgbar` residency work.
+
 ## 0.6.82.39.1 - retained-state compaction reachability repair - 2026-08-24
 
 - Revises rejected `0.6.82.39` after the broad host return showed exact science/ownership/work but `V068239_POSTSOLVE_COMPACTION_CALLS=0`, zero discarded records, and zero released bound-free sidecars.
