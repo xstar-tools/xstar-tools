@@ -210,6 +210,11 @@ struct PerformanceFoundationV068231 {
     std::uint64_t postsolve_bound_free_sidecars_released_total_v068239 = 0u;
     std::uint64_t postsolve_bound_free_sidecar_bytes_released_total_v068239 = 0u;
     std::uint64_t postsolve_dead_inline_bytes_peak_v068239 = 0u;
+    // 0.6.82.39.1 reachability audit: distinguish the ordinary production
+    // physics profile from an explicit rich-forensic request.
+    std::uint64_t postsolve_production_reachable_calls_v0682391 = 0u;
+    std::uint64_t postsolve_generic_replacement_bypass_calls_v0682391 = 0u;
+    std::uint64_t postsolve_explicit_forensic_blocks_v0682391 = 0u;
     std::uint64_t fixed_phase_rss_samples_v068239 = 0u;
     std::uint64_t fixed_phase_rss_peak_bytes_v068239 = 0u;
     std::uint64_t fixed_phase_rss_peak_phase_v068239 = 0u;

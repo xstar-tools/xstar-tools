@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.39.1 - retained-state compaction reachability repair - 2026-08-24
+
+- Revises rejected `0.6.82.39` after the broad host return showed exact science/ownership/work but `V068239_POSTSOLVE_COMPACTION_CALLS=0`, zero discarded records, and zero released bound-free sidecars.
+- Fixes the activation bug: true production intentionally sets `XSTAR_QUALIFICATION_REPLACEMENT=1` as part of the accepted physics profile, but `.39` incorrectly treated that generic physics-selection flag as a rich-forensic payload request and therefore disabled its own accepted-boundary compaction on every production call.
+- Separates explicit forensic requests (forced element diagnostics and the established attribution/diagnostic directory controls) from the generic production physics profile for the `.39` lifetime gate. Existing rich forensic/library behavior remains guarded and unchanged.
+- Keeps the `.38.2` localized Type-50 core/AVX2 cursor, `.38.3` ABI row owner transfer, `.38.1` dense spectral lookup, all science/solver/controller/transport arithmetic, public ABIs, and source ordering frozen.
+- Replaces the new `.39` `std::ifstream("/proc/self/statm")` phase sampler with an allocation-free `open/read/close` stack-buffer parser. This removes observation-path iostream allocation churn after the `.39` host run showed about 35 MiB extra free glibc arena space at the radial heap peak while live heap ownership was effectively unchanged.
+- Adds `.39.1` reachability counters proving that ordinary production can execute compaction even while `XSTAR_QUALIFICATION_REPLACEMENT=1`, while explicit forensic requests still block it.
+- Promotion policy is unchanged: exact science/ownership/work, active compaction, RSS strictly below accepted `.38.1`, and total/fixed-spectral/Type-50 time within 0.5% of the faster `.38.3` reference.
+
 ## 0.6.82.39 - retained-state lifetime compaction - 2026-08-24
 
 - Starts the retained-state/memory-bandwidth redesign on top of rejected-but-faster `0.6.82.38.3`, while keeping accepted `0.6.82.38.1` as the formal promotion RSS baseline.

@@ -51,6 +51,7 @@
 #include <variant>
 #include <vector>
 #if defined(__linux__)
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -126,10 +127,29 @@ void copy_text(char* target, std::size_t cap, const std::string& value) {
 // evaluations, so the hot DSEC/root trajectory is untouched.
 std::uint64_t current_rss_bytes_v068239() {
 #if defined(__linux__)
-    std::ifstream in("/proc/self/statm");
-    std::uint64_t total_pages = 0u;
+    // 0.6.82.39.1: keep phase attribution allocation-free.  The .39 host
+    // return showed no science-state growth, but ~35 MiB more free glibc arena
+    // space at the radial high-water.  Avoid std::ifstream/filebuf allocation
+    // churn in the observation path so telemetry cannot perturb allocator
+    // residency while we qualify the actual lifetime change.
+    const int fd = ::open("/proc/self/statm", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0u;
+    char buffer[128]{};
+    const ssize_t count = ::read(fd, buffer, sizeof(buffer) - 1u);
+    ::close(fd);
+    if (count <= 0) return 0u;
+    const char* cur = buffer;
+    const char* end = buffer + count;
+    while (cur < end && *cur != ' ' && *cur != '\t') ++cur;
+    while (cur < end && (*cur == ' ' || *cur == '\t')) ++cur;
     std::uint64_t resident_pages = 0u;
-    if (!(in >> total_pages >> resident_pages)) return 0u;
+    bool saw_digit = false;
+    while (cur < end && *cur >= '0' && *cur <= '9') {
+        saw_digit = true;
+        resident_pages = resident_pages * 10u + static_cast<std::uint64_t>(*cur - '0');
+        ++cur;
+    }
+    if (!saw_digit) return 0u;
     const long page_size = ::sysconf(_SC_PAGESIZE);
     if (page_size <= 0) return 0u;
     return resident_pages * static_cast<std::uint64_t>(page_size);
@@ -13054,6 +13074,25 @@ int run_impl(
     const bool retain_rich_element_payload_v0682372 =
         !native_production_v064897 || force_element_diagnostics_v06823087 ||
         rich_element_diagnostic_request_v0682372;
+    // 0.6.82.39.1: true production deliberately sets
+    // XSTAR_QUALIFICATION_REPLACEMENT=1 as part of the accepted physics
+    // profile.  That generic physics-selection flag is not, by itself, a
+    // request for the historical rich element/evaluated forensic payload.
+    // .39 accidentally used retain_rich_element_payload_v0682372 as the new
+    // post-evaluation compaction guard, so the optimization was unreachable
+    // in the very production profile it was intended to optimize.  Preserve
+    // every explicit forensic surface while separating that generic physics
+    // flag from the .39 lifetime gate.
+    const bool explicit_rich_element_forensic_request_v0682391 =
+        force_element_diagnostics_v06823087 ||
+        diagnostic_env_v0682372("XSTAR_ALL_ELEMENT_FIXED_PARITY_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V0648123350_ATTRIBUTION_DIR") ||
+        diagnostic_env_v0682372("XSTAR_FE_CALL1_MATRIX_DIAG_DIR") ||
+        diagnostic_env_v0682372("XSTAR_FE_CALL1_THERMAL_DIAG_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V06481235_O7_CALL1_ATTRIBUTION_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V06481238_O7_STATE_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V06481221_CA_ATTRIBUTION_DIR") ||
+        diagnostic_env_v0682372("XSTAR_V0648118_C_SOLVE_ATTRIBUTION_DIR");
     // Fail closed against a stale accepted-boundary snapshot if this
     // evaluation exits before the exact source workspaces are committed.
     ctx.last_source_workspaces_valid_v064894 = false;
@@ -14095,7 +14134,17 @@ int run_impl(
         // bound-free sidecars are dead before matrix workspace/solve overlap.
         const bool compact_postsolve_evaluated_v068239 =
             native_production_v064897 && !defer_product_projection &&
-            !retain_rich_element_payload_v0682372 && !retain_record_provenance_v064897;
+            !explicit_rich_element_forensic_request_v0682391 &&
+            !retain_record_provenance_v064897;
+        if (native_production_v064897 && !defer_product_projection) {
+            if (compact_postsolve_evaluated_v068239) {
+                ++perf_foundation_v068231.postsolve_production_reachable_calls_v0682391;
+                if (environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))
+                    ++perf_foundation_v068231.postsolve_generic_replacement_bypass_calls_v0682391;
+            } else if (explicit_rich_element_forensic_request_v0682391) {
+                ++perf_foundation_v068231.postsolve_explicit_forensic_blocks_v0682391;
+            }
+        }
         const std::size_t evaluated_before_compaction_v068239 = evaluated.size();
         std::size_t evaluated_retained_v068239 = 0u;
         std::uint64_t sidecars_released_v068239 = 0u;
