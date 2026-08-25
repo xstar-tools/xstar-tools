@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.82.40.2.3 - FORTRAN activation-audit module-resolution hotfix - 2026-08-25
+
+- Fixes the host build failure observed after `.40.2.2` activation instrumentation: the xstarlib sources were rebuilt, but the later `xstar.f90` driver compile could resolve an older installed `globaldata.mod` that lacked the new activation arrays.
+- The builder now verifies the freshly generated `globaldata.mod` with an explicit compile probe for all `.40.2.2` activation symbols, then shadows stale installed modules by copying that fresh module into `xstar/src/xstar/` for the driver build, where the existing `-I./` search order takes precedence.
+- Supports resuming from the already-patched `.40.2.2` diagnostic source tree; no FORTRAN instrumentation, counter definitions, atomic arithmetic, C++ scientific behavior, or audit marker schema changes.
+- The historical builder name forwards to the `.40.2.3` fixed builder so the stale-module failure cannot be repeated accidentally from this package.
+
 ## 0.6.82.40.2.2 - ionization-regime ATDB activation audit - 2026-08-25
 
 - Replaced the planned generic four-way HMC timing split with a measurement-only data-type/rate-type activation census across the fixed H+He+C `rlogxi=-3,+1,+4` sweep.
