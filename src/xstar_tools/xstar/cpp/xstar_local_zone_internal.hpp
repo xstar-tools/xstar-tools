@@ -198,6 +198,26 @@ struct PerformanceFoundationV068231 {
     std::uint64_t spectral_direct_contribution_lookups_v0682381 = 0u;
     std::uint64_t spectral_program_hash_rebuilds_elided_v0682381 = 0u;
     std::uint64_t spectral_type49_linear_scans_elided_v0682381 = 0u;
+    // 0.6.82.39: first retained-state/lifetime tranche.  Accepted-boundary
+    // native production discards matrix-only EvaluatedRecord ownership as soon
+    // as the canonical contribution/product rows have been captured.  The
+    // phase RSS fields are observation-only /proc samples used to locate the
+    // remaining fixed-state high-water without changing public ABIs.
+    std::uint64_t postsolve_compaction_calls_v068239 = 0u;
+    std::uint64_t postsolve_records_before_peak_v068239 = 0u;
+    std::uint64_t postsolve_records_retained_peak_v068239 = 0u;
+    std::uint64_t postsolve_records_discarded_total_v068239 = 0u;
+    std::uint64_t postsolve_bound_free_sidecars_released_total_v068239 = 0u;
+    std::uint64_t postsolve_bound_free_sidecar_bytes_released_total_v068239 = 0u;
+    std::uint64_t postsolve_dead_inline_bytes_peak_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_samples_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_peak_bytes_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_peak_phase_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_after_pass2_peak_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_after_contribution_peak_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_after_buffers_peak_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_after_solve_peak_v068239 = 0u;
+    std::uint64_t fixed_phase_rss_after_mapback_peak_v068239 = 0u;
     std::array<std::uint64_t, 103> evaluated_records_by_type{};
 };
 

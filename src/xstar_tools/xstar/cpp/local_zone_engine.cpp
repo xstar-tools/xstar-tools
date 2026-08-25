@@ -50,6 +50,9 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -116,6 +119,45 @@ void copy_text(char* target, std::size_t cap, const std::string& value) {
     const std::size_t n = std::min(cap - 1, value.size());
     std::memcpy(target, value.data(), n);
     target[n] = '\0';
+}
+
+// 0.6.82.39: observation-only current-RSS sampler for fixed-state phase
+// attribution.  It is called only on accepted-boundary native-production
+// evaluations, so the hot DSEC/root trajectory is untouched.
+std::uint64_t current_rss_bytes_v068239() {
+#if defined(__linux__)
+    std::ifstream in("/proc/self/statm");
+    std::uint64_t total_pages = 0u;
+    std::uint64_t resident_pages = 0u;
+    if (!(in >> total_pages >> resident_pages)) return 0u;
+    const long page_size = ::sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) return 0u;
+    return resident_pages * static_cast<std::uint64_t>(page_size);
+#else
+    return 0u;
+#endif
+}
+
+void sample_fixed_phase_rss_v068239(
+    xstar_local_zone_internal::PerformanceFoundationV068231& perf,
+    std::uint64_t phase) {
+    const std::uint64_t rss = current_rss_bytes_v068239();
+    if (rss == 0u) return;
+    ++perf.fixed_phase_rss_samples_v068239;
+    if (rss > perf.fixed_phase_rss_peak_bytes_v068239) {
+        perf.fixed_phase_rss_peak_bytes_v068239 = rss;
+        perf.fixed_phase_rss_peak_phase_v068239 = phase;
+    }
+    std::uint64_t* phase_peak = nullptr;
+    switch (phase) {
+        case 1u: phase_peak = &perf.fixed_phase_rss_after_pass2_peak_v068239; break;
+        case 2u: phase_peak = &perf.fixed_phase_rss_after_contribution_peak_v068239; break;
+        case 3u: phase_peak = &perf.fixed_phase_rss_after_buffers_peak_v068239; break;
+        case 4u: phase_peak = &perf.fixed_phase_rss_after_solve_peak_v068239; break;
+        case 5u: phase_peak = &perf.fixed_phase_rss_after_mapback_peak_v068239; break;
+        default: break;
+    }
+    if (phase_peak) *phase_peak = std::max(*phase_peak, rss);
 }
 
 
@@ -13845,6 +13887,9 @@ int run_impl(
         // returned by calc_hmc_ion.  Reconstruct that second-pass owner from
         // the corrected pass-2 EvaluatedRecord stream before publication.
         // This is publication state only; it does not feed the matrix solve.
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 1u);
+
         std::vector<double> detailed_pirt_v06822934(
             static_cast<std::size_t>(element.element_z), 0.0);
         std::vector<double> detailed_rrrt_v06822934(
@@ -14043,7 +14088,21 @@ int run_impl(
         struct Type95StreamEvent { Type95StreamIdentity identity; bool candidate = false; };
         std::vector<Type95StreamEvent> type95_source_stream_order;
         CanonicalThermalLedgerBuilderV048746212 canonical_thermal_builder(element, active);
-        for (const auto& item : evaluated) {
+        // 0.6.82.39: on accepted-boundary native production, retain after this
+        // pass only records consumed by the later spectral/RRC/two-photon/
+        // Type-88 reconstruction.  Matrix-only records have already donated
+        // their canonical contribution and compact product row, so their large
+        // bound-free sidecars are dead before matrix workspace/solve overlap.
+        const bool compact_postsolve_evaluated_v068239 =
+            native_production_v064897 && !defer_product_projection &&
+            !retain_rich_element_payload_v0682372 && !retain_record_provenance_v064897;
+        const std::size_t evaluated_before_compaction_v068239 = evaluated.size();
+        std::size_t evaluated_retained_v068239 = 0u;
+        std::uint64_t sidecars_released_v068239 = 0u;
+        for (std::size_t evaluated_index_v068239 = 0u;
+             evaluated_index_v068239 < evaluated_before_compaction_v068239;
+             ++evaluated_index_v068239) {
+            auto& item = evaluated[evaluated_index_v068239];
             const auto& original = item.contribution;
             const bool active_stage = original.ion_stage >= active.min_stage && original.ion_stage <= active.max_stage;
             // v0.6.48.12.3.25: msolvelucy.f90 consumes matrix endpoint
@@ -14140,6 +14199,52 @@ int run_impl(
                 diagnostic.matrix_committed = matrix_committed;
                 ctx.last_record_diagnostics.push_back(std::move(diagnostic));
             }
+
+            if (compact_postsolve_evaluated_v068239) {
+                const ProgramRecord* postsolve_record_v068239 =
+                    evaluated_index_v068239 < evaluated_records.size()
+                        ? evaluated_records[evaluated_index_v068239] : nullptr;
+                const bool retain_postsolve_v068239 = item.spectral ||
+                    (postsolve_record_v068239 &&
+                     (postsolve_record_v068239->data_type == 76 ||
+                      postsolve_record_v068239->data_type == 88));
+                if (retain_postsolve_v068239) {
+                    if (evaluated_retained_v068239 != evaluated_index_v068239) {
+                        evaluated[evaluated_retained_v068239] = std::move(item);
+                        evaluated_records[evaluated_retained_v068239] = postsolve_record_v068239;
+                    }
+                    ++evaluated_retained_v068239;
+                } else {
+                    if (item.bound_free_payload_v06823087) ++sidecars_released_v068239;
+                    // Destroy nested payload ownership immediately; vector
+                    // capacity remains reusable and therefore adds no allocator
+                    // churn to the accepted fixed-state path.
+                    item = EvaluatedRecord{};
+                }
+            }
+        }
+        if (compact_postsolve_evaluated_v068239) {
+            evaluated.resize(evaluated_retained_v068239);
+            evaluated_records.resize(evaluated_retained_v068239);
+            ++perf_foundation_v068231.postsolve_compaction_calls_v068239;
+            perf_foundation_v068231.postsolve_records_before_peak_v068239 = std::max(
+                perf_foundation_v068231.postsolve_records_before_peak_v068239,
+                static_cast<std::uint64_t>(evaluated_before_compaction_v068239));
+            perf_foundation_v068231.postsolve_records_retained_peak_v068239 = std::max(
+                perf_foundation_v068231.postsolve_records_retained_peak_v068239,
+                static_cast<std::uint64_t>(evaluated_retained_v068239));
+            const std::uint64_t discarded_v068239 = static_cast<std::uint64_t>(
+                evaluated_before_compaction_v068239 - evaluated_retained_v068239);
+            perf_foundation_v068231.postsolve_records_discarded_total_v068239 +=
+                discarded_v068239;
+            perf_foundation_v068231.postsolve_bound_free_sidecars_released_total_v068239 +=
+                sidecars_released_v068239;
+            perf_foundation_v068231.postsolve_bound_free_sidecar_bytes_released_total_v068239 +=
+                sidecars_released_v068239 * sizeof(BoundFreeEvaluatedPayloadV06823087);
+            perf_foundation_v068231.postsolve_dead_inline_bytes_peak_v068239 = std::max(
+                perf_foundation_v068231.postsolve_dead_inline_bytes_peak_v068239,
+                discarded_v068239 * sizeof(EvaluatedRecord));
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 2u);
         }
 
         // 0.6.82.30.8.6: removed an unused full copy of the contribution
@@ -14323,6 +14428,8 @@ int run_impl(
         residual_audit_v064812339.buffer_allocation_seconds = elapsed(buffer_allocation_started_v064812339);
         perf_foundation_v068231.matrix_workspace_seconds +=
             residual_audit_v064812339.buffer_allocation_seconds;
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 3u);
         residual_audit_v064812339.active_buffer_matrix_bytes =
             (buffers.dense.capacity() + buffers.heat.capacity() + buffers.heat2.capacity()) * sizeof(double);
         residual_audit_v064812339.active_buffer_nonmatrix_bytes =
@@ -14383,6 +14490,8 @@ int run_impl(
         stats.element_seconds += residual_element_solve_seconds_v064812339;
         residual_audit_v064812339.element_solve_seconds = residual_element_solve_seconds_v064812339;
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 4u);
         ++perf_foundation_v068231.element_solve_calls;
         if ((eout.status_flags & XSTAR_ELEMENT_STATUS_DENSE_RESCUE_USED) != 0u) {
             ++perf_foundation_v068231.dense_rescue_count_v0682364;
@@ -14721,6 +14830,8 @@ int run_impl(
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 5u);
         perf_foundation_v068231.retained_array_seconds +=
             elapsed(retained_array_started_v068231);
         residual_audit_v064812339.full_population_shadow_bytes =

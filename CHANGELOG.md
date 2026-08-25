@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.39 - retained-state lifetime compaction - 2026-08-24
+
+- Starts the retained-state/memory-bandwidth redesign on top of rejected-but-faster `0.6.82.38.3`, while keeping accepted `0.6.82.38.1` as the formal promotion RSS baseline.
+- Carries forward the exact `.38.2` localized Type-50 small-a core bounds and AVX2 integer-offset cursor unchanged.
+- Carries forward the `.38.3` frozen-ABI record-product owner transfer with no second 272-byte snapshot vector.
+- On accepted-boundary native production only, compacts the pass-2 `EvaluatedRecord` lifetime during canonical contribution construction: records that are matrix/thermal-only release nested payload ownership immediately, while records needed by later spectral/RRC, Type-76 two-photon, or Type-88 reconstruction stay in source order with their matching `ProgramRecord` pointer.
+- Rich forensic/library paths keep the full historical evaluated-record surface. Rate, matrix, solver, controller, spectral, publication ordering, and public ABIs are unchanged.
+- Adds observation-only `/proc/self/statm` phase RSS telemetry around pass-2 completion, contribution compaction, matrix-buffer preparation, element solve, and population mapback to identify the true fixed-state high-water.
+- Broad promotion requires exact science/ownership/work, active `.39` compaction and phase attribution, RSS below accepted `.38.1` (`3,945,746,432 B`), and total/fixed-spectral/Type-50 time within 0.5% of the faster rejected `.38.3` reference.
+
 ## 0.6.82.38.3 - record-product snapshot owner transfer - 2026-08-24
 
 - Keeps the exact `.38.2` Type-50 localized-core and AVX2 offset-cursor speed path unchanged.
