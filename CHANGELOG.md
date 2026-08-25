@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.1 - GCC-only LTO+PGO staged qualification - 2026-08-25
+
+- Revises host-tested `0.6.82.40` without changing scientific arithmetic. GCC is now the sole production-promotion compiler for the `.40.1` path; the earlier Clang/native experiments remain historical diagnostics only.
+- Carries accepted `0.6.82.39.2` as the scientific/memory source baseline and keeps the `.40` exact science/work/RSS contract. No new recomputation, `sgbar` eviction, physical cutoff, source reordering, fast-math, or accumulation change is introduced.
+- Adds the combined `gcc-o3-lto-pgo` profile using the existing strict-FP `V068240_*` controls. PGO generation is trained cumulatively on Fe and C5 before the profile-use build; LTO is active in both generate and use phases.
+- Adds explicit PGO coverage verification for the production `xstar-cpp` dependency/execution closure. Required coverage includes frontend, API/compiled case, solver, opacity/thermal, element engine, emissivity, local-zone engine, and production-zone source units. Missing-profile warnings from built-but-unloaded rate/matrix/XSPEC/final-recompute/backend targets are reported separately and do not masquerade as production coverage failures.
+- Adds `run_compiler_cpu_host_0_6_82_40_1.py` with a staged gate: Fe is measured first, C5 second, and broad is locked unless `gcc-o3-lto-pgo` preserves exact science/work/RSS/time and improves same-run GCC `-O3` internal time by at least 1.0% on both Fe and C5. The 1.0% threshold is intentionally above the approximately 0.7% same-profile C5 variation observed during `.40`.
+- Final broad qualification, when authorized, compares `gcc-o3-lto-pgo` to a same-source GCC `-O3` control and also requires exact public products versus the accepted `.39.2` broad output plus the frozen `.39.2` timing/RSS envelope.
+- Keeps plain `gcc-o3-lto` in the staged measurement as context because `.40` showed a real Fe improvement but neutral C5 total time. Plain PGO is retained as an optional GCC-only profile but is not the broad-promotion candidate.
+
 ## 0.6.82.40 - compiler and CPU optimization experiment framework - 2026-08-25
 
 - Starts the compiler/code-generation phase from accepted `0.6.82.39.2`. The `.39.2` broad host result is frozen as the source baseline: exact science/ownership/work, `3,828,912,128 B` peak RSS, `1025.784166 s` internal total, and Type-50 work `2,600,785` profiles / `14,623,981,466` updated bins.

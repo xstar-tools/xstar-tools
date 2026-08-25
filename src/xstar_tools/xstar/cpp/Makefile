@@ -7,7 +7,7 @@ OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
 THERMAL_STRICT_FP_FLAGS ?= -ffp-contract=off
 ELEMENT_STRICT_FP_FLAGS ?= -ffp-contract=off
 
-# v0.6.82.40 compiler/CPU experiment controls.  The default profile is
+# v0.6.82.40.1 GCC-only compiler/CPU experiment controls.  The default profile is
 # deliberately equivalent to the accepted 0.6.82.39.2 portable -O3 build.
 # Every non-default control is opt-in and must pass exact science/work/RSS
 # qualification before it can be promoted.  These controls never enable
@@ -26,18 +26,19 @@ V068240_PGO_MODE ?= $(V064897_PGO_MODE)
 V068240_PROFILE_DIR ?= $(if $(filter-out $(CURDIR)/.v064897_pgo,$(V064897_PROFILE_DIR)),$(V064897_PROFILE_DIR),$(CURDIR)/.v068240_pgo)
 V068240_NATIVE ?= $(V064897_NATIVE)
 V068240_BUILD_PROFILE ?= portable-o3
+V0682401_PRODUCTION_COMPILER ?= GCC
 
 ifeq ($(filter $(V068240_OPT_LEVEL),2 3),)
-  $(error v0.6.82.40 supports V068240_OPT_LEVEL=2 or 3)
+  $(error v0.6.82.40.1 supports V068240_OPT_LEVEL=2 or 3)
 endif
 ifeq ($(filter $(V068240_PGO_MODE),off generate use),)
-  $(error v0.6.82.40 supports V068240_PGO_MODE=off, generate, or use)
+  $(error v0.6.82.40.1 supports V068240_PGO_MODE=off, generate, or use)
 endif
 ifeq ($(filter $(V068240_LTO),0 1),)
-  $(error v0.6.82.40 supports V068240_LTO=0 or 1)
+  $(error v0.6.82.40.1 supports V068240_LTO=0 or 1)
 endif
 ifeq ($(filter $(V068240_NATIVE),0 1),)
-  $(error v0.6.82.40 supports V068240_NATIVE=0 or 1)
+  $(error v0.6.82.40.1 supports V068240_NATIVE=0 or 1)
 endif
 
 # Last optimization flag wins, so this safely overrides the historical -O3 in
@@ -57,10 +58,10 @@ ifeq ($(V068240_NATIVE),1)
 endif
 override CPPFLAGS += -DXSTAR_V068240_BUILD_PROFILE=\"$(V068240_BUILD_PROFILE)\"
 ifneq ($(findstring -ffast-math,$(CXXFLAGS)),)
-  $(error v0.6.82.40 rejects -ffast-math)
+  $(error v0.6.82.40.1 rejects -ffast-math)
 endif
 ifneq ($(findstring -Ofast,$(CXXFLAGS)),)
-  $(error v0.6.82.40 rejects -Ofast)
+  $(error v0.6.82.40.1 rejects -Ofast)
 endif
 
 COMMON_LIBS ?= -ldl -pthread
@@ -93,7 +94,7 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.82.40
+PACKAGE_VERSION ?= 0.6.82.40.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16.5
@@ -224,6 +225,7 @@ print-config:
 	@echo V068240_PROFILE_DIR=$(V068240_PROFILE_DIR)
 	@echo V068240_NATIVE=$(V068240_NATIVE)
 	@echo V068240_BUILD_PROFILE=$(V068240_BUILD_PROFILE)
+	@echo V0682401_PRODUCTION_COMPILER=$(V0682401_PRODUCTION_COMPILER)
 	@echo V068240_CXXFLAGS=$(CXXFLAGS)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
 	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)

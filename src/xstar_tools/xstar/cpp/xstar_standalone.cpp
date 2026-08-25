@@ -22077,6 +22077,7 @@ void emit_controller_performance_instrumentation(
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
+            << "V0682401_COMPILER_POLICY=GCC_ONLY_LTO_PGO_STAGED_NO_NEW_SCIENCE_WORK\n"
             << "V068240_COMPILER_CPU_POLICY=MEASUREMENT_ONLY_STRICT_FP_NO_NEW_SCIENCE_WORK\n"
             << "V068240_BUILD_PROFILE=" << XSTAR_V068240_BUILD_PROFILE << "\n"
             << "V068240_COMPILER_FAMILY=" << XSTAR_V068240_COMPILER_FAMILY << "\n"
