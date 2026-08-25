@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.40.2.1 - ionization-audit parser/resume hotfix - 2026-08-25
+
+- Fix the Phase-A audit parser so FORTRAN scientific-format timer markers with padding after `=` (for example `KEY=  8.88E+01`) are accepted.
+- Add internal model-total parsing for both FORTRAN and C++; Phase-B divergence ranking now uses the internal-total C++/FORTRAN ratio when available, falling back to external wall ratio only when necessary.
+- Add `--resume` support to the audit action so a completed `.40.2` canonical root and any already-complete instrumented FORTRAN case can be reused without rerunning stock FORTRAN/C++.
+- Accept `.40.2` canonical-summary schema as an input to the `.40.2.1` audit hotfix because the scientific C++ source is unchanged; canonical science/wall/RSS measurements remain authoritative.
+- No scientific arithmetic, work gating, solver/controller decisions, transport, spectral arithmetic, accumulation order, or FORTRAN instrumentation changed.
+
 ## 0.6.82.40.2 - ionization-regime FORTRAN/C++ work-equivalence audit - 2026-08-25
 
 - Moves the primary `.40` investigation beyond compiler flags while leaving the host-running `.40.1` GCC LTO+PGO experiment independent. `.40.2` defaults to portable GCC `-O3`; LTO/PGO/native/compiler selection is not an audit variable.
