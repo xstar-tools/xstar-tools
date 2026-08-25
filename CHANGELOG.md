@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.82.40.2.4 - embedded FORTRAN globaldata activation-declaration hotfix - 2026-08-25
+
+- Fixes the host build failure in 0.6.82.40.2.2/.2.3 caused by the duplicated
+  `module globaldata` source definitions in XSTAR.  The activation arrays were
+  added to `xstar/xstarlib/src/globaldata.f90` but were missing from the
+  embedded module at the top of `xstar/src/xstar/xstar.f90`.
+- Adds the six observation-only activation arrays to both source definitions.
+- Adds a recovery patch that upgrades an already-instrumented failed .2.2/.2.3
+  FORTRAN tree in place; no restore or repatch is required.
+- Replaces the ineffective external `globaldata.mod` shadow workaround with a
+  dual-source consistency gate and a direct syntax probe of `xstar.f90`.
+- No scientific arithmetic, controller behavior, ATDB dispatch, accumulation
+  order, output schema, or activation marker schema is changed.
+
 ## 0.6.82.40.2.3 - FORTRAN activation-audit module-resolution hotfix - 2026-08-25
 
 - Fixes the host build failure observed after `.40.2.2` activation instrumentation: the xstarlib sources were rebuilt, but the later `xstar.f90` driver compile could resolve an older installed `globaldata.mod` that lacked the new activation arrays.
