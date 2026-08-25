@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2 - ionization-regime FORTRAN/C++ work-equivalence audit - 2026-08-25
+
+- Moves the primary `.40` investigation beyond compiler flags while leaving the host-running `.40.1` GCC LTO+PGO experiment independent. `.40.2` defaults to portable GCC `-O3`; LTO/PGO/native/compiler selection is not an audit variable.
+- Adds a controlled H+He+C Phase-A sweep at `rlogxi=-3,+1,+4` with density `1e12`, `cfrac=0`, and `emult=0.25` held fixed, so ionization state is the only intended physics-axis change.
+- Adds explicit Phase-C broad confirmation cases at `rlogxi=-3,+1` with the existing multi-element composition/density/covering-fraction/emult held fixed. Broad execution remains locked behind `--allow-broad`. Fe remains an optional Phase-D control.
+- Reuses the `.35.1` FORTRAN work-counter design and extends it with coarse inclusive `system_clock` timers around controller/HMC/rate/element/emissivity/transport/publication routines. No clock is placed around `ucalc` or inside atomic-record, matrix-row, energy-bin, or Type-50 profile loops. Authoritative FORTRAN wall/RSS remains the uninstrumented executable.
+- Adds complete and `.35.1`-delta FORTRAN patches plus a host build helper. The patched FORTRAN is diagnostic-only and emits the historical `V0682351_FORTRAN_*` work counters together with new `V0682402_FORTRAN_*_SECONDS` phase markers.
+- Repairs C++ timing attribution by retaining the legacy first-four-call diagnostics while adding all-call controller evaluation/time and accepted-boundary time counters. This is observation-only and does not alter scientific arithmetic, controller decisions, work order, or public products.
+- Adds a split host runner: `canonical` runs uninstrumented FORTRAN plus C++ for authoritative science/wall/RSS and optional `perf stat`; `audit` then runs the instrumented FORTRAN and maps work/phase ratios against the already-completed C++ results. Phase A produces a heuristic divergence ranking to choose Phase-B fine counters rather than preselecting a kernel.
+- Optional hardware counters include cycles, instructions, branches/misses, cache references/misses, page faults, and context switches; they are non-gating and normalized per evaluated record when available.
+
 ## 0.6.82.40.1 - GCC-only LTO+PGO staged qualification - 2026-08-25
 
 - Revises host-tested `0.6.82.40` without changing scientific arithmetic. GCC is now the sole production-promotion compiler for the `.40.1` path; the earlier Clang/native experiments remain historical diagnostics only.

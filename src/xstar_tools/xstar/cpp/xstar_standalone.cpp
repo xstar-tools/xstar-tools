@@ -233,6 +233,11 @@ xstar_spectral_perf_v064892 diff_spectral_perf(
 struct PerformanceInstrumentationV064890 {
     std::array<double,4> controller_call_seconds{{0.0,0.0,0.0,0.0}};
     std::array<std::uint64_t,4> controller_call_evaluations{{0u,0u,0u,0u}};
+    // 0.6.82.40.2 observation-only all-call controller attribution.
+    std::uint64_t controller_all_calls_v0682402 = 0u;
+    std::uint64_t controller_all_evaluations_v0682402 = 0u;
+    double controller_all_seconds_v0682402 = 0.0;
+    double boundary_all_seconds_v0682402 = 0.0;
     std::array<double,4> fixed_traversal_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_rate_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_element_seconds{{0.0,0.0,0.0,0.0}};
@@ -20246,9 +20251,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 g_performance_v064892->controller_calls[call - 1u] =
                     diff_spectral_perf(spectral_perf_after_v064892, spectral_perf_before_v064892);
             }
+            const double controller_call_elapsed_v0682402 = performance_elapsed_seconds(controller_call_started_v064890);
+            if (g_performance_v064890) {
+                g_performance_v064890->controller_all_calls_v0682402 += 1u;
+                g_performance_v064890->controller_all_seconds_v0682402 += controller_call_elapsed_v0682402;
+            }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 const std::size_t slot = call - 1u;
-                g_performance_v064890->controller_call_seconds[slot] += performance_elapsed_seconds(controller_call_started_v064890);
+                g_performance_v064890->controller_call_seconds[slot] += controller_call_elapsed_v0682402;
                 g_performance_v064890->fixed_traversal_seconds[slot] += data.cumulative_stats.traversal_seconds - fixed_stats_before_v064890.traversal_seconds;
                 g_performance_v064890->fixed_rate_seconds[slot] += data.cumulative_stats.rate_seconds - fixed_stats_before_v064890.rate_seconds;
                 g_performance_v064890->fixed_element_seconds[slot] += data.cumulative_stats.element_seconds - fixed_stats_before_v064890.element_seconds;
@@ -20299,6 +20309,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 source_ntotit_v068227 = static_cast<std::size_t>(std::max(stats.ntotit, 0));
             }
             actual_dsec_ntotit.push_back(source_ntotit_v068227);
+            if (g_performance_v064890) {
+                g_performance_v064890->controller_all_evaluations_v0682402 += static_cast<std::uint64_t>(dsec_count);
+            }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->controller_call_evaluations[call - 1u] += static_cast<std::uint64_t>(dsec_count);
             }
@@ -20341,8 +20354,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             auto boundary = source_nlimdt_v068227 == 0
                 ? evaluate_full_boundary(data, state, 0.0, boundary_radius_cm, 0u)
                 : evaluate_accepted_boundary(data, state, 0.0, boundary_radius_cm, 0u);
+            const double boundary_elapsed_v0682402 = performance_elapsed_seconds(boundary_started_v064890);
+            if (g_performance_v064890) {
+                g_performance_v064890->boundary_all_seconds_v0682402 += boundary_elapsed_v0682402;
+            }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
-                g_performance_v064890->boundary_projection_seconds[call - 1u] += performance_elapsed_seconds(boundary_started_v064890);
+                g_performance_v064890->boundary_projection_seconds[call - 1u] += boundary_elapsed_v0682402;
             }
             std::string completeness_reason;
             if (!snapshot_complete(boundary, info, data.energy.size(), completeness_reason)) {
@@ -22061,10 +22078,12 @@ void emit_controller_performance_instrumentation(
     double lowering_seconds,
     double controller_seconds,
     double total_seconds) {
-    const double dsec_calls = std::accumulate(
+    const double dsec_first4 = std::accumulate(
         perf.controller_call_seconds.begin(), perf.controller_call_seconds.end(), 0.0);
-    const double boundaries = std::accumulate(
+    const double boundaries_first4 = std::accumulate(
         perf.boundary_projection_seconds.begin(), perf.boundary_projection_seconds.end(), 0.0);
+    const double dsec_calls = perf.controller_all_seconds_v0682402;
+    const double boundaries = perf.boundary_all_seconds_v0682402;
     const double controller_accounted = dsec_calls + boundaries +
         perf.continuum_transport_seconds + perf.atomic_luminosity_seconds +
         perf.stpcut_seconds + perf.step_seconds + perf.final_zero_thickness_seconds +
@@ -22077,6 +22096,7 @@ void emit_controller_performance_instrumentation(
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
+            << "V0682402_CPU_AUDIT_POLICY=IONIZATION_REGIME_WORK_EQUIVALENCE_PORTABLE_GCC_O3_MEASUREMENT_ONLY\n"
             << "V0682401_COMPILER_POLICY=GCC_ONLY_LTO_PGO_STAGED_NO_NEW_SCIENCE_WORK\n"
             << "V068240_COMPILER_CPU_POLICY=MEASUREMENT_ONLY_STRICT_FP_NO_NEW_SCIENCE_WORK\n"
             << "V068240_BUILD_PROFILE=" << XSTAR_V068240_BUILD_PROFILE << "\n"
@@ -22101,7 +22121,13 @@ void emit_controller_performance_instrumentation(
             << "\n"
             << "V064890_PERF_POLICY=MEASUREMENT_ONLY_NO_SCIENCE_CHANGE\n"
             << "V064890_PERF_ATDB_LOWERING_SECONDS=" << lowering_seconds << "\n"
-            << "V064890_PERF_CONTROLLER_SECONDS=" << controller_seconds << "\n";
+            << "V064890_PERF_CONTROLLER_SECONDS=" << controller_seconds << "\n"
+            << "V0682402_CPP_CONTROLLER_ALL_CALLS=" << perf.controller_all_calls_v0682402 << "\n"
+            << "V0682402_CPP_CONTROLLER_ALL_EVALUATIONS=" << perf.controller_all_evaluations_v0682402 << "\n"
+            << "V0682402_CPP_CONTROLLER_ALL_SECONDS=" << perf.controller_all_seconds_v0682402 << "\n"
+            << "V0682402_CPP_BOUNDARY_ALL_SECONDS=" << perf.boundary_all_seconds_v0682402 << "\n"
+            << "V0682402_CPP_CONTROLLER_FIRST4_SECONDS=" << dsec_first4 << "\n"
+            << "V0682402_CPP_BOUNDARY_FIRST4_SECONDS=" << boundaries_first4 << "\n";
         for (std::size_t i = 0; i < 4u; ++i) {
             out << "V064890_PERF_CALL" << (i + 1u) << "_DSEC_SECONDS=" << perf.controller_call_seconds[i] << "\n"
                 << "V064890_PERF_CALL" << (i + 1u) << "_DSEC_EVALUATIONS=" << perf.controller_call_evaluations[i] << "\n"

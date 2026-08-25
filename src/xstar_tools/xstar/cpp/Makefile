@@ -7,6 +7,8 @@ OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
 THERMAL_STRICT_FP_FLAGS ?= -ffp-contract=off
 ELEMENT_STRICT_FP_FLAGS ?= -ffp-contract=off
 
+# v0.6.82.40.2 defaults to portable GCC -O3 for the ionization-regime work-equivalence audit.
+# The .40.1 compiler experiment controls remain available but are not the audit variable.
 # v0.6.82.40.1 GCC-only compiler/CPU experiment controls.  The default profile is
 # deliberately equivalent to the accepted 0.6.82.39.2 portable -O3 build.
 # Every non-default control is opt-in and must pass exact science/work/RSS
@@ -94,7 +96,7 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.82.40.1
+PACKAGE_VERSION ?= 0.6.82.40.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16.5
