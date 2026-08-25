@@ -22433,6 +22433,53 @@ void emit_controller_performance_instrumentation(
                 << "V06824022_CPP_DT" << dt_v06824022 << "_INT_VALUES="
                 << perf.foundation_v068231.int_payload_values_by_type_v06824022[dt_v06824022] << "\n";
         }
+        // 0.6.82.40.2.5: narrow family timing and unique-residency
+        // diagnostics.  C++ EVAL_SECONDS reuses the existing per-record rate
+        // timer; no additional clock read was added to evaluate_record.
+        {
+            static constexpr const char* family_names_v06824025[5] = {
+                "NONE", "BOUND_FREE_RECOMB", "ELECTRON_COLLISION",
+                "CHARGE_EXCHANGE", "TYPE50_CONTROL"};
+            for (std::size_t family_v06824025 = 1; family_v06824025 < 5; ++family_v06824025) {
+                out << std::setprecision(17)
+                    << "V06824025_CPP_FAMILY_" << family_names_v06824025[family_v06824025]
+                    << "_EVAL_SECONDS="
+                    << perf.foundation_v068231.ion_family_eval_seconds_v06824025[family_v06824025] << "\n"
+                    << "V06824025_CPP_FAMILY_" << family_names_v06824025[family_v06824025]
+                    << "_EVAL_CALLS="
+                    << perf.foundation_v068231.ion_family_eval_calls_v06824025[family_v06824025] << "\n"
+                    << "V06824025_CPP_FAMILY_" << family_names_v06824025[family_v06824025]
+                    << "_FIRST_RSS_BEFORE_BYTES="
+                    << perf.foundation_v068231.ion_family_first_rss_before_v06824025[family_v06824025] << "\n"
+                    << "V06824025_CPP_FAMILY_" << family_names_v06824025[family_v06824025]
+                    << "_FIRST_RSS_AFTER_BYTES="
+                    << perf.foundation_v068231.ion_family_first_rss_after_v06824025[family_v06824025] << "\n"
+                    << "V06824025_CPP_FAMILY_" << family_names_v06824025[family_v06824025]
+                    << "_FIRST_RECORD_INDEX="
+                    << perf.foundation_v068231.ion_family_first_record_index_v06824025[family_v06824025] << "\n";
+            }
+            static constexpr int target_types_v06824025[] = {2,9,50,51,53,56,59,63,74,77,99};
+            for (const int dt_v06824025 : target_types_v06824025) {
+                const std::size_t dt_index_v06824025 = static_cast<std::size_t>(dt_v06824025);
+                const std::uint64_t record_header_bytes_v06824025 =
+                    perf.foundation_v068231.ion_unique_hot_record_bytes_by_type_v06824025[dt_index_v06824025] +
+                    perf.foundation_v068231.ion_unique_cold_record_bytes_by_type_v06824025[dt_index_v06824025];
+                out << "V06824025_CPP_DT" << dt_v06824025 << "_UNIQUE_RECORDS="
+                    << perf.foundation_v068231.ion_unique_records_touched_by_type_v06824025[dt_index_v06824025] << "\n"
+                    << "V06824025_CPP_DT" << dt_v06824025 << "_UNIQUE_REAL_PAYLOAD_BYTES="
+                    << perf.foundation_v068231.ion_unique_real_payload_bytes_by_type_v06824025[dt_index_v06824025] << "\n"
+                    << "V06824025_CPP_DT" << dt_v06824025 << "_UNIQUE_INT_PAYLOAD_BYTES="
+                    << perf.foundation_v068231.ion_unique_int_payload_bytes_by_type_v06824025[dt_index_v06824025] << "\n"
+                    << "V06824025_CPP_DT" << dt_v06824025 << "_UNIQUE_RECORD_HEADER_BYTES="
+                    << record_header_bytes_v06824025 << "\n"
+                    << "V06824025_CPP_DT" << dt_v06824025 << "_UNIQUE_PAYLOAD_PAGE_BYTES="
+                    << perf.foundation_v068231.ion_unique_payload_page_bytes_by_type_v06824025[dt_index_v06824025] << "\n"
+                    << "V06824025_CPP_DT" << dt_v06824025 << "_UNIQUE_RESIDENT_PAYLOAD_PAGE_BYTES="
+                    << perf.foundation_v068231.ion_unique_resident_payload_page_bytes_by_type_v06824025[dt_index_v06824025] << "\n"
+                    << "V06824025_CPP_DT" << dt_v06824025 << "_PREPARED_CACHE_BYTES="
+                    << perf.foundation_v068231.ion_prepared_cache_bytes_by_type_v06824025[dt_index_v06824025] << "\n";
+            }
+        }
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

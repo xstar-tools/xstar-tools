@@ -261,6 +261,25 @@ struct PerformanceFoundationV068231 {
     std::array<std::uint64_t, 111> bound_free_records_by_type_v06824022{};
     std::array<std::uint64_t, 111> real_payload_values_by_type_v06824022{};
     std::array<std::uint64_t, 111> int_payload_values_by_type_v06824022{};
+
+    // 0.6.82.40.2.5: narrow low-ionization family diagnostics.  Family
+    // indices are: 1=53/59/74/99 bound-free/recombination,
+    // 2=51/56/63/77 electron-collision, 3=2/9 charge exchange, and
+    // 4=Type-50 control.  EVAL_SECONDS reuses the pre-existing per-record
+    // rate timer and therefore adds no new clock read in the hot evaluator.
+    std::array<double, 5> ion_family_eval_seconds_v06824025{};
+    std::array<std::uint64_t, 5> ion_family_eval_calls_v06824025{};
+    std::array<std::uint64_t, 5> ion_family_first_rss_before_v06824025{};
+    std::array<std::uint64_t, 5> ion_family_first_rss_after_v06824025{};
+    std::array<std::uint64_t, 5> ion_family_first_record_index_v06824025{};
+    std::array<std::uint64_t, 111> ion_unique_records_touched_by_type_v06824025{};
+    std::array<std::uint64_t, 111> ion_unique_real_payload_bytes_by_type_v06824025{};
+    std::array<std::uint64_t, 111> ion_unique_int_payload_bytes_by_type_v06824025{};
+    std::array<std::uint64_t, 111> ion_unique_hot_record_bytes_by_type_v06824025{};
+    std::array<std::uint64_t, 111> ion_unique_cold_record_bytes_by_type_v06824025{};
+    std::array<std::uint64_t, 111> ion_unique_payload_page_bytes_by_type_v06824025{};
+    std::array<std::uint64_t, 111> ion_unique_resident_payload_page_bytes_by_type_v06824025{};
+    std::array<std::uint64_t, 111> ion_prepared_cache_bytes_by_type_v06824025{};
 };
 
 void capture_performance_foundation_v068231(

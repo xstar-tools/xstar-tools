@@ -52,6 +52,7 @@
 #include <vector>
 #if defined(__linux__)
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #endif
 
@@ -125,6 +126,22 @@ void copy_text(char* target, std::size_t cap, const std::string& value) {
 // 0.6.82.39: observation-only current-RSS sampler for fixed-state phase
 // attribution.  It is called only on accepted-boundary native-production
 // evaluations, so the hot DSEC/root trajectory is untouched.
+// 0.6.82.40.2.5: diagnostic family classifier for the low-ionization
+// investigation.  Zero means outside the narrow measurement set.
+int ionization_family_index_v06824025(int data_type) noexcept {
+    switch (data_type) {
+        case 53: case 59: case 74: case 99: return 1;
+        case 51: case 56: case 63: case 77: return 2;
+        case 2: case 9: return 3;
+        case 50: return 4;
+        default: return 0;
+    }
+}
+
+bool ionization_target_type_v06824025(int data_type) noexcept {
+    return ionization_family_index_v06824025(data_type) != 0;
+}
+
 std::uint64_t current_rss_bytes_v068239() {
 #if defined(__linux__)
     // 0.6.82.39.1: keep phase attribution allocation-free.  The .39 host
@@ -4565,6 +4582,11 @@ struct xstar_fixed_state_context_impl {
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
     std::map<int, std::uint64_t> visited_data_types;
+    // 0.6.82.40.2.5 diagnostic-only unique-residency census.  The bitmap is
+    // allocated only when XSTAR_IONIZATION_FAMILY_DIAGNOSTICS=1, so normal
+    // production runs retain the accepted .40.2.4 ownership/lifetime.
+    bool ion_family_diagnostics_enabled_v06824025 = false;
+    std::vector<std::uint8_t> ion_unique_record_seen_v06824025;
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
@@ -13571,8 +13593,42 @@ int run_impl(
         preliminary_cache_v064812337.clear();
 
         const auto evaluate_source_record = [&](
+            std::size_t record_index_v06824025,
             const ProgramRecord& record,
             const ProgramRecordHotV0682375& execution_v0682375) {
+            const int ion_family_v06824025 =
+                ctx.ion_family_diagnostics_enabled_v06824025
+                    ? ionization_family_index_v06824025(record.data_type) : 0;
+            bool first_family_activation_v06824025 = false;
+            if (ion_family_v06824025 > 0) {
+                auto& first_index_v06824025 =
+                    perf_foundation_v068231.ion_family_first_record_index_v06824025[
+                        static_cast<std::size_t>(ion_family_v06824025)];
+                if (first_index_v06824025 == 0u) {
+                    first_index_v06824025 =
+                        static_cast<std::uint64_t>(record_index_v06824025) + 1u;
+                    perf_foundation_v068231.ion_family_first_rss_before_v06824025[
+                        static_cast<std::size_t>(ion_family_v06824025)] =
+                        current_rss_bytes_v068239();
+                    first_family_activation_v06824025 = true;
+                }
+                if (record_index_v06824025 < ctx.ion_unique_record_seen_v06824025.size() &&
+                    ctx.ion_unique_record_seen_v06824025[record_index_v06824025] == 0u) {
+                    ctx.ion_unique_record_seen_v06824025[record_index_v06824025] = 1u;
+                    const std::size_t dt_v06824025 = static_cast<std::size_t>(record.data_type);
+                    ++perf_foundation_v068231.ion_unique_records_touched_by_type_v06824025[dt_v06824025];
+                    perf_foundation_v068231.ion_unique_real_payload_bytes_by_type_v06824025[dt_v06824025] +=
+                        static_cast<std::uint64_t>(execution_v0682375.real_count) * sizeof(double);
+                    perf_foundation_v068231.ion_unique_int_payload_bytes_by_type_v06824025[dt_v06824025] +=
+                        static_cast<std::uint64_t>(execution_v0682375.int_count) * sizeof(std::int64_t);
+                    perf_foundation_v068231.ion_unique_hot_record_bytes_by_type_v06824025[dt_v06824025] +=
+                        sizeof(ProgramRecordHotV0682375);
+                    perf_foundation_v068231.ion_unique_cold_record_bytes_by_type_v06824025[dt_v06824025] +=
+                        sizeof(ProgramRecord);
+                }
+            }
+            // Keep the accepted rate timer scoped to record evaluation itself;
+            // diagnostic first-touch/RSS bookkeeping above must not inflate it.
             const auto rate_start = clock_type::now();
             try {
                 EvaluatedRecord item = evaluate_record(
@@ -13606,10 +13662,34 @@ int run_impl(
                     }
                 }
                 if (record.data_type == 56) ++stats.type56_records_evaluated;
-                stats.rate_seconds += elapsed(rate_start);
+                const double rate_elapsed_v06824025 = elapsed(rate_start);
+                stats.rate_seconds += rate_elapsed_v06824025;
+                if (ion_family_v06824025 > 0) {
+                    const std::size_t family_index_v06824025 =
+                        static_cast<std::size_t>(ion_family_v06824025);
+                    perf_foundation_v068231.ion_family_eval_seconds_v06824025[family_index_v06824025] +=
+                        rate_elapsed_v06824025;
+                    ++perf_foundation_v068231.ion_family_eval_calls_v06824025[family_index_v06824025];
+                    if (first_family_activation_v06824025) {
+                        perf_foundation_v068231.ion_family_first_rss_after_v06824025[family_index_v06824025] =
+                            current_rss_bytes_v068239();
+                    }
+                }
                 return item;
             } catch (const std::exception&) {
-                stats.rate_seconds += elapsed(rate_start);
+                const double rate_elapsed_v06824025 = elapsed(rate_start);
+                stats.rate_seconds += rate_elapsed_v06824025;
+                if (ion_family_v06824025 > 0) {
+                    const std::size_t family_index_v06824025 =
+                        static_cast<std::size_t>(ion_family_v06824025);
+                    perf_foundation_v068231.ion_family_eval_seconds_v06824025[family_index_v06824025] +=
+                        rate_elapsed_v06824025;
+                    ++perf_foundation_v068231.ion_family_eval_calls_v06824025[family_index_v06824025];
+                    if (first_family_activation_v06824025) {
+                        perf_foundation_v068231.ion_family_first_rss_after_v06824025[family_index_v06824025] =
+                            current_rss_bytes_v068239();
+                    }
+                }
                 ++stats.records_unsupported;
                 throw;
             }
@@ -13645,7 +13725,7 @@ int run_impl(
             const auto& execution_v0682375 =
                 execution_record_by_index_v0682375(ctx.program, index);
             EvaluatedRecord preliminary_item_v064812337 =
-                evaluate_source_record(record, execution_v0682375);
+                evaluate_source_record(index, record, execution_v0682375);
             if (incremental_memory_telemetry_v06823615 &&
                 preliminary_item_v064812337.bound_free_payload_v06823087) {
                 ++preliminary_sidecar_count_incremental_v06823615;
@@ -13886,7 +13966,7 @@ int run_impl(
                     preliminary_cache_v064812337[preliminary_cursor_v064812337].evaluated);
                 ++preliminary_cursor_v064812337;
             } else {
-                item = evaluate_source_record(record, execution_v0682375);
+                item = evaluate_source_record(index, record, execution_v0682375);
             }
             // 0.6.82.30.8.6: these retained full-grid UCalc records are consumed
             // only by calc_emis/product publication. DSEC/root-finding calls set
@@ -18999,6 +19079,126 @@ void capture_performance_foundation_v068231(
         bf_v06823613.sgbar_dense_values_current_v06823613;
     out.bound_free_predecoded_context_hits_v0682371 =
         bf_v06823613.predecoded_context_hits_v0682371;
+
+    // 0.6.82.40.2.5: convert the diagnostic touched-record bitmap into an
+    // exact union of virtual payload pages reachable by each target type.
+    // This is done only when the final performance snapshot is captured, not
+    // in the hot evaluator, so it does not add allocation churn to DSEC.
+    if (context->ion_family_diagnostics_enabled_v06824025 &&
+        context->ion_unique_record_seen_v06824025.size() == context->program.records.size()) {
+        std::array<std::vector<std::pair<std::uintptr_t,std::uintptr_t>>,111>
+            page_ranges_v06824025;
+#if defined(__linux__)
+        const long page_size_raw_v06824025 = ::sysconf(_SC_PAGESIZE);
+        const std::uint64_t page_size_v06824025 = page_size_raw_v06824025 > 0
+            ? static_cast<std::uint64_t>(page_size_raw_v06824025) : 4096u;
+#else
+        const std::uint64_t page_size_v06824025 = 4096u;
+#endif
+        const auto add_page_range_v06824025 = [&](
+            std::size_t dt, const void* begin_ptr, std::size_t byte_count) {
+            if (!begin_ptr || byte_count == 0u || dt >= page_ranges_v06824025.size()) return;
+            const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(begin_ptr);
+            const std::uintptr_t end = begin + byte_count - 1u;
+            page_ranges_v06824025[dt].push_back({
+                begin / page_size_v06824025, end / page_size_v06824025});
+        };
+        for (std::size_t index_v06824025 = 0;
+             index_v06824025 < context->program.records.size(); ++index_v06824025) {
+            if (context->ion_unique_record_seen_v06824025[index_v06824025] == 0u) continue;
+            const auto& record_v06824025 = context->program.records[index_v06824025];
+            const std::size_t dt_v06824025 = static_cast<std::size_t>(record_v06824025.data_type);
+            if (dt_v06824025 >= 111u || !ionization_target_type_v06824025(record_v06824025.data_type)) continue;
+            const auto& hot_v06824025 = execution_record_by_index_v0682375(
+                context->program, index_v06824025);
+            if (hot_v06824025.real_count > 0u) {
+                add_page_range_v06824025(
+                    dt_v06824025,
+                    context->program.reals.data() + hot_v06824025.real_offset,
+                    static_cast<std::size_t>(hot_v06824025.real_count) * sizeof(double));
+            }
+            if (hot_v06824025.int_count > 0u) {
+                add_page_range_v06824025(
+                    dt_v06824025,
+                    context->program.ints.data() + hot_v06824025.int_offset,
+                    static_cast<std::size_t>(hot_v06824025.int_count) * sizeof(std::int64_t));
+            }
+            if (index_v06824025 < context->bound_free_slot_by_record_v0682371.size()) {
+                const std::uint32_t slot_v06824025 =
+                    context->bound_free_slot_by_record_v0682371[index_v06824025];
+                if (slot_v06824025 != std::numeric_limits<std::uint32_t>::max() &&
+                    static_cast<std::size_t>(slot_v06824025) < context->bound_free_prepared_v064895.size() &&
+                    static_cast<std::size_t>(slot_v06824025) < context->bound_free_context_by_slot_v0682371.size()) {
+                    const auto& cache_v06824025 =
+                        context->bound_free_prepared_v064895[static_cast<std::size_t>(slot_v06824025)];
+                    out.ion_prepared_cache_bytes_by_type_v06824025[dt_v06824025] +=
+                        sizeof(BoundFreePreparedRecordCacheV064895) + sizeof(Type53RecordContext) +
+                        static_cast<std::uint64_t>(cache_v06824025.reduced.sgbar.capacity()) * sizeof(double) +
+                        static_cast<std::uint64_t>(cache_v06824025.full.sgbar.capacity()) * sizeof(double);
+                }
+            }
+        }
+        for (std::size_t dt_v06824025 = 0; dt_v06824025 < page_ranges_v06824025.size(); ++dt_v06824025) {
+            auto& ranges_v06824025 = page_ranges_v06824025[dt_v06824025];
+            if (ranges_v06824025.empty()) continue;
+            std::sort(ranges_v06824025.begin(), ranges_v06824025.end());
+            std::uint64_t pages_v06824025 = 0u;
+            std::uintptr_t lo_v06824025 = ranges_v06824025.front().first;
+            std::uintptr_t hi_v06824025 = ranges_v06824025.front().second;
+            for (std::size_t i_v06824025 = 1; i_v06824025 < ranges_v06824025.size(); ++i_v06824025) {
+                const auto& range_v06824025 = ranges_v06824025[i_v06824025];
+                if (range_v06824025.first <= hi_v06824025 + 1u) {
+                    hi_v06824025 = std::max(hi_v06824025, range_v06824025.second);
+                } else {
+                    pages_v06824025 += static_cast<std::uint64_t>(hi_v06824025 - lo_v06824025 + 1u);
+                    lo_v06824025 = range_v06824025.first;
+                    hi_v06824025 = range_v06824025.second;
+                }
+            }
+            pages_v06824025 += static_cast<std::uint64_t>(hi_v06824025 - lo_v06824025 + 1u);
+            out.ion_unique_payload_page_bytes_by_type_v06824025[dt_v06824025] =
+                pages_v06824025 * page_size_v06824025;
+#if defined(__linux__)
+            // Query actual present pages without touching them.  mincore() is
+            // diagnostic-only and runs after the fixed-state work has completed;
+            // unlike a read probe, it does not fault nonresident pages into RAM.
+            std::uint64_t resident_pages_v06824025 = 0u;
+            const auto count_resident_range_v06824025 = [&](
+                std::uintptr_t first_page_v06824025,
+                std::uintptr_t last_page_v06824025) {
+                const std::uint64_t count_v06824025 = static_cast<std::uint64_t>(
+                    last_page_v06824025 - first_page_v06824025 + 1u);
+                std::vector<unsigned char> residency_v06824025(
+                    static_cast<std::size_t>(count_v06824025), 0u);
+                void* address_v06824025 = reinterpret_cast<void*>(
+                    first_page_v06824025 * page_size_v06824025);
+                const std::size_t length_v06824025 = static_cast<std::size_t>(
+                    count_v06824025 * page_size_v06824025);
+                if (::mincore(address_v06824025, length_v06824025,
+                              residency_v06824025.data()) == 0) {
+                    for (unsigned char state_v06824025 : residency_v06824025) {
+                        if ((state_v06824025 & 1u) != 0u) ++resident_pages_v06824025;
+                    }
+                }
+            };
+            lo_v06824025 = ranges_v06824025.front().first;
+            hi_v06824025 = ranges_v06824025.front().second;
+            for (std::size_t i_v06824025 = 1; i_v06824025 < ranges_v06824025.size(); ++i_v06824025) {
+                const auto& range_v06824025 = ranges_v06824025[i_v06824025];
+                if (range_v06824025.first <= hi_v06824025 + 1u) {
+                    hi_v06824025 = std::max(hi_v06824025, range_v06824025.second);
+                } else {
+                    count_resident_range_v06824025(lo_v06824025, hi_v06824025);
+                    lo_v06824025 = range_v06824025.first;
+                    hi_v06824025 = range_v06824025.second;
+                }
+            }
+            count_resident_range_v06824025(lo_v06824025, hi_v06824025);
+            out.ion_unique_resident_payload_page_bytes_by_type_v06824025[dt_v06824025] =
+                resident_pages_v06824025 * page_size_v06824025;
+#endif
+        }
+    }
 }
 
 std::uint64_t release_compact_record_products_v06823611(
@@ -19023,6 +19223,11 @@ std::uint64_t release_compact_record_products_v06823611(
 static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Program program) {
     auto ptr = std::make_unique<xstar_fixed_state_context>();
     ptr->program = std::move(program);
+    ptr->ion_family_diagnostics_enabled_v06824025 =
+        environment_flag("XSTAR_IONIZATION_FAMILY_DIAGNOSTICS");
+    if (ptr->ion_family_diagnostics_enabled_v06824025) {
+        ptr->ion_unique_record_seen_v06824025.assign(ptr->program.records.size(), 0u);
+    }
     ptr->source_leveltemp_energy_workspace_v06481231.assign(
         kSourceLeveltempNdlV06481231, 0.0);
     if (ptr->program.records.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {

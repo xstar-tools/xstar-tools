@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 0.6.82.40.2.5 - narrow low-ionization family timing and unique-residency audit - 2026-08-25
+
+- Keeps the completed `.40.2.4` activation result frozen and adds diagnostic-only
+  follow-up instrumentation for the measured dominant families: Types
+  `53/59/74/99`, `51/56/63/77`, `2/9`, with Type `50` retained as a control.
+- C++ family evaluator timing reuses the pre-existing per-record `rate_seconds`
+  clock sample, so no additional clock read is added to `evaluate_record`.
+- Adds C++ unique-record residency telemetry: unique records touched, unique
+  real/integer payload bytes, hot/cold record-header bytes, union of virtual
+  payload pages reachable by the touched records, Linux `mincore` resident-page
+  bytes queried without faulting pages, current prepared bound-free cache bytes,
+  and before/after RSS around the first activation of each family.
+- Adds FORTRAN fixed-state family-chain timing in `calc_hmc_ion` and
+  `calc_ion_rates`. `system_clock` is called only at targeted data-type chain
+  boundaries, never inside `ucalc` or once per atomic record.
+- Adds a narrow host runner/checker that reuses authoritative `.40.2` Phase-A
+  science/timing/RSS, emits family timing and unique-residency CSV/JSON outputs,
+  and keeps broad Phase C blocked.
+- No scientific arithmetic, source traversal order, controller/solver behavior,
+  accumulation order, public output schema, ABI, or physical cutoff changes.
+
 ## 0.6.82.40.2.4 - embedded FORTRAN globaldata activation-declaration hotfix - 2026-08-25
 
 - Fixes the host build failure in 0.6.82.40.2.2/.2.3 caused by the duplicated
