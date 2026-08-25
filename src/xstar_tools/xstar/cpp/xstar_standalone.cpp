@@ -442,6 +442,20 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t line_luminosity_values_v0682338 = 0u;
     std::uint64_t line_luminosity_bytes_v0682338 = 0u;
     std::uint64_t line_luminosity_capacity_bytes_v0682338 = 0u;
+    // 0.6.82.40.2.7: once each compact nonterminal radial state has been
+    // projected into the derived retained-product arrays, its large continuum
+    // and source-workspace vectors no longer need to overlap the growing
+    // product array owner.  Preserve first/terminal zones plus the compact
+    // scalar/ion/thermal state required by later public writers.
+    bool product_overlap_release_enabled_v06824027 = false;
+    std::uint64_t product_overlap_eligible_zones_v06824027 = 0u;
+    std::uint64_t product_overlap_released_zones_v06824027 = 0u;
+    std::uint64_t product_overlap_capacity_bytes_before_v06824027 = 0u;
+    std::uint64_t product_overlap_capacity_bytes_after_v06824027 = 0u;
+    std::uint64_t product_overlap_capacity_bytes_released_v06824027 = 0u;
+    std::uint64_t product_overlap_max_zone_capacity_released_v06824027 = 0u;
+    std::uint64_t product_overlap_rss_before_schema_v06824027 = 0u;
+    std::uint64_t product_overlap_rss_after_schema_v06824027 = 0u;
     std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
     xstar_local_zone_internal::PerformanceFoundationV068231 foundation_v068231{};
 };
@@ -3206,6 +3220,44 @@ MemoryBytesV068233 fixed_evaluation_memory_v0682332(
     XSTAR_ADD_WS_VECTOR_V0682332(line_profile_workspace);
 #undef XSTAR_ADD_WS_VECTOR_V0682332
     return out;
+}
+
+// 0.6.82.40.2.7: release only the large compact-zone payload that has
+// already been projected into retained_product_arrays.  Keep scalar thermal
+// state, source_ion_stage_fractions, and element_thermal_products because the
+// later abundance writer still consumes those owners.
+template <typename T>
+std::uint64_t release_vector_capacity_v06824027(std::vector<T>& values) {
+    const auto bytes = static_cast<std::uint64_t>(values.capacity()) * sizeof(T);
+    std::vector<T>().swap(values);
+    return bytes;
+}
+
+std::uint64_t release_projected_compact_zone_payload_v06824027(
+    xstar_run_state::FixedEvaluationState& evaluation) {
+    std::uint64_t released = 0u;
+#define XSTAR_RELEASE_EVAL_VECTOR_V06824027(name) \
+    released += release_vector_capacity_v06824027(evaluation.name)
+    XSTAR_RELEASE_EVAL_VECTOR_V06824027(radiation_energy_ev);
+    XSTAR_RELEASE_EVAL_VECTOR_V06824027(radiation_flux);
+    XSTAR_RELEASE_EVAL_VECTOR_V06824027(continuum_tau_in);
+    XSTAR_RELEASE_EVAL_VECTOR_V06824027(continuum_tau_out);
+    XSTAR_RELEASE_EVAL_VECTOR_V06824027(continuum_spectrum);
+    XSTAR_RELEASE_EVAL_VECTOR_V06824027(spectrum);
+    XSTAR_RELEASE_EVAL_VECTOR_V06824027(opacity);
+#undef XSTAR_RELEASE_EVAL_VECTOR_V06824027
+    auto& ws = evaluation.source_workspace;
+#define XSTAR_RELEASE_WS_VECTOR_V06824027(name) \
+    released += release_vector_capacity_v06824027(ws.name)
+    XSTAR_RELEASE_WS_VECTOR_V06824027(rccemis);
+    XSTAR_RELEASE_WS_VECTOR_V06824027(zrems);
+    XSTAR_RELEASE_WS_VECTOR_V06824027(opakc);
+    XSTAR_RELEASE_WS_VECTOR_V06824027(opakcont);
+    XSTAR_RELEASE_WS_VECTOR_V06824027(dpthc);
+    XSTAR_RELEASE_WS_VECTOR_V06824027(dpthcont);
+    XSTAR_RELEASE_WS_VECTOR_V06824027(zremsz);
+#undef XSTAR_RELEASE_WS_VECTOR_V06824027
+    return released;
 }
 
 MemoryBytesV068233 radial_zones_memory_v0682332(
@@ -8298,6 +8350,27 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     product.retained_product_arrays.clear();
     std::vector<NativeArrayInventoryRow> inventory;
 
+    // 0.6.82.40.2.7 applies only to the compact ordinary-production path.
+    // Diagnostic bridges, multipass/noncompact owners, and incomplete line
+    // ledgers retain the historical full radial workspaces unchanged.
+    const bool release_projected_zone_payloads_v06824027 =
+        product.backend == "cpp-general-standalone" &&
+        !persist_bridge &&
+        product.incremental_detail_products_complete_v068233 &&
+        product.compact_radial_retention_v0682336 &&
+        product.public_line_luminosity_exact_v0682338 &&
+        product.final_writer_evaluation.has_value() &&
+        product.radial_zones.size() > 2u;
+    if (g_performance_v064890) {
+        auto& perf = *g_performance_v064890;
+        perf.product_overlap_release_enabled_v06824027 =
+            release_projected_zone_payloads_v06824027;
+        perf.product_overlap_rss_before_schema_v06824027 =
+            current_rss_bytes_v068233();
+        perf.product_overlap_capacity_bytes_before_v06824027 =
+            radial_zones_memory_v0682332(product.radial_zones).capacity;
+    }
+
     const auto level_indices = level_identity_indices(product);
     const auto line_indices_all = line_identity_indices(product);
     const auto rrc_indices_all = rrc_identity_indices(product);
@@ -8434,6 +8507,37 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
             append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_in", rrc_tau_in);
             append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_out", rrc_tau_out);
         }
+
+        // The first accepted boundary remains a live incident-surface fallback
+        // and the terminal boundary remains the public-writer fallback.  Every
+        // compact middle zone has now been fully projected, so release its
+        // duplicate large vector payload before the next retained arrays grow.
+        if (release_projected_zone_payloads_v06824027 && zi > 0u &&
+            zi + 1u < product.radial_zones.size() &&
+            product.radial_zones[zi].compact_retained_v0682336) {
+            auto& projected_eval_v06824027 =
+                product.radial_zones[zi].accepted_controller.evaluation;
+            const auto before_v06824027 =
+                fixed_evaluation_memory_v0682332(projected_eval_v06824027).capacity;
+            const auto released_v06824027 =
+                release_projected_compact_zone_payload_v06824027(projected_eval_v06824027);
+            const auto after_v06824027 =
+                fixed_evaluation_memory_v0682332(projected_eval_v06824027).capacity;
+            if (g_performance_v064890) {
+                auto& perf = *g_performance_v064890;
+                ++perf.product_overlap_eligible_zones_v06824027;
+                ++perf.product_overlap_released_zones_v06824027;
+                const auto measured_released_v06824027 =
+                    before_v06824027 > after_v06824027
+                        ? before_v06824027 - after_v06824027 : 0u;
+                perf.product_overlap_capacity_bytes_released_v06824027 +=
+                    measured_released_v06824027;
+                perf.product_overlap_max_zone_capacity_released_v06824027 = std::max(
+                    perf.product_overlap_max_zone_capacity_released_v06824027,
+                    measured_released_v06824027);
+                (void)released_v06824027;
+            }
+        }
     }
 
     const std::size_t hdu = 3;
@@ -8544,6 +8648,14 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
                 << "  \"product_parity\": \"NOT_CLAIMED\"\n"
                 << "}\n";
         }
+    }
+    if (g_performance_v064890) {
+        auto& perf = *g_performance_v064890;
+        perf.product_overlap_capacity_bytes_after_v06824027 =
+            radial_zones_memory_v0682332(product.radial_zones).capacity;
+        perf.product_overlap_rss_after_schema_v06824027 =
+            current_rss_bytes_v068233();
+        update_radial_zones_memory_v0682332(product.radial_zones);
     }
     std::cout << "V048746255172582_PATCH520172_PRODUCTWRITE_HANDOFF="
               << (persist_bridge ? "IN_MEMORY_AND_DIAGNOSTIC_BRIDGE" : "IN_MEMORY_ONLY") << "\n"
@@ -22492,6 +22604,24 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.type53_legacy_pair_interpolations_executed_v06824026 << "\n"
             << "V06824026_TYPE53_LEGACY_PAIR_INTERPOLATIONS_ELIDED="
             << perf.foundation_v068231.type53_legacy_pair_interpolations_elided_v06824026 << "\n";
+        out << "V06824027_PRODUCT_OVERLAP_RELEASE_ENABLED="
+            << (perf.product_overlap_release_enabled_v06824027 ? "YES" : "NO") << "\n"
+            << "V06824027_PRODUCT_OVERLAP_ELIGIBLE_ZONES="
+            << perf.product_overlap_eligible_zones_v06824027 << "\n"
+            << "V06824027_PRODUCT_OVERLAP_RELEASED_ZONES="
+            << perf.product_overlap_released_zones_v06824027 << "\n"
+            << "V06824027_PRODUCT_OVERLAP_CAPACITY_BYTES_BEFORE="
+            << perf.product_overlap_capacity_bytes_before_v06824027 << "\n"
+            << "V06824027_PRODUCT_OVERLAP_CAPACITY_BYTES_AFTER="
+            << perf.product_overlap_capacity_bytes_after_v06824027 << "\n"
+            << "V06824027_PRODUCT_OVERLAP_CAPACITY_BYTES_RELEASED="
+            << perf.product_overlap_capacity_bytes_released_v06824027 << "\n"
+            << "V06824027_PRODUCT_OVERLAP_MAX_ZONE_CAPACITY_RELEASED="
+            << perf.product_overlap_max_zone_capacity_released_v06824027 << "\n"
+            << "V06824027_PRODUCT_OVERLAP_RSS_BEFORE_SCHEMA="
+            << perf.product_overlap_rss_before_schema_v06824027 << "\n"
+            << "V06824027_PRODUCT_OVERLAP_RSS_AFTER_SCHEMA="
+            << perf.product_overlap_rss_after_schema_v06824027 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

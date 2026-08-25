@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## 0.6.82.40.2.7 - low-xi radial/product-state overlap lifetime - 2026-08-25
+
+- Memory-focused successor to `.40.2.6`; no scientific formulas, traversal,
+  accumulation order, or fixed-state work counts are changed.
+- In ordinary compact single-pass production only, each middle radial zone is
+  projected into `retained_product_arrays` and then immediately releases the
+  duplicated continuum/source-workspace vectors before projection advances to
+  the next zone.
+- The first accepted boundary and terminal boundary remain fully resident as
+  publication fallbacks. Per-zone `source_ion_stage_fractions`,
+  `element_thermal_products`, scalar thermal state, and radial geometry are
+  retained for `xout_abund1` heating/cooling/abundance publication.
+- The release is disabled for diagnostic bridges, noncompact/multipass paths,
+  incomplete incremental detail state, or an inexact `.33.8` public line
+  luminosity ledger.
+- Adds `V06824027_PRODUCT_OVERLAP_*` diagnostics for released zone counts,
+  capacity bytes and schema-boundary RSS.
+- Qualification is the narrow carbon `rlogxi=-3,+1,+4` sweep only, reusing the
+  normal-production `.40.2.6` run as the CPU/RSS baseline and the frozen Phase-A
+  FORTRAN products for exact science/STEP gates. Broad Phase C remains blocked.
+- Compiler contract remains strict: the build rejects `-ffast-math` and rejects
+  `-Ofast`; no reassociation or new numerical cutoff is introduced.
+
 ## 0.6.82.40.2.6 - Type-53 production legacy-prepass elision - 2026-08-25
 
 - Single-change CPU optimization following the completed `.40.2.5` family audit.
