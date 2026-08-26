@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.13 - call-start single live workspace / small-ring locality experiment - 2026-08-26
+
+- Narrow successor to host-measured `.40.2.12`; science arithmetic, solver/controller decisions, accumulation order, ABI, publication schema, and physical cutoffs remain frozen.
+- Ordinary production defaults to a single persistent `CallStartWorkspace` payload. The call-indexed workspace vector is bypassed entirely in production instead of swapping the payload through a new vector object each radial zone.
+- `XSTAR_V068240213_CALL_START_MODE=historical|single|ring2|ring4|rolling212` provides same-binary controls. Reference-trajectory and forensic/audit modes always preserve historical indexed workspaces.
+- `single`, `ring2`, and `ring4` overwrite persistent payload vectors in place; no per-zone deallocation and no cross-object payload transfer occurs.
+- Qualification uses a same-binary/same-host low-xi A/B: historical, single, ring2, and ring4 for `c_xim3`; default-single science closure for `c_xip1` and `c_xip4`. No workstation timing is used as a CPU gate.
+- Promotion target: retain approximately the `.40.2.12` 20% low-xi RSS reduction while reducing the same-host CPU penalty to <=2%. Broad Phase C remains blocked.
+- Next priorities after call-start closure: contribution-list hot path (~8.5 s), remaining traversal orchestration (~12-13 s), then detail RRC (~9 s). DSEC orchestration, callback-wrapper micro-optimization, Type-53 legacy prepass, late `.2.7` radial release, and the final-boundary 784 MB residual are closed.
+
 ## 0.6.82.40.2.12 - call-start rolling reuse and final-boundary transient hotfix - 2026-08-26
 
 - Host-test successor to `.40.2.11`; `.40.2.11` is not overwritten.

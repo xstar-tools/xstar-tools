@@ -320,6 +320,13 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t call_start_final_total_capacity_bytes_v068240212 = 0u;
     std::uint64_t call_start_peak_nonempty_workspaces_v068240212 = 0u;
     bool call_start_reuse_enabled_v068240212 = false;
+    // 0.6.82.40.2.13 single-live/small-ring production representation.
+    std::uint64_t call_start_prepare_calls_v068240213 = 0u;
+    std::uint64_t call_start_slot_reuse_events_v068240213 = 0u;
+    std::uint64_t call_start_peak_total_capacity_bytes_v068240213 = 0u;
+    std::uint64_t call_start_final_total_capacity_bytes_v068240213 = 0u;
+    std::uint64_t call_start_peak_nonempty_workspaces_v068240213 = 0u;
+    std::uint32_t call_start_mode_code_v068240213 = 0u;
     bool final_boundary_diagnostics_enabled_v068240212 = false;
     std::array<FinalBoundaryMemorySampleV068240212,5> final_boundary_samples_v068240212{};
     std::array<double,4> fixed_traversal_seconds{{0.0,0.0,0.0,0.0}};
@@ -4084,6 +4091,61 @@ struct CallStartWorkspace {
     std::vector<double> global_bilevg;
     std::vector<double> global_rnisg;
 };
+
+// 0.6.82.40.2.13: ordinary production no longer transfers the live payload
+// through a vector of call-indexed workspace objects.  A single live slot is
+// the production default; ring2/ring4 are same-binary locality experiments;
+// historical preserves the pre-compaction indexed lifetime for qualification.
+enum class CallStartModeV068240213 : std::uint8_t {
+    Historical = 0u,
+    Single = 1u,
+    Ring2 = 2u,
+    Ring4 = 4u,
+    Rolling212 = 5u,
+};
+
+const char* call_start_mode_name_v068240213(CallStartModeV068240213 mode) {
+    switch (mode) {
+    case CallStartModeV068240213::Historical: return "historical";
+    case CallStartModeV068240213::Single: return "single";
+    case CallStartModeV068240213::Ring2: return "ring2";
+    case CallStartModeV068240213::Ring4: return "ring4";
+    case CallStartModeV068240213::Rolling212: return "rolling212";
+    }
+    return "unknown";
+}
+
+std::size_t call_start_live_slot_count_v068240213(CallStartModeV068240213 mode) {
+    switch (mode) {
+    case CallStartModeV068240213::Single: return 1u;
+    case CallStartModeV068240213::Ring2: return 2u;
+    case CallStartModeV068240213::Ring4: return 4u;
+    default: return 0u;
+    }
+}
+
+CallStartModeV068240213 configured_call_start_mode_v068240213(
+    bool reference_trajectory_mode, bool reference_diagnostics_enabled) {
+    if (reference_trajectory_mode || reference_diagnostics_enabled) {
+        return CallStartModeV068240213::Historical;
+    }
+    const char* requested = std::getenv("XSTAR_V068240213_CALL_START_MODE");
+    if (requested && *requested) {
+        const std::string mode(requested);
+        if (mode == "historical") return CallStartModeV068240213::Historical;
+        if (mode == "single") return CallStartModeV068240213::Single;
+        if (mode == "ring2") return CallStartModeV068240213::Ring2;
+        if (mode == "ring4") return CallStartModeV068240213::Ring4;
+        if (mode == "rolling212") return CallStartModeV068240213::Rolling212;
+        throw std::runtime_error("invalid XSTAR_V068240213_CALL_START_MODE: " + mode);
+    }
+    // Preserve the .2.12 control as a compatibility alias for historical.
+    const char* disable_212 = std::getenv("XSTAR_V068240212_DISABLE_CALL_START_REUSE");
+    if (disable_212 && std::string(disable_212) == "1") {
+        return CallStartModeV068240213::Historical;
+    }
+    return CallStartModeV068240213::Single;
+}
 
 // 0.6.82.40.2.11: production only needs the current call-start payload.
 // Historical full payloads were retained by call number and grew ~4.76 MiB
@@ -12735,9 +12797,17 @@ struct StandaloneControllerDataV67 {
     // v82 patch 5.15/5.16 diagnostic radial semantics.
     std::size_t physical_transport_intervals_completed = 0u;
     std::vector<CallStartWorkspace> call_start_workspaces;
-    // .2.12 rolling owner: exactly one reusable payload may live here
-    // between calls; indexed slots preserve call-number identity.
+    // .2.12 rolling owner retained only for an explicit rolling212 control.
     CallStartWorkspace call_start_recycle_workspace_v068240212;
+    // .2.13 production representation.  Only the first N slots selected by
+    // call_start_mode_v068240213 are live; default N=1.  Reference/audit modes
+    // continue to use call_start_workspaces above and never use these slots.
+    std::array<CallStartWorkspace,4> call_start_live_workspaces_v068240213{};
+    CallStartModeV068240213 call_start_mode_v068240213 = CallStartModeV068240213::Single;
+    std::uint64_t call_start_prepare_calls_v068240213 = 0u;
+    std::uint64_t call_start_slot_reuse_events_v068240213 = 0u;
+    std::uint64_t call_start_peak_total_capacity_bytes_v068240213 = 0u;
+    std::uint64_t call_start_peak_nonempty_workspaces_v068240213 = 0u;
     std::uint64_t call_start_recycle_events_v068240212 = 0u;
     std::uint64_t call_start_recycled_bytes_v068240212 = 0u;
     std::uint64_t call_start_peak_total_capacity_bytes_v068240212 = 0u;
@@ -12839,6 +12909,73 @@ struct StandaloneControllerDataV67 {
     std::string diagnostic_first_failure_reason;
 };
 
+CallStartWorkspace* call_start_workspace_for_call_v068240213(
+    StandaloneControllerDataV67& data, std::size_t call_index, bool ensure_historical) {
+    if (call_index < 1u) return nullptr;
+    if (data.call_start_mode_v068240213 == CallStartModeV068240213::Historical ||
+        data.call_start_mode_v068240213 == CallStartModeV068240213::Rolling212) {
+        if (ensure_historical && data.call_start_workspaces.size() < call_index) {
+            data.call_start_workspaces.resize(call_index);
+        }
+        if (call_index > data.call_start_workspaces.size()) return nullptr;
+        return &data.call_start_workspaces[call_index - 1u];
+    }
+    const std::size_t slots = call_start_live_slot_count_v068240213(
+        data.call_start_mode_v068240213);
+    if (slots == 0u) return nullptr;
+    return &data.call_start_live_workspaces_v068240213[(call_index - 1u) % slots];
+}
+
+const CallStartWorkspace* call_start_workspace_for_call_v068240213(
+    const StandaloneControllerDataV67& data, std::size_t call_index) {
+    if (call_index < 1u) return nullptr;
+    if (data.call_start_mode_v068240213 == CallStartModeV068240213::Historical ||
+        data.call_start_mode_v068240213 == CallStartModeV068240213::Rolling212) {
+        if (call_index > data.call_start_workspaces.size()) return nullptr;
+        return &data.call_start_workspaces[call_index - 1u];
+    }
+    const std::size_t slots = call_start_live_slot_count_v068240213(
+        data.call_start_mode_v068240213);
+    if (slots == 0u) return nullptr;
+    return &data.call_start_live_workspaces_v068240213[(call_index - 1u) % slots];
+}
+
+std::uint64_t call_start_live_capacity_bytes_v068240213(
+    const StandaloneControllerDataV67& data) {
+    const std::size_t slots = call_start_live_slot_count_v068240213(
+        data.call_start_mode_v068240213);
+    std::uint64_t bytes = 0u;
+    for (std::size_t i = 0u; i < slots; ++i) {
+        bytes += call_start_workspace_capacity_bytes_v068240211(
+            data.call_start_live_workspaces_v068240213[i]);
+    }
+    return bytes;
+}
+
+std::uint64_t call_start_total_capacity_bytes_v068240213(
+    const StandaloneControllerDataV67& data) {
+    return call_start_workspaces_capacity_bytes_v068240211(data.call_start_workspaces) +
+        call_start_workspace_capacity_bytes_v068240211(
+            data.call_start_recycle_workspace_v068240212) +
+        call_start_live_capacity_bytes_v068240213(data);
+}
+
+std::uint64_t call_start_nonempty_workspaces_v068240213(
+    const StandaloneControllerDataV67& data) {
+    std::uint64_t nonempty = 0u;
+    for (const auto& w : data.call_start_workspaces) {
+        if (call_start_workspace_capacity_bytes_v068240211(w) != 0u) ++nonempty;
+    }
+    if (call_start_workspace_capacity_bytes_v068240211(
+            data.call_start_recycle_workspace_v068240212) != 0u) ++nonempty;
+    const std::size_t slots = call_start_live_slot_count_v068240213(
+        data.call_start_mode_v068240213);
+    for (std::size_t i = 0u; i < slots; ++i) {
+        if (call_start_workspace_capacity_bytes_v068240211(
+                data.call_start_live_workspaces_v068240213[i]) != 0u) ++nonempty;
+    }
+    return nonempty;
+}
 
 // Historical 0.6.82.27.4 source-order marker retained for its static gate:
 // data.source_incident[i] = data.source_incident[i] + component[i]
@@ -13722,11 +13859,11 @@ void update_global_populations(
         if (!wrote_alias) write_role(data.population_global_level_index[row], 0u);
     }
     recompute_global_bilevg(data);
-    if (data.call_index >= 1u && data.call_index <= data.call_start_workspaces.size()) {
-        auto& workspace = data.call_start_workspaces[data.call_index - 1u];
-        workspace.global_xilevg = data.global_xilevg;
-        workspace.global_bilevg = data.global_bilevg;
-        workspace.global_rnisg = data.global_rnisg;
+    if (auto* workspace = call_start_workspace_for_call_v068240213(
+            data, data.call_index, false)) {
+        workspace->global_xilevg = data.global_xilevg;
+        workspace->global_bilevg = data.global_bilevg;
+        workspace->global_rnisg = data.global_rnisg;
     }
 }
 
@@ -13865,10 +14002,8 @@ void fill_standalone_input(
     input.radiation_energy_ev = data.energy.data();
     input.radiation_flux = data.flux.data();
     input.radiation_bin_count = data.energy.size();
-    const CallStartWorkspace* call_workspace = nullptr;
-    if (data.call_index >= 1u && data.call_index <= data.call_start_workspaces.size()) {
-        call_workspace = &data.call_start_workspaces[data.call_index - 1u];
-    }
+    const CallStartWorkspace* call_workspace =
+        call_start_workspace_for_call_v068240213(data, data.call_index);
     if (call_workspace && !call_workspace->radiation_energy.empty()) {
         input.dsec_radiation_energy_ev = call_workspace->radiation_energy.data();
         input.dsec_bremsa = call_workspace->bremsa.data();
@@ -13933,16 +14068,15 @@ void fill_standalone_input(
 
 bool call_start_workspace_compaction_enabled_v068240211(
     const StandaloneControllerDataV67& data) {
-    if (data.reference_trajectory_mode || data.reference_diagnostics_enabled) return false;
+    if (data.reference_trajectory_mode || data.reference_diagnostics_enabled ||
+        data.call_start_mode_v068240213 == CallStartModeV068240213::Historical) return false;
     const char* disable = std::getenv("XSTAR_V068240211_DISABLE_CALL_START_COMPACTION");
     return !(disable && std::string(disable) == "1");
 }
 
 bool call_start_workspace_reuse_enabled_v068240212(
     const StandaloneControllerDataV67& data) {
-    if (!call_start_workspace_compaction_enabled_v068240211(data)) return false;
-    const char* disable = std::getenv("XSTAR_V068240212_DISABLE_CALL_START_REUSE");
-    return !(disable && std::string(disable) == "1");
+    return data.call_start_mode_v068240213 == CallStartModeV068240213::Rolling212;
 }
 
 std::uint64_t call_start_total_capacity_bytes_v068240212(
@@ -14043,6 +14177,28 @@ void update_call_start_workspace_peak_v068240211(StandaloneControllerDataV67& da
     }
 }
 
+void update_call_start_workspace_peak_v068240213(StandaloneControllerDataV67& data) {
+    const auto bytes = call_start_total_capacity_bytes_v068240213(data);
+    const auto nonempty = call_start_nonempty_workspaces_v068240213(data);
+    data.call_start_peak_total_capacity_bytes_v068240213 = std::max(
+        data.call_start_peak_total_capacity_bytes_v068240213, bytes);
+    data.call_start_peak_nonempty_workspaces_v068240213 = std::max(
+        data.call_start_peak_nonempty_workspaces_v068240213, nonempty);
+    if (g_performance_v064890) {
+        g_performance_v064890->call_start_prepare_calls_v068240213 =
+            data.call_start_prepare_calls_v068240213;
+        g_performance_v064890->call_start_slot_reuse_events_v068240213 =
+            data.call_start_slot_reuse_events_v068240213;
+        g_performance_v064890->call_start_peak_total_capacity_bytes_v068240213 = std::max(
+            g_performance_v064890->call_start_peak_total_capacity_bytes_v068240213, bytes);
+        g_performance_v064890->call_start_peak_nonempty_workspaces_v068240213 = std::max(
+            g_performance_v064890->call_start_peak_nonempty_workspaces_v068240213, nonempty);
+        g_performance_v064890->call_start_final_total_capacity_bytes_v068240213 = bytes;
+        g_performance_v064890->call_start_mode_code_v068240213 =
+            static_cast<std::uint32_t>(data.call_start_mode_v068240213);
+    }
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Build call start workspace from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
@@ -14053,11 +14209,16 @@ void prepare_call_start_workspace(
     if (call_index < 1u) {
         throw std::runtime_error("v71 call-start workspace index must be positive");
     }
-    if (data.call_start_workspaces.size() < call_index) {
-        data.call_start_workspaces.resize(call_index);
+    CallStartWorkspace* workspace_ptr = call_start_workspace_for_call_v068240213(
+        data, call_index, true);
+    if (!workspace_ptr) {
+        throw std::runtime_error("0.6.82.40.2.13 call-start mode has no live workspace");
     }
-    auto& workspace = data.call_start_workspaces[call_index - 1u];
-    if (call_start_workspace_reuse_enabled_v068240212(data) &&
+    auto& workspace = *workspace_ptr;
+    const bool live_slot_had_capacity =
+        call_start_workspace_capacity_bytes_v068240211(workspace) != 0u;
+
+    if (data.call_start_mode_v068240213 == CallStartModeV068240213::Rolling212 &&
         call_start_workspace_capacity_bytes_v068240211(workspace) == 0u &&
         call_start_workspace_capacity_bytes_v068240211(
             data.call_start_recycle_workspace_v068240212) != 0u) {
@@ -14081,8 +14242,15 @@ void prepare_call_start_workspace(
         workspace.global_bilevg.clear();
         workspace.global_rnisg.clear();
     }
+    ++data.call_start_prepare_calls_v068240213;
+    if (live_slot_had_capacity &&
+        data.call_start_mode_v068240213 != CallStartModeV068240213::Historical) {
+        ++data.call_start_slot_reuse_events_v068240213;
+    }
     update_call_start_workspace_peak_v068240211(data);
+    update_call_start_workspace_peak_v068240213(data);
 }
+
 
 struct VectorAuditV82Patch4 {
     std::size_t source_rows = 0;
@@ -19792,6 +19960,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         data.reference_trajectory_mode = reference_trajectory_mode_v0648115;
         data.reference_diagnostics_enabled =
             data.reference_trajectory_mode && diagnostic_attribution_enabled();
+        data.call_start_mode_v068240213 = configured_call_start_mode_v068240213(
+            data.reference_trajectory_mode, data.reference_diagnostics_enabled);
+        std::cout << "V068240213_CALL_START_MODE="
+                  << call_start_mode_name_v068240213(data.call_start_mode_v068240213) << "\n";
         // 5.20.17 production never uses the old fail-open full-trajectory continuation.
         data.diagnostic_full_trajectory_continue =
             data.reference_diagnostics_enabled && diagnostic_full_trajectory_enabled();
@@ -20204,8 +20376,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             sample.heap_hblkhd_bytes = heap.hblkhd;
             sample.allocator_live_bytes = heap.uordblks + heap.hblkhd;
             if (boundary) sample.boundary_snapshot_capacity_bytes = snapshot_memory_v068233(*boundary).capacity;
-            sample.call_start_primary_bytes = call_start_total_capacity_bytes_v068240212(primary);
-            sample.call_start_copy_bytes = copied ? call_start_total_capacity_bytes_v068240212(*copied) : 0u;
+            sample.call_start_primary_bytes = call_start_total_capacity_bytes_v068240213(primary);
+            sample.call_start_copy_bytes = copied ? call_start_total_capacity_bytes_v068240213(*copied) : 0u;
             sample.call_start_total_bytes = sample.call_start_primary_bytes + sample.call_start_copy_bytes;
             sample.controller_primary_bytes = controller_workspace_capacity_v068240212(primary);
             sample.controller_copy_bytes = copied ? controller_workspace_capacity_v068240212(*copied) : 0u;
@@ -20629,7 +20801,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             production_zone_wait_before_call(call);
             const auto shared_zone_started_v0648110 = std::chrono::steady_clock::now();
             data.call_index = call;
-            recycle_completed_call_start_workspaces_v068240212(data, call);
+            if (data.call_start_mode_v068240213 == CallStartModeV068240213::Rolling212) {
+                recycle_completed_call_start_workspaces_v068240212(data, call);
+            }
             prepare_call_start_workspace(data, call);
             if (call == 3u && data.reference_trajectory_mode) {
                 gate_sequence23_native_committed_state(data);
@@ -21988,7 +22162,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // terminal shell.  The post-transport next-radius projection is a
             // convenience for a next zone that never exists in this run.
             final_pprint_data.dsec_bremsa = terminal_shell_entry_bremsa_v064883;
-            final_pprint_data.call_start_workspaces[terminal_call_index_v0648110 - 1u].bremsa = terminal_shell_entry_bremsa_v064883;
+            if (auto* final_call_workspace_v068240213 = call_start_workspace_for_call_v068240213(
+                    final_pprint_data, terminal_call_index_v0648110, false)) {
+                final_call_workspace_v068240213->bremsa = terminal_shell_entry_bremsa_v064883;
+            } else {
+                throw std::runtime_error("0.6.82.40.2.13 final call-start workspace is unavailable");
+            }
             std::cout << "V064883_FINAL_PPRINT_BREMSA_OWNER=TERMINAL_SHELL_ENTRY_PRE_FINAL_TRNFRC\n"
                       << "V064883_FINAL_PPRINT_BREMSA_RETAINED=ACCEPT\n";
             std::filesystem::path final_thermal_diagnostic_path;
@@ -22326,6 +22505,7 @@ int command_run_standalone_case_probe(const Options& options) {
         data.program_info = info;
         data.parameters = &params;
         data.reference_trajectory_mode = true;
+        data.call_start_mode_v068240213 = CallStartModeV068240213::Historical;
         {
             const auto benchmark_case_dir = std::filesystem::path(options.parameters_path).parent_path();
             const auto contract_dir = benchmark_case_dir / "v15926_qualification_contracts";
@@ -22736,6 +22916,13 @@ void emit_controller_performance_instrumentation(
             << "V068240212_CALL_START_PEAK_TOTAL_CAPACITY_BYTES=" << perf.call_start_peak_total_capacity_bytes_v068240212 << "\n"
             << "V068240212_CALL_START_PEAK_NONEMPTY_WORKSPACES=" << perf.call_start_peak_nonempty_workspaces_v068240212 << "\n"
             << "V068240212_CALL_START_FINAL_TOTAL_CAPACITY_BYTES=" << perf.call_start_final_total_capacity_bytes_v068240212 << "\n"
+            << "V068240213_CALL_START_MODE="
+            << call_start_mode_name_v068240213(static_cast<CallStartModeV068240213>(perf.call_start_mode_code_v068240213)) << "\n"
+            << "V068240213_CALL_START_PREPARE_CALLS=" << perf.call_start_prepare_calls_v068240213 << "\n"
+            << "V068240213_CALL_START_SLOT_REUSE_EVENTS=" << perf.call_start_slot_reuse_events_v068240213 << "\n"
+            << "V068240213_CALL_START_PEAK_TOTAL_CAPACITY_BYTES=" << perf.call_start_peak_total_capacity_bytes_v068240213 << "\n"
+            << "V068240213_CALL_START_PEAK_NONEMPTY_WORKSPACES=" << perf.call_start_peak_nonempty_workspaces_v068240213 << "\n"
+            << "V068240213_CALL_START_FINAL_TOTAL_CAPACITY_BYTES=" << perf.call_start_final_total_capacity_bytes_v068240213 << "\n"
             << "V068240212_FINAL_BOUNDARY_DIAGNOSTICS_ENABLED=" << (perf.final_boundary_diagnostics_enabled_v068240212 ? "YES" : "NO") << "\n"
             << "V06824028_DIAGNOSTIC_MODE=FIXED_CONTROLLER_NON_EVALUATOR_AND_RADIAL_PEAK_OWNERS\n"
             << "V06824028_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
