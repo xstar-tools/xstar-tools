@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.18.1 - post-zone allocator reuse qualification hotfix - 2026-08-26
+
+- Records the host `.2.18` result as measured-but-not-accepted: science and all four detail FITS payloads were exact, RSS was unchanged, and low-xi internal time improved by about 0.82%, but the diagnostic mode marker was absent from the captured performance log and the preregistered direct-trim-cost gate (`>=0.5 s`) was falsified by the measured 0.0945 s.
+- Makes no science, publication, ownership, or allocator-policy change relative to `.2.18`; the accepted-boundary trim remains byte-for-byte unchanged and the candidate post-detail trim elision remains the sole A/B behavior.
+- Emits `V068240218_POST_ZONE_TRIM_MODE` in the final performance stream next to the `.2.18` trim counters so host diagnostics can validate the actual runtime mode.
+- Reframes the hypothesis correctly: the direct `malloc_trim(0)` call cost is informational; any useful benefit must come from repeatable whole-run allocator reuse/locality effects and must not increase peak RSS materially.
+- Replaces the invalid direct-cost material gate with three repeated same-binary low-xi historical/optimized measurements in a balanced deterministic order. Acceptance requires median internal-total ratio `<=0.995`, at least two of three paired optimized runs faster than historical, median wall non-regression, exact four-detail payload equality across every repeat, RSS `<=1.03`, and preservation of `.2.14-.2.17` timing guards.
+- `xi=+1,+4` optimized science closure remains mandatory after the repeated low-xi gate. No multi-element run; Phase C remains blocked.
+
 ## 0.6.82.40.2.18 - post-zone allocator trim revalidation - 2026-08-26
 
 - Freezes host-accepted `0.6.82.40.2.17` detail-spectrum staging optimization as the production predecessor.

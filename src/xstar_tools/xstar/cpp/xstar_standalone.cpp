@@ -23448,6 +23448,8 @@ void emit_controller_performance_instrumentation(
             << "V068233_DETAL3_ROWS_STREAMED=" << perf.detal3_rows_streamed_v068233 << "\n"
             << "V068233_DETAL4_ROWS_STREAMED=" << perf.detal4_rows_streamed_v068233 << "\n"
             << "V068233_SAVED_SHELLS_STREAMED=" << perf.saved_shells_streamed_v068233 << "\n"
+            << "V068240218_POST_ZONE_TRIM_MODE="
+            << post_zone_trim_mode_name_v068240218(post_zone_trim_mode_v068240218()) << "\n"
             << "V068240218_POST_ZONE_TRIM_HISTORICAL_CALLS="
             << perf.post_zone_trim_historical_calls_v068240218 << "\n"
             << "V068240218_POST_ZONE_TRIM_ELIDED_CALLS="
