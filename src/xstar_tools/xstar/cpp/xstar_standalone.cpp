@@ -260,6 +260,34 @@ struct RadialOwnerSampleV06824028 {
     std::uint64_t rss_minus_known_owner_bytes = 0u;
 };
 
+// 0.6.82.40.2.12: low-perturbation final-boundary memory samples.
+// Samples are retained in the performance object and emitted from the
+// normal summary path, independent of live-output routing.
+struct FinalBoundaryMemorySampleV068240212 {
+    bool valid = false;
+    std::uint64_t rss_bytes = 0u;
+    std::uint64_t process_peak_rss_bytes = 0u;
+    std::uint64_t heap_uordblks_bytes = 0u;
+    std::uint64_t heap_hblkhd_bytes = 0u;
+    std::uint64_t allocator_live_bytes = 0u;
+    std::uint64_t boundary_snapshot_capacity_bytes = 0u;
+    std::uint64_t call_start_primary_bytes = 0u;
+    std::uint64_t call_start_copy_bytes = 0u;
+    std::uint64_t call_start_total_bytes = 0u;
+    std::uint64_t controller_primary_bytes = 0u;
+    std::uint64_t controller_copy_bytes = 0u;
+    std::uint64_t controller_total_bytes = 0u;
+    std::uint64_t full_radial_bytes = 0u;
+    std::uint64_t fixed_evaluations_bytes = 0u;
+    std::uint64_t accepted_controller_bytes = 0u;
+    std::uint64_t line_luminosity_bytes = 0u;
+    std::uint64_t atdb_decoded_bytes = 0u;
+    std::uint64_t prepared_sidecar_bytes = 0u;
+    xstar_local_zone_internal::FixedLiveOwnerMemoryV06824028 fixed{};
+    std::uint64_t known_owner_bytes = 0u;
+    std::uint64_t heap_residual_bytes = 0u;
+};
+
 struct PerformanceInstrumentationV064890 {
     std::array<double,4> controller_call_seconds{{0.0,0.0,0.0,0.0}};
     std::array<std::uint64_t,4> controller_call_evaluations{{0u,0u,0u,0u}};
@@ -285,6 +313,15 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t call_start_peak_nonempty_workspaces_v068240211 = 0u;
     std::uint64_t call_start_final_capacity_bytes_v068240211 = 0u;
     bool call_start_compaction_enabled_v068240211 = false;
+    // 0.6.82.40.2.12 rolling call-start capacity reuse.
+    std::uint64_t call_start_recycle_events_v068240212 = 0u;
+    std::uint64_t call_start_recycled_bytes_v068240212 = 0u;
+    std::uint64_t call_start_peak_total_capacity_bytes_v068240212 = 0u;
+    std::uint64_t call_start_final_total_capacity_bytes_v068240212 = 0u;
+    std::uint64_t call_start_peak_nonempty_workspaces_v068240212 = 0u;
+    bool call_start_reuse_enabled_v068240212 = false;
+    bool final_boundary_diagnostics_enabled_v068240212 = false;
+    std::array<FinalBoundaryMemorySampleV068240212,5> final_boundary_samples_v068240212{};
     std::array<double,4> fixed_traversal_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_rate_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_element_seconds{{0.0,0.0,0.0,0.0}};
@@ -4070,6 +4107,19 @@ std::uint64_t release_call_start_workspace_payload_v068240211(CallStartWorkspace
     std::vector<double>().swap(w.global_bilevg);
     std::vector<double>().swap(w.global_rnisg);
     return before;
+}
+
+// 0.6.82.40.2.12: transfer vector ownership without deallocation.
+// The next call reuses the exact capacity, avoiding .2.11 allocator churn.
+void swap_call_start_workspace_payload_v068240212(
+    CallStartWorkspace& a, CallStartWorkspace& b) {
+    a.radiation_energy.swap(b.radiation_energy);
+    a.bremsa.swap(b.bremsa);
+    a.continuum_tau_in.swap(b.continuum_tau_in);
+    a.continuum_tau_out.swap(b.continuum_tau_out);
+    a.global_xilevg.swap(b.global_xilevg);
+    a.global_bilevg.swap(b.global_bilevg);
+    a.global_rnisg.swap(b.global_rnisg);
 }
 
 std::uint64_t call_start_workspaces_capacity_bytes_v068240211(
@@ -12685,6 +12735,13 @@ struct StandaloneControllerDataV67 {
     // v82 patch 5.15/5.16 diagnostic radial semantics.
     std::size_t physical_transport_intervals_completed = 0u;
     std::vector<CallStartWorkspace> call_start_workspaces;
+    // .2.12 rolling owner: exactly one reusable payload may live here
+    // between calls; indexed slots preserve call-number identity.
+    CallStartWorkspace call_start_recycle_workspace_v068240212;
+    std::uint64_t call_start_recycle_events_v068240212 = 0u;
+    std::uint64_t call_start_recycled_bytes_v068240212 = 0u;
+    std::uint64_t call_start_peak_total_capacity_bytes_v068240212 = 0u;
+    std::uint64_t call_start_peak_nonempty_workspaces_v068240212 = 0u;
     std::uint64_t call_start_release_events_v068240211 = 0u;
     std::uint64_t call_start_released_bytes_v068240211 = 0u;
     std::uint64_t call_start_peak_capacity_bytes_v068240211 = 0u;
@@ -13881,32 +13938,69 @@ bool call_start_workspace_compaction_enabled_v068240211(
     return !(disable && std::string(disable) == "1");
 }
 
-void compact_completed_call_start_workspaces_v068240211(
+bool call_start_workspace_reuse_enabled_v068240212(
+    const StandaloneControllerDataV67& data) {
+    if (!call_start_workspace_compaction_enabled_v068240211(data)) return false;
+    const char* disable = std::getenv("XSTAR_V068240212_DISABLE_CALL_START_REUSE");
+    return !(disable && std::string(disable) == "1");
+}
+
+std::uint64_t call_start_total_capacity_bytes_v068240212(
+    const StandaloneControllerDataV67& data) {
+    return call_start_workspaces_capacity_bytes_v068240211(data.call_start_workspaces) +
+        call_start_workspace_capacity_bytes_v068240211(
+            data.call_start_recycle_workspace_v068240212);
+}
+
+void record_call_start_recycle_v068240212(
+    StandaloneControllerDataV67& data, std::uint64_t bytes) {
+    if (!bytes) return;
+    ++data.call_start_recycle_events_v068240212;
+    data.call_start_recycled_bytes_v068240212 += bytes;
+    if (g_performance_v064890) {
+        ++g_performance_v064890->call_start_recycle_events_v068240212;
+        g_performance_v064890->call_start_recycled_bytes_v068240212 += bytes;
+    }
+}
+
+void recycle_completed_call_start_workspaces_v068240212(
     StandaloneControllerDataV67& data, std::size_t next_call_index) {
-    if (!call_start_workspace_compaction_enabled_v068240211(data)) return;
+    if (!call_start_workspace_reuse_enabled_v068240212(data)) return;
+    auto& recycle = data.call_start_recycle_workspace_v068240212;
+    if (call_start_workspace_capacity_bytes_v068240211(recycle) != 0u) {
+        // Defensive only: prepare_call_start_workspace normally empties the
+        // pool into the current slot before a fixed-state call starts.
+        release_call_start_workspace_payload_v068240211(recycle);
+    }
     if (next_call_index <= 1u) {
+        // New pass: move the prior pass terminal payload into the rolling pool.
         for (auto& w : data.call_start_workspaces) {
-            const auto released = release_call_start_workspace_payload_v068240211(w);
-            if (released) {
-                ++data.call_start_release_events_v068240211;
-                data.call_start_released_bytes_v068240211 += released;
-                if (g_performance_v064890) {
-                    ++g_performance_v064890->call_start_release_events_v068240211;
-                    g_performance_v064890->call_start_released_bytes_v068240211 += released;
+            const auto bytes = call_start_workspace_capacity_bytes_v068240211(w);
+            if (!bytes) continue;
+            if (call_start_workspace_capacity_bytes_v068240211(recycle) == 0u) {
+                swap_call_start_workspace_payload_v068240212(w, recycle);
+                record_call_start_recycle_v068240212(data, bytes);
+            } else {
+                const auto released = release_call_start_workspace_payload_v068240211(w);
+                if (released) {
+                    ++data.call_start_release_events_v068240211;
+                    data.call_start_released_bytes_v068240211 += released;
+                    if (g_performance_v064890) {
+                        ++g_performance_v064890->call_start_release_events_v068240211;
+                        g_performance_v064890->call_start_released_bytes_v068240211 += released;
+                    }
                 }
             }
         }
         return;
     }
     const std::size_t completed = next_call_index - 2u;
-    if (completed < data.call_start_workspaces.size()) {
-        const auto released = release_call_start_workspace_payload_v068240211(
-            data.call_start_workspaces[completed]);
-        if (released) {
-            ++data.call_start_release_events_v068240211;
-            data.call_start_released_bytes_v068240211 += released;
-        }
-    }
+    if (completed >= data.call_start_workspaces.size()) return;
+    auto& w = data.call_start_workspaces[completed];
+    const auto bytes = call_start_workspace_capacity_bytes_v068240211(w);
+    if (!bytes) return;
+    swap_call_start_workspace_payload_v068240212(w, recycle);
+    record_call_start_recycle_v068240212(data, bytes);
 }
 
 void update_call_start_workspace_peak_v068240211(StandaloneControllerDataV67& data) {
@@ -13919,6 +14013,15 @@ void update_call_start_workspace_peak_v068240211(StandaloneControllerDataV67& da
     }
     data.call_start_peak_nonempty_workspaces_v068240211 =
         std::max(data.call_start_peak_nonempty_workspaces_v068240211, nonempty);
+    const auto total_v068240212 = call_start_total_capacity_bytes_v068240212(data);
+    const std::uint64_t recycle_nonempty_v068240212 =
+        call_start_workspace_capacity_bytes_v068240211(
+            data.call_start_recycle_workspace_v068240212) != 0u ? 1u : 0u;
+    data.call_start_peak_total_capacity_bytes_v068240212 = std::max(
+        data.call_start_peak_total_capacity_bytes_v068240212, total_v068240212);
+    data.call_start_peak_nonempty_workspaces_v068240212 = std::max(
+        data.call_start_peak_nonempty_workspaces_v068240212,
+        nonempty + recycle_nonempty_v068240212);
     if (g_performance_v064890) {
         g_performance_v064890->call_start_peak_capacity_bytes_v068240211 = std::max(
             g_performance_v064890->call_start_peak_capacity_bytes_v068240211, bytes);
@@ -13927,6 +14030,16 @@ void update_call_start_workspace_peak_v068240211(StandaloneControllerDataV67& da
         g_performance_v064890->call_start_final_capacity_bytes_v068240211 = bytes;
         g_performance_v064890->call_start_compaction_enabled_v068240211 =
             call_start_workspace_compaction_enabled_v068240211(data);
+        g_performance_v064890->call_start_peak_total_capacity_bytes_v068240212 = std::max(
+            g_performance_v064890->call_start_peak_total_capacity_bytes_v068240212,
+            total_v068240212);
+        g_performance_v064890->call_start_peak_nonempty_workspaces_v068240212 = std::max(
+            g_performance_v064890->call_start_peak_nonempty_workspaces_v068240212,
+            nonempty + recycle_nonempty_v068240212);
+        g_performance_v064890->call_start_final_total_capacity_bytes_v068240212 =
+            total_v068240212;
+        g_performance_v064890->call_start_reuse_enabled_v068240212 =
+            call_start_workspace_reuse_enabled_v068240212(data);
     }
 }
 
@@ -13944,6 +14057,13 @@ void prepare_call_start_workspace(
         data.call_start_workspaces.resize(call_index);
     }
     auto& workspace = data.call_start_workspaces[call_index - 1u];
+    if (call_start_workspace_reuse_enabled_v068240212(data) &&
+        call_start_workspace_capacity_bytes_v068240211(workspace) == 0u &&
+        call_start_workspace_capacity_bytes_v068240211(
+            data.call_start_recycle_workspace_v068240212) != 0u) {
+        swap_call_start_workspace_payload_v068240212(
+            workspace, data.call_start_recycle_workspace_v068240212);
+    }
     if (call_index == 2u && data.global_workspace_initialized && !data.call2_entry_global_rnisg_retained) {
         data.call2_entry_global_rnisg = data.global_rnisg;
         data.call2_entry_global_rnisg_retained = true;
@@ -20021,15 +20141,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             return value && std::string(value) == "1";
         }();
         const bool final_boundary_diagnostics_v068240211 = [] {
-            const char* value = std::getenv("XSTAR_V068240211_FINAL_BOUNDARY_DIAGNOSTICS");
+            const char* value = std::getenv("XSTAR_V068240212_FINAL_BOUNDARY_DIAGNOSTICS");
             return value && std::string(value) == "1";
         }();
-        std::uint64_t boundary_candidate_rss_v068240211 = 0u;
-        std::uint64_t boundary_candidate_peak_rss_v068240211 = 0u;
-        std::uint64_t boundary_candidate_heap_uord_v068240211 = 0u;
-        std::uint64_t boundary_candidate_heap_hblk_v068240211 = 0u;
-        std::uint64_t boundary_candidate_call_start_v068240211 = 0u;
-        std::uint64_t boundary_candidate_full_radial_v068240211 = 0u;
+        if (g_performance_v064890) {
+            g_performance_v064890->final_boundary_diagnostics_enabled_v068240212 =
+                final_boundary_diagnostics_v068240211;
+        }
         std::vector<xstar_run_state::CompactRadialZoneStateV0682336>
             compact_radial_zones_v0682336;
         if (compact_radial_retention_v0682336) {
@@ -20044,30 +20162,71 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             g_performance_v064890->line_luminosity_accumulator_enabled_v0682338 =
                 compact_radial_retention_v0682336;
         }
-        auto sample_final_boundary_v068240211 = [&](
-                const char* phase, const StandaloneControllerDataV67& primary,
-                const StandaloneControllerDataV67* copied) {
-            if (!final_boundary_diagnostics_v068240211) return;
+        auto controller_workspace_capacity_v068240212 = [&](const StandaloneControllerDataV67& owner) {
+            const auto cap = [](const auto& values) -> std::uint64_t {
+                using Value = typename std::decay_t<decltype(values)>::value_type;
+                return static_cast<std::uint64_t>(values.capacity()) * sizeof(Value);
+            };
+            std::uint64_t bytes =
+                cap(owner.energy) + cap(owner.flux) + cap(owner.dsec_bremsa) +
+                cap(owner.source_tau_in) + cap(owner.source_tau_out) +
+                cap(owner.grid_tau_in) + cap(owner.grid_tau_out) +
+                cap(owner.grid_cont_tau_in) + cap(owner.grid_cont_tau_out) +
+                cap(owner.accumulated_zrems) + cap(owner.accumulated_zremso) +
+                cap(owner.accumulated_zremsz) + cap(owner.source_incident) +
+                cap(owner.line_tau_in) + cap(owner.line_tau_out) +
+                cap(owner.product_line_tau_in) + cap(owner.product_line_tau_out) +
+                cap(owner.product_rrc_tau_in) + cap(owner.product_rrc_tau_out) +
+                cap(owner.line_luminosity) + cap(owner.rrc_luminosity) +
+                cap(owner.pprint4_flinel_accumulator_v068229334) +
+                cap(owner.unsavd_rcem_v0682274) + cap(owner.unsavd_oplin_v0682274) +
+                cap(owner.unsavd_cemab_v0682274) + cap(owner.unsavd_cabab_v0682274) +
+                cap(owner.unsavd_opakab_v0682274) + cap(owner.unsavd_opakc_v0682274) +
+                cap(owner.unsavd_rccemis_v0682274) + cap(owner.global_xilevg) +
+                cap(owner.global_bilevg) + cap(owner.global_rnisg) +
+                cap(owner.call2_entry_global_rnisg) + cap(owner.population_global_level_index) +
+                cap(owner.global_terminal_continuum_role);
+            for (const auto& aliases : owner.population_global_level_aliases) bytes += cap(aliases);
+            for (const auto& roles : owner.population_global_level_terminal_roles) bytes += cap(roles);
+            return bytes;
+        };
+        auto sample_final_boundary_v068240212 = [&] (
+                std::size_t slot, const StandaloneControllerDataV67& primary,
+                const StandaloneControllerDataV67* copied,
+                const FixedDsecSnapshot* boundary) {
+            if (!final_boundary_diagnostics_v068240211 || !g_performance_v064890 || slot >= 5u) return;
+            auto& sample = g_performance_v064890->final_boundary_samples_v068240212[slot];
+            sample.valid = true;
+            sample.rss_bytes = current_rss_bytes_v068233();
+            sample.process_peak_rss_bytes = peak_rss_bytes_v068231();
             const auto heap = current_heap_snapshot_v0682352();
-            const std::uint64_t allocator_live = heap.uordblks + heap.hblkhd;
-            std::uint64_t call_start = call_start_workspaces_capacity_bytes_v068240211(
-                primary.call_start_workspaces);
-            if (copied) call_start += call_start_workspaces_capacity_bytes_v068240211(
-                copied->call_start_workspaces);
-            const std::uint64_t radial = radial_zones_memory_v0682332(whole.radial_zones).capacity;
-            const std::uint64_t known = call_start + radial;
-            const std::uint64_t residual = allocator_live > known ? allocator_live - known : 0u;
-            std::cout << "V068240211_FINAL_BOUNDARY_SAMPLE"
-                      << " PHASE=" << (phase ? phase : "UNKNOWN")
-                      << " RSS_BYTES=" << current_rss_bytes_v068233()
-                      << " PROCESS_PEAK_RSS_BYTES=" << peak_rss_bytes_v068231()
-                      << " HEAP_UORDBLKS_BYTES=" << heap.uordblks
-                      << " HEAP_HBLKHD_BYTES=" << heap.hblkhd
-                      << " ALLOCATOR_LIVE_BYTES=" << allocator_live
-                      << " CALL_START_BYTES=" << call_start
-                      << " FULL_RADIAL_BYTES=" << radial
-                      << " HEAP_MINUS_CALL_START_RADIAL_BYTES=" << residual
-                      << "\n";
+            sample.heap_uordblks_bytes = heap.uordblks;
+            sample.heap_hblkhd_bytes = heap.hblkhd;
+            sample.allocator_live_bytes = heap.uordblks + heap.hblkhd;
+            if (boundary) sample.boundary_snapshot_capacity_bytes = snapshot_memory_v068233(*boundary).capacity;
+            sample.call_start_primary_bytes = call_start_total_capacity_bytes_v068240212(primary);
+            sample.call_start_copy_bytes = copied ? call_start_total_capacity_bytes_v068240212(*copied) : 0u;
+            sample.call_start_total_bytes = sample.call_start_primary_bytes + sample.call_start_copy_bytes;
+            sample.controller_primary_bytes = controller_workspace_capacity_v068240212(primary);
+            sample.controller_copy_bytes = copied ? controller_workspace_capacity_v068240212(*copied) : 0u;
+            sample.controller_total_bytes = sample.controller_primary_bytes + sample.controller_copy_bytes;
+            sample.full_radial_bytes = radial_zones_memory_v0682332(whole.radial_zones).capacity;
+            sample.fixed_evaluations_bytes = static_cast<std::uint64_t>(whole.fixed_evaluations.capacity()) * sizeof(xstar_run_state::FixedEvaluationState);
+            for (const auto& eval : whole.fixed_evaluations) {
+                const auto one = fixed_evaluation_memory_v0682332(eval);
+                sample.fixed_evaluations_bytes += one.capacity > sizeof(xstar_run_state::FixedEvaluationState) ? one.capacity - sizeof(xstar_run_state::FixedEvaluationState) : 0u;
+            }
+            sample.accepted_controller_bytes = static_cast<std::uint64_t>(whole.accepted_controller_states.capacity()) * sizeof(xstar_run_state::AcceptedControllerState);
+            for (const auto& accepted : whole.accepted_controller_states) {
+                const auto one = fixed_evaluation_memory_v0682332(accepted.evaluation);
+                sample.accepted_controller_bytes += one.capacity > sizeof(xstar_run_state::FixedEvaluationState) ? one.capacity - sizeof(xstar_run_state::FixedEvaluationState) : 0u;
+            }
+            sample.line_luminosity_bytes = static_cast<std::uint64_t>(public_line_luminosity_v0682338.capacity()) * sizeof(double);
+            sample.atdb_decoded_bytes = g_performance_v064890->atdb_decoded_capacity_bytes_v068233;
+            sample.prepared_sidecar_bytes = g_performance_v064890->prepared_sidecar_capacity_bytes_v068233;
+            xstar_local_zone_internal::capture_fixed_live_owner_memory_v06824028(primary.fixed_context, sample.fixed);
+            sample.known_owner_bytes = sample.boundary_snapshot_capacity_bytes + sample.call_start_total_bytes + sample.controller_total_bytes + sample.full_radial_bytes + sample.fixed_evaluations_bytes + sample.accepted_controller_bytes + sample.line_luminosity_bytes + sample.atdb_decoded_bytes + sample.prepared_sidecar_bytes + sample.fixed.persistent_scratch_bytes + sample.fixed.last_source_workspace_capacity_bytes + sample.fixed.compact_record_capacity_bytes + sample.fixed.rich_record_capacity_bytes + sample.fixed.prepared_bound_free_capacity_bytes + sample.fixed.execution_plan_capacity_bytes + sample.fixed.retained_state_capacity_bytes;
+            sample.heap_residual_bytes = sample.allocator_live_bytes > sample.known_owner_bytes ? sample.allocator_live_bytes - sample.known_owner_bytes : 0u;
         };
 
         auto accumulate_public_line_luminosity_v0682338 = [&](
@@ -20470,7 +20629,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             production_zone_wait_before_call(call);
             const auto shared_zone_started_v0648110 = std::chrono::steady_clock::now();
             data.call_index = call;
-            compact_completed_call_start_workspaces_v068240211(data, call);
+            recycle_completed_call_start_workspaces_v068240212(data, call);
             prepare_call_start_workspace(data, call);
             if (call == 3u && data.reference_trajectory_mode) {
                 gate_sequence23_native_committed_state(data);
@@ -20686,17 +20845,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 ? evaluate_full_boundary(data, state, 0.0, boundary_radius_cm, 0u)
                 : evaluate_accepted_boundary(data, state, 0.0, boundary_radius_cm, 0u);
             const double boundary_elapsed_v0682402 = performance_elapsed_seconds(boundary_started_v064890);
-            if (final_boundary_diagnostics_v068240211) {
-                const auto heap_v068240211 = current_heap_snapshot_v0682352();
-                boundary_candidate_rss_v068240211 = current_rss_bytes_v068233();
-                boundary_candidate_peak_rss_v068240211 = peak_rss_bytes_v068231();
-                boundary_candidate_heap_uord_v068240211 = heap_v068240211.uordblks;
-                boundary_candidate_heap_hblk_v068240211 = heap_v068240211.hblkhd;
-                boundary_candidate_call_start_v068240211 =
-                    call_start_workspaces_capacity_bytes_v068240211(data.call_start_workspaces);
-                boundary_candidate_full_radial_v068240211 =
-                    radial_zones_memory_v0682332(whole.radial_zones).capacity;
-            }
             if (g_performance_v064890) {
                 g_performance_v064890->boundary_all_seconds_v0682402 += boundary_elapsed_v0682402;
                 if (fixed_controller_diagnostics_v06824028) {
@@ -20943,24 +21091,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     : source_predicate_v0648110);
             const bool done_after_zone_v0648110 = !continue_after_zone_v0648110;
             if (done_after_zone_v0648110) {
-                if (final_boundary_diagnostics_v068240211) {
-                    const std::uint64_t allocator_live_v068240211 =
-                        boundary_candidate_heap_uord_v068240211 + boundary_candidate_heap_hblk_v068240211;
-                    const std::uint64_t known_v068240211 =
-                        boundary_candidate_call_start_v068240211 + boundary_candidate_full_radial_v068240211;
-                    std::cout << "V068240211_FINAL_BOUNDARY_SAMPLE"
-                              << " PHASE=TERMINAL_AFTER_ACCEPTED_BOUNDARY"
-                              << " RSS_BYTES=" << boundary_candidate_rss_v068240211
-                              << " PROCESS_PEAK_RSS_BYTES=" << boundary_candidate_peak_rss_v068240211
-                              << " HEAP_UORDBLKS_BYTES=" << boundary_candidate_heap_uord_v068240211
-                              << " HEAP_HBLKHD_BYTES=" << boundary_candidate_heap_hblk_v068240211
-                              << " ALLOCATOR_LIVE_BYTES=" << allocator_live_v068240211
-                              << " CALL_START_BYTES=" << boundary_candidate_call_start_v068240211
-                              << " FULL_RADIAL_BYTES=" << boundary_candidate_full_radial_v068240211
-                              << " HEAP_MINUS_CALL_START_RADIAL_BYTES="
-                              << (allocator_live_v068240211 > known_v068240211 ? allocator_live_v068240211 - known_v068240211 : 0u)
-                              << "\n";
-                }
+                sample_final_boundary_v068240212(0u, data, nullptr, &boundary);
                 terminal_shell_entry_bremsa_v064883 = current_shell_entry_bremsa_v0648110;
                 terminal_transport_boundary_v82_patch520144 = boundary;
                 if (tabulated_density_v068226 || analytic_variable_density_v068226) {
@@ -21825,9 +21956,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // 61-event trajectory.  Evaluate on a copy of the controller
             // bookkeeping while sharing the native fixed-state context; seed
             // its call-start workspace from the live post-transport state.
-            sample_final_boundary_v068240211("BEFORE_CONTROLLER_COPY", data, nullptr);
+            sample_final_boundary_v068240212(1u, data, nullptr, nullptr);
             auto final_pprint_data = data;
-            sample_final_boundary_v068240211("AFTER_CONTROLLER_COPY", data, &final_pprint_data);
+            sample_final_boundary_v068240212(2u, data, &final_pprint_data, nullptr);
             // This is a production computation, not a reference-trajectory
             // replay.  Disable every source-oracle alignment/gate on the copy
             // so the final pprint state is derived only from the live native
@@ -21849,7 +21980,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             final_pprint_data.writing_final_snapshot = true;
             const std::size_t terminal_call_index_v0648110 = accepted_boundary_count_v0682334;
             prepare_call_start_workspace(final_pprint_data, terminal_call_index_v0648110);
-            sample_final_boundary_v068240211("AFTER_FINAL_WORKSPACE_PREPARE", data, &final_pprint_data);
+            sample_final_boundary_v068240212(3u, data, &final_pprint_data, nullptr);
             if (terminal_shell_entry_bremsa_v064883.size() != final_pprint_data.energy.size()) {
                 throw std::runtime_error("v0.6.48.8.3 terminal shell-entry bremsa was not retained");
             }
@@ -21883,7 +22014,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
                 current_radius_cm_v068227, 0u);
-            sample_final_boundary_v068240211("AFTER_FINAL_FIXED_EVALUATION", data, &final_pprint_data);
+            sample_final_boundary_v068240212(4u, data, &final_pprint_data, &final_pprint);
             if (final_thermal_diagnostic_requested) {
                 const auto parent = final_thermal_diagnostic_path.parent_path();
                 if (!parent.empty()) std::filesystem::create_directories(parent);
@@ -22599,6 +22730,13 @@ void emit_controller_performance_instrumentation(
             << "V068240211_CALL_START_PEAK_CAPACITY_BYTES=" << perf.call_start_peak_capacity_bytes_v068240211 << "\n"
             << "V068240211_CALL_START_PEAK_NONEMPTY_WORKSPACES=" << perf.call_start_peak_nonempty_workspaces_v068240211 << "\n"
             << "V068240211_CALL_START_FINAL_CAPACITY_BYTES=" << perf.call_start_final_capacity_bytes_v068240211 << "\n"
+            << "V068240212_CALL_START_REUSE_ENABLED=" << (perf.call_start_reuse_enabled_v068240212 ? "YES" : "NO") << "\n"
+            << "V068240212_CALL_START_RECYCLE_EVENTS=" << perf.call_start_recycle_events_v068240212 << "\n"
+            << "V068240212_CALL_START_RECYCLED_BYTES=" << perf.call_start_recycled_bytes_v068240212 << "\n"
+            << "V068240212_CALL_START_PEAK_TOTAL_CAPACITY_BYTES=" << perf.call_start_peak_total_capacity_bytes_v068240212 << "\n"
+            << "V068240212_CALL_START_PEAK_NONEMPTY_WORKSPACES=" << perf.call_start_peak_nonempty_workspaces_v068240212 << "\n"
+            << "V068240212_CALL_START_FINAL_TOTAL_CAPACITY_BYTES=" << perf.call_start_final_total_capacity_bytes_v068240212 << "\n"
+            << "V068240212_FINAL_BOUNDARY_DIAGNOSTICS_ENABLED=" << (perf.final_boundary_diagnostics_enabled_v068240212 ? "YES" : "NO") << "\n"
             << "V06824028_DIAGNOSTIC_MODE=FIXED_CONTROLLER_NON_EVALUATOR_AND_RADIAL_PEAK_OWNERS\n"
             << "V06824028_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
             << "V06824028_FIXED_EVALUATOR_SECONDS=" << perf.all_fixed_rate_seconds << "\n"
@@ -22987,6 +23125,44 @@ void emit_controller_performance_instrumentation(
                 out << "V06824022_CPP_PAIR_DT" << dt_v06824022 << "_RT" << rt_v06824022
                     << "_CALLS=" << calls_v06824022 << "\n";
             }
+        }
+        static constexpr std::array<const char*,5> final_boundary_phase_names_v068240212{{
+            "TERMINAL_AFTER_ACCEPTED_BOUNDARY", "BEFORE_CONTROLLER_COPY",
+            "AFTER_CONTROLLER_COPY", "AFTER_FINAL_WORKSPACE_PREPARE",
+            "AFTER_FINAL_FIXED_EVALUATION"}};
+        for (std::size_t i_v068240212 = 0u; i_v068240212 < final_boundary_phase_names_v068240212.size(); ++i_v068240212) {
+            const auto& sm = perf.final_boundary_samples_v068240212[i_v068240212];
+            if (!sm.valid) continue;
+            out << "V068240212_FINAL_BOUNDARY_SAMPLE"
+                << " PHASE=" << final_boundary_phase_names_v068240212[i_v068240212]
+                << " RSS_BYTES=" << sm.rss_bytes
+                << " PROCESS_PEAK_RSS_BYTES=" << sm.process_peak_rss_bytes
+                << " HEAP_UORDBLKS_BYTES=" << sm.heap_uordblks_bytes
+                << " HEAP_HBLKHD_BYTES=" << sm.heap_hblkhd_bytes
+                << " ALLOCATOR_LIVE_BYTES=" << sm.allocator_live_bytes
+                << " BOUNDARY_SNAPSHOT_BYTES=" << sm.boundary_snapshot_capacity_bytes
+                << " CALL_START_PRIMARY_BYTES=" << sm.call_start_primary_bytes
+                << " CALL_START_COPY_BYTES=" << sm.call_start_copy_bytes
+                << " CALL_START_TOTAL_BYTES=" << sm.call_start_total_bytes
+                << " CONTROLLER_PRIMARY_BYTES=" << sm.controller_primary_bytes
+                << " CONTROLLER_COPY_BYTES=" << sm.controller_copy_bytes
+                << " CONTROLLER_TOTAL_BYTES=" << sm.controller_total_bytes
+                << " FULL_RADIAL_BYTES=" << sm.full_radial_bytes
+                << " FIXED_EVALUATIONS_BYTES=" << sm.fixed_evaluations_bytes
+                << " ACCEPTED_CONTROLLER_BYTES=" << sm.accepted_controller_bytes
+                << " LINE_LUMINOSITY_BYTES=" << sm.line_luminosity_bytes
+                << " ATDB_DECODED_BYTES=" << sm.atdb_decoded_bytes
+                << " PREPARED_SIDECAR_BYTES=" << sm.prepared_sidecar_bytes
+                << " FIXED_PERSISTENT_SCRATCH_BYTES=" << sm.fixed.persistent_scratch_bytes
+                << " FIXED_LAST_SOURCE_WORKSPACE_BYTES=" << sm.fixed.last_source_workspace_capacity_bytes
+                << " FIXED_COMPACT_RECORD_BYTES=" << sm.fixed.compact_record_capacity_bytes
+                << " FIXED_RICH_RECORD_BYTES=" << sm.fixed.rich_record_capacity_bytes
+                << " FIXED_PREPARED_BOUND_FREE_BYTES=" << sm.fixed.prepared_bound_free_capacity_bytes
+                << " FIXED_EXECUTION_PLAN_BYTES=" << sm.fixed.execution_plan_capacity_bytes
+                << " FIXED_RETAINED_STATE_BYTES=" << sm.fixed.retained_state_capacity_bytes
+                << " KNOWN_OWNER_BYTES=" << sm.known_owner_bytes
+                << " HEAP_RESIDUAL_BYTES=" << sm.heap_residual_bytes
+                << "\n";
         }
         const std::uint64_t peak_rss_v068231 = peak_rss_bytes_v068231();
         out << "V068231_PERF_PEAK_RSS_BYTES=" << peak_rss_v068231 << "\n"

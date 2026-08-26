@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.82.40.2.12 - call-start rolling reuse and final-boundary transient hotfix - 2026-08-26
+
+- Host-test successor to `.40.2.11`; `.40.2.11` is not overwritten.
+- `.40.2.11` proved the production call-start lifetime diagnosis (`PEAK_NONEMPTY_WORKSPACES=1`, peak/final call-start capacity about 5 MB) and materially reduced low-xi RSS, but its swap-with-empty implementation caused allocator/page-fault churn and its normal release branch failed to mirror release counters into the performance summary.
+- Replaces per-zone deallocation with a single rolling `CallStartWorkspace` capacity owner. Completed call payload capacity is transferred by vector `swap` into the rolling owner and reused by the next indexed call slot; call-number/index semantics remain unchanged and reference trajectory/audit modes keep historical ownership.
+- Adds `XSTAR_V068240212_DISABLE_CALL_START_REUSE=1` as the explicit qualification fallback.
+- Adds correctly mirrored recycle-event/recycled-byte telemetry and total call-start capacity accounting.
+- Removes `.40.2.11` per-boundary RSS/heap polling; final-boundary diagnostics now take only five one-shot samples and retain them in the performance object for emission from the normal summary path.
+- Extends those five samples with controller-copy, fixed-live-owner, radial, line-luminosity, ATDB/sidecar, known-owner, and heap-residual bytes to isolate the remaining terminal transient.
+- Host runner continues all narrow cases for diagnostic-marker failures after science acceptance, writes aggregate CSV/JSON, compares RSS/runtime to the accepted `.40.2.6` uninstrumented baseline, and keeps broad Phase C blocked.
+- No scientific arithmetic, solver/controller decisions, accumulation order, public schema, ABI, or physical cutoff changes.
+
 ## 0.6.82.40.2.11 - call-start workspace ownership and final-boundary transient - 2026-08-26
 
 - Production optimization and narrow diagnostic successor to host-measured `.40.2.10`.
