@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.11 - call-start workspace ownership and final-boundary transient - 2026-08-26
+
+- Production optimization and narrow diagnostic successor to host-measured `.40.2.10`.
+- Generic production now releases the seven vector payloads of each completed `CallStartWorkspace` before preparing the next radial call. The call-index vector itself is retained, so source call numbering/index semantics are unchanged.
+- Reference trajectory and reference diagnostic/audit modes retain the historical full call-start workspaces exactly. `XSTAR_V068240211_DISABLE_CALL_START_COMPACTION=1` provides an explicit qualification fallback.
+- Adds release/peak telemetry proving the production path retains at most one non-empty call-start payload at a time and reporting released/capacity bytes.
+- Adds low-perturbation final-boundary memory sampling under `XSTAR_V068240211_FINAL_BOUNDARY_DIAGNOSTICS=1`: terminal accepted boundary, before/after the post-loop controller copy, after final workspace preparation, and after the final zero-thickness fixed evaluation.
+- Does not enable `.40.2.10` deep per-callback owner sampling; the host runner therefore preserves useful timing while isolating the remaining terminal heap residual.
+- Runs only controlled H+He+C `rlogxi=-3,+1,+4`; science/STEP compare to Phase-A FORTRAN and `.40.2.6` is reused as the uninstrumented C++ timing/RSS context. Broad Phase C remains blocked.
+- No scientific arithmetic, solver/controller decision, source accumulation order, public output schema, ABI, or physical cutoff changes.
+
 ## 0.6.82.40.2.10 - fixed recompute transient and callback wrapper diagnostics - 2026-08-26
 
 - Diagnostic-only successor to the host-measured `.40.2.9`; no scientific arithmetic, solver/controller decision, accumulation-order, ABI, publication-schema, or ownership-lifetime change.

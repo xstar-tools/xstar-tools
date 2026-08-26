@@ -260,39 +260,6 @@ struct RadialOwnerSampleV06824028 {
     std::uint64_t rss_minus_known_owner_bytes = 0u;
 };
 
-struct FixedRecomputeOwnerSampleV068240210 {
-    std::uint64_t sample_index = 0u;
-    std::uint64_t pass_index = 0u;
-    std::uint64_t zone_ordinal = 0u;
-    std::uint64_t source_sequence = 0u;
-    std::uint64_t call_index = 0u;
-    std::uint64_t evaluation_index = 0u;
-    std::string phase;
-    std::uint64_t rss_bytes = 0u;
-    std::uint64_t process_peak_rss_bytes = 0u;
-    std::uint64_t heap_uordblks = 0u;
-    std::uint64_t heap_hblkhd = 0u;
-    std::uint64_t heap_fordblks = 0u;
-    std::uint64_t allocator_live_bytes = 0u;
-    std::uint64_t current_snapshot_capacity_bytes = 0u;
-    std::uint64_t previous_iteration_capacity_bytes = 0u;
-    std::uint64_t retained_snapshot_history_capacity_bytes = 0u;
-    std::uint64_t controller_workspace_capacity_bytes = 0u;
-    std::uint64_t call_start_workspace_capacity_bytes = 0u;
-    std::uint64_t atdb_decoded_capacity_bytes = 0u;
-    std::uint64_t prepared_sidecar_capacity_bytes = 0u;
-    std::uint64_t compact_radial_capacity_bytes = 0u;
-    std::uint64_t full_radial_capacity_bytes = 0u;
-    std::uint64_t publication_retained_capacity_bytes = 0u;
-    std::uint64_t final_snapshot_capacity_bytes = 0u;
-    std::uint64_t line_luminosity_capacity_bytes = 0u;
-    xstar_local_zone_internal::FixedLiveOwnerMemoryV06824028 fixed{};
-    std::uint64_t known_owner_capacity_bytes = 0u;
-    std::uint64_t heap_minus_known_owner_bytes = 0u;
-    std::uint64_t rss_minus_allocator_live_bytes = 0u;
-    std::uint64_t rss_minus_known_owner_bytes = 0u;
-};
-
 struct PerformanceInstrumentationV064890 {
     std::array<double,4> controller_call_seconds{{0.0,0.0,0.0,0.0}};
     std::array<std::uint64_t,4> controller_call_evaluations{{0u,0u,0u,0u}};
@@ -311,19 +278,13 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t boundary_fixed_calls_v06824028 = 0u;
     std::vector<RadialOwnerSampleV06824028> radial_owner_samples_v06824028;
     std::size_t radial_owner_peak_index_v06824028 = std::numeric_limits<std::size_t>::max();
-    // 0.6.82.40.2.10: diagnostic-only DSEC callback split and fixed-recompute
-    // transient owner samples.  Scientific state never reads these fields.
-    double dsec_core_orchestration_seconds_v068240210 = 0.0;
-    double dsec_callback_seconds_v068240210 = 0.0;
-    double dsec_callback_fixed_seconds_v068240210 = 0.0;
-    double dsec_callback_wrapper_seconds_v068240210 = 0.0;
-    double callback_snapshot_input_seconds_v068240210 = 0.0;
-    double callback_pre_engine_binding_seconds_v068240210 = 0.0;
-    double callback_post_engine_seconds_v068240210 = 0.0;
-    std::uint64_t callback_count_v068240210 = 0u;
-    std::vector<FixedRecomputeOwnerSampleV068240210> fixed_recompute_owner_samples_v068240210;
-    std::size_t fixed_recompute_rss_peak_index_v068240210 = std::numeric_limits<std::size_t>::max();
-    std::size_t fixed_recompute_heap_peak_index_v068240210 = std::numeric_limits<std::size_t>::max();
+    // 0.6.82.40.2.11 production call-start lifetime telemetry.
+    std::uint64_t call_start_release_events_v068240211 = 0u;
+    std::uint64_t call_start_released_bytes_v068240211 = 0u;
+    std::uint64_t call_start_peak_capacity_bytes_v068240211 = 0u;
+    std::uint64_t call_start_peak_nonempty_workspaces_v068240211 = 0u;
+    std::uint64_t call_start_final_capacity_bytes_v068240211 = 0u;
+    bool call_start_compaction_enabled_v068240211 = false;
     std::array<double,4> fixed_traversal_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_rate_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_element_seconds{{0.0,0.0,0.0,0.0}};
@@ -4086,6 +4047,37 @@ struct CallStartWorkspace {
     std::vector<double> global_bilevg;
     std::vector<double> global_rnisg;
 };
+
+// 0.6.82.40.2.11: production only needs the current call-start payload.
+// Historical full payloads were retained by call number and grew ~4.76 MiB
+// per low-xi radial zone. Reference-trajectory/audit modes keep the old
+// lifetime exactly; generic production releases completed payloads.
+std::uint64_t call_start_workspace_capacity_bytes_v068240211(const CallStartWorkspace& w) {
+    return static_cast<std::uint64_t>(
+        w.radiation_energy.capacity() + w.bremsa.capacity() +
+        w.continuum_tau_in.capacity() + w.continuum_tau_out.capacity() +
+        w.global_xilevg.capacity() + w.global_bilevg.capacity() +
+        w.global_rnisg.capacity()) * sizeof(double);
+}
+
+std::uint64_t release_call_start_workspace_payload_v068240211(CallStartWorkspace& w) {
+    const std::uint64_t before = call_start_workspace_capacity_bytes_v068240211(w);
+    std::vector<double>().swap(w.radiation_energy);
+    std::vector<double>().swap(w.bremsa);
+    std::vector<double>().swap(w.continuum_tau_in);
+    std::vector<double>().swap(w.continuum_tau_out);
+    std::vector<double>().swap(w.global_xilevg);
+    std::vector<double>().swap(w.global_bilevg);
+    std::vector<double>().swap(w.global_rnisg);
+    return before;
+}
+
+std::uint64_t call_start_workspaces_capacity_bytes_v068240211(
+    const std::vector<CallStartWorkspace>& workspaces) {
+    std::uint64_t total = static_cast<std::uint64_t>(workspaces.capacity()) * sizeof(CallStartWorkspace);
+    for (const auto& w : workspaces) total += call_start_workspace_capacity_bytes_v068240211(w);
+    return total;
+}
 
 struct RuntimeStateWorkspace {
     int call_index = 0;
@@ -12693,6 +12685,10 @@ struct StandaloneControllerDataV67 {
     // v82 patch 5.15/5.16 diagnostic radial semantics.
     std::size_t physical_transport_intervals_completed = 0u;
     std::vector<CallStartWorkspace> call_start_workspaces;
+    std::uint64_t call_start_release_events_v068240211 = 0u;
+    std::uint64_t call_start_released_bytes_v068240211 = 0u;
+    std::uint64_t call_start_peak_capacity_bytes_v068240211 = 0u;
+    std::uint64_t call_start_peak_nonempty_workspaces_v068240211 = 0u;
     std::vector<double> global_xilevg;
     std::vector<double> global_bilevg;
     std::vector<double> global_rnisg;
@@ -12781,161 +12777,10 @@ struct StandaloneControllerDataV67 {
     std::string last_error;
     // v82 patch 5.16: fail-closed diagnostic full-trajectory continuation.
     bool diagnostic_full_trajectory_continue = false;
-    // 0.6.82.40.2.10 diagnostic enablement is captured once before the radial
-    // loop so wrapper timing does not repeatedly query the process environment.
-    bool fixed_recompute_diagnostics_v068240210 = false;
     bool diagnostic_first_failure_latched = false;
     std::size_t diagnostic_first_failure_sequence = 0u;
     std::string diagnostic_first_failure_reason;
 };
-
-std::uint64_t call_start_workspace_capacity_v068240210(const CallStartWorkspace& workspace) {
-    const auto cap = [](const auto& values) -> std::uint64_t {
-        using Value = typename std::decay_t<decltype(values)>::value_type;
-        return static_cast<std::uint64_t>(values.capacity()) * sizeof(Value);
-    };
-    return cap(workspace.radiation_energy) + cap(workspace.bremsa) +
-        cap(workspace.continuum_tau_in) + cap(workspace.continuum_tau_out) +
-        cap(workspace.global_xilevg) + cap(workspace.global_bilevg) +
-        cap(workspace.global_rnisg);
-}
-
-std::uint64_t standalone_controller_workspace_capacity_v068240210(
-    const StandaloneControllerDataV67& data) {
-    const auto cap = [](const auto& values) -> std::uint64_t {
-        using Value = typename std::decay_t<decltype(values)>::value_type;
-        return static_cast<std::uint64_t>(values.capacity()) * sizeof(Value);
-    };
-    std::uint64_t bytes = 0u;
-#define XSTAR_ADD_CONTROLLER_VECTOR_V068240210(name) bytes += cap(data.name)
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(energy);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(flux);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(dsec_bremsa);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(source_tau_in);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(source_tau_out);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(line_tau_in);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(line_tau_out);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(product_line_tau_in);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(product_line_tau_out);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(product_rrc_tau_in);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(product_rrc_tau_out);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(line_luminosity);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(rrc_luminosity);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(grid_tau_in);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(grid_tau_out);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(grid_cont_tau_in);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(grid_cont_tau_out);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(accumulated_zrems);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(accumulated_zremso);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(accumulated_zremsz);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(source_incident);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(pprint4_flinel_accumulator_v068229334);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(unsavd_rcem_v0682274);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(unsavd_oplin_v0682274);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(unsavd_cemab_v0682274);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(unsavd_cabab_v0682274);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(unsavd_opakab_v0682274);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(unsavd_opakc_v0682274);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(unsavd_rccemis_v0682274);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(global_xilevg);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(global_bilevg);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(global_rnisg);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(population_global_level_index);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(global_terminal_continuum_role);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(call2_entry_global_rnisg);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(sequence58_native_projected_global_xilevg);
-    XSTAR_ADD_CONTROLLER_VECTOR_V068240210(call1_current_input_global_xilevg);
-#undef XSTAR_ADD_CONTROLLER_VECTOR_V068240210
-    for (const auto& aliases : data.population_global_level_aliases) bytes += cap(aliases);
-    for (const auto& roles : data.population_global_level_terminal_roles) bytes += cap(roles);
-    return bytes;
-}
-
-void sample_fixed_recompute_owner_v068240210(
-    StandaloneControllerDataV67& data,
-    const FixedDsecSnapshot& snapshot,
-    const char* phase) {
-    if (!data.fixed_recompute_diagnostics_v068240210 || !g_performance_v064890) return;
-    auto& perf = *g_performance_v064890;
-    FixedRecomputeOwnerSampleV068240210 sample;
-    sample.sample_index = perf.fixed_recompute_owner_samples_v068240210.size() + 1u;
-    sample.pass_index = data.radial_pass_index_v068227;
-    sample.zone_ordinal = data.call_index;
-    sample.source_sequence = snapshot.sequence;
-    sample.call_index = snapshot.call_index;
-    sample.evaluation_index = snapshot.evaluation_index;
-    sample.phase = phase ? phase : "UNKNOWN";
-    sample.rss_bytes = current_rss_bytes_v068233();
-    sample.process_peak_rss_bytes = peak_rss_bytes_v068231();
-    const auto heap = current_heap_snapshot_v0682352();
-    sample.heap_uordblks = heap.uordblks;
-    sample.heap_hblkhd = heap.hblkhd;
-    sample.heap_fordblks = heap.fordblks;
-    sample.allocator_live_bytes = heap.uordblks + heap.hblkhd;
-    sample.current_snapshot_capacity_bytes = snapshot_memory_v068233(snapshot).capacity;
-    sample.previous_iteration_capacity_bytes = snapshot_memory_v068233(data.last_iteration).capacity;
-    sample.retained_snapshot_history_capacity_bytes = final_snapshots_memory_v0682332(data.snapshots).capacity;
-    sample.controller_workspace_capacity_bytes = standalone_controller_workspace_capacity_v068240210(data);
-    sample.call_start_workspace_capacity_bytes =
-        static_cast<std::uint64_t>(data.call_start_workspaces.capacity()) * sizeof(CallStartWorkspace);
-    for (const auto& workspace : data.call_start_workspaces)
-        sample.call_start_workspace_capacity_bytes += call_start_workspace_capacity_v068240210(workspace);
-    sample.atdb_decoded_capacity_bytes = perf.atdb_decoded_capacity_bytes_v068233;
-    sample.prepared_sidecar_capacity_bytes = perf.prepared_sidecar_capacity_bytes_v068233;
-    sample.compact_radial_capacity_bytes = perf.compact_radial_zones_current_capacity_bytes_v0682336;
-    sample.full_radial_capacity_bytes = perf.radial_zones_current_capacity_bytes_v0682332;
-    sample.publication_retained_capacity_bytes = perf.publication_retained_current_capacity_bytes_v068233;
-    sample.final_snapshot_capacity_bytes = std::max(
-        perf.final_snapshots_current_capacity_bytes_v0682332,
-        perf.final_snapshots_current_capacity_bytes_v0682334);
-    sample.line_luminosity_capacity_bytes = perf.line_luminosity_capacity_bytes_v0682338;
-    xstar_local_zone_internal::capture_fixed_live_owner_memory_v06824028(
-        data.fixed_context, sample.fixed);
-    const std::uint64_t fixed_owner_bytes =
-        sample.fixed.persistent_scratch_bytes +
-        sample.fixed.last_source_workspace_capacity_bytes +
-        sample.fixed.compact_record_capacity_bytes +
-        sample.fixed.rich_record_capacity_bytes +
-        sample.fixed.prepared_bound_free_capacity_bytes +
-        sample.fixed.execution_plan_capacity_bytes +
-        sample.fixed.retained_state_capacity_bytes +
-        sample.fixed.element_diagnostic_inline_capacity_bytes +
-        sample.fixed.element_diagnostic_nested_capacity_bytes +
-        sample.fixed.detail_publication_capacity_bytes +
-        sample.fixed.continuum_diagnostic_capacity_bytes +
-        sample.fixed.thermal_diagonal_capacity_bytes;
-    sample.known_owner_capacity_bytes =
-        sample.current_snapshot_capacity_bytes +
-        sample.previous_iteration_capacity_bytes +
-        sample.retained_snapshot_history_capacity_bytes +
-        sample.controller_workspace_capacity_bytes +
-        sample.call_start_workspace_capacity_bytes +
-        sample.atdb_decoded_capacity_bytes +
-        sample.prepared_sidecar_capacity_bytes +
-        sample.compact_radial_capacity_bytes +
-        sample.full_radial_capacity_bytes +
-        sample.publication_retained_capacity_bytes +
-        sample.final_snapshot_capacity_bytes +
-        sample.line_luminosity_capacity_bytes + fixed_owner_bytes;
-    sample.heap_minus_known_owner_bytes = sample.allocator_live_bytes > sample.known_owner_capacity_bytes
-        ? sample.allocator_live_bytes - sample.known_owner_capacity_bytes : 0u;
-    sample.rss_minus_allocator_live_bytes = sample.rss_bytes > sample.allocator_live_bytes
-        ? sample.rss_bytes - sample.allocator_live_bytes : 0u;
-    sample.rss_minus_known_owner_bytes = sample.rss_bytes > sample.known_owner_capacity_bytes
-        ? sample.rss_bytes - sample.known_owner_capacity_bytes : 0u;
-    perf.fixed_recompute_owner_samples_v068240210.push_back(std::move(sample));
-    const std::size_t index = perf.fixed_recompute_owner_samples_v068240210.size() - 1u;
-    if (perf.fixed_recompute_rss_peak_index_v068240210 == std::numeric_limits<std::size_t>::max() ||
-        perf.fixed_recompute_owner_samples_v068240210[index].rss_bytes >=
-            perf.fixed_recompute_owner_samples_v068240210[perf.fixed_recompute_rss_peak_index_v068240210].rss_bytes) {
-        perf.fixed_recompute_rss_peak_index_v068240210 = index;
-    }
-    if (perf.fixed_recompute_heap_peak_index_v068240210 == std::numeric_limits<std::size_t>::max() ||
-        perf.fixed_recompute_owner_samples_v068240210[index].allocator_live_bytes >=
-            perf.fixed_recompute_owner_samples_v068240210[perf.fixed_recompute_heap_peak_index_v068240210].allocator_live_bytes) {
-        perf.fixed_recompute_heap_peak_index_v068240210 = index;
-    }
-}
 
 
 // Historical 0.6.82.27.4 source-order marker retained for its static gate:
@@ -14029,6 +13874,62 @@ void fill_standalone_input(
     }
 }
 
+bool call_start_workspace_compaction_enabled_v068240211(
+    const StandaloneControllerDataV67& data) {
+    if (data.reference_trajectory_mode || data.reference_diagnostics_enabled) return false;
+    const char* disable = std::getenv("XSTAR_V068240211_DISABLE_CALL_START_COMPACTION");
+    return !(disable && std::string(disable) == "1");
+}
+
+void compact_completed_call_start_workspaces_v068240211(
+    StandaloneControllerDataV67& data, std::size_t next_call_index) {
+    if (!call_start_workspace_compaction_enabled_v068240211(data)) return;
+    if (next_call_index <= 1u) {
+        for (auto& w : data.call_start_workspaces) {
+            const auto released = release_call_start_workspace_payload_v068240211(w);
+            if (released) {
+                ++data.call_start_release_events_v068240211;
+                data.call_start_released_bytes_v068240211 += released;
+                if (g_performance_v064890) {
+                    ++g_performance_v064890->call_start_release_events_v068240211;
+                    g_performance_v064890->call_start_released_bytes_v068240211 += released;
+                }
+            }
+        }
+        return;
+    }
+    const std::size_t completed = next_call_index - 2u;
+    if (completed < data.call_start_workspaces.size()) {
+        const auto released = release_call_start_workspace_payload_v068240211(
+            data.call_start_workspaces[completed]);
+        if (released) {
+            ++data.call_start_release_events_v068240211;
+            data.call_start_released_bytes_v068240211 += released;
+        }
+    }
+}
+
+void update_call_start_workspace_peak_v068240211(StandaloneControllerDataV67& data) {
+    const auto bytes = call_start_workspaces_capacity_bytes_v068240211(data.call_start_workspaces);
+    data.call_start_peak_capacity_bytes_v068240211 =
+        std::max(data.call_start_peak_capacity_bytes_v068240211, bytes);
+    std::uint64_t nonempty = 0u;
+    for (const auto& w : data.call_start_workspaces) {
+        if (call_start_workspace_capacity_bytes_v068240211(w) != 0u) ++nonempty;
+    }
+    data.call_start_peak_nonempty_workspaces_v068240211 =
+        std::max(data.call_start_peak_nonempty_workspaces_v068240211, nonempty);
+    if (g_performance_v064890) {
+        g_performance_v064890->call_start_peak_capacity_bytes_v068240211 = std::max(
+            g_performance_v064890->call_start_peak_capacity_bytes_v068240211, bytes);
+        g_performance_v064890->call_start_peak_nonempty_workspaces_v068240211 = std::max(
+            g_performance_v064890->call_start_peak_nonempty_workspaces_v068240211, nonempty);
+        g_performance_v064890->call_start_final_capacity_bytes_v068240211 = bytes;
+        g_performance_v064890->call_start_compaction_enabled_v068240211 =
+            call_start_workspace_compaction_enabled_v068240211(data);
+    }
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Build call start workspace from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
@@ -14060,6 +13961,7 @@ void prepare_call_start_workspace(
         workspace.global_bilevg.clear();
         workspace.global_rnisg.clear();
     }
+    update_call_start_workspace_peak_v068240211(data);
 }
 
 struct VectorAuditV82Patch4 {
@@ -16705,9 +16607,6 @@ int standalone_iteration_evaluator(
     }
     try {
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
-        const bool wrapper_diag_v068240210 = data->fixed_recompute_diagnostics_v068240210 &&
-            g_performance_v064890 != nullptr;
-        const auto callback_started_v068240210 = std::chrono::steady_clock::now();
         FixedDsecSnapshot snapshot = make_iteration_snapshot(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
             std::cerr << "V048746255172582_EVALUATION_BEGIN=" << snapshot.sequence
@@ -16729,11 +16628,6 @@ int standalone_iteration_evaluator(
             (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
                 ? input.dsec_covering_fraction : input.covering_fraction;
         fill_continuum_shape(snapshot, input, data->energy);
-        const auto snapshot_input_done_v068240210 = std::chrono::steady_clock::now();
-        if (wrapper_diag_v068240210) {
-            g_performance_v064890->callback_snapshot_input_seconds_v068240210 +=
-                std::chrono::duration<double>(snapshot_input_done_v068240210 - callback_started_v068240210).count();
-        }
         // v0.6.48.9.4.1: the accepted-boundary workspace cannot be rebuilt
         // from an ordinary deferred DSEC snapshot because calc_emis_all's
         // selected bound-free/RRC replay and writer-facing line-emission
@@ -16881,20 +16775,9 @@ int standalone_iteration_evaluator(
             ::setenv("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR",
                      fe_matrix_diag_root_v06823083, 1);
         }
-        const auto fixed_engine_started_v068240210 = std::chrono::steady_clock::now();
-        if (wrapper_diag_v068240210) {
-            g_performance_v064890->callback_pre_engine_binding_seconds_v068240210 +=
-                std::chrono::duration<double>(fixed_engine_started_v068240210 - snapshot_input_done_v068240210).count();
-        }
         const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
             data->fixed_context, &input, &output, &source, &data->cumulative_stats,
             message.data(), message.size());
-        const auto fixed_engine_done_v068240210 = std::chrono::steady_clock::now();
-        if (wrapper_diag_v068240210) {
-            ++g_performance_v064890->callback_count_v068240210;
-            sample_fixed_recompute_owner_v068240210(
-                *data, snapshot, "dsec_after_fixed_engine");
-        }
         const auto restore_env_v06823083 = [](const char* name,
                                                const std::pair<bool,std::string>& saved) {
             if (saved.first) ::setenv(name, saved.second.c_str(), 1);
@@ -17491,13 +17374,6 @@ int standalone_iteration_evaluator(
                 data->snapshots.push_back(lightweight_snapshot(snapshot));
             }
         }
-        if (wrapper_diag_v068240210) {
-            const auto postprocess_done_v068240210 = std::chrono::steady_clock::now();
-            g_performance_v064890->callback_post_engine_seconds_v068240210 +=
-                std::chrono::duration<double>(postprocess_done_v068240210 - fixed_engine_done_v068240210).count();
-            sample_fixed_recompute_owner_v068240210(
-                *data, snapshot, "dsec_after_postprocess");
-        }
         data->last_iteration = std::move(snapshot);
         evaluation->hmctot = output.hmctot;
         evaluation->elcter = output.elcter;
@@ -17851,10 +17727,6 @@ FixedDsecSnapshot evaluate_full_boundary(
     const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
         data.fixed_context, &input, &output, &source, &data.cumulative_stats,
         message.data(), message.size());
-    if (data.fixed_recompute_diagnostics_v068240210) {
-        sample_fixed_recompute_owner_v068240210(
-            data, snapshot, "boundary_after_fixed_engine");
-    }
     if (rc != 0) throw std::runtime_error(std::string("accepted boundary evaluation failed: ") + message.data());
     if (g_performance_v064890) {
         const auto rss_v06823611 = current_rss_bytes_v068233();
@@ -20148,11 +20020,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             const char* value = std::getenv("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS");
             return value && std::string(value) == "1";
         }();
-        const bool fixed_recompute_diagnostics_v068240210 = [] {
-            const char* value = std::getenv("XSTAR_FIXED_RECOMPUTE_DIAGNOSTICS");
+        const bool final_boundary_diagnostics_v068240211 = [] {
+            const char* value = std::getenv("XSTAR_V068240211_FINAL_BOUNDARY_DIAGNOSTICS");
             return value && std::string(value) == "1";
         }();
-        data.fixed_recompute_diagnostics_v068240210 = fixed_recompute_diagnostics_v068240210;
+        std::uint64_t boundary_candidate_rss_v068240211 = 0u;
+        std::uint64_t boundary_candidate_peak_rss_v068240211 = 0u;
+        std::uint64_t boundary_candidate_heap_uord_v068240211 = 0u;
+        std::uint64_t boundary_candidate_heap_hblk_v068240211 = 0u;
+        std::uint64_t boundary_candidate_call_start_v068240211 = 0u;
+        std::uint64_t boundary_candidate_full_radial_v068240211 = 0u;
         std::vector<xstar_run_state::CompactRadialZoneStateV0682336>
             compact_radial_zones_v0682336;
         if (compact_radial_retention_v0682336) {
@@ -20167,6 +20044,32 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             g_performance_v064890->line_luminosity_accumulator_enabled_v0682338 =
                 compact_radial_retention_v0682336;
         }
+        auto sample_final_boundary_v068240211 = [&](
+                const char* phase, const StandaloneControllerDataV67& primary,
+                const StandaloneControllerDataV67* copied) {
+            if (!final_boundary_diagnostics_v068240211) return;
+            const auto heap = current_heap_snapshot_v0682352();
+            const std::uint64_t allocator_live = heap.uordblks + heap.hblkhd;
+            std::uint64_t call_start = call_start_workspaces_capacity_bytes_v068240211(
+                primary.call_start_workspaces);
+            if (copied) call_start += call_start_workspaces_capacity_bytes_v068240211(
+                copied->call_start_workspaces);
+            const std::uint64_t radial = radial_zones_memory_v0682332(whole.radial_zones).capacity;
+            const std::uint64_t known = call_start + radial;
+            const std::uint64_t residual = allocator_live > known ? allocator_live - known : 0u;
+            std::cout << "V068240211_FINAL_BOUNDARY_SAMPLE"
+                      << " PHASE=" << (phase ? phase : "UNKNOWN")
+                      << " RSS_BYTES=" << current_rss_bytes_v068233()
+                      << " PROCESS_PEAK_RSS_BYTES=" << peak_rss_bytes_v068231()
+                      << " HEAP_UORDBLKS_BYTES=" << heap.uordblks
+                      << " HEAP_HBLKHD_BYTES=" << heap.hblkhd
+                      << " ALLOCATOR_LIVE_BYTES=" << allocator_live
+                      << " CALL_START_BYTES=" << call_start
+                      << " FULL_RADIAL_BYTES=" << radial
+                      << " HEAP_MINUS_CALL_START_RADIAL_BYTES=" << residual
+                      << "\n";
+        };
+
         auto accumulate_public_line_luminosity_v0682338 = [&](
                 const FixedDsecSnapshot& snapshot, std::size_t radial_zero_index,
                 double radius_cm, double current_depth_cm, double next_depth_cm) {
@@ -20567,6 +20470,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             production_zone_wait_before_call(call);
             const auto shared_zone_started_v0648110 = std::chrono::steady_clock::now();
             data.call_index = call;
+            compact_completed_call_start_workspaces_v068240211(data, call);
             prepare_call_start_workspace(data, call);
             if (call == 3u && data.reference_trajectory_mode) {
                 gate_sequence23_native_committed_state(data);
@@ -20681,18 +20585,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                         0.0, controller_call_elapsed_v0682402 - fixed_delta_v06824028);
                     g_performance_v064890->controller_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
                 }
-                if (fixed_recompute_diagnostics_v068240210) {
-                    const double fixed_delta_v068240210 = std::max(
-                        0.0, data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds);
-                    g_performance_v064890->dsec_core_orchestration_seconds_v068240210 +=
-                        std::max(0.0, stats.orchestration_seconds);
-                    g_performance_v064890->dsec_callback_seconds_v068240210 +=
-                        std::max(0.0, stats.callback_seconds);
-                    g_performance_v064890->dsec_callback_fixed_seconds_v068240210 +=
-                        fixed_delta_v068240210;
-                    g_performance_v064890->dsec_callback_wrapper_seconds_v068240210 +=
-                        std::max(0.0, stats.callback_seconds - fixed_delta_v068240210);
-                }
             }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 const std::size_t slot = call - 1u;
@@ -20794,6 +20686,17 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 ? evaluate_full_boundary(data, state, 0.0, boundary_radius_cm, 0u)
                 : evaluate_accepted_boundary(data, state, 0.0, boundary_radius_cm, 0u);
             const double boundary_elapsed_v0682402 = performance_elapsed_seconds(boundary_started_v064890);
+            if (final_boundary_diagnostics_v068240211) {
+                const auto heap_v068240211 = current_heap_snapshot_v0682352();
+                boundary_candidate_rss_v068240211 = current_rss_bytes_v068233();
+                boundary_candidate_peak_rss_v068240211 = peak_rss_bytes_v068231();
+                boundary_candidate_heap_uord_v068240211 = heap_v068240211.uordblks;
+                boundary_candidate_heap_hblk_v068240211 = heap_v068240211.hblkhd;
+                boundary_candidate_call_start_v068240211 =
+                    call_start_workspaces_capacity_bytes_v068240211(data.call_start_workspaces);
+                boundary_candidate_full_radial_v068240211 =
+                    radial_zones_memory_v0682332(whole.radial_zones).capacity;
+            }
             if (g_performance_v064890) {
                 g_performance_v064890->boundary_all_seconds_v0682402 += boundary_elapsed_v0682402;
                 if (fixed_controller_diagnostics_v06824028) {
@@ -21040,6 +20943,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     : source_predicate_v0648110);
             const bool done_after_zone_v0648110 = !continue_after_zone_v0648110;
             if (done_after_zone_v0648110) {
+                if (final_boundary_diagnostics_v068240211) {
+                    const std::uint64_t allocator_live_v068240211 =
+                        boundary_candidate_heap_uord_v068240211 + boundary_candidate_heap_hblk_v068240211;
+                    const std::uint64_t known_v068240211 =
+                        boundary_candidate_call_start_v068240211 + boundary_candidate_full_radial_v068240211;
+                    std::cout << "V068240211_FINAL_BOUNDARY_SAMPLE"
+                              << " PHASE=TERMINAL_AFTER_ACCEPTED_BOUNDARY"
+                              << " RSS_BYTES=" << boundary_candidate_rss_v068240211
+                              << " PROCESS_PEAK_RSS_BYTES=" << boundary_candidate_peak_rss_v068240211
+                              << " HEAP_UORDBLKS_BYTES=" << boundary_candidate_heap_uord_v068240211
+                              << " HEAP_HBLKHD_BYTES=" << boundary_candidate_heap_hblk_v068240211
+                              << " ALLOCATOR_LIVE_BYTES=" << allocator_live_v068240211
+                              << " CALL_START_BYTES=" << boundary_candidate_call_start_v068240211
+                              << " FULL_RADIAL_BYTES=" << boundary_candidate_full_radial_v068240211
+                              << " HEAP_MINUS_CALL_START_RADIAL_BYTES="
+                              << (allocator_live_v068240211 > known_v068240211 ? allocator_live_v068240211 - known_v068240211 : 0u)
+                              << "\n";
+                }
                 terminal_shell_entry_bremsa_v064883 = current_shell_entry_bremsa_v0648110;
                 terminal_transport_boundary_v82_patch520144 = boundary;
                 if (tabulated_density_v068226 || analytic_variable_density_v068226) {
@@ -21904,7 +21825,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // 61-event trajectory.  Evaluate on a copy of the controller
             // bookkeeping while sharing the native fixed-state context; seed
             // its call-start workspace from the live post-transport state.
+            sample_final_boundary_v068240211("BEFORE_CONTROLLER_COPY", data, nullptr);
             auto final_pprint_data = data;
+            sample_final_boundary_v068240211("AFTER_CONTROLLER_COPY", data, &final_pprint_data);
             // This is a production computation, not a reference-trajectory
             // replay.  Disable every source-oracle alignment/gate on the copy
             // so the final pprint state is derived only from the live native
@@ -21926,6 +21849,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             final_pprint_data.writing_final_snapshot = true;
             const std::size_t terminal_call_index_v0648110 = accepted_boundary_count_v0682334;
             prepare_call_start_workspace(final_pprint_data, terminal_call_index_v0648110);
+            sample_final_boundary_v068240211("AFTER_FINAL_WORKSPACE_PREPARE", data, &final_pprint_data);
             if (terminal_shell_entry_bremsa_v064883.size() != final_pprint_data.energy.size()) {
                 throw std::runtime_error("v0.6.48.8.3 terminal shell-entry bremsa was not retained");
             }
@@ -21959,6 +21883,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
                 current_radius_cm_v068227, 0u);
+            sample_final_boundary_v068240211("AFTER_FINAL_FIXED_EVALUATION", data, &final_pprint_data);
             if (final_thermal_diagnostic_requested) {
                 const auto parent = final_thermal_diagnostic_path.parent_path();
                 if (!parent.empty()) std::filesystem::create_directories(parent);
@@ -22667,6 +22592,13 @@ void emit_controller_performance_instrumentation(
             << "V068222_PERF_ALL_FIXED_CONTINUUM_SECONDS=" << perf.all_fixed_continuum_seconds << "\n"
             << "V068222_PERF_ALL_FIXED_SPECTRAL_SECONDS=" << perf.all_fixed_spectral_seconds << "\n"
             << "V068222_PERF_ALL_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
+            << "V068240211_CALL_START_COMPACTION_ENABLED="
+            << (perf.call_start_compaction_enabled_v068240211 ? "YES" : "NO") << "\n"
+            << "V068240211_CALL_START_RELEASE_EVENTS=" << perf.call_start_release_events_v068240211 << "\n"
+            << "V068240211_CALL_START_RELEASED_BYTES=" << perf.call_start_released_bytes_v068240211 << "\n"
+            << "V068240211_CALL_START_PEAK_CAPACITY_BYTES=" << perf.call_start_peak_capacity_bytes_v068240211 << "\n"
+            << "V068240211_CALL_START_PEAK_NONEMPTY_WORKSPACES=" << perf.call_start_peak_nonempty_workspaces_v068240211 << "\n"
+            << "V068240211_CALL_START_FINAL_CAPACITY_BYTES=" << perf.call_start_final_capacity_bytes_v068240211 << "\n"
             << "V06824028_DIAGNOSTIC_MODE=FIXED_CONTROLLER_NON_EVALUATOR_AND_RADIAL_PEAK_OWNERS\n"
             << "V06824028_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
             << "V06824028_FIXED_EVALUATOR_SECONDS=" << perf.all_fixed_rate_seconds << "\n"
@@ -22739,68 +22671,6 @@ void emit_controller_performance_instrumentation(
                 << "V06824028_RADIAL_PEAK_KNOWN_OWNER_CAPACITY_BYTES=" << peak_v06824028.known_owner_capacity_bytes << "\n"
                 << "V06824028_RADIAL_PEAK_RSS_MINUS_KNOWN_OWNER_BYTES=" << peak_v06824028.rss_minus_known_owner_bytes << "\n";
         }
-        out << "V068240210_DIAGNOSTIC_MODE=FIXED_RECOMPUTE_TRANSIENT_AND_CALLBACK_WRAPPER\n"
-            << "V068240210_DSEC_CORE_ORCHESTRATION_SECONDS=" << perf.dsec_core_orchestration_seconds_v068240210 << "\n"
-            << "V068240210_DSEC_CALLBACK_SECONDS=" << perf.dsec_callback_seconds_v068240210 << "\n"
-            << "V068240210_DSEC_CALLBACK_FIXED_SECONDS=" << perf.dsec_callback_fixed_seconds_v068240210 << "\n"
-            << "V068240210_DSEC_CALLBACK_WRAPPER_SECONDS=" << perf.dsec_callback_wrapper_seconds_v068240210 << "\n"
-            << "V068240210_CALLBACK_SNAPSHOT_INPUT_SECONDS=" << perf.callback_snapshot_input_seconds_v068240210 << "\n"
-            << "V068240210_CALLBACK_PRE_ENGINE_BINDING_SECONDS=" << perf.callback_pre_engine_binding_seconds_v068240210 << "\n"
-            << "V068240210_CALLBACK_POST_ENGINE_SECONDS=" << perf.callback_post_engine_seconds_v068240210 << "\n"
-            << "V068240210_CALLBACK_SECTION_SUM_SECONDS="
-            << (perf.callback_snapshot_input_seconds_v068240210 +
-                perf.callback_pre_engine_binding_seconds_v068240210 +
-                perf.callback_post_engine_seconds_v068240210) << "\n"
-            << "V068240210_CALLBACK_COUNT=" << perf.callback_count_v068240210 << "\n"
-            << "V068240210_FIXED_RECOMPUTE_SAMPLE_COUNT=" << perf.fixed_recompute_owner_samples_v068240210.size() << "\n";
-        const auto write_recompute_peak_v068240210 = [&](const char* prefix_v068240210, std::size_t index_v068240210) {
-            if (index_v068240210 >= perf.fixed_recompute_owner_samples_v068240210.size()) return;
-            const auto& peak_v068240210 = perf.fixed_recompute_owner_samples_v068240210[index_v068240210];
-            out << prefix_v068240210 << "_SAMPLE_INDEX=" << peak_v068240210.sample_index << "\n"
-                << prefix_v068240210 << "_PASS=" << peak_v068240210.pass_index << "\n"
-                << prefix_v068240210 << "_ZONE=" << peak_v068240210.zone_ordinal << "\n"
-                << prefix_v068240210 << "_SOURCE_SEQUENCE=" << peak_v068240210.source_sequence << "\n"
-                << prefix_v068240210 << "_CALL=" << peak_v068240210.call_index << "\n"
-                << prefix_v068240210 << "_EVALUATION=" << peak_v068240210.evaluation_index << "\n"
-                << prefix_v068240210 << "_PHASE=" << peak_v068240210.phase << "\n"
-                << prefix_v068240210 << "_RSS_BYTES=" << peak_v068240210.rss_bytes << "\n"
-                << prefix_v068240210 << "_PROCESS_PEAK_RSS_BYTES=" << peak_v068240210.process_peak_rss_bytes << "\n"
-                << prefix_v068240210 << "_HEAP_UORDBLKS_BYTES=" << peak_v068240210.heap_uordblks << "\n"
-                << prefix_v068240210 << "_HEAP_HBLKHD_BYTES=" << peak_v068240210.heap_hblkhd << "\n"
-                << prefix_v068240210 << "_ALLOCATOR_LIVE_BYTES=" << peak_v068240210.allocator_live_bytes << "\n"
-                << prefix_v068240210 << "_CURRENT_SNAPSHOT_CAPACITY_BYTES=" << peak_v068240210.current_snapshot_capacity_bytes << "\n"
-                << prefix_v068240210 << "_PREVIOUS_ITERATION_CAPACITY_BYTES=" << peak_v068240210.previous_iteration_capacity_bytes << "\n"
-                << prefix_v068240210 << "_SNAPSHOT_HISTORY_CAPACITY_BYTES=" << peak_v068240210.retained_snapshot_history_capacity_bytes << "\n"
-                << prefix_v068240210 << "_CONTROLLER_WORKSPACE_CAPACITY_BYTES=" << peak_v068240210.controller_workspace_capacity_bytes << "\n"
-                << prefix_v068240210 << "_CALL_START_WORKSPACE_CAPACITY_BYTES=" << peak_v068240210.call_start_workspace_capacity_bytes << "\n"
-                << prefix_v068240210 << "_ATDB_DECODED_CAPACITY_BYTES=" << peak_v068240210.atdb_decoded_capacity_bytes << "\n"
-                << prefix_v068240210 << "_PREPARED_SIDECAR_CAPACITY_BYTES=" << peak_v068240210.prepared_sidecar_capacity_bytes << "\n"
-                << prefix_v068240210 << "_COMPACT_RADIAL_CAPACITY_BYTES=" << peak_v068240210.compact_radial_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FULL_RADIAL_CAPACITY_BYTES=" << peak_v068240210.full_radial_capacity_bytes << "\n"
-                << prefix_v068240210 << "_PUBLICATION_RETAINED_CAPACITY_BYTES=" << peak_v068240210.publication_retained_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FINAL_SNAPSHOT_CAPACITY_BYTES=" << peak_v068240210.final_snapshot_capacity_bytes << "\n"
-                << prefix_v068240210 << "_LINE_LUMINOSITY_CAPACITY_BYTES=" << peak_v068240210.line_luminosity_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_PERSISTENT_SCRATCH_BYTES=" << peak_v068240210.fixed.persistent_scratch_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_LAST_SOURCE_WORKSPACE_BYTES=" << peak_v068240210.fixed.last_source_workspace_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_COMPACT_RECORD_BYTES=" << peak_v068240210.fixed.compact_record_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_RICH_RECORD_BYTES=" << peak_v068240210.fixed.rich_record_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_PREPARED_BOUND_FREE_BYTES=" << peak_v068240210.fixed.prepared_bound_free_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_EXECUTION_PLAN_BYTES=" << peak_v068240210.fixed.execution_plan_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_RETAINED_STATE_BYTES=" << peak_v068240210.fixed.retained_state_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_ELEMENT_DIAGNOSTIC_INLINE_BYTES=" << peak_v068240210.fixed.element_diagnostic_inline_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_ELEMENT_DIAGNOSTIC_NESTED_BYTES=" << peak_v068240210.fixed.element_diagnostic_nested_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_DETAIL_PUBLICATION_BYTES=" << peak_v068240210.fixed.detail_publication_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_CONTINUUM_DIAGNOSTIC_BYTES=" << peak_v068240210.fixed.continuum_diagnostic_capacity_bytes << "\n"
-                << prefix_v068240210 << "_FIXED_THERMAL_DIAGONAL_BYTES=" << peak_v068240210.fixed.thermal_diagonal_capacity_bytes << "\n"
-                << prefix_v068240210 << "_KNOWN_OWNER_CAPACITY_BYTES=" << peak_v068240210.known_owner_capacity_bytes << "\n"
-                << prefix_v068240210 << "_HEAP_MINUS_KNOWN_OWNER_BYTES=" << peak_v068240210.heap_minus_known_owner_bytes << "\n"
-                << prefix_v068240210 << "_RSS_MINUS_ALLOCATOR_LIVE_BYTES=" << peak_v068240210.rss_minus_allocator_live_bytes << "\n"
-                << prefix_v068240210 << "_RSS_MINUS_KNOWN_OWNER_BYTES=" << peak_v068240210.rss_minus_known_owner_bytes << "\n";
-        };
-        write_recompute_peak_v068240210(
-            "V068240210_RECOMPUTE_RSS_PEAK", perf.fixed_recompute_rss_peak_index_v068240210);
-        write_recompute_peak_v068240210(
-            "V068240210_RECOMPUTE_HEAP_PEAK", perf.fixed_recompute_heap_peak_index_v068240210);
         out << "V068231_PERF_FIXED_CALLS=" << perf.foundation_v068231.fixed_calls << "\n"
             << "V068231_PERF_RECORD_PREPARATION_SECONDS=" << perf.foundation_v068231.record_preparation_seconds << "\n"
             << "V068231_PERF_PRELIMINARY_CACHE_SECONDS=" << perf.foundation_v068231.preliminary_cache_seconds << "\n"
@@ -23428,55 +23298,6 @@ void write_radial_owner_samples_v06824028(
             }
         }
 
-}
-
-// 0.6.82.40.2.10: fixed-recompute transient samples are diagnostic-owned and
-// are serialized whenever the dedicated diagnostic environment switch caused
-// samples to be collected.  They do not depend on the ordinary artifact profile.
-void write_fixed_recompute_samples_v068240210(
-    const std::filesystem::path& output,
-    const PerformanceInstrumentationV064890& perf) {
-    if (perf.fixed_recompute_owner_samples_v068240210.empty()) return;
-    const auto dir = output / "standalone_diagnostics" / "timing";
-    std::filesystem::create_directories(dir);
-    std::ofstream csv(dir / "fixed_recompute_owner_samples_v068240210.csv");
-    csv << "sample_index,pass_index,zone_ordinal,source_sequence,call_index,evaluation_index,phase,"
-           "rss_bytes,process_peak_rss_bytes,heap_uordblks,heap_hblkhd,heap_fordblks,allocator_live_bytes,"
-           "current_snapshot_capacity_bytes,previous_iteration_capacity_bytes,retained_snapshot_history_capacity_bytes,"
-           "controller_workspace_capacity_bytes,call_start_workspace_capacity_bytes,atdb_decoded_capacity_bytes,"
-           "prepared_sidecar_capacity_bytes,compact_radial_capacity_bytes,full_radial_capacity_bytes,"
-           "publication_retained_capacity_bytes,final_snapshot_capacity_bytes,line_luminosity_capacity_bytes,"
-           "fixed_persistent_scratch_bytes,fixed_persistent_record_cache_bytes,fixed_persistent_contribution_bytes,"
-           "fixed_persistent_population_bytes,fixed_persistent_spectral_bytes,fixed_persistent_element_solver_bytes,"
-           "fixed_persistent_continuum_bytes,fixed_last_source_workspace_capacity_bytes,fixed_compact_record_capacity_bytes,"
-           "fixed_rich_record_capacity_bytes,fixed_prepared_bound_free_capacity_bytes,fixed_execution_plan_capacity_bytes,"
-           "fixed_retained_state_capacity_bytes,fixed_element_diagnostic_inline_capacity_bytes,"
-           "fixed_element_diagnostic_nested_capacity_bytes,fixed_detail_publication_capacity_bytes,"
-           "fixed_continuum_diagnostic_capacity_bytes,fixed_thermal_diagonal_capacity_bytes,known_owner_capacity_bytes,"
-           "heap_minus_known_owner_bytes,rss_minus_allocator_live_bytes,rss_minus_known_owner_bytes\n";
-    for (const auto& x : perf.fixed_recompute_owner_samples_v068240210) {
-        csv << x.sample_index << ',' << x.pass_index << ',' << x.zone_ordinal << ','
-            << x.source_sequence << ',' << x.call_index << ',' << x.evaluation_index << ',' << x.phase << ','
-            << x.rss_bytes << ',' << x.process_peak_rss_bytes << ',' << x.heap_uordblks << ',' << x.heap_hblkhd << ','
-            << x.heap_fordblks << ',' << x.allocator_live_bytes << ',' << x.current_snapshot_capacity_bytes << ','
-            << x.previous_iteration_capacity_bytes << ',' << x.retained_snapshot_history_capacity_bytes << ','
-            << x.controller_workspace_capacity_bytes << ',' << x.call_start_workspace_capacity_bytes << ','
-            << x.atdb_decoded_capacity_bytes << ',' << x.prepared_sidecar_capacity_bytes << ','
-            << x.compact_radial_capacity_bytes << ',' << x.full_radial_capacity_bytes << ','
-            << x.publication_retained_capacity_bytes << ',' << x.final_snapshot_capacity_bytes << ','
-            << x.line_luminosity_capacity_bytes << ',' << x.fixed.persistent_scratch_bytes << ','
-            << x.fixed.persistent_record_cache_bytes << ',' << x.fixed.persistent_contribution_bytes << ','
-            << x.fixed.persistent_population_bytes << ',' << x.fixed.persistent_spectral_bytes << ','
-            << x.fixed.persistent_element_solver_bytes << ',' << x.fixed.persistent_continuum_bytes << ','
-            << x.fixed.last_source_workspace_capacity_bytes << ',' << x.fixed.compact_record_capacity_bytes << ','
-            << x.fixed.rich_record_capacity_bytes << ',' << x.fixed.prepared_bound_free_capacity_bytes << ','
-            << x.fixed.execution_plan_capacity_bytes << ',' << x.fixed.retained_state_capacity_bytes << ','
-            << x.fixed.element_diagnostic_inline_capacity_bytes << ',' << x.fixed.element_diagnostic_nested_capacity_bytes << ','
-            << x.fixed.detail_publication_capacity_bytes << ',' << x.fixed.continuum_diagnostic_capacity_bytes << ','
-            << x.fixed.thermal_diagonal_capacity_bytes << ',' << x.known_owner_capacity_bytes << ','
-            << x.heap_minus_known_owner_bytes << ',' << x.rss_minus_allocator_live_bytes << ','
-            << x.rss_minus_known_owner_bytes << '\n';
-    }
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -24152,7 +23973,6 @@ int command_run_standalone_production(const Options& options, const std::filesys
             output, artifacts.timing_summary, performance_v064890, lowering_seconds,
             controller_seconds, production_total_seconds_v06488);
         write_radial_owner_samples_v06824028(output, performance_v064890);
-        write_fixed_recompute_samples_v068240210(output, performance_v064890);
         emit_spectral_performance_instrumentation(
             output, artifacts.timing_summary, performance_v064890, performance_v064892);
         if (g_bound_free_perf_v064895_valid) {

@@ -308,13 +308,6 @@ struct FixedLiveOwnerMemoryV06824028 {
     std::uint64_t prepared_bound_free_capacity_bytes = 0u;
     std::uint64_t execution_plan_capacity_bytes = 0u;
     std::uint64_t retained_state_capacity_bytes = 0u;
-    // 0.6.82.40.2.10: current post-solve diagnostic owners that were not
-    // included in the .40.2.8 radial lower-bound census.
-    std::uint64_t element_diagnostic_inline_capacity_bytes = 0u;
-    std::uint64_t element_diagnostic_nested_capacity_bytes = 0u;
-    std::uint64_t detail_publication_capacity_bytes = 0u;
-    std::uint64_t continuum_diagnostic_capacity_bytes = 0u;
-    std::uint64_t thermal_diagonal_capacity_bytes = 0u;
 };
 
 void capture_fixed_live_owner_memory_v06824028(
