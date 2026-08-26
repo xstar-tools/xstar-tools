@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.6.82.40.2.16 - detail RRC staging hot path - 2026-08-26
+
+- Freezes host-accepted `0.6.82.40.2.15` traversal-orchestration optimization as the production predecessor.
+- Adds same-binary `XSTAR_V068240216_DETAIL_RRC_MODE=historical|optimized`; ordinary native production defaults to `optimized`, while forensic/non-production execution retains historical staging.
+- Filters retained record diagnostics to Type 49/53/59/99 RRC candidates before constructing publication `RecordDiag` copies, preserving source-position order and exact row semantics.
+- Compiles the immutable 1849-row detailed-RRC oracle inventory into source-order ion groups and restricts each diagnostic identity search to the matching ion without changing the original within-ion scan order, tolerance, consumed-row behavior, or Type-99 fallback.
+- Elides stable sorting when the filtered RRC diagnostic stream is already source-position ordered.
+- Borrows exact retained full-size `elumab`/`tauc` arrays by const reference instead of copying them when available.
+- Avoids the unused `native_rrcs_by_record` map on generic non-Mg optimized publication and caches the invariant native `cfrac` lookup across detailed-RRC rows.
+- Adds production telemetry for filtered/copy-elided records, sort elision, label comparisons, bridge-array borrowing, and dead-map elision.
+- Scientific rates, controller state, RRC inventory/activity rules, label selection/tie-breaking, directional projection, FITS row/HDU order, REAL(4) conversion, `.2.13` call-start ownership, `.2.14` contribution order, and `.2.15` traversal behavior remain frozen.
+- Qualification remains narrow: same-host/same-binary `c_xim3` historical/optimized A/B first, then optimized `c_xip1,+4` science closure; no multi-element run and Phase C remains blocked.
+
 ## 0.6.82.40.2.15 - traversal orchestration hot path - 2026-08-26
 
 - Freeze host-accepted `0.6.82.40.2.14` contribution-list optimization as the production baseline.

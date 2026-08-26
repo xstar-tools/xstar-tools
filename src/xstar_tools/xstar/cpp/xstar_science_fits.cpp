@@ -51,6 +51,51 @@ bool true_production_mode() {
 
 thread_local bool g_public_lines_fast_path_v06823089 = false;
 
+// 0.6.82.40.2.16: same-binary control for the detailed-RRC CPU-staging hot path.
+// Ordinary native production defaults to the optimized path.  Historical and
+// forensic/non-production execution retain the pre-.2.16 staging behavior.
+enum class DetailRrcModeV068240216 { Historical, Optimized };
+
+DetailRrcModeV068240216 detail_rrc_mode_v068240216() {
+    static const DetailRrcModeV068240216 mode = [] {
+        const char* raw = std::getenv("XSTAR_V068240216_DETAIL_RRC_MODE");
+        if (!raw || !*raw || std::string(raw) == "optimized") {
+            return DetailRrcModeV068240216::Optimized;
+        }
+        if (std::string(raw) == "historical") {
+            return DetailRrcModeV068240216::Historical;
+        }
+        throw std::runtime_error(
+            "XSTAR_V068240216_DETAIL_RRC_MODE must be historical or optimized");
+    }();
+    return mode;
+}
+
+bool detail_rrc_hotpath_optimized_v068240216() {
+    return true_production_mode() &&
+        detail_rrc_mode_v068240216() == DetailRrcModeV068240216::Optimized;
+}
+
+const char* detail_rrc_mode_name_v068240216() {
+    return detail_rrc_hotpath_optimized_v068240216() ? "OPTIMIZED" : "HISTORICAL";
+}
+
+struct DetailRrcHotpathAuditV068240216 {
+    std::uint64_t historical_calls = 0u;
+    std::uint64_t optimized_calls = 0u;
+    std::uint64_t record_diagnostics_seen = 0u;
+    std::uint64_t rrc_record_diagnostics_copied = 0u;
+    std::uint64_t non_rrc_record_copies_elided = 0u;
+    std::uint64_t source_order_sorts_elided = 0u;
+    std::uint64_t label_candidate_comparisons = 0u;
+    std::uint64_t full_inventory_comparisons_elided = 0u;
+    std::uint64_t bridge_arrays_borrowed = 0u;
+    std::uint64_t bridge_bytes_copy_elided = 0u;
+    std::uint64_t unused_native_maps_elided = 0u;
+};
+
+thread_local DetailRrcHotpathAuditV068240216 g_detail_rrc_hotpath_v068240216{};
+
 // v82 patch 5.20.17.3.8.1: diagnostic-only audit of the exact
 // xo01_detal4 inward-emission writer path.  The public column is 1E/float32,
 // so the correct writer comparison is retained binary64 -> static_cast<float>
@@ -607,12 +652,19 @@ std::map<std::int32_t,SolveRowValue> read_solve_rows_by_global(
 // XSTAR-FUNCTION-COMMENT-END
 std::vector<RecordDiag> read_record_diagnostics(
     const xstar_run_state::ProductWritingState& state,
-    std::size_t sequence) {
+    std::size_t sequence,
+    bool rrc_only_v068240216 = false) {
     if (const auto* evaluation = retained_evaluation_by_sequence(state, sequence);
         evaluation && !evaluation->record_product_diagnostics.empty()) {
         std::vector<RecordDiag> out;
         out.reserve(evaluation->record_product_diagnostics.size());
         for (const auto& source : evaluation->record_product_diagnostics) {
+            if (rrc_only_v068240216 &&
+                !(source.type49_valid || source.type53_valid || source.type99_valid ||
+                  source.data_type == 49 || source.data_type == 53 ||
+                  source.data_type == 59 || source.data_type == 99)) {
+                continue;
+            }
             RecordDiag r;
             r.source_position = source.source_position;
             r.record = source.record;
@@ -713,6 +765,12 @@ std::vector<RecordDiag> read_record_diagnostics(
         r.type53_ptmp2 = number_or(f, columns, "type53_ptmp2", 1.0);
         r.type53_tau_in = number_or(f, columns, "type53_tau_in", std::numeric_limits<double>::quiet_NaN());
         r.type53_tau_out = number_or(f, columns, "type53_tau_out", std::numeric_limits<double>::quiet_NaN());
+        if (rrc_only_v068240216 &&
+            !(r.type49_valid || r.type53_valid || r.type99_valid ||
+              r.data_type == 49 || r.data_type == 53 ||
+              r.data_type == 59 || r.data_type == 99)) {
+            continue;
+        }
         out.push_back(r);
     }
     return out;
@@ -8642,6 +8700,30 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
 }
 
 
+struct DetailRrcLabelPlanV068240216 {
+    std::vector<int> element_z;
+    std::vector<int> ion_stage;
+    std::map<std::pair<int,int>, std::vector<std::size_t>> ordinals_by_ion;
+};
+
+const DetailRrcLabelPlanV068240216& detail_rrc_label_plan_v068240216() {
+    static const DetailRrcLabelPlanV068240216 plan = [] {
+        DetailRrcLabelPlanV068240216 out;
+        const auto& labels = oracle_detail_rrc_label_template();
+        out.element_z.reserve(labels.size());
+        out.ion_stage.reserve(labels.size());
+        for (std::size_t i = 0; i < labels.size(); ++i) {
+            const int z = element_z_from_ion_label(labels[i].ion);
+            const int stage = roman_stage_from_ion_label(labels[i].ion);
+            out.element_z.push_back(z);
+            out.ion_stage.push_back(stage);
+            out.ordinals_by_ion[{z, stage}].push_back(i);
+        }
+        return out;
+    }();
+    return plan;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute diagnostic rrc rows by index for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
@@ -8653,12 +8735,35 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     const std::vector<RowMeta>& rows,
     std::size_t sequence) {
     std::map<long long,RrcRow> out;
+    const bool optimized_v068240216 = detail_rrc_hotpath_optimized_v068240216();
+    if (optimized_v068240216) ++g_detail_rrc_hotpath_v068240216.optimized_calls;
+    else ++g_detail_rrc_hotpath_v068240216.historical_calls;
+    g_detail_rrc_hotpath_v068240216.record_diagnostics_seen +=
+        static_cast<std::uint64_t>(evaluation.record_product_diagnostics.size());
+
     std::vector<RecordDiag> records;
-    try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
-    std::stable_sort(records.begin(), records.end(), [](const RecordDiag& a, const RecordDiag& b) {
-        return a.source_position < b.source_position;
-    });
+    try { records = read_record_diagnostics(state, sequence, optimized_v068240216); } catch (...) { return out; }
+    if (optimized_v068240216) {
+        g_detail_rrc_hotpath_v068240216.rrc_record_diagnostics_copied +=
+            static_cast<std::uint64_t>(records.size());
+        if (evaluation.record_product_diagnostics.size() >= records.size()) {
+            g_detail_rrc_hotpath_v068240216.non_rrc_record_copies_elided +=
+                static_cast<std::uint64_t>(evaluation.record_product_diagnostics.size() - records.size());
+        }
+    }
+    const bool source_ordered_v068240216 = std::is_sorted(
+        records.begin(), records.end(), [](const RecordDiag& a, const RecordDiag& b) {
+            return a.source_position < b.source_position;
+        });
+    if (!optimized_v068240216 || !source_ordered_v068240216) {
+        std::stable_sort(records.begin(), records.end(), [](const RecordDiag& a, const RecordDiag& b) {
+            return a.source_position < b.source_position;
+        });
+    } else {
+        ++g_detail_rrc_hotpath_v068240216.source_order_sorts_elided;
+    }
     const auto& labels = oracle_detail_rrc_label_template();
+    const auto& label_plan_v068240216 = detail_rrc_label_plan_v068240216();
     std::vector<bool> consumed(labels.size(), false);
 
     auto label_matches_ion = [](const RrcLabelTemplateRow& label, const RecordDiag& r) {
@@ -8675,37 +8780,65 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     auto select_label = [&](const RecordDiag& r, int global_level, double published_threshold) -> std::size_t {
         std::size_t best = labels.size();
         double best_delta = std::numeric_limits<double>::infinity();
+        const std::vector<std::size_t>* optimized_candidates = nullptr;
+        if (optimized_v068240216) {
+            const auto it = label_plan_v068240216.ordinals_by_ion.find({r.element_z, r.ion_stage});
+            if (it != label_plan_v068240216.ordinals_by_ion.end()) optimized_candidates = &it->second;
+        }
+        auto scan_candidates = [&](auto&& consider) {
+            if (optimized_v068240216) {
+                if (!optimized_candidates) return;
+                for (const std::size_t i : *optimized_candidates) {
+                    ++g_detail_rrc_hotpath_v068240216.label_candidate_comparisons;
+                    consider(i, true);
+                }
+            } else {
+                for (std::size_t i = 0; i < labels.size(); ++i) consider(i, false);
+            }
+        };
         // Primary source identity: ion + bound global level + the published
-        // (base) continuum threshold.  This removes the 16 non-published
-        // excited-parent records from the 1865-record active stream and maps
-        // the remaining 1849 records to the fstepr3 inventory without shifts.
-        for (std::size_t i = 0; i < labels.size(); ++i) {
-            if (consumed[i] || !label_matches_ion(labels[i], r)) continue;
-            if (global_level > 0 && labels[i].level_index != global_level) continue;
-            if (!label_energy_close(labels[i].energy_ev, published_threshold)) continue;
+        // (base) continuum threshold.  The optimized plan scans only the same
+        // ion's labels, in their original oracle order, so tie-breaking and
+        // consumed-row semantics are byte-for-byte identical.
+        scan_candidates([&](std::size_t i, bool ion_prevalidated) {
+            if (consumed[i] || (!ion_prevalidated && !label_matches_ion(labels[i], r))) return;
+            if (global_level > 0 && labels[i].level_index != global_level) return;
+            if (!label_energy_close(labels[i].energy_ev, published_threshold)) return;
             const double delta = std::abs(labels[i].energy_ev - published_threshold);
             if (delta < best_delta) { best = i; best_delta = delta; }
+        });
+        if (optimized_v068240216 && optimized_candidates) {
+            g_detail_rrc_hotpath_v068240216.full_inventory_comparisons_elided +=
+                static_cast<std::uint64_t>(labels.size() - optimized_candidates->size());
         }
         // Some He-like records carry a compact/local level address that differs
         // from the public global-level label, while their ion and threshold are
         // unique.  Use the threshold within the same ion as the second key.
         if (best == labels.size()) {
-            for (std::size_t i = 0; i < labels.size(); ++i) {
-                if (consumed[i] || !label_matches_ion(labels[i], r)) continue;
-                if (!label_energy_close(labels[i].energy_ev, published_threshold)) continue;
+            scan_candidates([&](std::size_t i, bool ion_prevalidated) {
+                if (consumed[i] || (!ion_prevalidated && !label_matches_ion(labels[i], r))) return;
+                if (!label_energy_close(labels[i].energy_ev, published_threshold)) return;
                 const double delta = std::abs(labels[i].energy_ev - published_threshold);
                 if (delta < best_delta) { best = i; best_delta = delta; }
+            });
+            if (optimized_v068240216 && optimized_candidates) {
+                g_detail_rrc_hotpath_v068240216.full_inventory_comparisons_elided +=
+                    static_cast<std::uint64_t>(labels.size() - optimized_candidates->size());
             }
         }
         // Type-99 superlevels can carry a threshold relative to a different
         // parent reference.  Their bound global level is nevertheless the
         // stable fstepr3 identity, so use it only for this record family.
         if (best == labels.size() && (r.type99_valid || r.data_type == 99) && global_level > 0) {
-            for (std::size_t i = 0; i < labels.size(); ++i) {
-                if (consumed[i] || !label_matches_ion(labels[i], r)) continue;
-                if (labels[i].level_index != global_level) continue;
+            scan_candidates([&](std::size_t i, bool ion_prevalidated) {
+                if (consumed[i] || (!ion_prevalidated && !label_matches_ion(labels[i], r))) return;
+                if (labels[i].level_index != global_level) return;
                 const double delta = std::abs(labels[i].energy_ev - published_threshold);
                 if (delta < best_delta) { best = i; best_delta = delta; }
+            });
+            if (optimized_v068240216 && optimized_candidates) {
+                g_detail_rrc_hotpath_v068240216.full_inventory_comparisons_elided +=
+                    static_cast<std::uint64_t>(labels.size() - optimized_candidates->size());
             }
         }
         return best;
@@ -9191,8 +9324,43 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     // because evaluation.source_workspace.elumab is empty; use the retained
     // per-HDU bridge inventory that v25.5.13/15 promoted.
     constexpr std::size_t kOracleContinuumCount = 301301u;
-    const auto elumab = bridge_array_for_hdu(state, "elumab", hdu_number, 2 * kOracleContinuumCount);
-    const auto tauc = bridge_array_for_hdu(state, "tauc", hdu_number, 2 * kOracleContinuumCount);
+    const bool optimized_v068240216 = detail_rrc_hotpath_optimized_v068240216();
+    std::vector<double> elumab_owned_v068240216;
+    std::vector<double> tauc_owned_v068240216;
+    const std::vector<double>* elumab_view_v068240216 = nullptr;
+    const std::vector<double>* tauc_view_v068240216 = nullptr;
+    if (optimized_v068240216) {
+        const auto elumab_it = state.retained_product_arrays.find(
+            retained_product_array_memory_key(hdu_number, "elumab"));
+        if (elumab_it != state.retained_product_arrays.end() &&
+            elumab_it->second.size() == 2u * kOracleContinuumCount) {
+            elumab_view_v068240216 = &elumab_it->second;
+            ++g_detail_rrc_hotpath_v068240216.bridge_arrays_borrowed;
+            g_detail_rrc_hotpath_v068240216.bridge_bytes_copy_elided +=
+                static_cast<std::uint64_t>(elumab_it->second.size() * sizeof(double));
+        }
+        const auto tauc_it = state.retained_product_arrays.find(
+            retained_product_array_memory_key(hdu_number, "tauc"));
+        if (tauc_it != state.retained_product_arrays.end() &&
+            tauc_it->second.size() == 2u * kOracleContinuumCount) {
+            tauc_view_v068240216 = &tauc_it->second;
+            ++g_detail_rrc_hotpath_v068240216.bridge_arrays_borrowed;
+            g_detail_rrc_hotpath_v068240216.bridge_bytes_copy_elided +=
+                static_cast<std::uint64_t>(tauc_it->second.size() * sizeof(double));
+        }
+    }
+    if (!elumab_view_v068240216) {
+        elumab_owned_v068240216 = bridge_array_for_hdu(
+            state, "elumab", hdu_number, 2 * kOracleContinuumCount);
+        elumab_view_v068240216 = &elumab_owned_v068240216;
+    }
+    if (!tauc_view_v068240216) {
+        tauc_owned_v068240216 = bridge_array_for_hdu(
+            state, "tauc", hdu_number, 2 * kOracleContinuumCount);
+        tauc_view_v068240216 = &tauc_owned_v068240216;
+    }
+    const auto& elumab = *elumab_view_v068240216;
+    const auto& tauc = *tauc_view_v068240216;
     const auto rrc_bridge = load_rrc_bridge_arrays(state, hdu_number);
     const std::size_t n = kOracleContinuumCount;
     // 0.6.82.27.10: fstepr3 inventory is the literal rate-type-7/npconi2
@@ -9367,6 +9535,12 @@ void write_rrc_detail(const std::filesystem::path& path,
     };
     std::vector<Detal3AuditRow> detal3_audit;
     const auto rrc_identity_lookup_v06823088 = build_rrc_identity_lookup_v06823088(state);
+    const bool optimized_v068240216 = detail_rrc_hotpath_optimized_v068240216();
+    const bool reference_mg11_v068240216 = reference_mg11_product_state(state);
+    const bool native_standalone_v068240216 = native_standalone_product_state(state);
+    const double cached_cfrac_v068240216 =
+        (optimized_v068240216 && native_standalone_v068240216)
+            ? parameter_value(state, "cfrac", 1.0) : 1.0;
     // Source heatt accumulates tauc over individual shells rather than
     // multiplying the current-zone opakab by the terminal cumulative depth.
     std::map<long long,double> cumulative_rrc_tau_in;
@@ -9446,9 +9620,13 @@ void write_rrc_detail(const std::filesystem::path& path,
         const std::size_t rrc_bridge_hdu_number = detail_terminal_bridge_hdu_number(hdu_number);
         auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, elements, rows, rrc_bridge_hdu_number, true);
         std::map<long long,RrcRow> native_rrcs_by_record;
-        for (const auto& rrc : rrcs) native_rrcs_by_record[rrc.record] = rrc;
+        if (reference_mg11_v068240216 || !optimized_v068240216) {
+            for (const auto& rrc : rrcs) native_rrcs_by_record[rrc.record] = rrc;
+        } else {
+            ++g_detail_rrc_hotpath_v068240216.unused_native_maps_elided;
+        }
 
-        if (!reference_mg11_product_state(state)) {
+        if (!reference_mg11_v068240216) {
             // v0.6.48.11.2: generic detailed RRC products use the live,
             // terminal-active source inventory rather than the frozen 1849-row
             // Mg XI label template.
@@ -9476,8 +9654,10 @@ void write_rrc_detail(const std::filesystem::path& path,
                 // that the historical Mg template path applied later.  Re-split
                 // only the already accepted total RRC emissivity; rates,
                 // populations, opacity, tau, and controller state are frozen.
-                if (native_standalone_product_state(state)) {
-                    const double cfrac = parameter_value(state, "cfrac", 1.0);
+                if (native_standalone_v068240216) {
+                    const double cfrac = optimized_v068240216
+                        ? cached_cfrac_v068240216
+                        : parameter_value(state, "cfrac", 1.0);
                     const auto directional = source_rrc_directional_projection(
                         r.emis_in, r.emis_out, r.tau_in, r.tau_out, cfrac);
                     r.emis_in = directional.first;
@@ -11700,7 +11880,19 @@ Result write_historical_science_products(
                   << "V06823088_BULK_FITS_FLUSHES=" << g_bulk_fits_perf_v06823088.flushes << "\n"
                   << "V068232_BULK_FITS_WRITE_SECONDS=" << g_bulk_fits_perf_v06823088.write_seconds << "\n"
                   << "V068232_FITS_CHECKSUM_SECONDS=" << g_fits_checksum_seconds_v068232 << "\n"
-                  << "V06823089_PUBLIC_LINES_RETAINED_FAST_PATH=" << (g_public_lines_fast_path_v06823089 ? "YES" : "NO") << "\n";
+                  << "V06823089_PUBLIC_LINES_RETAINED_FAST_PATH=" << (g_public_lines_fast_path_v06823089 ? "YES" : "NO") << "\n"
+                  << "V068240216_DETAIL_RRC_MODE=" << detail_rrc_mode_name_v068240216() << "\n"
+                  << "V068240216_DETAIL_RRC_HISTORICAL_CALLS=" << g_detail_rrc_hotpath_v068240216.historical_calls << "\n"
+                  << "V068240216_DETAIL_RRC_OPTIMIZED_CALLS=" << g_detail_rrc_hotpath_v068240216.optimized_calls << "\n"
+                  << "V068240216_RRC_RECORD_DIAGNOSTICS_SEEN=" << g_detail_rrc_hotpath_v068240216.record_diagnostics_seen << "\n"
+                  << "V068240216_RRC_RECORD_DIAGNOSTICS_COPIED=" << g_detail_rrc_hotpath_v068240216.rrc_record_diagnostics_copied << "\n"
+                  << "V068240216_NON_RRC_RECORD_COPIES_ELIDED=" << g_detail_rrc_hotpath_v068240216.non_rrc_record_copies_elided << "\n"
+                  << "V068240216_SOURCE_ORDER_SORTS_ELIDED=" << g_detail_rrc_hotpath_v068240216.source_order_sorts_elided << "\n"
+                  << "V068240216_LABEL_CANDIDATE_COMPARISONS=" << g_detail_rrc_hotpath_v068240216.label_candidate_comparisons << "\n"
+                  << "V068240216_FULL_INVENTORY_COMPARISONS_ELIDED=" << g_detail_rrc_hotpath_v068240216.full_inventory_comparisons_elided << "\n"
+                  << "V068240216_BRIDGE_ARRAYS_BORROWED=" << g_detail_rrc_hotpath_v068240216.bridge_arrays_borrowed << "\n"
+                  << "V068240216_BRIDGE_BYTES_COPY_ELIDED=" << g_detail_rrc_hotpath_v068240216.bridge_bytes_copy_elided << "\n"
+                  << "V068240216_UNUSED_NATIVE_MAPS_ELIDED=" << g_detail_rrc_hotpath_v068240216.unused_native_maps_elided << "\n";
     }
     return result;
 }
