@@ -440,6 +440,21 @@ bool environment_flag(const char* name) {
     throw std::runtime_error(std::string("invalid environment flag: ") + name);
 }
 
+// 0.6.82.40.2.14: contribution-list hot-path control.  The optimized mode is
+// production-only and preserves the exact source contribution order and
+// accumulation order; historical keeps the pre-.14 allocation/lookup path for
+// same-binary qualification and all non-production forensic/library calls.
+enum class ContributionHotPathModeV068240214 { Historical, Optimized };
+
+ContributionHotPathModeV068240214 configured_contribution_hotpath_mode_v068240214() {
+    const char* value = std::getenv("XSTAR_V068240214_CONTRIBUTION_MODE");
+    if (!value || !*value || std::string(value) == "optimized")
+        return ContributionHotPathModeV068240214::Optimized;
+    if (std::string(value) == "historical")
+        return ContributionHotPathModeV068240214::Historical;
+    throw std::runtime_error("invalid XSTAR_V068240214_CONTRIBUTION_MODE");
+}
+
 // v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
 // This records the legacy approximation, the already-computed source-faithful
 // phint53 shadow, and the actually committed answers for the two call-1
@@ -2810,6 +2825,129 @@ public:
         return out;
     }
 
+    // 0.6.82.40.2.14: direct production builder.  Contributions reaching this
+    // method are already the final committed stream.  Build the canonical
+    // ledger directly from that stream into context-owned reusable storage,
+    // eliminating the historical candidate map plus second identity lookup.
+    // One identity set is retained as an invariant check; scientific term
+    // order and arithmetic are byte-for-byte the same as finish().
+    void finish_direct_into_v068240214(
+        const std::vector<xstar_element_contribution_v1>& committed_contributions,
+        const std::vector<xstar_element_contribution_v1>& thermal_only_contributions,
+        CanonicalThermalLedgerBuild& out,
+        std::uint64_t& capacity_growths,
+        std::uint64_t& capacity_reuses
+    ) const {
+        const std::size_t total_contributions =
+            committed_contributions.size() + thermal_only_contributions.size();
+        out.terms.clear();
+        const std::size_t required_terms = total_contributions * 2u;
+        if (out.terms.capacity() < required_terms) {
+            const std::size_t geometric = out.terms.capacity() == 0u
+                ? std::max<std::size_t>(64u, required_terms)
+                : std::max(required_terms, out.terms.capacity() + out.terms.capacity() / 2u);
+            out.terms.reserve(geometric);
+            ++capacity_growths;
+        } else if (out.terms.capacity() > 0u) {
+            ++capacity_reuses;
+        }
+
+        std::set<Identity> consumed;
+        std::set<std::pair<std::int64_t, std::string>> type99_rows_matched;
+        std::set<std::pair<std::int64_t, std::string>> primary_rows_matched;
+        std::int64_t term_index = 0;
+        std::int64_t type95_thermal_terms_committed = 0;
+        const bool native_sequence1_source_order =
+            environment_flag("XSTAR_NATIVE_SEQUENCE1_THERMAL_SOURCE_ORDER") &&
+            environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") <= 61;
+
+        const auto commit_term = [&](const xstar_canonical_thermal_term_v1& candidate) {
+            xstar_canonical_thermal_term_v1 term = candidate;
+            term.term_index = ++term_index;
+            const bool need_source_key = element_.element_z == 12 &&
+                ((type99_state_.enabled && term.data_type == 99) ||
+                 (primary_order_state_.enabled && term.cj > 0.0));
+            if (need_source_key) {
+                const char* role_name = term.role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+                    ? "forward_diag_loss" : "reverse_diag_loss";
+                const auto source_key = std::make_pair(term.record, std::string(role_name));
+                if (type99_state_.enabled && term.data_type == 99)
+                    type99_rows_matched.insert(source_key);
+                if (primary_order_state_.enabled && term.cj > 0.0)
+                    primary_rows_matched.insert(source_key);
+            }
+            if (term.data_type == 95 && term.rate_type == 15)
+                ++type95_thermal_terms_committed;
+            if (native_sequence1_source_order && element_.element_z == 12 && term.cj > 0.0) {
+                term.flags |= XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED;
+                if (!(primary_order_state_.enabled && term.primary_source_order_index > 0)) {
+                    const std::int64_t overlay_terms = std::max<std::int64_t>(
+                        0, type95_thermal_terms_committed - 2);
+                    term.primary_source_order_index = 2 * (term.term_index - overlay_terms);
+                }
+                if (term.data_type == 99) {
+                    term.flags |= XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED;
+                    term.source_cj = term.cj;
+                }
+            }
+            out.terms.push_back(term);
+        };
+
+        const auto consume = [&](const xstar_element_contribution_v1& contribution) {
+            const Identity identity = identity_of(contribution);
+            if (!consumed.insert(identity).second) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger committed identity was consumed more than once");
+            }
+            const auto forward = make_term(
+                contribution, contribution.lower_row,
+                XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS,
+                contribution.ans4 * contribution.density_scale,
+                contribution.ans6 * contribution.density_scale, true);
+            const auto reverse = make_term(
+                contribution, contribution.upper_row,
+                XSTAR_CANONICAL_THERMAL_REVERSE_DIAG_LOSS,
+                -contribution.ans3 * contribution.density_scale,
+                -contribution.ans5 * contribution.density_scale, true);
+            commit_term(forward);
+            commit_term(reverse);
+        };
+
+        if (native_sequence1_source_order) {
+            // Preserve the historical special source-order branch exactly.
+            std::vector<xstar_element_contribution_v1> ordered_contributions;
+            ordered_contributions.reserve(total_contributions);
+            ordered_contributions.insert(ordered_contributions.end(),
+                committed_contributions.begin(), committed_contributions.end());
+            ordered_contributions.insert(ordered_contributions.end(),
+                thermal_only_contributions.begin(), thermal_only_contributions.end());
+            std::stable_sort(
+                ordered_contributions.begin(), ordered_contributions.end(),
+                [](const auto& left, const auto& right) {
+                    return std::tie(left.ion_stage, left.rate_type, left.source_position, left.record) <
+                        std::tie(right.ion_stage, right.rate_type, right.source_position, right.record);
+                });
+            for (const auto& contribution : ordered_contributions) consume(contribution);
+        } else {
+            for (const auto& contribution : committed_contributions) consume(contribution);
+            for (const auto& contribution : thermal_only_contributions) consume(contribution);
+        }
+
+        if (type99_state_.enabled && element_.element_z == 12 &&
+            type99_rows_matched.size() != type99_state_.rows.size()) {
+            throw std::runtime_error(
+                "canonical Thermal ledger did not consume every Mg Type-99 source row");
+        }
+        if (primary_order_state_.enabled && element_.element_z == 12 &&
+            primary_rows_matched.size() != primary_order_state_.rows.size()) {
+            throw std::runtime_error(
+                "canonical Thermal ledger did not consume every Mg primary source-order row");
+        }
+        xstar_canonical_thermal::validate(
+            out.terms.data(), out.terms.size(), active_.element.n_rows);
+        out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
+    }
+
 private:
     using Identity = std::tuple<std::int64_t, int, int, int>;
     struct Candidate {
@@ -2830,7 +2968,8 @@ private:
         int native_compact_row,
         int role,
         double native_cj,
-        double cj2
+        double cj2,
+        bool elide_unused_source_key_v068240214 = false
     ) const {
         const char* role_name = role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
             ? "forward_diag_loss" : "reverse_diag_loss";
@@ -2844,9 +2983,17 @@ private:
             flags |= XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW;
         }
 
-        const auto source_key = std::make_pair(contribution.record, std::string(role_name));
+        const bool need_source_key = !elide_unused_source_key_v068240214 ||
+            (element_.element_z == 12 &&
+             ((type99_state_.enabled && contribution.data_type == 99) ||
+              primary_order_state_.enabled));
+        std::optional<std::pair<std::int64_t,std::string>> source_key;
+        if (need_source_key)
+            source_key.emplace(contribution.record, std::string(role_name));
         if (type99_state_.enabled && element_.element_z == 12 && contribution.data_type == 99) {
-            const auto it = type99_state_.rows.find(source_key);
+            if (!source_key.has_value())
+                throw std::runtime_error("canonical Thermal ledger missing optimized source key");
+            const auto it = type99_state_.rows.find(*source_key);
             if (it == type99_state_.rows.end()) {
                 throw std::runtime_error(
                     "canonical Thermal ledger missing Mg Type-99 source row");
@@ -2861,7 +3008,9 @@ private:
 
         std::int64_t primary_source_order_index = 0;
         if (primary_order_state_.enabled && element_.element_z == 12 && cj > 0.0) {
-            const auto it = primary_order_state_.rows.find(source_key);
+            if (!source_key.has_value())
+                throw std::runtime_error("canonical Thermal ledger missing optimized primary source key");
+            const auto it = primary_order_state_.rows.find(*source_key);
             if (it == primary_order_state_.rows.end()) {
                 throw std::runtime_error(
                     "canonical Thermal ledger missing Mg primary source-order row");
@@ -4090,6 +4239,9 @@ struct FixedStatePersistentScratchV068231 {
     std::vector<xstar_element_contribution_v1> contributions;
     std::vector<xstar_element_contribution_v1> thermal_only_contributions;
     std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
+    // 0.6.82.40.2.14: reusable canonical thermal ledger storage paired with
+    // the contribution list.  Values are cleared/rebuilt every element solve.
+    CanonicalThermalLedgerBuild canonical_thermal_ledger_v068240214;
     std::vector<xstar_spectral_contribution_v1> spectral_contributions;
     // 0.6.82.38.1: one-based spectral-contribution index keyed by the immutable
     // compiled ProgramRecord index.  Zero means that this program record did
@@ -4141,6 +4293,7 @@ struct FixedStatePersistentScratchV068231 {
         XSTAR_CAP_BYTES_V068231(contributions);
         XSTAR_CAP_BYTES_V068231(thermal_only_contributions);
         XSTAR_CAP_BYTES_V068231(type95_self_loop_candidates);
+        XSTAR_CAP_BYTES_V068231(canonical_thermal_ledger_v068240214.terms);
         XSTAR_CAP_BYTES_V068231(spectral_contributions);
         XSTAR_CAP_BYTES_V068231(spectral_index_by_record_v0682381);
         XSTAR_CAP_BYTES_V068231(all_populations);
@@ -4205,7 +4358,9 @@ struct FixedStatePersistentScratchV068231 {
         add(out[0], evaluated_records);
         // 1: scientific contribution lists.
         add(out[1], contributions); add(out[1], thermal_only_contributions);
-        add(out[1], type95_self_loop_candidates); add(out[1], spectral_contributions);
+        add(out[1], type95_self_loop_candidates);
+        add(out[1], canonical_thermal_ledger_v068240214.terms);
+        add(out[1], spectral_contributions);
         add(out[3], spectral_index_by_record_v0682381);
         // 2: full/population streams retained between evaluations.
         add(out[2], all_populations); add(out[2], thermal_population_stream);
@@ -4590,6 +4745,11 @@ struct xstar_fixed_state_context_impl {
     // 0.6.82.40.2.8: enables boundary-level owner sampling only.  The hot
     // evaluator receives no additional clocks or branches from this flag.
     bool fixed_controller_diagnostics_enabled_v06824028 = false;
+    // 0.6.82.40.2.14: resolve contribution hot-path mode once per context so
+    // the fixed-state hot path never performs repeated environment parsing.
+    bool contribution_hotpath_mode_initialized_v068240214 = false;
+    ContributionHotPathModeV068240214 contribution_hotpath_mode_v068240214 =
+        ContributionHotPathModeV068240214::Optimized;
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
@@ -13146,6 +13306,21 @@ int run_impl(
          force_096_record_provenance_v064897);
     const bool retain_compact_record_products_v06823611 =
         compact_record_products_v06823611 && !defer_product_projection;
+    if (!ctx.contribution_hotpath_mode_initialized_v068240214) {
+        ctx.contribution_hotpath_mode_v068240214 =
+            configured_contribution_hotpath_mode_v068240214();
+        ctx.contribution_hotpath_mode_initialized_v068240214 = true;
+    }
+    // Preserve historical behavior automatically for non-production/rich
+    // forensic calls.  Ordinary native production defaults to optimized.
+    const bool contribution_hotpath_optimized_v068240214 =
+        native_production_v064897 && !retain_record_provenance_v064897 &&
+        ctx.contribution_hotpath_mode_v068240214 ==
+            ContributionHotPathModeV068240214::Optimized;
+    if (contribution_hotpath_optimized_v068240214)
+        ++perf_foundation_v068231.contribution_hotpath_optimized_calls_v068240214;
+    else
+        ++perf_foundation_v068231.contribution_hotpath_historical_calls_v068240214;
     // 0.6.82.30.8.7: true-production DSEC consumes thermal/state outputs, not
     // the retained element-product diagnostic package.  Avoid deep-copying
     // contributions, populations and residual workspaces on those deferred
@@ -14359,7 +14534,15 @@ int run_impl(
         thermal_only_contributions.clear();
         type95_self_loop_candidates.clear();
         if (contributions.capacity() < evaluated.size()) {
-            contributions.reserve(evaluated.size());
+            std::size_t target = evaluated.size();
+            if (contribution_hotpath_optimized_v068240214) {
+                const std::size_t geometric = contributions.capacity() == 0u
+                    ? std::max<std::size_t>(64u, target)
+                    : contributions.capacity() + contributions.capacity() / 2u;
+                target = std::max(target, geometric);
+                ++perf_foundation_v068231.contribution_geometric_growths_v068240214;
+            }
+            contributions.reserve(target);
             ++perf_foundation_v068231.contribution_capacity_growths;
         } else if (contributions.capacity() > 0u) {
             ++perf_foundation_v068231.contribution_capacity_reuses;
@@ -14434,17 +14617,33 @@ int run_impl(
             const bool qualification_ablated = matrix_family_ablated || matrix_source_ablated || matrix_row_ablated ||
                 unqualified_type53_ablated || unqualified_type71_ablated || unqualified_type99_ablated;
             bool matrix_committed = false;
+            const xstar_element_contribution_v1* committed_contribution_v068240214 = nullptr;
             if (item.matrix_enabled && active_stage && endpoints_active && !qualification_ablated &&
                 source_detailed_matrix_record && !source_absent_type95_self_loop) {
-                auto contribution = original;
-                const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
-                const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
-                if (raw_lower_row <= 0 || raw_upper_row <= 0) {
-                    throw std::runtime_error("source matrix endpoint mapped below compact basis");
+                if (contribution_hotpath_optimized_v068240214) {
+                    contributions.emplace_back(original);
+                    auto& contribution = contributions.back();
+                    const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
+                    const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
+                    if (raw_lower_row <= 0 || raw_upper_row <= 0) {
+                        throw std::runtime_error("source matrix endpoint mapped below compact basis");
+                    }
+                    contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
+                    contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
+                    committed_contribution_v068240214 = &contribution;
+                    ++perf_foundation_v068231.contribution_temporary_copies_elided_v068240214;
+                } else {
+                    auto contribution = original;
+                    const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
+                    const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
+                    if (raw_lower_row <= 0 || raw_upper_row <= 0) {
+                        throw std::runtime_error("source matrix endpoint mapped below compact basis");
+                    }
+                    contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
+                    contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
+                    contributions.push_back(contribution);
+                    committed_contribution_v068240214 = &contributions.back();
                 }
-                contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
-                contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
-                contributions.push_back(contribution);
                 type95_source_stream_order.push_back(Type95StreamEvent{
                     Type95StreamIdentity{original.record, original.data_type,
                         original.rate_type, original.ion_stage}, false});
@@ -14478,6 +14677,16 @@ int run_impl(
                 diagnostic.row = make_record_product_row_v06823611(
                     element.element_index, element.element_z, item);
                 diagnostic.matrix_committed = matrix_committed;
+                if (contribution_hotpath_optimized_v068240214 &&
+                    committed_contribution_v068240214 && !matrix_construction_closure) {
+                    const auto& committed = *committed_contribution_v068240214;
+                    diagnostic.row.ans[0] = committed.ans1;
+                    diagnostic.row.ans[1] = committed.ans2;
+                    diagnostic.row.ans[2] = committed.ans3;
+                    diagnostic.row.ans[3] = committed.ans4;
+                    diagnostic.row.ans[4] = committed.ans5;
+                    diagnostic.row.ans[5] = committed.ans6;
+                }
                 ctx.last_compact_record_product_diagnostics_v06823611.push_back(
                     std::move(diagnostic));
             } else if (retain_record_provenance_v064897) {
@@ -14635,73 +14844,100 @@ int run_impl(
             }
         }
 
-        // The source answer-channel capture is matrix-commit scoped.  Keep the
-        // native record diagnostics on that same semantic boundary by replacing
-        // raw pre-closure UCalc answers with the final committed contribution
-        // answers.  Removed native-only contributions are no longer marked as
-        // matrix committed.
-        using DiagnosticIdentity = std::tuple<std::int64_t, int, int, int>;
-        std::map<DiagnosticIdentity, const xstar_element_contribution_v1*> committed_by_identity;
-        for (const auto& contribution : contributions) {
-            const DiagnosticIdentity key{
-                contribution.record, contribution.data_type,
-                contribution.rate_type, contribution.ion_stage};
-            if (!committed_by_identity.emplace(key, &contribution).second) {
-                throw std::runtime_error(
-                    "duplicate final committed contribution identity for diagnostics");
+        // The source answer-channel capture is matrix-commit scoped.  In
+        // ordinary compact production the final committed answers were copied
+        // directly into the compact diagnostic row at insertion above, so the
+        // historical ordered identity map is redundant.  Preserve that exact
+        // map path for matrix-closure and rich/forensic execution.
+        const bool direct_compact_diagnostic_v068240214 =
+            contribution_hotpath_optimized_v068240214 &&
+            retain_compact_record_products_v06823611 && !matrix_construction_closure;
+        const bool no_diagnostic_reconciliation_v068240214 =
+            contribution_hotpath_optimized_v068240214 &&
+            ctx.last_record_diagnostics.empty() &&
+            ctx.last_compact_record_product_diagnostics_v06823611.empty();
+        if (direct_compact_diagnostic_v068240214 ||
+            no_diagnostic_reconciliation_v068240214) {
+            ++perf_foundation_v068231.contribution_diagnostic_maps_elided_v068240214;
+        } else {
+            using DiagnosticIdentity = std::tuple<std::int64_t, int, int, int>;
+            std::map<DiagnosticIdentity, const xstar_element_contribution_v1*> committed_by_identity;
+            for (const auto& contribution : contributions) {
+                const DiagnosticIdentity key{
+                    contribution.record, contribution.data_type,
+                    contribution.rate_type, contribution.ion_stage};
+                if (!committed_by_identity.emplace(key, &contribution).second) {
+                    throw std::runtime_error(
+                        "duplicate final committed contribution identity for diagnostics");
+                }
             }
-        }
-        for (auto& diagnostic : ctx.last_record_diagnostics) {
-            if (diagnostic.element_z != element.element_z || !diagnostic.matrix_committed) {
-                continue;
+            for (auto& diagnostic : ctx.last_record_diagnostics) {
+                if (diagnostic.element_z != element.element_z || !diagnostic.matrix_committed) {
+                    continue;
+                }
+                auto& answers = diagnostic.evaluated.contribution;
+                const DiagnosticIdentity key{
+                    answers.record, answers.data_type, answers.rate_type, answers.ion_stage};
+                const auto committed = committed_by_identity.find(key);
+                if (committed == committed_by_identity.end()) {
+                    diagnostic.matrix_committed = false;
+                    continue;
+                }
+                answers.ans1 = committed->second->ans1;
+                answers.ans2 = committed->second->ans2;
+                answers.ans3 = committed->second->ans3;
+                answers.ans4 = committed->second->ans4;
+                answers.ans5 = committed->second->ans5;
+                answers.ans6 = committed->second->ans6;
             }
-            auto& answers = diagnostic.evaluated.contribution;
-            const DiagnosticIdentity key{
-                answers.record, answers.data_type, answers.rate_type, answers.ion_stage};
-            const auto committed = committed_by_identity.find(key);
-            if (committed == committed_by_identity.end()) {
-                diagnostic.matrix_committed = false;
-                continue;
+            for (auto& diagnostic : ctx.last_compact_record_product_diagnostics_v06823611) {
+                auto& answers = diagnostic.row;
+                if (answers.element_z != element.element_z || !diagnostic.matrix_committed) {
+                    continue;
+                }
+                const DiagnosticIdentity key{
+                    answers.record, answers.data_type, answers.rate_type, answers.ion_stage};
+                const auto committed = committed_by_identity.find(key);
+                if (committed == committed_by_identity.end()) {
+                    diagnostic.matrix_committed = false;
+                    continue;
+                }
+                answers.ans[0] = committed->second->ans1;
+                answers.ans[1] = committed->second->ans2;
+                answers.ans[2] = committed->second->ans3;
+                answers.ans[3] = committed->second->ans4;
+                answers.ans[4] = committed->second->ans5;
+                answers.ans[5] = committed->second->ans6;
             }
-            answers.ans1 = committed->second->ans1;
-            answers.ans2 = committed->second->ans2;
-            answers.ans3 = committed->second->ans3;
-            answers.ans4 = committed->second->ans4;
-            answers.ans5 = committed->second->ans5;
-            answers.ans6 = committed->second->ans6;
-        }
-        for (auto& diagnostic : ctx.last_compact_record_product_diagnostics_v06823611) {
-            auto& answers = diagnostic.row;
-            if (answers.element_z != element.element_z || !diagnostic.matrix_committed) {
-                continue;
-            }
-            const DiagnosticIdentity key{
-                answers.record, answers.data_type, answers.rate_type, answers.ion_stage};
-            const auto committed = committed_by_identity.find(key);
-            if (committed == committed_by_identity.end()) {
-                diagnostic.matrix_committed = false;
-                continue;
-            }
-            answers.ans[0] = committed->second->ans1;
-            answers.ans[1] = committed->second->ans2;
-            answers.ans[2] = committed->second->ans3;
-            answers.ans[3] = committed->second->ans4;
-            answers.ans[4] = committed->second->ans5;
-            answers.ans[5] = committed->second->ans6;
         }
 
-        // v0.6.48.7.46.21.8: capture canonical Thermal coefficients only
-        // after matrix closure and source-order correction.  0.6.82.32 keeps
-        // the two already source-ordered contribution ranges separate instead
-        // of copying both into a temporary combined vector on every solve.
-        for (const auto& contribution : contributions) {
-            canonical_thermal_builder.append_matrix_committed(contribution);
+        // v0.6.48.7.46.21.8 canonical Thermal coefficients.  .40.2.14
+        // retains the historical candidate-map path as a same-binary control,
+        // while ordinary production builds the same source-ordered terms
+        // directly into context-owned reusable storage.
+        CanonicalThermalLedgerBuild historical_canonical_thermal_ledger_v068240214;
+        CanonicalThermalLedgerBuild* canonical_thermal_ledger_v068240214 = nullptr;
+        if (contribution_hotpath_optimized_v068240214) {
+            auto& reusable = ctx.scratch_v068231.canonical_thermal_ledger_v068240214;
+            canonical_thermal_builder.finish_direct_into_v068240214(
+                contributions, thermal_only_contributions, reusable,
+                perf_foundation_v068231.contribution_thermal_term_capacity_growths_v068240214,
+                perf_foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214);
+            canonical_thermal_ledger_v068240214 = &reusable;
+            ++perf_foundation_v068231.contribution_direct_thermal_build_calls_v068240214;
+        } else {
+            for (const auto& contribution : contributions) {
+                canonical_thermal_builder.append_matrix_committed(contribution);
+            }
+            for (const auto& contribution : thermal_only_contributions) {
+                canonical_thermal_builder.append_matrix_committed(contribution);
+            }
+            historical_canonical_thermal_ledger_v068240214 =
+                canonical_thermal_builder.finish(contributions, thermal_only_contributions);
+            canonical_thermal_ledger_v068240214 =
+                &historical_canonical_thermal_ledger_v068240214;
         }
-        for (const auto& contribution : thermal_only_contributions) {
-            canonical_thermal_builder.append_matrix_committed(contribution);
-        }
-        const auto canonical_thermal_ledger =
-            canonical_thermal_builder.finish(contributions, thermal_only_contributions);
+        const auto& canonical_thermal_ledger = *canonical_thermal_ledger_v068240214;
         perf_foundation_v068231.contribution_list_seconds +=
             elapsed(contribution_list_started_v068231);
         stats.contributions_constructed += contributions.size();

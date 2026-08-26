@@ -55,6 +55,15 @@ struct PerformanceFoundationV068231 {
     std::uint64_t evaluated_capacity_reuses = 0u;
     std::uint64_t contribution_capacity_growths = 0u;
     std::uint64_t contribution_capacity_reuses = 0u;
+    // 0.6.82.40.2.14 contribution-list hot-path qualification.
+    std::uint64_t contribution_hotpath_optimized_calls_v068240214 = 0u;
+    std::uint64_t contribution_hotpath_historical_calls_v068240214 = 0u;
+    std::uint64_t contribution_geometric_growths_v068240214 = 0u;
+    std::uint64_t contribution_temporary_copies_elided_v068240214 = 0u;
+    std::uint64_t contribution_diagnostic_maps_elided_v068240214 = 0u;
+    std::uint64_t contribution_direct_thermal_build_calls_v068240214 = 0u;
+    std::uint64_t contribution_thermal_term_capacity_growths_v068240214 = 0u;
+    std::uint64_t contribution_thermal_term_capacity_reuses_v068240214 = 0u;
     std::uint64_t element_buffer_reuses = 0u;
     std::uint64_t leveltemp_backup_reuses = 0u;
     std::uint64_t reduced_continuum_geometry_builds = 0u;

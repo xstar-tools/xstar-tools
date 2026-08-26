@@ -23013,6 +23013,19 @@ void emit_controller_performance_instrumentation(
             << "V068231_PERF_EVALUATED_CAPACITY_REUSES=" << perf.foundation_v068231.evaluated_capacity_reuses << "\n"
             << "V068231_PERF_CONTRIBUTION_CAPACITY_GROWTHS=" << perf.foundation_v068231.contribution_capacity_growths << "\n"
             << "V068231_PERF_CONTRIBUTION_CAPACITY_REUSES=" << perf.foundation_v068231.contribution_capacity_reuses << "\n"
+            << "V068240214_CONTRIBUTION_MODE="
+            << ((perf.foundation_v068231.contribution_hotpath_optimized_calls_v068240214 > 0u &&
+                 perf.foundation_v068231.contribution_hotpath_historical_calls_v068240214 == 0u) ? "OPTIMIZED" :
+                (perf.foundation_v068231.contribution_hotpath_historical_calls_v068240214 > 0u &&
+                 perf.foundation_v068231.contribution_hotpath_optimized_calls_v068240214 == 0u) ? "HISTORICAL" : "MIXED") << "\n"
+            << "V068240214_CONTRIBUTION_HOTPATH_OPTIMIZED_CALLS=" << perf.foundation_v068231.contribution_hotpath_optimized_calls_v068240214 << "\n"
+            << "V068240214_CONTRIBUTION_HOTPATH_HISTORICAL_CALLS=" << perf.foundation_v068231.contribution_hotpath_historical_calls_v068240214 << "\n"
+            << "V068240214_CONTRIBUTION_GEOMETRIC_GROWTHS=" << perf.foundation_v068231.contribution_geometric_growths_v068240214 << "\n"
+            << "V068240214_CONTRIBUTION_TEMPORARY_COPIES_ELIDED=" << perf.foundation_v068231.contribution_temporary_copies_elided_v068240214 << "\n"
+            << "V068240214_CONTRIBUTION_DIAGNOSTIC_MAPS_ELIDED=" << perf.foundation_v068231.contribution_diagnostic_maps_elided_v068240214 << "\n"
+            << "V068240214_CONTRIBUTION_DIRECT_THERMAL_BUILD_CALLS=" << perf.foundation_v068231.contribution_direct_thermal_build_calls_v068240214 << "\n"
+            << "V068240214_CONTRIBUTION_THERMAL_TERM_CAPACITY_GROWTHS=" << perf.foundation_v068231.contribution_thermal_term_capacity_growths_v068240214 << "\n"
+            << "V068240214_CONTRIBUTION_THERMAL_TERM_CAPACITY_REUSES=" << perf.foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214 << "\n"
             << "V068231_PERF_ELEMENT_BUFFER_REUSES=" << perf.foundation_v068231.element_buffer_reuses << "\n"
             << "V068231_PERF_LEVELTEMP_BACKUP_REUSES=" << perf.foundation_v068231.leveltemp_backup_reuses << "\n"
             << "V068231_PERF_REDUCED_CONTINUUM_GEOMETRY_BUILDS=" << perf.foundation_v068231.reduced_continuum_geometry_builds << "\n"

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.14 - contribution-list hot path - 2026-08-26
+
+- Narrow CPU successor to host-accepted `.40.2.13`; the accepted single-live call-start workspace remains the production default and no memory-lifetime work is reopened.
+- Adds `XSTAR_V068240214_CONTRIBUTION_MODE=historical|optimized` for same-binary qualification. Ordinary native production defaults to `optimized`; non-production/rich record-forensic calls retain the historical path.
+- Optimized contribution construction uses geometric persistent-capacity growth and writes committed contributions directly into the retained vector, avoiding the redundant temporary contribution copy while preserving source order and endpoint mapping.
+- Ordinary compact production updates committed ans1..ans6 in the compact record-product row at insertion time and therefore skips the per-element ordered `committed_by_identity` map. Matrix-closure and rich/forensic execution preserve the historical reconciliation map.
+- Canonical Thermal terms are built directly from the final committed contribution stream into context-owned reusable term storage. This removes the historical candidate-map plus second identity lookup while retaining one duplicate-identity invariant set, the special sequence-1 stable-sort branch, exact term order, and exact arithmetic.
+- No clocks are added inside `evaluate_record()`. Existing `V068231_PERF_CONTRIBUTION_LIST_SECONDS` remains the authoritative hot-path timer; `.2.14` adds only counters/markers for capacity growth, copy elision, map elision, direct Thermal builds, and reusable term capacity.
+- Host qualification is same-binary/same-host: `c_xim3` historical vs optimized first, then optimized `c_xip1` and `c_xip4` science closure. Material target is at least 10% lower contribution-list time with whole-run CPU <=1% regression and RSS <=3% regression. No multi-element run; broad Phase C remains blocked.
+- Remaining priorities after this gate: remaining traversal orchestration (~12-13 s), then detail RRC (~9 s). DSEC orchestration, callback wrapper, Type-53 legacy prepass, late radial release `.2.7`, final-boundary 784 MB residual, call-start workspace ownership, and C5 xi-dependent RSS remain CLOSED.
+
 ## 0.6.82.40.2.13 - call-start single live workspace / small-ring locality experiment - 2026-08-26
 
 - Narrow successor to host-measured `.40.2.12`; science arithmetic, solver/controller decisions, accumulation order, ABI, publication schema, and physical cutoffs remain frozen.
