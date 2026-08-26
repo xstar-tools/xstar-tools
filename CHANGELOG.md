@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.15 - traversal orchestration hot path - 2026-08-26
+
+- Freeze host-accepted `0.6.82.40.2.14` contribution-list optimization as the production baseline.
+- Add same-binary `XSTAR_V068240215_TRAVERSAL_MODE=historical|optimized`, defaulting to optimized only for ordinary native production while preserving historical/non-production forensic behavior.
+- Compile immutable Option-10 `nlev/idest1/idest2` ownership once per program record instead of repeating LTE-topology and UCalc-endpoint reconstruction in every fixed-state post-pass.
+- Build compact source-ordered post-pass index lists while pass-2 records are already being materialized, so optimized Option-10 ownership visits only rate families that can contribute and optimized `errc` ownership visits only rate-7 Type-49/53/99 records with continuum slots.
+- Reuse context-owned `pirt/rrrt` scratch capacity across element solves; preserve exact contribution/rate accumulation order and publication ownership semantics.
+- Add coarse post-pass timers/counters outside `evaluate_record()` and a narrow same-host qualification for `xi=-3` historical/optimized plus optimized `xi=+1,+4`; no multi-element qualification and Phase C remains blocked.
+
 ## 0.6.82.40.2.14 - contribution-list hot path - 2026-08-26
 
 - Narrow CPU successor to host-accepted `.40.2.13`; the accepted single-live call-start workspace remains the production default and no memory-lifetime work is reopened.

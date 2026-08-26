@@ -23026,6 +23026,25 @@ void emit_controller_performance_instrumentation(
             << "V068240214_CONTRIBUTION_DIRECT_THERMAL_BUILD_CALLS=" << perf.foundation_v068231.contribution_direct_thermal_build_calls_v068240214 << "\n"
             << "V068240214_CONTRIBUTION_THERMAL_TERM_CAPACITY_GROWTHS=" << perf.foundation_v068231.contribution_thermal_term_capacity_growths_v068240214 << "\n"
             << "V068240214_CONTRIBUTION_THERMAL_TERM_CAPACITY_REUSES=" << perf.foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214 << "\n"
+            << "V068240215_TRAVERSAL_MODE="
+            << ((perf.foundation_v068231.traversal_hotpath_optimized_calls_v068240215 > 0u &&
+                 perf.foundation_v068231.traversal_hotpath_historical_calls_v068240215 == 0u) ? "OPTIMIZED" :
+                (perf.foundation_v068231.traversal_hotpath_historical_calls_v068240215 > 0u &&
+                 perf.foundation_v068231.traversal_hotpath_optimized_calls_v068240215 == 0u) ? "HISTORICAL" : "MIXED") << "\n"
+            << "V068240215_TRAVERSAL_HOTPATH_OPTIMIZED_CALLS=" << perf.foundation_v068231.traversal_hotpath_optimized_calls_v068240215 << "\n"
+            << "V068240215_TRAVERSAL_HOTPATH_HISTORICAL_CALLS=" << perf.foundation_v068231.traversal_hotpath_historical_calls_v068240215 << "\n"
+            << "V068240215_OPTION10_POSTPASS_RECORDS_CONSIDERED=" << perf.foundation_v068231.option10_postpass_records_considered_v068240215 << "\n"
+            << "V068240215_OPTION10_POSTPASS_RECORDS_ELIDED=" << perf.foundation_v068231.option10_postpass_records_elided_v068240215 << "\n"
+            << "V068240215_OPTION10_ENDPOINT_CACHE_HITS=" << perf.foundation_v068231.option10_endpoint_cache_hits_v068240215 << "\n"
+            << "V068240215_ERRC_POSTPASS_RECORDS_CONSIDERED=" << perf.foundation_v068231.errc_postpass_records_considered_v068240215 << "\n"
+            << "V068240215_ERRC_POSTPASS_RECORDS_ELIDED=" << perf.foundation_v068231.errc_postpass_records_elided_v068240215 << "\n"
+            << "V068240215_POSTPASS_INDEX_CAPACITY_GROWTHS=" << perf.foundation_v068231.postpass_index_capacity_growths_v068240215 << "\n"
+            << "V068240215_POSTPASS_INDEX_CAPACITY_REUSES=" << perf.foundation_v068231.postpass_index_capacity_reuses_v068240215 << "\n"
+            << "V068240215_OPTION10_OWNERSHIP_SECONDS=" << perf.foundation_v068231.option10_ownership_seconds_v068240215 << "\n"
+            << "V068240215_ERRC_OWNERSHIP_SECONDS=" << perf.foundation_v068231.errc_ownership_seconds_v068240215 << "\n"
+            << "V068240215_POSTPASS_OWNERSHIP_SECONDS="
+            << (perf.foundation_v068231.option10_ownership_seconds_v068240215 +
+                perf.foundation_v068231.errc_ownership_seconds_v068240215) << "\n"
             << "V068231_PERF_ELEMENT_BUFFER_REUSES=" << perf.foundation_v068231.element_buffer_reuses << "\n"
             << "V068231_PERF_LEVELTEMP_BACKUP_REUSES=" << perf.foundation_v068231.leveltemp_backup_reuses << "\n"
             << "V068231_PERF_REDUCED_CONTINUUM_GEOMETRY_BUILDS=" << perf.foundation_v068231.reduced_continuum_geometry_builds << "\n"

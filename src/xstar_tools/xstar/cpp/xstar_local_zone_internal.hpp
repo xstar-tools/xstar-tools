@@ -64,6 +64,18 @@ struct PerformanceFoundationV068231 {
     std::uint64_t contribution_direct_thermal_build_calls_v068240214 = 0u;
     std::uint64_t contribution_thermal_term_capacity_growths_v068240214 = 0u;
     std::uint64_t contribution_thermal_term_capacity_reuses_v068240214 = 0u;
+    // 0.6.82.40.2.15 traversal-orchestration hot-path qualification.
+    std::uint64_t traversal_hotpath_optimized_calls_v068240215 = 0u;
+    std::uint64_t traversal_hotpath_historical_calls_v068240215 = 0u;
+    std::uint64_t option10_postpass_records_considered_v068240215 = 0u;
+    std::uint64_t option10_postpass_records_elided_v068240215 = 0u;
+    std::uint64_t option10_endpoint_cache_hits_v068240215 = 0u;
+    std::uint64_t errc_postpass_records_considered_v068240215 = 0u;
+    std::uint64_t errc_postpass_records_elided_v068240215 = 0u;
+    std::uint64_t postpass_index_capacity_growths_v068240215 = 0u;
+    std::uint64_t postpass_index_capacity_reuses_v068240215 = 0u;
+    double option10_ownership_seconds_v068240215 = 0.0;
+    double errc_ownership_seconds_v068240215 = 0.0;
     std::uint64_t element_buffer_reuses = 0u;
     std::uint64_t leveltemp_backup_reuses = 0u;
     std::uint64_t reduced_continuum_geometry_builds = 0u;

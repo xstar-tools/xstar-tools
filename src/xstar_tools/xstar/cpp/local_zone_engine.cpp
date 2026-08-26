@@ -455,6 +455,22 @@ ContributionHotPathModeV068240214 configured_contribution_hotpath_mode_v06824021
     throw std::runtime_error("invalid XSTAR_V068240214_CONTRIBUTION_MODE");
 }
 
+// 0.6.82.40.2.15: post-pass traversal-orchestration control.  The optimized
+// production path keeps the exact corrected EvaluatedRecord stream but avoids
+// rescanning records that cannot participate in Option-10 pirt/rrrt ownership
+// or Type-49/53/99 errc ownership.  Historical preserves the pre-.15 scans for
+// same-binary qualification and non-production forensic calls.
+enum class TraversalHotPathModeV068240215 { Historical, Optimized };
+
+TraversalHotPathModeV068240215 configured_traversal_hotpath_mode_v068240215() {
+    const char* value = std::getenv("XSTAR_V068240215_TRAVERSAL_MODE");
+    if (!value || !*value || std::string(value) == "optimized")
+        return TraversalHotPathModeV068240215::Optimized;
+    if (std::string(value) == "historical")
+        return TraversalHotPathModeV068240215::Historical;
+    throw std::runtime_error("invalid XSTAR_V068240215_TRAVERSAL_MODE");
+}
+
 // v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
 // This records the legacy approximation, the already-computed source-faithful
 // phint53 shadow, and the actually committed answers for the two call-1
@@ -2316,6 +2332,19 @@ BoundFreeRevisitStateV06823614 compact_bound_free_revisit_v06823614(
 struct RecordSelectionV068237 {
     std::uint32_t ordinal = 0u;
     std::uint32_t record_index = 0u;
+};
+
+// 0.6.82.40.2.15: immutable Option-10 endpoint metadata compiled once from
+// source topology.  Normal fixed-state evaluations consume this directly
+// instead of repeatedly searching LTE topology and reconstructing UCalc
+// endpoint ownership in the post-pass publication scan.
+struct Option10EndpointPlanV068240215 {
+    int nlev = 0;
+    int idest1 = 0;
+    int idest2 = 0;
+    bool exact = false;
+    bool relevant = false;
+    const char* owner = "row_fallback";
 };
 
 struct PreliminaryCachedRecordV064812337 {
@@ -4236,6 +4265,12 @@ struct FixedStatePersistentScratchV068231 {
     std::vector<const ProgramRecord*> preliminary_records;
     std::vector<EvaluatedRecord> evaluated;
     std::vector<const ProgramRecord*> evaluated_records;
+    // 0.6.82.40.2.15: compact post-pass selection indices.  These vectors are
+    // rebuilt in source order for every element and retain only capacity.
+    std::vector<std::uint32_t> option10_postpass_indices_v068240215;
+    std::vector<std::uint32_t> errc_postpass_indices_v068240215;
+    std::vector<double> detailed_pirt_v068240215;
+    std::vector<double> detailed_rrrt_v068240215;
     std::vector<xstar_element_contribution_v1> contributions;
     std::vector<xstar_element_contribution_v1> thermal_only_contributions;
     std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
@@ -4290,6 +4325,10 @@ struct FixedStatePersistentScratchV068231 {
         XSTAR_CAP_BYTES_V068231(preliminary_records);
         XSTAR_CAP_BYTES_V068231(evaluated);
         XSTAR_CAP_BYTES_V068231(evaluated_records);
+        XSTAR_CAP_BYTES_V068231(option10_postpass_indices_v068240215);
+        XSTAR_CAP_BYTES_V068231(errc_postpass_indices_v068240215);
+        XSTAR_CAP_BYTES_V068231(detailed_pirt_v068240215);
+        XSTAR_CAP_BYTES_V068231(detailed_rrrt_v068240215);
         XSTAR_CAP_BYTES_V068231(contributions);
         XSTAR_CAP_BYTES_V068231(thermal_only_contributions);
         XSTAR_CAP_BYTES_V068231(type95_self_loop_candidates);
@@ -4356,6 +4395,10 @@ struct FixedStatePersistentScratchV068231 {
         add(out[0], preliminary_cache); add(out[0], preliminary_evaluated);
         add(out[0], preliminary_records); add(out[0], evaluated);
         add(out[0], evaluated_records);
+        add(out[0], option10_postpass_indices_v068240215);
+        add(out[0], errc_postpass_indices_v068240215);
+        add(out[0], detailed_pirt_v068240215);
+        add(out[0], detailed_rrrt_v068240215);
         // 1: scientific contribution lists.
         add(out[1], contributions); add(out[1], thermal_only_contributions);
         add(out[1], type95_self_loop_candidates);
@@ -4750,6 +4793,12 @@ struct xstar_fixed_state_context_impl {
     bool contribution_hotpath_mode_initialized_v068240214 = false;
     ContributionHotPathModeV068240214 contribution_hotpath_mode_v068240214 =
         ContributionHotPathModeV068240214::Optimized;
+    // 0.6.82.40.2.15: resolve the remaining traversal hot-path mode once per
+    // context and compile immutable Option-10 endpoint ownership by record.
+    bool traversal_hotpath_mode_initialized_v068240215 = false;
+    TraversalHotPathModeV068240215 traversal_hotpath_mode_v068240215 =
+        TraversalHotPathModeV068240215::Optimized;
+    std::vector<Option10EndpointPlanV068240215> option10_endpoint_plan_by_record_v068240215;
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
@@ -13321,6 +13370,19 @@ int run_impl(
         ++perf_foundation_v068231.contribution_hotpath_optimized_calls_v068240214;
     else
         ++perf_foundation_v068231.contribution_hotpath_historical_calls_v068240214;
+    if (!ctx.traversal_hotpath_mode_initialized_v068240215) {
+        ctx.traversal_hotpath_mode_v068240215 =
+            configured_traversal_hotpath_mode_v068240215();
+        ctx.traversal_hotpath_mode_initialized_v068240215 = true;
+    }
+    const bool traversal_hotpath_optimized_v068240215 =
+        native_production_v064897 && !retain_record_provenance_v064897 &&
+        ctx.traversal_hotpath_mode_v068240215 ==
+            TraversalHotPathModeV068240215::Optimized;
+    if (traversal_hotpath_optimized_v068240215)
+        ++perf_foundation_v068231.traversal_hotpath_optimized_calls_v068240215;
+    else
+        ++perf_foundation_v068231.traversal_hotpath_historical_calls_v068240215;
     // 0.6.82.30.8.7: true-production DSEC consumes thermal/state outputs, not
     // the retained element-product diagnostic package.  Avoid deep-copying
     // contributions, populations and residual workspaces on those deferred
@@ -14154,6 +14216,25 @@ int run_impl(
             if (evaluated_growth_v068231) ++perf_foundation_v068231.evaluated_capacity_growths;
             else if (active_pass2_count_v064812337 > 0u) ++perf_foundation_v068231.evaluated_capacity_reuses;
         }
+        auto& option10_postpass_indices_v068240215 =
+            ctx.scratch_v068231.option10_postpass_indices_v068240215;
+        auto& errc_postpass_indices_v068240215 =
+            ctx.scratch_v068231.errc_postpass_indices_v068240215;
+        option10_postpass_indices_v068240215.clear();
+        errc_postpass_indices_v068240215.clear();
+        if (traversal_hotpath_optimized_v068240215) {
+            const bool growth_v068240215 =
+                option10_postpass_indices_v068240215.capacity() < active_pass2_count_v064812337 ||
+                errc_postpass_indices_v068240215.capacity() < active_pass2_count_v064812337;
+            if (option10_postpass_indices_v068240215.capacity() < active_pass2_count_v064812337)
+                option10_postpass_indices_v068240215.reserve(active_pass2_count_v064812337);
+            if (errc_postpass_indices_v068240215.capacity() < active_pass2_count_v064812337)
+                errc_postpass_indices_v068240215.reserve(active_pass2_count_v064812337);
+            if (growth_v068240215)
+                ++perf_foundation_v068231.postpass_index_capacity_growths_v068240215;
+            else if (active_pass2_count_v064812337 > 0u)
+                ++perf_foundation_v068231.postpass_index_capacity_reuses_v068240215;
+        }
         std::size_t preliminary_cursor_v064812337 = 0u;
         std::uint64_t evaluated_sidecar_count_incremental_v06823615 = 0u;
         std::uint64_t evaluated_generic_bf_capacity_incremental_v06823615 = 0u;
@@ -14210,6 +14291,23 @@ int run_impl(
                 evaluated_generic_bf_capacity_incremental_v06823615 +=
                     static_cast<std::uint64_t>(
                         item.generic_bound_free_sigma_cm2_v0648120.capacity()) * sizeof(double);
+            }
+            if (traversal_hotpath_optimized_v068240215) {
+                const std::uint32_t evaluated_index_v068240215 =
+                    static_cast<std::uint32_t>(evaluated.size());
+                if (record.rate_type == 7 || record.rate_type == 1 ||
+                    record.rate_type == 40 || record.rate_type == 42 ||
+                    record.rate_type == 8 || record.rate_type == 15) {
+                    option10_postpass_indices_v068240215.push_back(
+                        evaluated_index_v068240215);
+                }
+                if (!defer_product_projection && record.rate_type == 7 &&
+                    record.continuum_index_one_based > 0 &&
+                    (record.data_type == 49 || record.data_type == 53 ||
+                     record.data_type == 99)) {
+                    errc_postpass_indices_v068240215.push_back(
+                        evaluated_index_v068240215);
+                }
             }
             evaluated.push_back(std::move(item));
             evaluated_records.push_back(&record);
@@ -14345,10 +14443,19 @@ int run_impl(
         if (native_production_v064897 && !defer_product_projection)
             sample_fixed_phase_rss_v068239(perf_foundation_v068231, 1u);
 
-        std::vector<double> detailed_pirt_v06822934(
-            static_cast<std::size_t>(element.element_z), 0.0);
-        std::vector<double> detailed_rrrt_v06822934(
-            static_cast<std::size_t>(element.element_z), 0.0);
+        const auto option10_ownership_started_v068240215 = clock_type::now();
+        std::vector<double> historical_detailed_pirt_v068240215;
+        std::vector<double> historical_detailed_rrrt_v068240215;
+        auto* detailed_pirt_owner_v068240215 = &historical_detailed_pirt_v068240215;
+        auto* detailed_rrrt_owner_v068240215 = &historical_detailed_rrrt_v068240215;
+        if (traversal_hotpath_optimized_v068240215) {
+            detailed_pirt_owner_v068240215 = &ctx.scratch_v068231.detailed_pirt_v068240215;
+            detailed_rrrt_owner_v068240215 = &ctx.scratch_v068231.detailed_rrrt_v068240215;
+        }
+        auto& detailed_pirt_v06822934 = *detailed_pirt_owner_v068240215;
+        auto& detailed_rrrt_v06822934 = *detailed_rrrt_owner_v068240215;
+        detailed_pirt_v06822934.assign(static_cast<std::size_t>(element.element_z), 0.0);
+        detailed_rrrt_v06822934.assign(static_cast<std::size_t>(element.element_z), 0.0);
 
         const char* option10_rate_provenance_path_v06822934 =
             std::getenv("XSTAR_V06822934_OPTION10_RATE_OWNERSHIP_PATH");
@@ -14375,72 +14482,159 @@ int run_impl(
             }
         }
 
-        for (std::size_t k_v06822934 = 0;
-             k_v06822934 < evaluated.size() &&
-             k_v06822934 < evaluated_records.size();
-             ++k_v06822934) {
-            const ProgramRecord* pr_v06822934 = evaluated_records[k_v06822934];
-            if (!pr_v06822934) continue;
-            const auto& c_v06822934 = evaluated[k_v06822934].contribution;
-            const int stage_v06822934 = c_v06822934.ion_stage;
-            const bool active_v06822934 =
-                stage_v06822934 >= active.min_stage &&
-                stage_v06822934 <= active.max_stage;
-            if (!active_v06822934 || stage_v06822934 < 1 ||
-                stage_v06822934 > element.element_z) {
-                continue;
-            }
+        if (traversal_hotpath_optimized_v068240215) {
+            perf_foundation_v068231.option10_postpass_records_considered_v068240215 +=
+                static_cast<std::uint64_t>(option10_postpass_indices_v068240215.size());
+            perf_foundation_v068231.option10_postpass_records_elided_v068240215 +=
+                static_cast<std::uint64_t>(evaluated.size() - option10_postpass_indices_v068240215.size());
+            for (const std::uint32_t compact_index_v068240215 :
+                 option10_postpass_indices_v068240215) {
+                const std::size_t k_v06822934 = static_cast<std::size_t>(compact_index_v068240215);
+                if (k_v06822934 >= evaluated.size() || k_v06822934 >= evaluated_records.size())
+                    throw std::runtime_error("0.6.82.40.2.15 Option-10 compact index out of range");
+                const ProgramRecord* pr_v06822934 = evaluated_records[k_v06822934];
+                if (!pr_v06822934) continue;
+                const auto& c_v06822934 = evaluated[k_v06822934].contribution;
+                const int stage_v06822934 = c_v06822934.ion_stage;
+                const bool active_v06822934 =
+                    stage_v06822934 >= active.min_stage &&
+                    stage_v06822934 <= active.max_stage;
+                if (!active_v06822934 || stage_v06822934 < 1 ||
+                    stage_v06822934 > element.element_z) {
+                    continue;
+                }
+                const bool scalar_family_v06822934 =
+                    c_v06822934.rate_type == 7 ||
+                    c_v06822934.rate_type == 1 ||
+                    c_v06822934.rate_type == 40 ||
+                    c_v06822934.rate_type == 42;
+                const bool provenance_only_v068240215 =
+                    option10_rate_provenance_v06822934 &&
+                    (c_v06822934.rate_type == 8 || c_v06822934.rate_type == 15);
+                if (!scalar_family_v06822934 && !provenance_only_v068240215) continue;
 
-            const int nlev_v06822934 = source_nlev_for_stage(
-                ctx.program, element, stage_v06822934);
-            if (nlev_v06822934 <= 0) continue;
-            const auto endpoints_v06822934 = calc_hmc_ion_endpoints_v06822934(
-                ctx.program, element, *pr_v06822934, nlev_v06822934);
-            const int idest1_v06822934 = endpoints_v06822934.idest1;
-            const int idest2_v06822934 = endpoints_v06822934.idest2;
+                const std::ptrdiff_t record_index_signed_v068240215 =
+                    pr_v06822934 - ctx.program.records.data();
+                if (record_index_signed_v068240215 < 0 ||
+                    static_cast<std::size_t>(record_index_signed_v068240215) >=
+                        ctx.option10_endpoint_plan_by_record_v068240215.size()) {
+                    throw std::runtime_error("0.6.82.40.2.15 Option-10 record index out of range");
+                }
+                const auto& endpoint_plan_v068240215 =
+                    ctx.option10_endpoint_plan_by_record_v068240215[
+                        static_cast<std::size_t>(record_index_signed_v068240215)];
+                if (!endpoint_plan_v068240215.relevant) {
+                    throw std::runtime_error("0.6.82.40.2.15 Option-10 endpoint plan missing");
+                }
+                const int nlev_v06822934 = endpoint_plan_v068240215.nlev;
+                if (nlev_v06822934 <= 0) continue;
+                const int idest1_v06822934 = endpoint_plan_v068240215.idest1;
+                const int idest2_v06822934 = endpoint_plan_v068240215.idest2;
+                ++perf_foundation_v068231.option10_endpoint_cache_hits_v068240215;
 
-            // Literal calc_hmc_ion.f90 call filter.  Rate-type 1 / data-type
-            // 53, rate 15 and rate 8 do not call UCalc in this pass.
-            const bool calc_hmc_ion_called_v06822934 =
-                !(c_v06822934.rate_type == 1 && c_v06822934.data_type == 53) &&
-                c_v06822934.rate_type != 15 && c_v06822934.rate_type != 8;
-            const bool scalar_family_v06822934 =
-                c_v06822934.rate_type == 7 ||
-                c_v06822934.rate_type == 1 ||
-                c_v06822934.rate_type == 40 ||
-                c_v06822934.rate_type == 42;
-            const bool contributes_pirt_v06822934 =
-                calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
-                idest1_v06822934 == 1;
-            const bool contributes_rrrt_v06822934 =
-                calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
-                idest2_v06822934 >= nlev_v06822934;
-            const std::size_t slot_v06822934 =
-                static_cast<std::size_t>(stage_v06822934 - 1);
-            if (contributes_pirt_v06822934) {
-                detailed_pirt_v06822934[slot_v06822934] += c_v06822934.ans1;
-            }
-            if (contributes_rrrt_v06822934) {
-                detailed_rrrt_v06822934[slot_v06822934] += c_v06822934.ans2;
-            }
+                const bool calc_hmc_ion_called_v06822934 =
+                    !(c_v06822934.rate_type == 1 && c_v06822934.data_type == 53) &&
+                    c_v06822934.rate_type != 15 && c_v06822934.rate_type != 8;
+                const bool contributes_pirt_v06822934 =
+                    calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
+                    idest1_v06822934 == 1;
+                const bool contributes_rrrt_v06822934 =
+                    calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
+                    idest2_v06822934 >= nlev_v06822934;
+                const std::size_t slot_v06822934 =
+                    static_cast<std::size_t>(stage_v06822934 - 1);
+                if (contributes_pirt_v06822934) {
+                    detailed_pirt_v06822934[slot_v06822934] += c_v06822934.ans1;
+                }
+                if (contributes_rrrt_v06822934) {
+                    detailed_rrrt_v06822934[slot_v06822934] += c_v06822934.ans2;
+                }
 
-            if (option10_rate_provenance_v06822934 &&
-                (scalar_family_v06822934 ||
-                 c_v06822934.rate_type == 8 ||
-                 c_v06822934.rate_type == 15)) {
-                option10_rate_provenance_v06822934 << std::setprecision(17)
-                    << source_sequence_v82_patch511 << ",record,"
-                    << element.element_z << ',' << stage_v06822934 << ",1,calc_hmc_ion_second_pass,"
-                    << pr_v06822934->source_position << ',' << pr_v06822934->record << ','
-                    << c_v06822934.data_type << ',' << c_v06822934.rate_type << ','
-                    << idest1_v06822934 << ',' << idest2_v06822934 << ','
-                    << nlev_v06822934 << ',' << (endpoints_v06822934.exact ? 1 : 0) << ','
-                    << endpoints_v06822934.owner << ',' << c_v06822934.ans1 << ','
-                    << c_v06822934.ans2 << ','
-                    << (contributes_pirt_v06822934 ? 1 : 0) << ','
-                    << (contributes_rrrt_v06822934 ? 1 : 0) << ','
-                    << detailed_pirt_v06822934[slot_v06822934] << ','
-                    << detailed_rrrt_v06822934[slot_v06822934] << ",0,0\n";
+                if (option10_rate_provenance_v06822934 &&
+                    (scalar_family_v06822934 || provenance_only_v068240215)) {
+                    option10_rate_provenance_v06822934 << std::setprecision(17)
+                        << source_sequence_v82_patch511 << ",record,"
+                        << element.element_z << ',' << stage_v06822934 << ",1,calc_hmc_ion_second_pass,"
+                        << pr_v06822934->source_position << ',' << pr_v06822934->record << ','
+                        << c_v06822934.data_type << ',' << c_v06822934.rate_type << ','
+                        << idest1_v06822934 << ',' << idest2_v06822934 << ','
+                        << nlev_v06822934 << ',' << (endpoint_plan_v068240215.exact ? 1 : 0) << ','
+                        << endpoint_plan_v068240215.owner << ',' << c_v06822934.ans1 << ','
+                        << c_v06822934.ans2 << ','
+                        << (contributes_pirt_v06822934 ? 1 : 0) << ','
+                        << (contributes_rrrt_v06822934 ? 1 : 0) << ','
+                        << detailed_pirt_v06822934[slot_v06822934] << ','
+                        << detailed_rrrt_v06822934[slot_v06822934] << ",0,0\n";
+                }
+            }
+        } else {
+            perf_foundation_v068231.option10_postpass_records_considered_v068240215 +=
+                static_cast<std::uint64_t>(evaluated.size());
+            for (std::size_t k_v06822934 = 0;
+                 k_v06822934 < evaluated.size() &&
+                 k_v06822934 < evaluated_records.size();
+                 ++k_v06822934) {
+                const ProgramRecord* pr_v06822934 = evaluated_records[k_v06822934];
+                if (!pr_v06822934) continue;
+                const auto& c_v06822934 = evaluated[k_v06822934].contribution;
+                const int stage_v06822934 = c_v06822934.ion_stage;
+                const bool active_v06822934 =
+                    stage_v06822934 >= active.min_stage &&
+                    stage_v06822934 <= active.max_stage;
+                if (!active_v06822934 || stage_v06822934 < 1 ||
+                    stage_v06822934 > element.element_z) {
+                    continue;
+                }
+
+                const int nlev_v06822934 = source_nlev_for_stage(
+                    ctx.program, element, stage_v06822934);
+                if (nlev_v06822934 <= 0) continue;
+                const auto endpoints_v06822934 = calc_hmc_ion_endpoints_v06822934(
+                    ctx.program, element, *pr_v06822934, nlev_v06822934);
+                const int idest1_v06822934 = endpoints_v06822934.idest1;
+                const int idest2_v06822934 = endpoints_v06822934.idest2;
+
+                const bool calc_hmc_ion_called_v06822934 =
+                    !(c_v06822934.rate_type == 1 && c_v06822934.data_type == 53) &&
+                    c_v06822934.rate_type != 15 && c_v06822934.rate_type != 8;
+                const bool scalar_family_v06822934 =
+                    c_v06822934.rate_type == 7 ||
+                    c_v06822934.rate_type == 1 ||
+                    c_v06822934.rate_type == 40 ||
+                    c_v06822934.rate_type == 42;
+                const bool contributes_pirt_v06822934 =
+                    calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
+                    idest1_v06822934 == 1;
+                const bool contributes_rrrt_v06822934 =
+                    calc_hmc_ion_called_v06822934 && scalar_family_v06822934 &&
+                    idest2_v06822934 >= nlev_v06822934;
+                const std::size_t slot_v06822934 =
+                    static_cast<std::size_t>(stage_v06822934 - 1);
+                if (contributes_pirt_v06822934) {
+                    detailed_pirt_v06822934[slot_v06822934] += c_v06822934.ans1;
+                }
+                if (contributes_rrrt_v06822934) {
+                    detailed_rrrt_v06822934[slot_v06822934] += c_v06822934.ans2;
+                }
+
+                if (option10_rate_provenance_v06822934 &&
+                    (scalar_family_v06822934 ||
+                     c_v06822934.rate_type == 8 ||
+                     c_v06822934.rate_type == 15)) {
+                    option10_rate_provenance_v06822934 << std::setprecision(17)
+                        << source_sequence_v82_patch511 << ",record,"
+                        << element.element_z << ',' << stage_v06822934 << ",1,calc_hmc_ion_second_pass,"
+                        << pr_v06822934->source_position << ',' << pr_v06822934->record << ','
+                        << c_v06822934.data_type << ',' << c_v06822934.rate_type << ','
+                        << idest1_v06822934 << ',' << idest2_v06822934 << ','
+                        << nlev_v06822934 << ',' << (endpoints_v06822934.exact ? 1 : 0) << ','
+                        << endpoints_v06822934.owner << ',' << c_v06822934.ans1 << ','
+                        << c_v06822934.ans2 << ','
+                        << (contributes_pirt_v06822934 ? 1 : 0) << ','
+                        << (contributes_rrrt_v06822934 ? 1 : 0) << ','
+                        << detailed_pirt_v06822934[slot_v06822934] << ','
+                        << detailed_rrrt_v06822934[slot_v06822934] << ",0,0\n";
+                }
             }
         }
 
@@ -14482,6 +14676,8 @@ int run_impl(
                     << mixed_rrrt_v06822934[slot_v06822934] << '\n';
             }
         }
+        perf_foundation_v068231.option10_ownership_seconds_v068240215 +=
+            elapsed(option10_ownership_started_v068240215);
 
         // v82 patch 5.20.9: reproduce xstarsetup's slot-owned errc lifetime
         // before abundance/product filtering.  xstarsetup traverses every rate-7
@@ -14491,40 +14687,89 @@ int run_impl(
         // and Program validation guarantees monotonically increasing source
         // positions.  Type-49, Type-53 and Type-99 all participate in this same
         // rate-7 errc slot workspace.
+        const auto errc_ownership_started_v068240215 = clock_type::now();
         if (!defer_product_projection) {
-            for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
-                const ProgramRecord* pr = evaluated_records[k];
-                if (!pr || pr->rate_type != 7 || pr->continuum_index_one_based <= 0) continue;
-                const auto& pr_execution_v0682375 = execution_record_v0682375(ctx.program, *pr);
-                const auto& item = evaluated[k];
-                double rank_energy_ev = 0.0;
-                if (pr->data_type == 49 && item.bound_free_payload().type49_shadow_v0682374().valid)
-                    rank_energy_ev = item.bound_free_payload().type49_shadow_v0682374().source_errc_rank_energy_ev;
-                else if (pr->data_type == 53 && item.bound_free_payload().type53_shadow_v0682374().valid)
-                    rank_energy_ev = item.bound_free_payload().type53_shadow_v0682374().source_errc_rank_energy_ev;
-                else if (pr->data_type == 99 && item.type99_shadow_v06823615().valid)
-                    rank_energy_ev = item.type99_shadow_v06823615().source_errc_rank_energy_ev;
-                if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
-                const auto identity = std::make_pair(
-                    static_cast<std::uint64_t>(pr->source_position),
-                    static_cast<std::int64_t>(pr->record));
-                source_errc_rank_energy_by_identity_v82_patch5205[identity] = rank_energy_ev;
-                double patch52082_identity_energy_ev = rank_energy_ev;
-                if (pr->data_type == 49 && pr_execution_v0682375.real_count >= 2 &&
-                    pr_execution_v0682375.real_offset < ctx.program.reals.size()) {
-                    // Exact pre-5.20.9 behavior: identity-owned Type-49 setup energy
-                    // used a double 13.598 literal and incorrectly imposed 0.1 eV.
-                    patch52082_identity_energy_ev = std::max(
-                        0.1, ctx.program.reals[pr_execution_v0682375.real_offset] * 13.598);
+            if (traversal_hotpath_optimized_v068240215) {
+                perf_foundation_v068231.errc_postpass_records_considered_v068240215 +=
+                    static_cast<std::uint64_t>(errc_postpass_indices_v068240215.size());
+                perf_foundation_v068231.errc_postpass_records_elided_v068240215 +=
+                    static_cast<std::uint64_t>(evaluated.size() - errc_postpass_indices_v068240215.size());
+                for (const std::uint32_t compact_index_v068240215 :
+                     errc_postpass_indices_v068240215) {
+                    const std::size_t k = static_cast<std::size_t>(compact_index_v068240215);
+                    if (k >= evaluated.size() || k >= evaluated_records.size())
+                        throw std::runtime_error("0.6.82.40.2.15 errc compact index out of range");
+                    const ProgramRecord* pr = evaluated_records[k];
+                    if (!pr) continue;
+                    const auto& item = evaluated[k];
+                    double rank_energy_ev = 0.0;
+                    if (pr->data_type == 49 && item.bound_free_payload().type49_shadow_v0682374().valid)
+                        rank_energy_ev = item.bound_free_payload().type49_shadow_v0682374().source_errc_rank_energy_ev;
+                    else if (pr->data_type == 53 && item.bound_free_payload().type53_shadow_v0682374().valid)
+                        rank_energy_ev = item.bound_free_payload().type53_shadow_v0682374().source_errc_rank_energy_ev;
+                    else if (pr->data_type == 99 && item.type99_shadow_v06823615().valid)
+                        rank_energy_ev = item.type99_shadow_v06823615().source_errc_rank_energy_ev;
+                    if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
+                    const auto identity = std::make_pair(
+                        static_cast<std::uint64_t>(pr->source_position),
+                        static_cast<std::int64_t>(pr->record));
+                    source_errc_rank_energy_by_identity_v82_patch5205[identity] = rank_energy_ev;
+                    double patch52082_identity_energy_ev = rank_energy_ev;
+                    if (pr->data_type == 49) {
+                        const auto& pr_execution_v0682375 = execution_record_v0682375(ctx.program, *pr);
+                        if (pr_execution_v0682375.real_count >= 2 &&
+                            pr_execution_v0682375.real_offset < ctx.program.reals.size()) {
+                            patch52082_identity_energy_ev = std::max(
+                                0.1, ctx.program.reals[pr_execution_v0682375.real_offset] * 13.598);
+                        }
+                    }
+                    source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209[identity] =
+                        patch52082_identity_energy_ev;
+                    source_errc_rank_energy_by_slot_v82_patch5209[pr->continuum_index_one_based] =
+                        rank_energy_ev;
+                    source_errc_owner_by_slot_v82_patch5209[pr->continuum_index_one_based] =
+                        std::make_tuple(static_cast<std::uint64_t>(pr->source_position),
+                                        static_cast<std::int64_t>(pr->record), pr->data_type);
                 }
-                source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209[identity] =
-                    patch52082_identity_energy_ev;
-                source_errc_rank_energy_by_slot_v82_patch5209[pr->continuum_index_one_based] = rank_energy_ev;
-                source_errc_owner_by_slot_v82_patch5209[pr->continuum_index_one_based] =
-                    std::make_tuple(static_cast<std::uint64_t>(pr->source_position),
-                                    static_cast<std::int64_t>(pr->record), pr->data_type);
+            } else {
+                perf_foundation_v068231.errc_postpass_records_considered_v068240215 +=
+                    static_cast<std::uint64_t>(evaluated.size());
+                for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
+                    const ProgramRecord* pr = evaluated_records[k];
+                    if (!pr || pr->rate_type != 7 || pr->continuum_index_one_based <= 0) continue;
+                    const auto& pr_execution_v0682375 = execution_record_v0682375(ctx.program, *pr);
+                    const auto& item = evaluated[k];
+                    double rank_energy_ev = 0.0;
+                    if (pr->data_type == 49 && item.bound_free_payload().type49_shadow_v0682374().valid)
+                        rank_energy_ev = item.bound_free_payload().type49_shadow_v0682374().source_errc_rank_energy_ev;
+                    else if (pr->data_type == 53 && item.bound_free_payload().type53_shadow_v0682374().valid)
+                        rank_energy_ev = item.bound_free_payload().type53_shadow_v0682374().source_errc_rank_energy_ev;
+                    else if (pr->data_type == 99 && item.type99_shadow_v06823615().valid)
+                        rank_energy_ev = item.type99_shadow_v06823615().source_errc_rank_energy_ev;
+                    if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
+                    const auto identity = std::make_pair(
+                        static_cast<std::uint64_t>(pr->source_position),
+                        static_cast<std::int64_t>(pr->record));
+                    source_errc_rank_energy_by_identity_v82_patch5205[identity] = rank_energy_ev;
+                    double patch52082_identity_energy_ev = rank_energy_ev;
+                    if (pr->data_type == 49 && pr_execution_v0682375.real_count >= 2 &&
+                        pr_execution_v0682375.real_offset < ctx.program.reals.size()) {
+                        // Exact pre-5.20.9 behavior: identity-owned Type-49 setup energy
+                        // used a double 13.598 literal and incorrectly imposed 0.1 eV.
+                        patch52082_identity_energy_ev = std::max(
+                            0.1, ctx.program.reals[pr_execution_v0682375.real_offset] * 13.598);
+                    }
+                    source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209[identity] =
+                        patch52082_identity_energy_ev;
+                    source_errc_rank_energy_by_slot_v82_patch5209[pr->continuum_index_one_based] = rank_energy_ev;
+                    source_errc_owner_by_slot_v82_patch5209[pr->continuum_index_one_based] =
+                        std::make_tuple(static_cast<std::uint64_t>(pr->source_position),
+                                        static_cast<std::int64_t>(pr->record), pr->data_type);
+                }
             }
         }
+        perf_foundation_v068231.errc_ownership_seconds_v068240215 +=
+            elapsed(errc_ownership_started_v068240215);
 
         const auto contribution_list_started_v068231 = clock_type::now();
         auto& contributions = ctx.scratch_v068231.contributions;
@@ -19381,7 +19626,8 @@ void capture_fixed_live_owner_memory_v06824028(
     out.execution_plan_capacity_bytes =
         capacity_bytes(context->flat_record_indices_v068237) +
         capacity_bytes(context->element_execution_plan_v068237) +
-        capacity_bytes(context->bound_free_slot_by_record_v0682371);
+        capacity_bytes(context->bound_free_slot_by_record_v0682371) +
+        capacity_bytes(context->option10_endpoint_plan_by_record_v068240215);
     for (const auto& plan : context->element_execution_plan_v068237) {
         out.execution_plan_capacity_bytes += capacity_bytes(plan.preliminary_source);
         out.execution_plan_capacity_bytes += capacity_bytes(plan.preliminary_legacy);
@@ -19588,6 +19834,8 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     }
     ptr->flat_record_indices_v068237.reserve(ptr->program.records.size());
     ptr->element_execution_plan_v068237.reserve(ptr->program.elements.size());
+    ptr->option10_endpoint_plan_by_record_v068240215.assign(
+        ptr->program.records.size(), Option10EndpointPlanV068240215{});
     ptr->bound_free_slot_by_record_v0682371.assign(
         ptr->program.records.size(), std::numeric_limits<std::uint32_t>::max());
     const std::size_t bound_free_record_count_v0682371 = static_cast<std::size_t>(
@@ -19630,6 +19878,26 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
             const auto& record = ptr->program.records[record_index_v068237];
             if (record.element_index != element.element_index) {
                 throw std::runtime_error("linked traversal crossed element boundary during context preparation");
+            }
+            // 0.6.82.40.2.15: Option-10 endpoint ownership depends only on
+            // immutable topology/record metadata.  Compile it once instead of
+            // repeating LTE topology scans on every fixed-state evaluation.
+            if (record.rate_type == 7 || record.rate_type == 1 ||
+                record.rate_type == 40 || record.rate_type == 42 ||
+                record.rate_type == 8 || record.rate_type == 15) {
+                auto& endpoint_plan_v068240215 =
+                    ptr->option10_endpoint_plan_by_record_v068240215[record_index_v068237];
+                endpoint_plan_v068240215.relevant = true;
+                endpoint_plan_v068240215.nlev =
+                    source_nlev_for_stage(ptr->program, element, record.ion_stage);
+                if (endpoint_plan_v068240215.nlev > 0) {
+                    const auto endpoints_v068240215 = calc_hmc_ion_endpoints_v06822934(
+                        ptr->program, element, record, endpoint_plan_v068240215.nlev);
+                    endpoint_plan_v068240215.idest1 = endpoints_v068240215.idest1;
+                    endpoint_plan_v068240215.idest2 = endpoints_v068240215.idest2;
+                    endpoint_plan_v068240215.exact = endpoints_v068240215.exact;
+                    endpoint_plan_v068240215.owner = endpoints_v068240215.owner;
+                }
             }
             const std::size_t ordinal_v068237 = static_cast<std::size_t>(hops);
             const auto compact_index_v068237 = static_cast<std::uint32_t>(record_index_v068237);
