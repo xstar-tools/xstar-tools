@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.18 - post-zone allocator trim revalidation - 2026-08-26
+
+- Freezes host-accepted `0.6.82.40.2.17` detail-spectrum staging optimization as the production predecessor.
+- Adds same-binary `XSTAR_V068240218_POST_ZONE_TRIM_MODE=historical|optimized`; production defaults to `optimized`.
+- Revalidates only the `.36.12` glibc `malloc_trim(0)` checkpoint executed after each streamed SAVD detail zone. The separate accepted-boundary trim before exact boundary recomputation remains byte-for-byte unchanged.
+- Historical mode executes the existing per-zone trim exactly; optimized mode elides only that post-detail checkpoint so allocator pages can be reused by the next radial zone.
+- Adds coarse outside-evaluator timing/counters for historical post-zone trim cost and optimized elisions. No clock is added inside fixed-state record evaluation.
+- Scientific arithmetic, controller decisions, SAVD detail rows, FITS payloads, source ordering, `.2.13` call-start ownership, `.2.14` contribution order, `.2.15` traversal behavior, `.2.16` RRC staging, and `.2.17` spectrum staging remain frozen.
+- Qualification is narrow: same-host/same-binary `c_xim3` historical/optimized A/B, then optimized `c_xip1,+4` science closure. Exact raw `xo01_detail/detal2/detal3/detal4.fits` payload equality is mandatory. Peak RSS must remain within 3%; no multi-element run and Phase C remains blocked.
+
 ## 0.6.82.40.2.17 - detail spectrum staging hot path - 2026-08-26
 
 - Freezes host-accepted `0.6.82.40.2.16` detail-RRC staging optimization as the production predecessor.

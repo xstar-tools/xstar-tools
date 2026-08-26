@@ -351,6 +351,12 @@ struct PerformanceInstrumentationV064890 {
     double abundance_fits_seconds = 0.0;
     double step_log_seconds = 0.0;
     double publication_seconds = 0.0;
+    // 0.6.82.40.2.18: revalidate the post-SAVD-detail glibc trim after
+    // .2.16/.2.17 removed the dominant RRC/spectrum staging temporaries.
+    // The accepted-boundary trim remains unchanged and is accounted separately.
+    double post_zone_trim_seconds_v068240218 = 0.0;
+    std::uint64_t post_zone_trim_historical_calls_v068240218 = 0u;
+    std::uint64_t post_zone_trim_elided_calls_v068240218 = 0u;
     double detail_population_seconds = 0.0;
     double detail_line_seconds = 0.0;
     double detail_line_identity_seconds = 0.0;
@@ -616,6 +622,27 @@ HeapSnapshotV0682352 current_heap_snapshot_v0682352() {
 #endif
 #endif
     return out;
+}
+
+enum class PostZoneTrimModeV068240218 { Historical, Optimized };
+
+PostZoneTrimModeV068240218 post_zone_trim_mode_v068240218() {
+    static const PostZoneTrimModeV068240218 mode = [] {
+        const char* raw = std::getenv("XSTAR_V068240218_POST_ZONE_TRIM_MODE");
+        if (!raw || !*raw || std::string(raw) == "optimized") {
+            return PostZoneTrimModeV068240218::Optimized;
+        }
+        if (std::string(raw) == "historical") {
+            return PostZoneTrimModeV068240218::Historical;
+        }
+        throw std::runtime_error(
+            "XSTAR_V068240218_POST_ZONE_TRIM_MODE must be historical or optimized");
+    }();
+    return mode;
+}
+
+const char* post_zone_trim_mode_name_v068240218(PostZoneTrimModeV068240218 mode) {
+    return mode == PostZoneTrimModeV068240218::Historical ? "HISTORICAL" : "OPTIMIZED";
 }
 
 void allocator_trim_checkpoint_v06823612() {
@@ -19454,9 +19481,22 @@ void stream_saved_shell_detail_v068233(
         g_performance_v064890->detal4_rows_streamed_v068233 +=
             stream_state.radial_zones.front().accepted_controller.evaluation.radiation_energy_ev.size();
         ++g_performance_v064890->saved_shells_streamed_v068233;
-        // 0.6.82.36.12: per-zone writer temporaries are dead here. Returning
-        // free arena pages prevents RSS from ratcheting upward zone by zone.
-        allocator_trim_checkpoint_v06823612();
+        // 0.6.82.40.2.18: .36.12 introduced a glibc trim after every streamed
+        // detail zone to bound the then-large writer staging lifetime.  The
+        // accepted-boundary trim is still frozen.  Revalidate only this second
+        // checkpoint now that .2.16/.2.17 removed the dominant RRC/spectrum
+        // staging allocations.  Historical mode executes the exact old call;
+        // optimized mode lets the allocator reuse those freed pages.
+        const auto trim_mode_v068240218 = post_zone_trim_mode_v068240218();
+        if (trim_mode_v068240218 == PostZoneTrimModeV068240218::Historical) {
+            const auto trim_started_v068240218 = std::chrono::steady_clock::now();
+            allocator_trim_checkpoint_v06823612();
+            g_performance_v064890->post_zone_trim_seconds_v068240218 +=
+                performance_elapsed_seconds(trim_started_v068240218);
+            ++g_performance_v064890->post_zone_trim_historical_calls_v068240218;
+        } else {
+            ++g_performance_v064890->post_zone_trim_elided_calls_v068240218;
+        }
         const auto rss = current_rss_bytes_v068233();
         const auto heap_after_zone_v06823611 = current_heap_snapshot_v0682352();
         g_performance_v064890->rss_after_zone_publication_peak_v06823611 = std::max(
@@ -19969,7 +20009,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         data.call_start_mode_v068240213 = configured_call_start_mode_v068240213(
             data.reference_trajectory_mode, data.reference_diagnostics_enabled);
         std::cout << "V068240213_CALL_START_MODE="
-                  << call_start_mode_name_v068240213(data.call_start_mode_v068240213) << "\n";
+                  << call_start_mode_name_v068240213(data.call_start_mode_v068240213) << "\n"
+                  << "V068240218_POST_ZONE_TRIM_MODE="
+                  << post_zone_trim_mode_name_v068240218(post_zone_trim_mode_v068240218()) << "\n";
         // 5.20.17 production never uses the old fail-open full-trajectory continuation.
         data.diagnostic_full_trajectory_continue =
             data.reference_diagnostics_enabled && diagnostic_full_trajectory_enabled();
@@ -23406,6 +23448,12 @@ void emit_controller_performance_instrumentation(
             << "V068233_DETAL3_ROWS_STREAMED=" << perf.detal3_rows_streamed_v068233 << "\n"
             << "V068233_DETAL4_ROWS_STREAMED=" << perf.detal4_rows_streamed_v068233 << "\n"
             << "V068233_SAVED_SHELLS_STREAMED=" << perf.saved_shells_streamed_v068233 << "\n"
+            << "V068240218_POST_ZONE_TRIM_HISTORICAL_CALLS="
+            << perf.post_zone_trim_historical_calls_v068240218 << "\n"
+            << "V068240218_POST_ZONE_TRIM_ELIDED_CALLS="
+            << perf.post_zone_trim_elided_calls_v068240218 << "\n"
+            << "V068240218_POST_ZONE_TRIM_SECONDS="
+            << std::setprecision(17) << perf.post_zone_trim_seconds_v068240218 << "\n"
             << "V068233_ATDB_DECODED_LOGICAL_BYTES=" << perf.atdb_decoded_logical_bytes_v068233 << "\n"
             << "V068233_ATDB_DECODED_CAPACITY_BYTES=" << perf.atdb_decoded_capacity_bytes_v068233 << "\n"
             << "V068233_PREPARED_SIDECAR_LOGICAL_BYTES=" << perf.prepared_sidecar_logical_bytes_v068233 << "\n"
