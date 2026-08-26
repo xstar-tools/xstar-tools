@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.18.2 - post-zone allocator trim rejection closure - 2026-08-26
+
+- Records the repeated same-binary `.2.18.1` host result as a rejection of post-zone trim elision for production: science, diagnostics, RSS, and all four detail FITS payloads remained exact, but only 1 of 3 adjacent historical/optimized pairs favored the optimized mode and the repeatability gate rejected promotion.
+- The six low-xi runs exhibited strong host-wide drift (internal total 226.808 -> 294.892 s); the favorable aggregate median ratio 0.920494 was dominated by the middle O2/H2 pair (0.920494), while the other adjacent pairs were 1.014255 and 1.002516. The same drift appeared proportionally in fixed traversal, traversal orchestration, contribution list, detail RRC, and detail spectrum timings.
+- The measured direct cost of the historical 150 post-zone `malloc_trim(0)` calls remained only about 0.10-0.12 s, so there is no reproducible evidence that eliding this checkpoint provides a material CPU benefit.
+- Restores `historical` as the no-environment production default for `XSTAR_V068240218_POST_ZONE_TRIM_MODE`. Explicit `optimized` remains available only for forensic/research A/B testing; the separate accepted-boundary trim remains untouched.
+- No scientific arithmetic, controller decisions, FITS publication semantics, source ordering, ABI, or accepted `.2.13-.2.17` optimization is changed. No multi-element qualification is authorized by this closure.
+- Performance work should resume from the accepted `.2.17` behavior and use attribution-first instrumentation for the remaining controller residual rather than another speculative ownership/lifetime change.
+
 ## 0.6.82.40.2.18.1 - post-zone allocator reuse qualification hotfix - 2026-08-26
 
 - Records the host `.2.18` result as measured-but-not-accepted: science and all four detail FITS payloads were exact, RSS was unchanged, and low-xi internal time improved by about 0.82%, but the diagnostic mode marker was absent from the captured performance log and the preregistered direct-trim-cost gate (`>=0.5 s`) was falsified by the measured 0.0945 s.

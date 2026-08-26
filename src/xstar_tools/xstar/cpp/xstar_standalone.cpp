@@ -629,11 +629,11 @@ enum class PostZoneTrimModeV068240218 { Historical, Optimized };
 PostZoneTrimModeV068240218 post_zone_trim_mode_v068240218() {
     static const PostZoneTrimModeV068240218 mode = [] {
         const char* raw = std::getenv("XSTAR_V068240218_POST_ZONE_TRIM_MODE");
-        if (!raw || !*raw || std::string(raw) == "optimized") {
-            return PostZoneTrimModeV068240218::Optimized;
-        }
-        if (std::string(raw) == "historical") {
+        if (!raw || !*raw || std::string(raw) == "historical") {
             return PostZoneTrimModeV068240218::Historical;
+        }
+        if (std::string(raw) == "optimized") {
+            return PostZoneTrimModeV068240218::Optimized;
         }
         throw std::runtime_error(
             "XSTAR_V068240218_POST_ZONE_TRIM_MODE must be historical or optimized");
