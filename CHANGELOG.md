@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 0.6.82.40.2.9 - fixed/controller diagnostic serialization hotfix - 2026-08-25
+
+- Host-test successor to `.40.2.8`; diagnostic-only and no science/ABI change.
+- Preserves the `.40.2.8` fixed/controller timing and radial peak-owner schema (`V06824028_*`).
+- Fixes radial-owner CSV materialization so `radial_owner_samples_v06824028.csv` is written whenever the diagnostic collected samples, independent of the normal timing-summary artifact profile.
+- Keeps the public `xstar-cpp` invocation on supported options only; `--emit-timing-summary` is not used.
+- Includes the corrected C++ `PACKAGE_VERSION ?= 0.6.82.40.2.9`.
+- Reuses the existing accepted `.40.2.6` elided baseline and authoritative Phase-A FORTRAN science; broad Phase C remains blocked.
+
+- Host-qualification correction: set the C++ Makefile `PACKAGE_VERSION` to `0.6.82.40.2.8` and have the `.40.2.8` runner pass `--emit-timing-summary`, which is required for `radial_owner_samples_v06824028.csv` to be materialized. Diagnostic/science code is unchanged.
+
+- Diagnostic-only successor to accepted `.40.2.6`; rejected `.40.2.7` is not inherited.
+- Reuses existing cumulative fixed-state/evaluator/element/controller/boundary timers to expose fixed total minus evaluator, traversal minus evaluator, traversal orchestration after evaluator+element solve, DSEC wrapper time outside fixed-state calls, and accepted-boundary wrapper time outside the fixed recompute. No new clock read is added inside `evaluate_record`.
+- Under `XSTAR_FIXED_CONTROLLER_DIAGNOSTICS=1`, samples current RSS, process peak RSS, glibc heap state, and named live-owner capacities at `post_boundary_recompute` and `post_zone_retention` for every accepted radial boundary.
+- Emits the peak sampled radial owner census plus `radial_owner_samples_v06824028.csv`; named owner totals are capacity lower bounds and the RSS residual remains explicitly unattributed.
+- Runs only the controlled H+He+C `rlogxi=-3,+1,+4` sweep and reuses the existing `.40.2.6` host run as the uninstrumented timing context. Broad Phase C remains blocked.
+- No science, ownership lifetime, source traversal, solver/controller decisions, accumulation order, ABI, or publication schema changes.
+
 ## 0.6.82.40.2.8 - fixed/controller overhead and radial peak-owner diagnostic - 2026-08-25
 - Host-qualification correction: set the C++ Makefile `PACKAGE_VERSION` to `0.6.82.40.2.8` and have the `.40.2.8` runner pass `--emit-timing-summary`, which is required for `radial_owner_samples_v06824028.csv` to be materialized. Diagnostic/science code is unchanged.
 

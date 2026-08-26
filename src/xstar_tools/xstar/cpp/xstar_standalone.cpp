@@ -23046,7 +23046,21 @@ void emit_controller_performance_instrumentation(
         std::filesystem::create_directories(dir);
         std::ofstream file(dir / "performance_v064890.txt");
         write(file);
-        if (!perf.radial_owner_samples_v06824028.empty()) {
+    }
+
+}
+
+// 0.6.82.40.2.9: the fixed/controller radial-owner census is a diagnostic
+// artifact owned by XSTAR_FIXED_CONTROLLER_DIAGNOSTICS, not by the general
+// timing-summary artifact profile.  Serialize it whenever samples were
+// collected so the public xstar-cpp frontend can remain on its supported CLI.
+void write_radial_owner_samples_v06824028(
+    const std::filesystem::path& output,
+    const PerformanceInstrumentationV064890& perf) {
+    if (perf.radial_owner_samples_v06824028.empty()) return;
+        const auto dir = output / "standalone_diagnostics" / "timing";
+        std::filesystem::create_directories(dir);
+        {
             std::ofstream csv(dir / "radial_owner_samples_v06824028.csv");
             csv << "sample_index,pass_index,zone_ordinal,phase,rss_bytes,peak_rss_bytes,"
                    "heap_uordblks,heap_hblkhd,heap_fordblks,boundary_snapshot_capacity_bytes,"
@@ -23107,7 +23121,7 @@ void emit_controller_performance_instrumentation(
                     << sample_v06824028.rss_minus_known_owner_bytes << '\n';
             }
         }
-    }
+
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -23782,6 +23796,7 @@ int command_run_standalone_production(const Options& options, const std::filesys
         emit_controller_performance_instrumentation(
             output, artifacts.timing_summary, performance_v064890, lowering_seconds,
             controller_seconds, production_total_seconds_v06488);
+        write_radial_owner_samples_v06824028(output, performance_v064890);
         emit_spectral_performance_instrumentation(
             output, artifacts.timing_summary, performance_v064890, performance_v064892);
         if (g_bound_free_perf_v064895_valid) {
