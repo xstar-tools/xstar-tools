@@ -375,6 +375,9 @@ struct PerformanceInstrumentationV064890 {
     double detail_rrc_fits_write_seconds = 0.0;
     double detail_rrc_checksum_seconds = 0.0;
     double detail_spectrum_seconds = 0.0;
+    double detail_spectrum_cpu_staging_seconds = 0.0;
+    double detail_spectrum_fits_write_seconds = 0.0;
+    double detail_spectrum_checksum_seconds = 0.0;
     double public_lines_seconds = 0.0;
     double public_rrc_seconds = 0.0;
     double public_cont_seconds = 0.0;
@@ -19439,6 +19442,9 @@ void stream_saved_shell_detail_v068233(
         g_performance_v064890->detail_rrc_fits_write_seconds += result.detail_rrc_fits_write_seconds;
         g_performance_v064890->detail_rrc_checksum_seconds += result.detail_rrc_checksum_seconds;
         g_performance_v064890->detail_spectrum_seconds += result.detail_spectrum_seconds;
+        g_performance_v064890->detail_spectrum_cpu_staging_seconds += result.detail_spectrum_cpu_staging_seconds;
+        g_performance_v064890->detail_spectrum_fits_write_seconds += result.detail_spectrum_fits_write_seconds;
+        g_performance_v064890->detail_spectrum_checksum_seconds += result.detail_spectrum_checksum_seconds;
         g_performance_v064890->detail_rows_streamed_v068233 += result.detail_rows;
         g_performance_v064890->detal2_rows_streamed_v068233 += result.detal2_rows;
         g_performance_v064890->detal3_rows_streamed_v068233 += result.detal3_rows;
@@ -22886,6 +22892,9 @@ void emit_controller_performance_instrumentation(
             << "V068232_DETAIL_RRC_FITS_WRITE_SECONDS=" << perf.detail_rrc_fits_write_seconds << "\n"
             << "V068232_DETAIL_RRC_CHECKSUM_SECONDS=" << perf.detail_rrc_checksum_seconds << "\n"
             << "DETAIL_SPECTRUM_SECONDS=" << perf.detail_spectrum_seconds << "\n"
+            << "V068240217_DETAIL_SPECTRUM_CPU_STAGING_SECONDS=" << perf.detail_spectrum_cpu_staging_seconds << "\n"
+            << "V068240217_DETAIL_SPECTRUM_FITS_WRITE_SECONDS=" << perf.detail_spectrum_fits_write_seconds << "\n"
+            << "V068240217_DETAIL_SPECTRUM_CHECKSUM_SECONDS=" << perf.detail_spectrum_checksum_seconds << "\n"
             << "PUBLIC_LINES_SECONDS=" << perf.public_lines_seconds << "\n"
             << "PUBLIC_RRC_SECONDS=" << perf.public_rrc_seconds << "\n"
             << "PUBLIC_CONT_SECONDS=" << perf.public_cont_seconds << "\n"
@@ -24266,6 +24275,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
         performance_v064890.detail_rrc_fits_write_seconds += science.detail_rrc_fits_write_seconds;
         performance_v064890.detail_rrc_checksum_seconds += science.detail_rrc_checksum_seconds;
         performance_v064890.detail_spectrum_seconds += science.detail_spectrum_seconds;
+        performance_v064890.detail_spectrum_cpu_staging_seconds += science.detail_spectrum_cpu_staging_seconds;
+        performance_v064890.detail_spectrum_fits_write_seconds += science.detail_spectrum_fits_write_seconds;
+        performance_v064890.detail_spectrum_checksum_seconds += science.detail_spectrum_checksum_seconds;
         performance_v064890.public_lines_seconds += science.public_lines_seconds;
         performance_v064890.public_rrc_seconds += science.public_rrc_seconds;
         performance_v064890.public_cont_seconds += science.public_cont_seconds;

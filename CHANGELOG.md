@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.17 - detail spectrum staging hot path - 2026-08-26
+
+- Freezes host-accepted `0.6.82.40.2.16` detail-RRC staging optimization as the production predecessor.
+- Adds same-binary `XSTAR_V068240217_DETAIL_SPECTRUM_MODE=historical|optimized`; ordinary native production defaults to `optimized`, while non-production/forensic execution preserves the historical fstepr4 publication path.
+- Activates the optimized path only when every published radial zone owns the complete retained fstepr4 workspace (`zrems`, `opakc`, `rccemis`, `dpthc`) with the canonical continuum shape. Mixed/incomplete states fall back wholesale to the historical reconstruction path.
+- In the exact-workspace path, skips the continuum-diagnostic expansion and fallback zrems/depth reconstruction whose values are overwritten by the retained source workspace before publication.
+- Reuses thread-local typed detal4 column scratch and writes the canonical one integer plus eleven REAL(4) columns directly with 12 CFITSIO column writes per radial HDU instead of routing every cell through the generic scalar staging dispatcher.
+- Preserves exact row/HDU order, source energy grid, retained directional RRC planes, dpthc ownership, `write_detal4_writer_projection` forensic hook, and float32 conversion point.
+- Adds detail-spectrum CPU-staging/FITS/checksum attribution and counters for exact-workspace use, dead reconstruction elision, scalar-dispatch elision, direct column writes, and scratch capacity reuse.
+- Qualification remains narrow: same-host/same-binary `c_xim3` historical/optimized A/B first, then optimized `c_xip1,+4` science closure; exact raw `xo01_detal4.fits` payload equality is mandatory. No multi-element run and Phase C remains blocked.
+
 ## 0.6.82.40.2.16 - detail RRC staging hot path - 2026-08-26
 
 - Freezes host-accepted `0.6.82.40.2.15` traversal-orchestration optimization as the production predecessor.

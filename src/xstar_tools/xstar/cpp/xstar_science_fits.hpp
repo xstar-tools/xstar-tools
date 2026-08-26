@@ -47,6 +47,9 @@ struct IncrementalDetailResultV068233 {
     double detail_rrc_fits_write_seconds = 0.0;
     double detail_rrc_checksum_seconds = 0.0;
     double detail_spectrum_seconds = 0.0;
+    double detail_spectrum_cpu_staging_seconds = 0.0;
+    double detail_spectrum_fits_write_seconds = 0.0;
+    double detail_spectrum_checksum_seconds = 0.0;
     std::uint64_t zone_publication_scratch_bytes = 0u;
     std::uint64_t detail_rows = 0u;
     std::uint64_t detal2_rows = 0u;
@@ -99,6 +102,9 @@ struct Result {
     double detail_rrc_fits_write_seconds = 0.0;
     double detail_rrc_checksum_seconds = 0.0;
     double detail_spectrum_seconds = 0.0;
+    double detail_spectrum_cpu_staging_seconds = 0.0;
+    double detail_spectrum_fits_write_seconds = 0.0;
+    double detail_spectrum_checksum_seconds = 0.0;
     double public_lines_seconds = 0.0;
     double public_rrc_seconds = 0.0;
     double public_cont_seconds = 0.0;

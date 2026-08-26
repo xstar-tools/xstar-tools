@@ -96,6 +96,48 @@ struct DetailRrcHotpathAuditV068240216 {
 
 thread_local DetailRrcHotpathAuditV068240216 g_detail_rrc_hotpath_v068240216{};
 
+// 0.6.82.40.2.17: same-binary control for detailed-continuum (fstepr4)
+// publication.  The optimized production path is permitted only when every
+// published radial zone owns the complete retained fstepr4 workspace; in that
+// case the historical fallback reconstruction is provably unused and the
+// final 12 FITS columns can be staged directly without per-cell dispatcher
+// traffic.  Historical/non-production execution retains the pre-.2.17 path.
+enum class DetailSpectrumModeV068240217 { Historical, Optimized };
+
+DetailSpectrumModeV068240217 detail_spectrum_mode_v068240217() {
+    static const DetailSpectrumModeV068240217 mode = [] {
+        const char* raw = std::getenv("XSTAR_V068240217_DETAIL_SPECTRUM_MODE");
+        if (!raw || !*raw || std::string(raw) == "optimized") {
+            return DetailSpectrumModeV068240217::Optimized;
+        }
+        if (std::string(raw) == "historical") {
+            return DetailSpectrumModeV068240217::Historical;
+        }
+        throw std::runtime_error(
+            "XSTAR_V068240217_DETAIL_SPECTRUM_MODE must be historical or optimized");
+    }();
+    return mode;
+}
+
+bool detail_spectrum_hotpath_requested_v068240217() {
+    return true_production_mode() &&
+        detail_spectrum_mode_v068240217() == DetailSpectrumModeV068240217::Optimized;
+}
+
+struct DetailSpectrumHotpathAuditV068240217 {
+    std::uint64_t historical_calls = 0u;
+    std::uint64_t optimized_calls = 0u;
+    std::uint64_t exact_workspace_zones = 0u;
+    std::uint64_t fallback_reconstruction_zones_elided = 0u;
+    std::uint64_t continuum_diagnostic_expansions_elided = 0u;
+    std::uint64_t scalar_cell_dispatches_elided = 0u;
+    std::uint64_t direct_column_writes = 0u;
+    std::uint64_t scratch_capacity_growths = 0u;
+    std::uint64_t scratch_capacity_reuses = 0u;
+};
+
+thread_local DetailSpectrumHotpathAuditV068240217 g_detail_spectrum_hotpath_v068240217{};
+
 // v82 patch 5.20.17.3.8.1: diagnostic-only audit of the exact
 // xo01_detal4 inward-emission writer path.  The public column is 1E/float32,
 // so the correct writer comparison is retained binary64 -> static_cast<float>
@@ -1245,6 +1287,23 @@ thread_local std::vector<xstar_run_state::IncrementalDetal2TerminalPatchStateV06
 thread_local BulkFitsBufferV06823088 g_bulk_fits_buffer_v06823088;
 thread_local BulkFitsPerfV06823088 g_bulk_fits_perf_v06823088;
 
+struct DetailSpectrumColumnScratchV068240217 {
+    std::vector<int> index;
+    std::array<std::vector<float>,11> floats;
+};
+thread_local DetailSpectrumColumnScratchV068240217 g_detail_spectrum_columns_v068240217;
+
+DetailSpectrumColumnScratchV068240217& detail_spectrum_columns_v068240217(std::size_t n) {
+    auto& scratch = g_detail_spectrum_columns_v068240217;
+    bool grew = scratch.index.capacity() < n;
+    for (const auto& one : scratch.floats) grew = grew || one.capacity() < n;
+    scratch.index.resize(n);
+    for (auto& one : scratch.floats) one.resize(n);
+    if (grew) ++g_detail_spectrum_hotpath_v068240217.scratch_capacity_growths;
+    else ++g_detail_spectrum_hotpath_v068240217.scratch_capacity_reuses;
+    return scratch;
+}
+
 bool bulk_fits_enabled_v06823088() {
     if (!true_production_mode()) return false;
     const char* disable = std::getenv("XSTAR_DISABLE_BULK_FITS_06823088");
@@ -1350,6 +1409,30 @@ void flush_bulk_fits_v06823088(fitsfile* fptr) {
     ++g_bulk_fits_perf_v06823088.flushes;
     g_bulk_fits_perf_v06823088.write_seconds += std::chrono::duration<double>(
         std::chrono::steady_clock::now() - flush_started_v068232).count();
+}
+
+void write_detail_spectrum_columns_v068240217(
+    fitsfile* fptr, const DetailSpectrumColumnScratchV068240217& scratch, std::size_t n) {
+    if (bulk_fits_enabled_v06823088()) flush_bulk_fits_v06823088(fptr);
+    if (scratch.index.size() < n) throw std::runtime_error("0.6.82.40.2.17 detail-spectrum index scratch too small");
+    for (const auto& one : scratch.floats) {
+        if (one.size() < n) throw std::runtime_error("0.6.82.40.2.17 detail-spectrum float scratch too small");
+    }
+    const auto started_v068240217 = std::chrono::steady_clock::now();
+    int status = 0;
+    fits_write_col(fptr, TINT, 1, 1, 1, static_cast<LONGLONG>(n),
+                   const_cast<int*>(scratch.index.data()), &status);
+    check_fits(status, "0.6.82.40.2.17 direct detal4 index column");
+    for (int col = 2; col <= 12; ++col) {
+        auto& values = scratch.floats[static_cast<std::size_t>(col - 2)];
+        fits_write_col(fptr, TFLOAT, col, 1, 1, static_cast<LONGLONG>(n),
+                       const_cast<float*>(values.data()), &status);
+        check_fits(status, "0.6.82.40.2.17 direct detal4 float column");
+    }
+    g_bulk_fits_perf_v06823088.column_write_calls += 12u;
+    g_detail_spectrum_hotpath_v068240217.direct_column_writes += 12u;
+    g_bulk_fits_perf_v06823088.write_seconds += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - started_v068240217).count();
 }
 
 template <typename T>
@@ -10113,152 +10196,182 @@ void write_spectrum_detail(const std::filesystem::path& path,
         const auto& terminal = state.radial_zones.back().accepted_controller.evaluation;
         const std::size_t n = terminal.radiation_energy_ev.size();
         if (n == 0) throw std::runtime_error("native xo01_detal4 requires continuum bins");
-        std::vector<double> z1(n, 0.0), z3(n, 0.0), z5(n, 0.0), forward_depth(n, 0.0);
+
+        const bool requested_v068240217 = detail_spectrum_hotpath_requested_v068240217();
+        bool exact_all_zones_v068240217 = requested_v068240217;
+        if (exact_all_zones_v068240217) {
+            for (std::size_t oz_v068240217 = 0; oz_v068240217 < state.radial_zones.size(); ++oz_v068240217) {
+                const std::size_t src_v068240217 = source_zone_index(state, oz_v068240217);
+                if (src_v068240217 >= state.radial_zones.size()) { exact_all_zones_v068240217 = false; break; }
+                const auto& e_v068240217 = state.radial_zones[src_v068240217].accepted_controller.evaluation;
+                const auto& ws_v068240217 = e_v068240217.source_workspace;
+                if (e_v068240217.radiation_energy_ev.size() != n || e_v068240217.radiation_flux.size() != n ||
+                    ws_v068240217.zrems.size() != 5u * n || ws_v068240217.opakc.size() != n ||
+                    ws_v068240217.rccemis.size() != 2u * n || ws_v068240217.dpthc.size() != 2u * n) {
+                    exact_all_zones_v068240217 = false;
+                    break;
+                }
+            }
+        }
+        if (exact_all_zones_v068240217) ++g_detail_spectrum_hotpath_v068240217.optimized_calls;
+        else ++g_detail_spectrum_hotpath_v068240217.historical_calls;
+
+        // Historical fallback reconstruction state is allocated only when the
+        // exact retained fstepr4 workspace cannot be consumed directly.  This
+        // leaves the old path byte-for-byte available for the same-binary A/B.
+        std::vector<double> z1, z3, z5, forward_depth;
+        if (!exact_all_zones_v068240217) {
+            z1.assign(n, 0.0); z3.assign(n, 0.0); z5.assign(n, 0.0); forward_depth.assign(n, 0.0);
+        }
         double previous_emission_depth = 0.0;
         double previous_tau_depth = 0.0;
-        const double cfrac = std::clamp(parameter_value(state, "cfrac", 1.0), 0.0, 1.0);
+        const double cfrac = exact_all_zones_v068240217
+            ? 0.0 : std::clamp(parameter_value(state, "cfrac", 1.0), 0.0, 1.0);
         for (std::size_t oz = 0; oz < state.radial_zones.size(); ++oz) {
             const std::size_t src = source_zone_index(state, oz);
             const auto& zone = state.radial_zones[src];
             const auto& e = zone.accepted_controller.evaluation;
             const auto& ws = e.source_workspace;
-            // v82 patch 5.20.17.3.7: each public radial extension publishes
-            // the exact source workspace retained for that boundary.  The
-            // former call-2 opacity/inward-rccemis substitutions hid producer
-            // lifetime bugs and duplicated HDU4 state into HDU3.
             if (e.radiation_energy_ev.size() != n || e.radiation_flux.size() != n ||
                 (ws.opakc.size() != n && e.opacity.size() != n)) {
                 throw std::runtime_error("native xo01_detal4 radial continuum shape mismatch");
             }
-            // fstepr4/heatt consume the complete opakc workspace.  The reduced
-            // FixedEvaluationState::opacity surface can omit bound-free terms
-            // and was about two orders of magnitude low in parts of v52.
+            const bool exact_fstepr4 = ws.zrems.size() == 5u * n &&
+                ws.opakc.size() == n && ws.rccemis.size() == 2u * n &&
+                ws.dpthc.size() == 2u * n;
+            if (exact_fstepr4) ++g_detail_spectrum_hotpath_v068240217.exact_workspace_zones;
+
             const auto continuum_opacity = [&](std::size_t i) -> double {
                 if (i < ws.opakc.size() && std::isfinite(ws.opakc[i])) return std::max(0.0, ws.opakc[i]);
                 return i < e.opacity.size() && std::isfinite(e.opacity[i]) ? std::max(0.0, e.opacity[i]) : 0.0;
             };
-            // fixed_state_engine reconstructs the two phint53 rccemis planes
-            // with the source ptmp1/ptmp2 directional weights already applied.
-            // Splitting their sum a second time (v52) erased source asymmetry
-            // and corrupted `emis in`, zrems(2/3), and zrems(4/5).
             const auto directional_rcc = [&](std::size_t i) -> std::pair<double,double> {
-                // Literal fstepr4 writes rccemis(1,:) and rccemis(2,:)
-                // directly.  Do not re-split or merge these caller-owned
-                // directional planes according to cfrac at writer time.
                 const double plane0 = i < ws.rccemis.size() && std::isfinite(ws.rccemis[i])
                     ? ws.rccemis[i] : 0.0;
                 const double plane1 = n + i < ws.rccemis.size() &&
-                    std::isfinite(ws.rccemis[n + i])
-                    ? ws.rccemis[n + i] : 0.0;
+                    std::isfinite(ws.rccemis[n + i]) ? ws.rccemis[n + i] : 0.0;
                 return {plane0, plane1};
             };
-            const bool have_retained_accumulated_zrems =
-                native_standalone_product_state(state) && ws.zrems.size() == 5u * n;
-            if (have_retained_accumulated_zrems) {
-                // advance_source_continuum_radiation runs the same
-                // dense bremem + gsmooth + heatt + trnfrn path as the native
-                // controller and stores the cumulative five-plane zrems state
-                // on every accepted boundary.  Publish that state directly.
-                // Reconstructing it here from ContinuumProductDiagnosticState
-                // used only the sparse reduced brcems rows and suppressed the
-                // continuum luminosity by ~2.58 in 5.20.7.3.
-                for (std::size_t i = 0; i < n; ++i) {
-                    z1[i] = std::isfinite(ws.zrems[i]) ? ws.zrems[i] : 0.0;
-                    z3[i] = std::isfinite(ws.zrems[2u * n + i]) ? ws.zrems[2u * n + i] : 0.0;
-                    z5[i] = std::isfinite(ws.zrems[4u * n + i]) ? ws.zrems[4u * n + i] : 0.0;
+
+            if (!exact_all_zones_v068240217) {
+                const bool have_retained_accumulated_zrems = ws.zrems.size() == 5u * n;
+                if (have_retained_accumulated_zrems) {
+                    for (std::size_t i = 0; i < n; ++i) {
+                        z1[i] = std::isfinite(ws.zrems[i]) ? ws.zrems[i] : 0.0;
+                        z3[i] = std::isfinite(ws.zrems[2u * n + i]) ? ws.zrems[2u * n + i] : 0.0;
+                        z5[i] = std::isfinite(ws.zrems[4u * n + i]) ? ws.zrems[4u * n + i] : 0.0;
+                    }
+                } else if (oz == 0) {
+                    z1 = e.radiation_flux;
                 }
-            } else if (oz == 0) {
-                z1 = e.radiation_flux;
-            }
-            const auto continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(
-                state, zone.accepted_controller.accepted_sequence, n);
-            const double radius = [&]() {
-                const auto boundaries = abundance_boundary_rows(state);
-                if (oz < boundaries.size() && boundaries[oz].radius_cm > 0.0) return boundaries[oz].radius_cm;
-                if (zone.radius_cm > 0.0) return zone.radius_cm;
-                return benchmark_radius_cm_from_parameters(state);
-            }();
-            const double fpr2 = radius > 0.0 ? 12.56 * std::pow(radius / 1.0e19, 2) : 0.0;
-            const std::size_t emission_depth_index = std::min(oz + 1, state.radial_zones.size() - 1);
-            const double emission_depth = line_tau_depth_cm_for_output_zone(state, emission_depth_index);
-            const double emission_shell = std::max(0.0, emission_depth - previous_emission_depth);
-            previous_emission_depth = std::max(previous_emission_depth, emission_depth);
-            if (!have_retained_accumulated_zrems && emission_shell > 0.0 && fpr2 > 0.0) {
-                for (std::size_t i = 0; i < n; ++i) {
-                    const double opacity = continuum_opacity(i);
-                    const double tau = opacity * emission_shell;
-                    const double fac = tau > 0.01 ? (1.0 - std::exp(-tau)) / tau : 1.0;
-                    const double opakcont = i < ws.opakcont.size() ? std::max(0.0, ws.opakcont[i]) : 0.0;
-                    const double tau_cont = opakcont * emission_shell;
-                    const double fac_cont = tau_cont > 0.01 ? (1.0 - std::exp(-tau_cont)) / tau_cont : 1.0;
-                    const double brcems = i < continuum_diag.size() && std::isfinite(continuum_diag[i].brcems)
-                        ? std::max(0.0, continuum_diag[i].brcems) : 0.0;
-                    const auto rcc = directional_rcc(i);
-                    const double rcc_out = rcc.first;
-                    const double rcc_in = rcc.second;
-                    const double tmpc1 = rcc_out + brcems * (1.0 - cfrac) / 2.0;
-                    const double tmpc2 = rcc_in + brcems * (1.0 + cfrac) / 2.0;
-                    const double bremsa = z1[i] / fpr2;
-                    const double tmph = bremsa * opacity;
-                    z1[i] = std::max(0.0, z1[i] -
-                        (tmph - 12.56 * (tmpc1 + tmpc2)) * fac * emission_shell * fpr2);
-                    z3[i] += 12.56 * tmpc2 * fac * emission_shell * fpr2;
-                    z5[i] += 12.56 * tmpc2 * fac_cont * emission_shell * fpr2;
+                const auto continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(
+                    state, zone.accepted_controller.accepted_sequence, n);
+                const double radius = [&]() {
+                    const auto boundaries = abundance_boundary_rows(state);
+                    if (oz < boundaries.size() && boundaries[oz].radius_cm > 0.0) return boundaries[oz].radius_cm;
+                    if (zone.radius_cm > 0.0) return zone.radius_cm;
+                    return benchmark_radius_cm_from_parameters(state);
+                }();
+                const double fpr2 = radius > 0.0 ? 12.56 * std::pow(radius / 1.0e19, 2) : 0.0;
+                const std::size_t emission_depth_index = std::min(oz + 1, state.radial_zones.size() - 1);
+                const double emission_depth = line_tau_depth_cm_for_output_zone(state, emission_depth_index);
+                const double emission_shell = std::max(0.0, emission_depth - previous_emission_depth);
+                previous_emission_depth = std::max(previous_emission_depth, emission_depth);
+                if (!have_retained_accumulated_zrems && emission_shell > 0.0 && fpr2 > 0.0) {
+                    for (std::size_t i = 0; i < n; ++i) {
+                        const double opacity = continuum_opacity(i);
+                        const double tau = opacity * emission_shell;
+                        const double fac = tau > 0.01 ? (1.0 - std::exp(-tau)) / tau : 1.0;
+                        const double opakcont = i < ws.opakcont.size() ? std::max(0.0, ws.opakcont[i]) : 0.0;
+                        const double tau_cont = opakcont * emission_shell;
+                        const double fac_cont = tau_cont > 0.01 ? (1.0 - std::exp(-tau_cont)) / tau_cont : 1.0;
+                        const double brcems = i < continuum_diag.size() && std::isfinite(continuum_diag[i].brcems)
+                            ? std::max(0.0, continuum_diag[i].brcems) : 0.0;
+                        const auto rcc = directional_rcc(i);
+                        const double tmpc1 = rcc.first + brcems * (1.0 - cfrac) / 2.0;
+                        const double tmpc2 = rcc.second + brcems * (1.0 + cfrac) / 2.0;
+                        const double bremsa = z1[i] / fpr2;
+                        const double tmph = bremsa * opacity;
+                        z1[i] = std::max(0.0, z1[i] -
+                            (tmph - 12.56 * (tmpc1 + tmpc2)) * fac * emission_shell * fpr2);
+                        z3[i] += 12.56 * tmpc2 * fac * emission_shell * fpr2;
+                        z5[i] += 12.56 * tmpc2 * fac_cont * emission_shell * fpr2;
+                    }
                 }
+                const double tau_depth = line_tau_depth_cm_for_output_zone(state, oz);
+                const double tau_shell = std::max(0.0, tau_depth - previous_tau_depth);
+                previous_tau_depth = std::max(previous_tau_depth, tau_depth);
+                if (tau_shell > 0.0) {
+                    for (std::size_t i = 0; i < n; ++i) forward_depth[i] += continuum_opacity(i) * tau_shell;
+                }
+            } else {
+                ++g_detail_spectrum_hotpath_v068240217.fallback_reconstruction_zones_elided;
+                ++g_detail_spectrum_hotpath_v068240217.continuum_diagnostic_expansions_elided;
             }
-            const double tau_depth = line_tau_depth_cm_for_output_zone(state, oz);
-            const double tau_shell = std::max(0.0, tau_depth - previous_tau_depth);
-            previous_tau_depth = std::max(previous_tau_depth, tau_depth);
-            if (tau_shell > 0.0) {
-                for (std::size_t i = 0; i < n; ++i) forward_depth[i] += continuum_opacity(i) * tau_shell;
-            }
+
             create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
                 {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
                 {"1J","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E"},
                 {"","eV","erg/s","erg/s","erg/s","erg/s","erg/s","/cm","erg/cm**3/s","erg/cm**3/s","",""});
             write_radial_keywords(fptr, state, oz, zone);
-            for (std::size_t i = 0; i < n; ++i) {
-                const long row = static_cast<long>(i + 1);
-                const auto rcc = directional_rcc(i);
-                const double rcc_out = rcc.first;
-                const double rcc_in = rcc.second;
-                write_int(fptr, 1, row, static_cast<int>(i + 1));
-                write_real4(fptr, 2, row, e.radiation_energy_ev[i]);
-                // fstepr4.f90 publishes the live five-plane zrems, opakc,
-                // rccemis, and dpthc workspaces verbatim (apart from float32
-                // FITS conversion).  When the standalone controller retained
-                // those full-grid arrays, use them directly rather than a
-                // product-time reconstruction.
-                const bool exact_fstepr4 = ws.zrems.size() == 5u * n &&
-                    ws.opakc.size() == n && ws.rccemis.size() == 2u * n &&
-                    ws.dpthc.size() == 2u * n;
-                const double out_z1 = exact_fstepr4 ? ws.zrems[i] : z1[i];
-                const double out_z2 = exact_fstepr4 ? ws.zrems[n + i] : 0.0;
-                const double out_z3 = exact_fstepr4 ? ws.zrems[2u * n + i] : z3[i];
-                const double out_z4 = exact_fstepr4 ? ws.zrems[3u * n + i] : 0.0;
-                const double out_z5 = exact_fstepr4 ? ws.zrems[4u * n + i] : z5[i];
-                const double out_opacity = exact_fstepr4
-                    ? ws.opakc[i] : continuum_opacity(i);
-                const double out_emis = exact_fstepr4 ? ws.rccemis[i] : rcc_out;
-                const double in_emis = exact_fstepr4
-                    ? ws.rccemis[n + i] : rcc_in;
-                const double out_fwd_depth = exact_fstepr4 ? ws.dpthc[i] : forward_depth[i];
-                const double out_back_depth = exact_fstepr4 ? ws.dpthc[n + i] : 0.0;
-                write_real4(fptr, 3, row, out_z1);
-                write_real4(fptr, 4, row, out_z2);
-                write_real4(fptr, 5, row, out_z3);
-                write_real4(fptr, 6, row, out_z4);
-                write_real4(fptr, 7, row, out_z5);
-                write_real4(fptr, 8, row, out_opacity);
-                write_real4(fptr, 9, row, out_emis);
-                write_detal4_writer_projection(
-                    oz + 1u, src + 1u, oz + 3u, e.sequence, e.call_index, i + 1u,
-                    e.radiation_energy_ev[i], exact_fstepr4, n, ws.rccemis.size(),
-                    (n + i < ws.rccemis.size() ? ws.rccemis[n + i] : 0.0),
-                    rcc_in, in_emis);
-                write_real4(fptr, 10, row, in_emis);
-                write_real4(fptr, 11, row, out_fwd_depth);
-                write_real4(fptr, 12, row, out_back_depth);
+
+            if (exact_all_zones_v068240217) {
+                auto& scratch = detail_spectrum_columns_v068240217(n);
+                for (std::size_t i = 0; i < n; ++i) {
+                    scratch.index[i] = static_cast<int>(i + 1u);
+                    scratch.floats[0][i] = static_cast<float>(e.radiation_energy_ev[i]);
+                    scratch.floats[1][i] = static_cast<float>(ws.zrems[i]);
+                    scratch.floats[2][i] = static_cast<float>(ws.zrems[n + i]);
+                    scratch.floats[3][i] = static_cast<float>(ws.zrems[2u * n + i]);
+                    scratch.floats[4][i] = static_cast<float>(ws.zrems[3u * n + i]);
+                    scratch.floats[5][i] = static_cast<float>(ws.zrems[4u * n + i]);
+                    scratch.floats[6][i] = static_cast<float>(ws.opakc[i]);
+                    scratch.floats[7][i] = static_cast<float>(ws.rccemis[i]);
+                    scratch.floats[8][i] = static_cast<float>(ws.rccemis[n + i]);
+                    scratch.floats[9][i] = static_cast<float>(ws.dpthc[i]);
+                    scratch.floats[10][i] = static_cast<float>(ws.dpthc[n + i]);
+                    write_detal4_writer_projection(
+                        oz + 1u, src + 1u, oz + 3u, e.sequence, e.call_index, i + 1u,
+                        e.radiation_energy_ev[i], true, n, ws.rccemis.size(),
+                        ws.rccemis[n + i], ws.rccemis[n + i], ws.rccemis[n + i]);
+                }
+                g_detail_spectrum_hotpath_v068240217.scalar_cell_dispatches_elided +=
+                    static_cast<std::uint64_t>(n) * 12u;
+                write_detail_spectrum_columns_v068240217(fptr, scratch, n);
+            } else {
+                for (std::size_t i = 0; i < n; ++i) {
+                    const long row = static_cast<long>(i + 1);
+                    const auto rcc = directional_rcc(i);
+                    const double rcc_out = rcc.first;
+                    const double rcc_in = rcc.second;
+                    write_int(fptr, 1, row, static_cast<int>(i + 1));
+                    write_real4(fptr, 2, row, e.radiation_energy_ev[i]);
+                    const double out_z1 = exact_fstepr4 ? ws.zrems[i] : z1[i];
+                    const double out_z2 = exact_fstepr4 ? ws.zrems[n + i] : 0.0;
+                    const double out_z3 = exact_fstepr4 ? ws.zrems[2u * n + i] : z3[i];
+                    const double out_z4 = exact_fstepr4 ? ws.zrems[3u * n + i] : 0.0;
+                    const double out_z5 = exact_fstepr4 ? ws.zrems[4u * n + i] : z5[i];
+                    const double out_opacity = exact_fstepr4 ? ws.opakc[i] : continuum_opacity(i);
+                    const double out_emis = exact_fstepr4 ? ws.rccemis[i] : rcc_out;
+                    const double in_emis = exact_fstepr4 ? ws.rccemis[n + i] : rcc_in;
+                    const double out_fwd_depth = exact_fstepr4 ? ws.dpthc[i] : forward_depth[i];
+                    const double out_back_depth = exact_fstepr4 ? ws.dpthc[n + i] : 0.0;
+                    write_real4(fptr, 3, row, out_z1);
+                    write_real4(fptr, 4, row, out_z2);
+                    write_real4(fptr, 5, row, out_z3);
+                    write_real4(fptr, 6, row, out_z4);
+                    write_real4(fptr, 7, row, out_z5);
+                    write_real4(fptr, 8, row, out_opacity);
+                    write_real4(fptr, 9, row, out_emis);
+                    write_detal4_writer_projection(
+                        oz + 1u, src + 1u, oz + 3u, e.sequence, e.call_index, i + 1u,
+                        e.radiation_energy_ev[i], exact_fstepr4, n, ws.rccemis.size(),
+                        (n + i < ws.rccemis.size() ? ws.rccemis[n + i] : 0.0),
+                        rcc_in, in_emis);
+                    write_real4(fptr, 10, row, in_emis);
+                    write_real4(fptr, 11, row, out_fwd_depth);
+                    write_real4(fptr, 12, row, out_back_depth);
+                }
             }
         }
         close_fits(fptr);
@@ -11582,9 +11695,12 @@ IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
         result.detail_rrc_seconds - result.detail_rrc_fits_write_seconds -
         result.detail_rrc_checksum_seconds);
 
-    publish_one("detal4",
+    result.detail_spectrum_checksum_seconds += publish_one("detal4",
         [&](const auto& path) { write_spectrum_detail(path, one_zone_state); },
-        result.detail_spectrum_seconds, nullptr, nullptr);
+        result.detail_spectrum_seconds, &result.detail_spectrum_fits_write_seconds, nullptr);
+    result.detail_spectrum_cpu_staging_seconds = std::max(0.0,
+        result.detail_spectrum_seconds - result.detail_spectrum_fits_write_seconds -
+        result.detail_spectrum_checksum_seconds);
     return result;
 }
 
@@ -11696,6 +11812,8 @@ Result write_historical_science_products(
     double detail_rrc_fits_write_seconds_v068232 = 0.0;
     double detail_rrc_checksum_seconds_v068232 = 0.0;
     double detail_spectrum_seconds_v06823089 = 0.0;
+    double detail_spectrum_fits_write_seconds_v068240217 = 0.0;
+    double detail_spectrum_checksum_seconds_v068240217 = 0.0;
     double public_lines_seconds_v06823089 = 0.0;
     double public_rrc_seconds_v06823089 = 0.0;
     double public_cont_seconds_v06823089 = 0.0;
@@ -11777,7 +11895,7 @@ Result write_historical_science_products(
                     timed_publication_v06823089(detail_population_seconds_v06823089, [&] { write_population_detail(output_dir / (prefix_v0682272 + "detail.fits"), state, elements, rows); });
                     timed_detail_v068232(detail_line_seconds_v06823089, detail_line_fits_write_seconds_v068232, detail_line_checksum_seconds_v068232, [&] { write_line_detail(output_dir / (prefix_v0682272 + "detal2.fits"), state, elements, rows); });
                     timed_detail_v068232(detail_rrc_seconds_v06823089, detail_rrc_fits_write_seconds_v068232, detail_rrc_checksum_seconds_v068232, [&] { write_rrc_detail(output_dir / (prefix_v0682272 + "detal3.fits"), state, elements, rows); });
-                    timed_publication_v06823089(detail_spectrum_seconds_v06823089, [&] { write_spectrum_detail(output_dir / (prefix_v0682272 + "detal4.fits"), state); });
+                    timed_detail_v068232(detail_spectrum_seconds_v06823089, detail_spectrum_fits_write_seconds_v068240217, detail_spectrum_checksum_seconds_v068240217, [&] { write_spectrum_detail(output_dir / (prefix_v0682272 + "detal4.fits"), state); });
                     detail_filenames_v0682272.insert(detail_filenames_v0682272.end(), {
                         prefix_v0682272 + "detail.fits", prefix_v0682272 + "detal2.fits",
                         prefix_v0682272 + "detal3.fits", prefix_v0682272 + "detal4.fits"});
@@ -11796,7 +11914,7 @@ Result write_historical_science_products(
             timed_publication_v06823089(detail_population_seconds_v06823089, [&] { write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows); });
             timed_detail_v068232(detail_line_seconds_v06823089, detail_line_fits_write_seconds_v068232, detail_line_checksum_seconds_v068232, [&] { write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows); });
             timed_detail_v068232(detail_rrc_seconds_v06823089, detail_rrc_fits_write_seconds_v068232, detail_rrc_checksum_seconds_v068232, [&] { write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows); });
-            timed_publication_v06823089(detail_spectrum_seconds_v06823089, [&] { write_spectrum_detail(output_dir / "xo01_detal4.fits", state); });
+            timed_detail_v068232(detail_spectrum_seconds_v06823089, detail_spectrum_fits_write_seconds_v068240217, detail_spectrum_checksum_seconds_v068240217, [&] { write_spectrum_detail(output_dir / "xo01_detal4.fits", state); });
             detail_filenames_v0682272 = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"};
         }
     }
@@ -11862,6 +11980,11 @@ Result write_historical_science_products(
         detail_rrc_seconds_v06823089 - result.detail_rrc_fits_write_seconds -
         result.detail_rrc_checksum_seconds);
     result.detail_spectrum_seconds = detail_spectrum_seconds_v06823089;
+    result.detail_spectrum_fits_write_seconds = detail_spectrum_fits_write_seconds_v068240217;
+    result.detail_spectrum_checksum_seconds = detail_spectrum_checksum_seconds_v068240217;
+    result.detail_spectrum_cpu_staging_seconds = std::max(0.0,
+        result.detail_spectrum_seconds - result.detail_spectrum_fits_write_seconds -
+        result.detail_spectrum_checksum_seconds);
     result.public_lines_seconds = public_lines_seconds_v06823089;
     result.public_rrc_seconds = public_rrc_seconds_v06823089;
     result.public_cont_seconds = public_cont_seconds_v06823089;
@@ -11892,7 +12015,18 @@ Result write_historical_science_products(
                   << "V068240216_FULL_INVENTORY_COMPARISONS_ELIDED=" << g_detail_rrc_hotpath_v068240216.full_inventory_comparisons_elided << "\n"
                   << "V068240216_BRIDGE_ARRAYS_BORROWED=" << g_detail_rrc_hotpath_v068240216.bridge_arrays_borrowed << "\n"
                   << "V068240216_BRIDGE_BYTES_COPY_ELIDED=" << g_detail_rrc_hotpath_v068240216.bridge_bytes_copy_elided << "\n"
-                  << "V068240216_UNUSED_NATIVE_MAPS_ELIDED=" << g_detail_rrc_hotpath_v068240216.unused_native_maps_elided << "\n";
+                  << "V068240216_UNUSED_NATIVE_MAPS_ELIDED=" << g_detail_rrc_hotpath_v068240216.unused_native_maps_elided << "\n"
+                  << "V068240217_DETAIL_SPECTRUM_MODE="
+                  << (detail_spectrum_hotpath_requested_v068240217() ? "OPTIMIZED" : "HISTORICAL") << "\n"
+                  << "V068240217_DETAIL_SPECTRUM_HISTORICAL_CALLS=" << g_detail_spectrum_hotpath_v068240217.historical_calls << "\n"
+                  << "V068240217_DETAIL_SPECTRUM_OPTIMIZED_CALLS=" << g_detail_spectrum_hotpath_v068240217.optimized_calls << "\n"
+                  << "V068240217_EXACT_WORKSPACE_ZONES=" << g_detail_spectrum_hotpath_v068240217.exact_workspace_zones << "\n"
+                  << "V068240217_FALLBACK_RECONSTRUCTION_ZONES_ELIDED=" << g_detail_spectrum_hotpath_v068240217.fallback_reconstruction_zones_elided << "\n"
+                  << "V068240217_CONTINUUM_DIAGNOSTIC_EXPANSIONS_ELIDED=" << g_detail_spectrum_hotpath_v068240217.continuum_diagnostic_expansions_elided << "\n"
+                  << "V068240217_SCALAR_CELL_DISPATCHES_ELIDED=" << g_detail_spectrum_hotpath_v068240217.scalar_cell_dispatches_elided << "\n"
+                  << "V068240217_DIRECT_COLUMN_WRITES=" << g_detail_spectrum_hotpath_v068240217.direct_column_writes << "\n"
+                  << "V068240217_SCRATCH_CAPACITY_GROWTHS=" << g_detail_spectrum_hotpath_v068240217.scratch_capacity_growths << "\n"
+                  << "V068240217_SCRATCH_CAPACITY_REUSES=" << g_detail_spectrum_hotpath_v068240217.scratch_capacity_reuses << "\n";
     }
     return result;
 }
