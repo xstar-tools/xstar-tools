@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.10 - fixed recompute transient and callback wrapper diagnostics - 2026-08-26
+
+- Diagnostic-only successor to the host-measured `.40.2.9`; no scientific arithmetic, solver/controller decision, accumulation-order, ABI, publication-schema, or ownership-lifetime change.
+- Reuses the thermal controller's existing `callback_seconds` and `orchestration_seconds` and adds coarse production-callback section clocks to separate DSEC core orchestration, callback time inside the fixed engine, callback-wrapper preparation/postprocessing, and accepted-boundary recompute overhead without adding clocks inside `evaluate_record`.
+- Samples RSS, process peak RSS, glibc heap state, current snapshot/controller/radial/publication owners, and detailed fixed-engine live owners immediately after DSEC fixed-state recomputes, after callback postprocessing, and after accepted-boundary fixed recomputes.
+- Extends the internal fixed live-owner census with element-diagnostic inline/nested storage, detail-publication storage, continuum diagnostics, and thermal-diagonal diagnostics so the fixed-recompute heap residual can be reduced rather than attributed to a generic RSS residual.
+- Writes `fixed_recompute_owner_samples_v068240210.csv` whenever the diagnostic is enabled, independently of ordinary timing-artifact selection; the host runner aggregates callback overhead, fixed-recompute peak owners, and all recompute samples into CSV/JSON outputs.
+- Runs only the controlled H+He+C `rlogxi=-3,+1,+4` sweep, reuses the existing accepted `.40.2.6` elided host baseline, and compares science/STEP to authoritative Phase-A FORTRAN. Broad Phase C remains blocked.
+
 ## 0.6.82.40.2.9 - fixed/controller diagnostic serialization hotfix - 2026-08-25
 
 - Host-test successor to `.40.2.8`; diagnostic-only and no science/ABI change.

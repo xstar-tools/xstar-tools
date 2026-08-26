@@ -19165,6 +19165,22 @@ void capture_fixed_live_owner_memory_v06824028(
         out.retained_state_capacity_bytes += capacity_bytes(item.second);
     for (const auto& item : context->last_source_recombination_rates_v0682292)
         out.retained_state_capacity_bytes += capacity_bytes(item.second);
+
+    out.element_diagnostic_inline_capacity_bytes =
+        capacity_bytes(context->last_element_diagnostics);
+    for (const auto& diagnostic : context->last_element_diagnostics) {
+        out.element_diagnostic_nested_capacity_bytes +=
+            element_diagnostic_nested_capacity_bytes_v06823611(diagnostic);
+    }
+    out.detail_publication_capacity_bytes =
+        capacity_bytes(context->last_detail_pre_mapback_populations_v064812318) +
+        capacity_bytes(context->last_active_stage_windows_v064812318);
+    out.continuum_diagnostic_capacity_bytes =
+        capacity_bytes(context->last_continuum_workspace_diagnostics);
+    out.thermal_diagonal_capacity_bytes =
+        capacity_bytes(context->last_thermal_diagonal_diagnostics);
+    for (const auto& row : context->last_thermal_diagonal_diagnostics)
+        out.thermal_diagonal_capacity_bytes += row.role.capacity();
 }
 
 void capture_performance_foundation_v068231(
@@ -19344,7 +19360,8 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
         ptr->ion_unique_record_seen_v06824025.assign(ptr->program.records.size(), 0u);
     }
     ptr->fixed_controller_diagnostics_enabled_v06824028 =
-        environment_flag("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS");
+        environment_flag("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS") ||
+        environment_flag("XSTAR_FIXED_RECOMPUTE_DIAGNOSTICS");
     ptr->source_leveltemp_energy_workspace_v06481231.assign(
         kSourceLeveltempNdlV06481231, 0.0);
     if (ptr->program.records.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
