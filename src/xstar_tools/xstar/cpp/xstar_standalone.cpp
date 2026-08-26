@@ -230,6 +230,36 @@ xstar_spectral_perf_v064892 diff_spectral_perf(
     return out;
 }
 
+struct RadialOwnerSampleV06824028 {
+    std::uint64_t sample_index = 0u;
+    std::uint64_t pass_index = 0u;
+    std::uint64_t zone_ordinal = 0u;
+    std::string phase;
+    std::uint64_t rss_bytes = 0u;
+    std::uint64_t peak_rss_bytes = 0u;
+    std::uint64_t heap_uordblks = 0u;
+    std::uint64_t heap_hblkhd = 0u;
+    std::uint64_t heap_fordblks = 0u;
+    std::uint64_t boundary_snapshot_capacity_bytes = 0u;
+    std::uint64_t controller_continuum_capacity_bytes = 0u;
+    std::uint64_t controller_line_rrc_capacity_bytes = 0u;
+    std::uint64_t controller_population_capacity_bytes = 0u;
+    std::uint64_t controller_workspace_capacity_bytes = 0u;
+    std::uint64_t atdb_decoded_capacity_bytes = 0u;
+    std::uint64_t prepared_sidecar_capacity_bytes = 0u;
+    std::uint64_t compact_radial_capacity_bytes = 0u;
+    std::uint64_t full_radial_capacity_bytes = 0u;
+    std::uint64_t accepted_controller_capacity_bytes = 0u;
+    std::uint64_t fixed_evaluations_capacity_bytes = 0u;
+    std::uint64_t publication_retained_capacity_bytes = 0u;
+    std::uint64_t final_snapshot_capacity_bytes = 0u;
+    std::uint64_t line_luminosity_capacity_bytes = 0u;
+    std::uint64_t retained_product_capacity_bytes = 0u;
+    xstar_local_zone_internal::FixedLiveOwnerMemoryV06824028 fixed{};
+    std::uint64_t known_owner_capacity_bytes = 0u;
+    std::uint64_t rss_minus_known_owner_bytes = 0u;
+};
+
 struct PerformanceInstrumentationV064890 {
     std::array<double,4> controller_call_seconds{{0.0,0.0,0.0,0.0}};
     std::array<std::uint64_t,4> controller_call_evaluations{{0u,0u,0u,0u}};
@@ -238,6 +268,16 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t controller_all_evaluations_v0682402 = 0u;
     double controller_all_seconds_v0682402 = 0.0;
     double boundary_all_seconds_v0682402 = 0.0;
+    // 0.6.82.40.2.8: no new hot-path clocks.  These split the already-timed
+    // DSEC/boundary wrappers using fixed-state cumulative deltas.
+    double controller_fixed_seconds_v06824028 = 0.0;
+    double controller_nonfixed_seconds_v06824028 = 0.0;
+    std::uint64_t controller_fixed_calls_v06824028 = 0u;
+    double boundary_fixed_seconds_v06824028 = 0.0;
+    double boundary_nonfixed_seconds_v06824028 = 0.0;
+    std::uint64_t boundary_fixed_calls_v06824028 = 0u;
+    std::vector<RadialOwnerSampleV06824028> radial_owner_samples_v06824028;
+    std::size_t radial_owner_peak_index_v06824028 = std::numeric_limits<std::size_t>::max();
     std::array<double,4> fixed_traversal_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_rate_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_element_seconds{{0.0,0.0,0.0,0.0}};
@@ -442,20 +482,6 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t line_luminosity_values_v0682338 = 0u;
     std::uint64_t line_luminosity_bytes_v0682338 = 0u;
     std::uint64_t line_luminosity_capacity_bytes_v0682338 = 0u;
-    // 0.6.82.40.2.7: once each compact nonterminal radial state has been
-    // projected into the derived retained-product arrays, its large continuum
-    // and source-workspace vectors no longer need to overlap the growing
-    // product array owner.  Preserve first/terminal zones plus the compact
-    // scalar/ion/thermal state required by later public writers.
-    bool product_overlap_release_enabled_v06824027 = false;
-    std::uint64_t product_overlap_eligible_zones_v06824027 = 0u;
-    std::uint64_t product_overlap_released_zones_v06824027 = 0u;
-    std::uint64_t product_overlap_capacity_bytes_before_v06824027 = 0u;
-    std::uint64_t product_overlap_capacity_bytes_after_v06824027 = 0u;
-    std::uint64_t product_overlap_capacity_bytes_released_v06824027 = 0u;
-    std::uint64_t product_overlap_max_zone_capacity_released_v06824027 = 0u;
-    std::uint64_t product_overlap_rss_before_schema_v06824027 = 0u;
-    std::uint64_t product_overlap_rss_after_schema_v06824027 = 0u;
     std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
     xstar_local_zone_internal::PerformanceFoundationV068231 foundation_v068231{};
 };
@@ -3220,44 +3246,6 @@ MemoryBytesV068233 fixed_evaluation_memory_v0682332(
     XSTAR_ADD_WS_VECTOR_V0682332(line_profile_workspace);
 #undef XSTAR_ADD_WS_VECTOR_V0682332
     return out;
-}
-
-// 0.6.82.40.2.7: release only the large compact-zone payload that has
-// already been projected into retained_product_arrays.  Keep scalar thermal
-// state, source_ion_stage_fractions, and element_thermal_products because the
-// later abundance writer still consumes those owners.
-template <typename T>
-std::uint64_t release_vector_capacity_v06824027(std::vector<T>& values) {
-    const auto bytes = static_cast<std::uint64_t>(values.capacity()) * sizeof(T);
-    std::vector<T>().swap(values);
-    return bytes;
-}
-
-std::uint64_t release_projected_compact_zone_payload_v06824027(
-    xstar_run_state::FixedEvaluationState& evaluation) {
-    std::uint64_t released = 0u;
-#define XSTAR_RELEASE_EVAL_VECTOR_V06824027(name) \
-    released += release_vector_capacity_v06824027(evaluation.name)
-    XSTAR_RELEASE_EVAL_VECTOR_V06824027(radiation_energy_ev);
-    XSTAR_RELEASE_EVAL_VECTOR_V06824027(radiation_flux);
-    XSTAR_RELEASE_EVAL_VECTOR_V06824027(continuum_tau_in);
-    XSTAR_RELEASE_EVAL_VECTOR_V06824027(continuum_tau_out);
-    XSTAR_RELEASE_EVAL_VECTOR_V06824027(continuum_spectrum);
-    XSTAR_RELEASE_EVAL_VECTOR_V06824027(spectrum);
-    XSTAR_RELEASE_EVAL_VECTOR_V06824027(opacity);
-#undef XSTAR_RELEASE_EVAL_VECTOR_V06824027
-    auto& ws = evaluation.source_workspace;
-#define XSTAR_RELEASE_WS_VECTOR_V06824027(name) \
-    released += release_vector_capacity_v06824027(ws.name)
-    XSTAR_RELEASE_WS_VECTOR_V06824027(rccemis);
-    XSTAR_RELEASE_WS_VECTOR_V06824027(zrems);
-    XSTAR_RELEASE_WS_VECTOR_V06824027(opakc);
-    XSTAR_RELEASE_WS_VECTOR_V06824027(opakcont);
-    XSTAR_RELEASE_WS_VECTOR_V06824027(dpthc);
-    XSTAR_RELEASE_WS_VECTOR_V06824027(dpthcont);
-    XSTAR_RELEASE_WS_VECTOR_V06824027(zremsz);
-#undef XSTAR_RELEASE_WS_VECTOR_V06824027
-    return released;
 }
 
 MemoryBytesV068233 radial_zones_memory_v0682332(
@@ -8350,27 +8338,6 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     product.retained_product_arrays.clear();
     std::vector<NativeArrayInventoryRow> inventory;
 
-    // 0.6.82.40.2.7 applies only to the compact ordinary-production path.
-    // Diagnostic bridges, multipass/noncompact owners, and incomplete line
-    // ledgers retain the historical full radial workspaces unchanged.
-    const bool release_projected_zone_payloads_v06824027 =
-        product.backend == "cpp-general-standalone" &&
-        !persist_bridge &&
-        product.incremental_detail_products_complete_v068233 &&
-        product.compact_radial_retention_v0682336 &&
-        product.public_line_luminosity_exact_v0682338 &&
-        product.final_writer_evaluation.has_value() &&
-        product.radial_zones.size() > 2u;
-    if (g_performance_v064890) {
-        auto& perf = *g_performance_v064890;
-        perf.product_overlap_release_enabled_v06824027 =
-            release_projected_zone_payloads_v06824027;
-        perf.product_overlap_rss_before_schema_v06824027 =
-            current_rss_bytes_v068233();
-        perf.product_overlap_capacity_bytes_before_v06824027 =
-            radial_zones_memory_v0682332(product.radial_zones).capacity;
-    }
-
     const auto level_indices = level_identity_indices(product);
     const auto line_indices_all = line_identity_indices(product);
     const auto rrc_indices_all = rrc_identity_indices(product);
@@ -8507,37 +8474,6 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
             append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_in", rrc_tau_in);
             append_native_array(inventory, product, hdu, "product_write_detail_rrc_tau_out", rrc_tau_out);
         }
-
-        // The first accepted boundary remains a live incident-surface fallback
-        // and the terminal boundary remains the public-writer fallback.  Every
-        // compact middle zone has now been fully projected, so release its
-        // duplicate large vector payload before the next retained arrays grow.
-        if (release_projected_zone_payloads_v06824027 && zi > 0u &&
-            zi + 1u < product.radial_zones.size() &&
-            product.radial_zones[zi].compact_retained_v0682336) {
-            auto& projected_eval_v06824027 =
-                product.radial_zones[zi].accepted_controller.evaluation;
-            const auto before_v06824027 =
-                fixed_evaluation_memory_v0682332(projected_eval_v06824027).capacity;
-            const auto released_v06824027 =
-                release_projected_compact_zone_payload_v06824027(projected_eval_v06824027);
-            const auto after_v06824027 =
-                fixed_evaluation_memory_v0682332(projected_eval_v06824027).capacity;
-            if (g_performance_v064890) {
-                auto& perf = *g_performance_v064890;
-                ++perf.product_overlap_eligible_zones_v06824027;
-                ++perf.product_overlap_released_zones_v06824027;
-                const auto measured_released_v06824027 =
-                    before_v06824027 > after_v06824027
-                        ? before_v06824027 - after_v06824027 : 0u;
-                perf.product_overlap_capacity_bytes_released_v06824027 +=
-                    measured_released_v06824027;
-                perf.product_overlap_max_zone_capacity_released_v06824027 = std::max(
-                    perf.product_overlap_max_zone_capacity_released_v06824027,
-                    measured_released_v06824027);
-                (void)released_v06824027;
-            }
-        }
     }
 
     const std::size_t hdu = 3;
@@ -8648,14 +8584,6 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
                 << "  \"product_parity\": \"NOT_CLAIMED\"\n"
                 << "}\n";
         }
-    }
-    if (g_performance_v064890) {
-        auto& perf = *g_performance_v064890;
-        perf.product_overlap_capacity_bytes_after_v06824027 =
-            radial_zones_memory_v0682332(product.radial_zones).capacity;
-        perf.product_overlap_rss_after_schema_v06824027 =
-            current_rss_bytes_v068233();
-        update_radial_zones_memory_v0682332(product.radial_zones);
     }
     std::cout << "V048746255172582_PATCH520172_PRODUCTWRITE_HANDOFF="
               << (persist_bridge ? "IN_MEMORY_AND_DIAGNOSTIC_BRIDGE" : "IN_MEMORY_ONLY") << "\n"
@@ -19989,6 +19917,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         if (!immediate_final_transfer_v0682334) {
             finals.reserve(static_cast<std::size_t>(std::max(params.nsteps, 4)));
         }
+        const bool fixed_controller_diagnostics_v06824028 = [] {
+            const char* value = std::getenv("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS");
+            return value && std::string(value) == "1";
+        }();
         std::vector<xstar_run_state::CompactRadialZoneStateV0682336>
             compact_radial_zones_v0682336;
         if (compact_radial_retention_v0682336) {
@@ -20052,6 +19984,144 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     public_line_luminosity_v0682338.capacity() * sizeof(double);
             }
         };
+        auto sample_radial_owner_v06824028 = [&] (
+                const char* phase_v06824028, std::size_t zone_ordinal_v06824028,
+                const FixedDsecSnapshot* boundary_v06824028) {
+            if (!fixed_controller_diagnostics_v06824028 || !g_performance_v064890) return;
+            auto& perf_v06824028 = *g_performance_v064890;
+            RadialOwnerSampleV06824028 sample;
+            sample.sample_index = perf_v06824028.radial_owner_samples_v06824028.size() + 1u;
+            sample.pass_index = data.radial_pass_index_v068227;
+            sample.zone_ordinal = zone_ordinal_v06824028;
+            sample.phase = phase_v06824028 ? phase_v06824028 : "UNKNOWN";
+            sample.rss_bytes = current_rss_bytes_v068233();
+            sample.peak_rss_bytes = peak_rss_bytes_v068231();
+            const auto heap_v06824028 = current_heap_snapshot_v0682352();
+            sample.heap_uordblks = heap_v06824028.uordblks;
+            sample.heap_hblkhd = heap_v06824028.hblkhd;
+            sample.heap_fordblks = heap_v06824028.fordblks;
+            if (boundary_v06824028) {
+                sample.boundary_snapshot_capacity_bytes =
+                    snapshot_memory_v068233(*boundary_v06824028).capacity;
+            }
+
+            const auto vector_capacity_v06824028 = [](const auto& values) -> std::uint64_t {
+                using Value = typename std::decay_t<decltype(values)>::value_type;
+                return static_cast<std::uint64_t>(values.capacity()) * sizeof(Value);
+            };
+            sample.controller_continuum_capacity_bytes =
+                vector_capacity_v06824028(data.energy) +
+                vector_capacity_v06824028(data.flux) +
+                vector_capacity_v06824028(data.dsec_bremsa) +
+                vector_capacity_v06824028(data.source_tau_in) +
+                vector_capacity_v06824028(data.source_tau_out) +
+                vector_capacity_v06824028(data.grid_tau_in) +
+                vector_capacity_v06824028(data.grid_tau_out) +
+                vector_capacity_v06824028(data.grid_cont_tau_in) +
+                vector_capacity_v06824028(data.grid_cont_tau_out) +
+                vector_capacity_v06824028(data.accumulated_zrems) +
+                vector_capacity_v06824028(data.accumulated_zremso) +
+                vector_capacity_v06824028(data.accumulated_zremsz) +
+                vector_capacity_v06824028(data.source_incident);
+            sample.controller_line_rrc_capacity_bytes =
+                vector_capacity_v06824028(data.line_tau_in) +
+                vector_capacity_v06824028(data.line_tau_out) +
+                vector_capacity_v06824028(data.product_line_tau_in) +
+                vector_capacity_v06824028(data.product_line_tau_out) +
+                vector_capacity_v06824028(data.product_rrc_tau_in) +
+                vector_capacity_v06824028(data.product_rrc_tau_out) +
+                vector_capacity_v06824028(data.line_luminosity) +
+                vector_capacity_v06824028(data.rrc_luminosity) +
+                vector_capacity_v06824028(data.pprint4_flinel_accumulator_v068229334) +
+                vector_capacity_v06824028(data.unsavd_rcem_v0682274) +
+                vector_capacity_v06824028(data.unsavd_oplin_v0682274) +
+                vector_capacity_v06824028(data.unsavd_cemab_v0682274) +
+                vector_capacity_v06824028(data.unsavd_cabab_v0682274) +
+                vector_capacity_v06824028(data.unsavd_opakab_v0682274) +
+                vector_capacity_v06824028(data.unsavd_opakc_v0682274) +
+                vector_capacity_v06824028(data.unsavd_rccemis_v0682274);
+            sample.controller_population_capacity_bytes =
+                vector_capacity_v06824028(data.global_xilevg) +
+                vector_capacity_v06824028(data.global_bilevg) +
+                vector_capacity_v06824028(data.global_rnisg) +
+                vector_capacity_v06824028(data.call2_entry_global_rnisg) +
+                vector_capacity_v06824028(data.population_global_level_index) +
+                vector_capacity_v06824028(data.global_terminal_continuum_role);
+            for (const auto& aliases_v06824028 : data.population_global_level_aliases)
+                sample.controller_population_capacity_bytes += vector_capacity_v06824028(aliases_v06824028);
+            for (const auto& roles_v06824028 : data.population_global_level_terminal_roles)
+                sample.controller_population_capacity_bytes += vector_capacity_v06824028(roles_v06824028);
+            sample.controller_workspace_capacity_bytes =
+                sample.controller_continuum_capacity_bytes +
+                sample.controller_line_rrc_capacity_bytes +
+                sample.controller_population_capacity_bytes;
+
+            sample.atdb_decoded_capacity_bytes = perf_v06824028.atdb_decoded_capacity_bytes_v068233;
+            sample.prepared_sidecar_capacity_bytes = perf_v06824028.prepared_sidecar_capacity_bytes_v068233;
+            sample.compact_radial_capacity_bytes =
+                compact_radial_zones_memory_v0682336(compact_radial_zones_v0682336).capacity;
+            sample.full_radial_capacity_bytes = radial_zones_memory_v0682332(whole.radial_zones).capacity;
+
+            sample.accepted_controller_capacity_bytes =
+                static_cast<std::uint64_t>(whole.accepted_controller_states.capacity()) *
+                sizeof(xstar_run_state::AcceptedControllerState);
+            for (const auto& accepted_v06824028 : whole.accepted_controller_states) {
+                const auto one_v06824028 = fixed_evaluation_memory_v0682332(accepted_v06824028.evaluation);
+                sample.accepted_controller_capacity_bytes += one_v06824028.capacity > sizeof(xstar_run_state::FixedEvaluationState)
+                    ? one_v06824028.capacity - sizeof(xstar_run_state::FixedEvaluationState) : 0u;
+            }
+            sample.fixed_evaluations_capacity_bytes =
+                static_cast<std::uint64_t>(whole.fixed_evaluations.capacity()) *
+                sizeof(xstar_run_state::FixedEvaluationState);
+            for (const auto& eval_v06824028 : whole.fixed_evaluations) {
+                const auto one_v06824028 = fixed_evaluation_memory_v0682332(eval_v06824028);
+                sample.fixed_evaluations_capacity_bytes += one_v06824028.capacity > sizeof(xstar_run_state::FixedEvaluationState)
+                    ? one_v06824028.capacity - sizeof(xstar_run_state::FixedEvaluationState) : 0u;
+            }
+            sample.publication_retained_capacity_bytes = perf_v06824028.publication_retained_current_capacity_bytes_v068233;
+            sample.final_snapshot_capacity_bytes =
+                std::max(perf_v06824028.final_snapshots_current_capacity_bytes_v0682332,
+                         perf_v06824028.final_snapshots_current_capacity_bytes_v0682334);
+            sample.line_luminosity_capacity_bytes =
+                static_cast<std::uint64_t>(public_line_luminosity_v0682338.capacity()) * sizeof(double);
+            // Product-state retained arrays are constructed after the radial
+            // controller phase.  They are therefore zero at these accepted
+            // radial-boundary samples by construction.
+            sample.retained_product_capacity_bytes = 0u;
+            xstar_local_zone_internal::capture_fixed_live_owner_memory_v06824028(
+                data.fixed_context, sample.fixed);
+
+            sample.known_owner_capacity_bytes =
+                sample.boundary_snapshot_capacity_bytes +
+                sample.controller_workspace_capacity_bytes +
+                sample.atdb_decoded_capacity_bytes +
+                sample.prepared_sidecar_capacity_bytes +
+                sample.compact_radial_capacity_bytes +
+                sample.full_radial_capacity_bytes +
+                sample.accepted_controller_capacity_bytes +
+                sample.fixed_evaluations_capacity_bytes +
+                sample.publication_retained_capacity_bytes +
+                sample.final_snapshot_capacity_bytes +
+                sample.line_luminosity_capacity_bytes +
+                sample.retained_product_capacity_bytes +
+                sample.fixed.persistent_scratch_bytes +
+                sample.fixed.last_source_workspace_capacity_bytes +
+                sample.fixed.compact_record_capacity_bytes +
+                sample.fixed.rich_record_capacity_bytes +
+                sample.fixed.prepared_bound_free_capacity_bytes +
+                sample.fixed.execution_plan_capacity_bytes +
+                sample.fixed.retained_state_capacity_bytes;
+            sample.rss_minus_known_owner_bytes = sample.rss_bytes > sample.known_owner_capacity_bytes
+                ? sample.rss_bytes - sample.known_owner_capacity_bytes : 0u;
+            perf_v06824028.radial_owner_samples_v06824028.push_back(std::move(sample));
+            const std::size_t index_v06824028 = perf_v06824028.radial_owner_samples_v06824028.size() - 1u;
+            if (perf_v06824028.radial_owner_peak_index_v06824028 == std::numeric_limits<std::size_t>::max() ||
+                perf_v06824028.radial_owner_samples_v06824028[index_v06824028].rss_bytes >=
+                    perf_v06824028.radial_owner_samples_v06824028[perf_v06824028.radial_owner_peak_index_v06824028].rss_bytes) {
+                perf_v06824028.radial_owner_peak_index_v06824028 = index_v06824028;
+            }
+        };
+
         auto append_zone_v0682334 = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
                                         double source_radius, double source_depth, double source_column,
                                         std::size_t dsec_ntotit, bool terminal_row,
@@ -20115,6 +20185,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             whole.abundance_radial_rows.push_back(std::move(abundance));
             update_radial_zones_memory_v0682332(whole.radial_zones);
             update_full_radial_owner_memory_v0682336(whole.radial_zones);
+            sample_radial_owner_v06824028("post_zone_retention", ordinal, &snapshot);
         };
         auto append_compact_zone_v0682336 = [&](
                 const FixedDsecSnapshot& snapshot, const std::string& reason,
@@ -20176,6 +20247,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             whole.abundance_radial_rows.push_back(std::move(abundance));
             update_compact_radial_zones_memory_v0682336(
                 compact_radial_zones_v0682336);
+            sample_radial_owner_v06824028("post_zone_retention", ordinal, &snapshot);
         };
         std::optional<FixedDsecSnapshot> pending_final_snapshot_v0682334;
         double pending_final_radius_cm_v0682334 = 0.0;
@@ -20367,6 +20439,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (g_performance_v064890) {
                 g_performance_v064890->controller_all_calls_v0682402 += 1u;
                 g_performance_v064890->controller_all_seconds_v0682402 += controller_call_elapsed_v0682402;
+                if (fixed_controller_diagnostics_v06824028) {
+                    const double fixed_delta_v06824028 = std::max(
+                        0.0, data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds);
+                    const std::uint64_t fixed_calls_delta_v06824028 =
+                        data.cumulative_stats.calls - fixed_stats_before_v064890.calls;
+                    g_performance_v064890->controller_fixed_seconds_v06824028 += fixed_delta_v06824028;
+                    g_performance_v064890->controller_nonfixed_seconds_v06824028 += std::max(
+                        0.0, controller_call_elapsed_v0682402 - fixed_delta_v06824028);
+                    g_performance_v064890->controller_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
+                }
             }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 const std::size_t slot = call - 1u;
@@ -20458,6 +20540,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // committed only across the shell selected by the previous
             // source STEP evaluation (call 1 itself has zero thickness).
             const auto boundary_started_v064890 = std::chrono::steady_clock::now();
+            const xstar_fixed_state_stats_v1 boundary_fixed_before_v06824028 = data.cumulative_stats;
             // 0.6.82.27.4: an inward/even pass has nlimdt=0, but source
             // xstarcalc.f90 still executes calc_hmc_all + calc_emisab_all +
             // calc_emis_all once.  There is no DSEC boundary to reuse; force a
@@ -20469,10 +20552,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             const double boundary_elapsed_v0682402 = performance_elapsed_seconds(boundary_started_v064890);
             if (g_performance_v064890) {
                 g_performance_v064890->boundary_all_seconds_v0682402 += boundary_elapsed_v0682402;
+                if (fixed_controller_diagnostics_v06824028) {
+                    const double fixed_delta_v06824028 = std::max(
+                        0.0, data.cumulative_stats.total_seconds - boundary_fixed_before_v06824028.total_seconds);
+                    const std::uint64_t fixed_calls_delta_v06824028 =
+                        data.cumulative_stats.calls - boundary_fixed_before_v06824028.calls;
+                    g_performance_v064890->boundary_fixed_seconds_v06824028 += fixed_delta_v06824028;
+                    g_performance_v064890->boundary_nonfixed_seconds_v06824028 += std::max(
+                        0.0, boundary_elapsed_v0682402 - fixed_delta_v06824028);
+                    g_performance_v064890->boundary_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
+                }
             }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->boundary_projection_seconds[call - 1u] += boundary_elapsed_v0682402;
             }
+            sample_radial_owner_v06824028(
+                "post_boundary_recompute",
+                compact_radial_zones_v0682336.size() + whole.radial_zones.size() + 1u,
+                &boundary);
             std::string completeness_reason;
             if (!snapshot_complete(boundary, info, data.energy.size(), completeness_reason)) {
                 throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
@@ -22205,6 +22302,25 @@ void emit_controller_performance_instrumentation(
     const double top_unattributed = std::max(0.0, total_seconds - top_accounted);
     const double coverage_percent = total_seconds > 0.0 ? 100.0 * top_accounted / total_seconds : 0.0;
     const std::array<int,6> family_types{{49,50,53,86,88,99}};
+    // 0.6.82.40.2.8: derive non-evaluator/controller partitions only from
+    // already-existing cumulative timers.  No clock read is added to the
+    // evaluate_record hot path.
+    const double fixed_non_evaluator_v06824028 = std::max(
+        0.0, perf.all_fixed_total_seconds - perf.all_fixed_rate_seconds);
+    const double traversal_non_evaluator_v06824028 = std::max(
+        0.0, perf.all_fixed_traversal_seconds - perf.all_fixed_rate_seconds);
+    const double traversal_orchestration_v06824028 = std::max(
+        0.0, perf.all_fixed_traversal_seconds - perf.all_fixed_rate_seconds -
+            perf.all_fixed_element_seconds);
+    const double foundation_record_orchestration_v06824028 =
+        perf.foundation_v068231.preliminary_cache_seconds +
+        perf.foundation_v068231.record_preparation_seconds +
+        perf.foundation_v068231.evaluated_record_seconds +
+        perf.foundation_v068231.contribution_list_seconds +
+        perf.foundation_v068231.element_input_seconds +
+        perf.foundation_v068231.matrix_workspace_seconds +
+        perf.foundation_v068231.retained_array_seconds +
+        perf.foundation_v068231.level_population_scratch_seconds;
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
@@ -22307,7 +22423,79 @@ void emit_controller_performance_instrumentation(
             << "V068222_PERF_ALL_FIXED_CONTINUUM_SECONDS=" << perf.all_fixed_continuum_seconds << "\n"
             << "V068222_PERF_ALL_FIXED_SPECTRAL_SECONDS=" << perf.all_fixed_spectral_seconds << "\n"
             << "V068222_PERF_ALL_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
-            << "V068231_PERF_FIXED_CALLS=" << perf.foundation_v068231.fixed_calls << "\n"
+            << "V06824028_DIAGNOSTIC_MODE=FIXED_CONTROLLER_NON_EVALUATOR_AND_RADIAL_PEAK_OWNERS\n"
+            << "V06824028_FIXED_TOTAL_SECONDS=" << perf.all_fixed_total_seconds << "\n"
+            << "V06824028_FIXED_EVALUATOR_SECONDS=" << perf.all_fixed_rate_seconds << "\n"
+            << "V06824028_FIXED_NON_EVALUATOR_SECONDS=" << fixed_non_evaluator_v06824028 << "\n"
+            << "V06824028_FIXED_TRAVERSAL_SECONDS=" << perf.all_fixed_traversal_seconds << "\n"
+            << "V06824028_TRAVERSAL_NON_EVALUATOR_SECONDS=" << traversal_non_evaluator_v06824028 << "\n"
+            << "V06824028_TRAVERSAL_ORCHESTRATION_SECONDS=" << traversal_orchestration_v06824028 << "\n"
+            << "V06824028_ELEMENT_SOLVE_SECONDS=" << perf.all_fixed_element_seconds << "\n"
+            << "V06824028_CONTINUUM_SECONDS=" << perf.all_fixed_continuum_seconds << "\n"
+            << "V06824028_SPECTRAL_SECONDS=" << perf.all_fixed_spectral_seconds << "\n"
+            << "V06824028_PRELIMINARY_CACHE_OVERHEAD_SECONDS=" << perf.foundation_v068231.preliminary_cache_seconds << "\n"
+            << "V06824028_RECORD_PREPARATION_SECONDS=" << perf.foundation_v068231.record_preparation_seconds << "\n"
+            << "V06824028_PASS2_RECORD_CONTAINER_OVERHEAD_SECONDS=" << perf.foundation_v068231.evaluated_record_seconds << "\n"
+            << "V06824028_CONTRIBUTION_LIST_SECONDS=" << perf.foundation_v068231.contribution_list_seconds << "\n"
+            << "V06824028_MATRIX_WORKSPACE_SECONDS=" << perf.foundation_v068231.matrix_workspace_seconds << "\n"
+            << "V06824028_ELEMENT_INPUT_SECONDS=" << perf.foundation_v068231.element_input_seconds << "\n"
+            << "V06824028_RETAINED_ARRAY_SECONDS=" << perf.foundation_v068231.retained_array_seconds << "\n"
+            << "V06824028_LEVEL_POPULATION_SCRATCH_SECONDS=" << perf.foundation_v068231.level_population_scratch_seconds << "\n"
+            << "V06824028_FOUNDATION_RECORD_ORCHESTRATION_SECONDS=" << foundation_record_orchestration_v06824028 << "\n"
+            << "V06824028_BOUND_FREE_WORKSPACE_SECONDS=" << perf.foundation_v068231.bound_free_workspace_seconds << "\n"
+            << "V06824028_SPECTRAL_WORKSPACE_SECONDS=" << perf.foundation_v068231.spectral_workspace_seconds << "\n"
+            << "V06824028_CONTROLLER_DSEC_SECONDS=" << perf.controller_all_seconds_v0682402 << "\n"
+            << "V06824028_CONTROLLER_DSEC_FIXED_SECONDS=" << perf.controller_fixed_seconds_v06824028 << "\n"
+            << "V06824028_CONTROLLER_DSEC_NONFIXED_SECONDS=" << perf.controller_nonfixed_seconds_v06824028 << "\n"
+            << "V06824028_CONTROLLER_DSEC_FIXED_CALLS=" << perf.controller_fixed_calls_v06824028 << "\n"
+            << "V06824028_BOUNDARY_SECONDS=" << perf.boundary_all_seconds_v0682402 << "\n"
+            << "V06824028_BOUNDARY_FIXED_SECONDS=" << perf.boundary_fixed_seconds_v06824028 << "\n"
+            << "V06824028_BOUNDARY_NONFIXED_SECONDS=" << perf.boundary_nonfixed_seconds_v06824028 << "\n"
+            << "V06824028_BOUNDARY_FIXED_CALLS=" << perf.boundary_fixed_calls_v06824028 << "\n"
+            << "V06824028_RADIAL_OWNER_SAMPLE_COUNT=" << perf.radial_owner_samples_v06824028.size() << "\n";
+        if (perf.radial_owner_peak_index_v06824028 < perf.radial_owner_samples_v06824028.size()) {
+            const auto& peak_v06824028 = perf.radial_owner_samples_v06824028[perf.radial_owner_peak_index_v06824028];
+            out << "V06824028_RADIAL_PEAK_SAMPLE_INDEX=" << peak_v06824028.sample_index << "\n"
+                << "V06824028_RADIAL_PEAK_PASS=" << peak_v06824028.pass_index << "\n"
+                << "V06824028_RADIAL_PEAK_ZONE=" << peak_v06824028.zone_ordinal << "\n"
+                << "V06824028_RADIAL_PEAK_PHASE=" << peak_v06824028.phase << "\n"
+                << "V06824028_RADIAL_PEAK_RSS_BYTES=" << peak_v06824028.rss_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_PROCESS_RSS_BYTES=" << peak_v06824028.peak_rss_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_HEAP_UORDBLKS_BYTES=" << peak_v06824028.heap_uordblks << "\n"
+                << "V06824028_RADIAL_PEAK_HEAP_HBLKHD_BYTES=" << peak_v06824028.heap_hblkhd << "\n"
+                << "V06824028_RADIAL_PEAK_HEAP_FORDBLKS_BYTES=" << peak_v06824028.heap_fordblks << "\n"
+                << "V06824028_RADIAL_PEAK_BOUNDARY_SNAPSHOT_CAPACITY_BYTES=" << peak_v06824028.boundary_snapshot_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_CONTROLLER_CONTINUUM_CAPACITY_BYTES=" << peak_v06824028.controller_continuum_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_CONTROLLER_LINE_RRC_CAPACITY_BYTES=" << peak_v06824028.controller_line_rrc_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_CONTROLLER_POPULATION_CAPACITY_BYTES=" << peak_v06824028.controller_population_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_CONTROLLER_WORKSPACE_CAPACITY_BYTES=" << peak_v06824028.controller_workspace_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_ATDB_DECODED_CAPACITY_BYTES=" << peak_v06824028.atdb_decoded_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_PREPARED_SIDECAR_CAPACITY_BYTES=" << peak_v06824028.prepared_sidecar_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_COMPACT_RADIAL_CAPACITY_BYTES=" << peak_v06824028.compact_radial_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FULL_RADIAL_CAPACITY_BYTES=" << peak_v06824028.full_radial_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_ACCEPTED_CONTROLLER_CAPACITY_BYTES=" << peak_v06824028.accepted_controller_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_EVALUATIONS_CAPACITY_BYTES=" << peak_v06824028.fixed_evaluations_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_PUBLICATION_RETAINED_CAPACITY_BYTES=" << peak_v06824028.publication_retained_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FINAL_SNAPSHOT_CAPACITY_BYTES=" << peak_v06824028.final_snapshot_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_LINE_LUMINOSITY_CAPACITY_BYTES=" << peak_v06824028.line_luminosity_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_RETAINED_PRODUCT_CAPACITY_BYTES=" << peak_v06824028.retained_product_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PERSISTENT_SCRATCH_BYTES=" << peak_v06824028.fixed.persistent_scratch_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PERSISTENT_RECORD_CACHE_BYTES=" << peak_v06824028.fixed.persistent_record_cache_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PERSISTENT_CONTRIBUTION_BYTES=" << peak_v06824028.fixed.persistent_contribution_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PERSISTENT_POPULATION_BYTES=" << peak_v06824028.fixed.persistent_population_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PERSISTENT_SPECTRAL_BYTES=" << peak_v06824028.fixed.persistent_spectral_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PERSISTENT_ELEMENT_SOLVER_BYTES=" << peak_v06824028.fixed.persistent_element_solver_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PERSISTENT_CONTINUUM_BYTES=" << peak_v06824028.fixed.persistent_continuum_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_LAST_SOURCE_WORKSPACE_BYTES=" << peak_v06824028.fixed.last_source_workspace_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_COMPACT_RECORD_BYTES=" << peak_v06824028.fixed.compact_record_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_RICH_RECORD_BYTES=" << peak_v06824028.fixed.rich_record_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_PREPARED_BOUND_FREE_BYTES=" << peak_v06824028.fixed.prepared_bound_free_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_EXECUTION_PLAN_BYTES=" << peak_v06824028.fixed.execution_plan_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_FIXED_RETAINED_STATE_BYTES=" << peak_v06824028.fixed.retained_state_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_KNOWN_OWNER_CAPACITY_BYTES=" << peak_v06824028.known_owner_capacity_bytes << "\n"
+                << "V06824028_RADIAL_PEAK_RSS_MINUS_KNOWN_OWNER_BYTES=" << peak_v06824028.rss_minus_known_owner_bytes << "\n";
+        }
+        out << "V068231_PERF_FIXED_CALLS=" << perf.foundation_v068231.fixed_calls << "\n"
             << "V068231_PERF_RECORD_PREPARATION_SECONDS=" << perf.foundation_v068231.record_preparation_seconds << "\n"
             << "V068231_PERF_PRELIMINARY_CACHE_SECONDS=" << perf.foundation_v068231.preliminary_cache_seconds << "\n"
             << "V068231_PERF_EVALUATED_RECORD_SECONDS=" << perf.foundation_v068231.evaluated_record_seconds << "\n"
@@ -22604,24 +22792,6 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.type53_legacy_pair_interpolations_executed_v06824026 << "\n"
             << "V06824026_TYPE53_LEGACY_PAIR_INTERPOLATIONS_ELIDED="
             << perf.foundation_v068231.type53_legacy_pair_interpolations_elided_v06824026 << "\n";
-        out << "V06824027_PRODUCT_OVERLAP_RELEASE_ENABLED="
-            << (perf.product_overlap_release_enabled_v06824027 ? "YES" : "NO") << "\n"
-            << "V06824027_PRODUCT_OVERLAP_ELIGIBLE_ZONES="
-            << perf.product_overlap_eligible_zones_v06824027 << "\n"
-            << "V06824027_PRODUCT_OVERLAP_RELEASED_ZONES="
-            << perf.product_overlap_released_zones_v06824027 << "\n"
-            << "V06824027_PRODUCT_OVERLAP_CAPACITY_BYTES_BEFORE="
-            << perf.product_overlap_capacity_bytes_before_v06824027 << "\n"
-            << "V06824027_PRODUCT_OVERLAP_CAPACITY_BYTES_AFTER="
-            << perf.product_overlap_capacity_bytes_after_v06824027 << "\n"
-            << "V06824027_PRODUCT_OVERLAP_CAPACITY_BYTES_RELEASED="
-            << perf.product_overlap_capacity_bytes_released_v06824027 << "\n"
-            << "V06824027_PRODUCT_OVERLAP_MAX_ZONE_CAPACITY_RELEASED="
-            << perf.product_overlap_max_zone_capacity_released_v06824027 << "\n"
-            << "V06824027_PRODUCT_OVERLAP_RSS_BEFORE_SCHEMA="
-            << perf.product_overlap_rss_before_schema_v06824027 << "\n"
-            << "V06824027_PRODUCT_OVERLAP_RSS_AFTER_SCHEMA="
-            << perf.product_overlap_rss_after_schema_v06824027 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {
@@ -22876,6 +23046,67 @@ void emit_controller_performance_instrumentation(
         std::filesystem::create_directories(dir);
         std::ofstream file(dir / "performance_v064890.txt");
         write(file);
+        if (!perf.radial_owner_samples_v06824028.empty()) {
+            std::ofstream csv(dir / "radial_owner_samples_v06824028.csv");
+            csv << "sample_index,pass_index,zone_ordinal,phase,rss_bytes,peak_rss_bytes,"
+                   "heap_uordblks,heap_hblkhd,heap_fordblks,boundary_snapshot_capacity_bytes,"
+                   "controller_continuum_capacity_bytes,controller_line_rrc_capacity_bytes,"
+                   "controller_population_capacity_bytes,controller_workspace_capacity_bytes,"
+                   "atdb_decoded_capacity_bytes,prepared_sidecar_capacity_bytes,"
+                   "compact_radial_capacity_bytes,full_radial_capacity_bytes,"
+                   "accepted_controller_capacity_bytes,fixed_evaluations_capacity_bytes,"
+                   "publication_retained_capacity_bytes,final_snapshot_capacity_bytes,"
+                   "line_luminosity_capacity_bytes,retained_product_capacity_bytes,"
+                   "fixed_persistent_scratch_bytes,fixed_persistent_record_cache_bytes,"
+                   "fixed_persistent_contribution_bytes,fixed_persistent_population_bytes,"
+                   "fixed_persistent_spectral_bytes,fixed_persistent_element_solver_bytes,"
+                   "fixed_persistent_continuum_bytes,fixed_last_source_workspace_capacity_bytes,"
+                   "fixed_compact_record_capacity_bytes,fixed_rich_record_capacity_bytes,"
+                   "fixed_prepared_bound_free_capacity_bytes,fixed_execution_plan_capacity_bytes,"
+                   "fixed_retained_state_capacity_bytes,known_owner_capacity_bytes,"
+                   "rss_minus_known_owner_bytes\n";
+            for (const auto& sample_v06824028 : perf.radial_owner_samples_v06824028) {
+                csv << sample_v06824028.sample_index << ','
+                    << sample_v06824028.pass_index << ','
+                    << sample_v06824028.zone_ordinal << ','
+                    << sample_v06824028.phase << ','
+                    << sample_v06824028.rss_bytes << ','
+                    << sample_v06824028.peak_rss_bytes << ','
+                    << sample_v06824028.heap_uordblks << ','
+                    << sample_v06824028.heap_hblkhd << ','
+                    << sample_v06824028.heap_fordblks << ','
+                    << sample_v06824028.boundary_snapshot_capacity_bytes << ','
+                    << sample_v06824028.controller_continuum_capacity_bytes << ','
+                    << sample_v06824028.controller_line_rrc_capacity_bytes << ','
+                    << sample_v06824028.controller_population_capacity_bytes << ','
+                    << sample_v06824028.controller_workspace_capacity_bytes << ','
+                    << sample_v06824028.atdb_decoded_capacity_bytes << ','
+                    << sample_v06824028.prepared_sidecar_capacity_bytes << ','
+                    << sample_v06824028.compact_radial_capacity_bytes << ','
+                    << sample_v06824028.full_radial_capacity_bytes << ','
+                    << sample_v06824028.accepted_controller_capacity_bytes << ','
+                    << sample_v06824028.fixed_evaluations_capacity_bytes << ','
+                    << sample_v06824028.publication_retained_capacity_bytes << ','
+                    << sample_v06824028.final_snapshot_capacity_bytes << ','
+                    << sample_v06824028.line_luminosity_capacity_bytes << ','
+                    << sample_v06824028.retained_product_capacity_bytes << ','
+                    << sample_v06824028.fixed.persistent_scratch_bytes << ','
+                    << sample_v06824028.fixed.persistent_record_cache_bytes << ','
+                    << sample_v06824028.fixed.persistent_contribution_bytes << ','
+                    << sample_v06824028.fixed.persistent_population_bytes << ','
+                    << sample_v06824028.fixed.persistent_spectral_bytes << ','
+                    << sample_v06824028.fixed.persistent_element_solver_bytes << ','
+                    << sample_v06824028.fixed.persistent_continuum_bytes << ','
+                    << sample_v06824028.fixed.last_source_workspace_capacity_bytes << ','
+                    << sample_v06824028.fixed.compact_record_capacity_bytes << ','
+                    << sample_v06824028.fixed.rich_record_capacity_bytes << ','
+                    << sample_v06824028.fixed.prepared_bound_free_capacity_bytes << ','
+                    << sample_v06824028.fixed.execution_plan_capacity_bytes << ','
+                    << sample_v06824028.fixed.retained_state_capacity_bytes << ','
+                    << sample_v06824028.known_owner_capacity_bytes << ','
+                    << sample_v06824028.rss_minus_known_owner_bytes << '\n';
+            }
+        }
     }
 }
 

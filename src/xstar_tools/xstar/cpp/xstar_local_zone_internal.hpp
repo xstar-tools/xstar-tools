@@ -291,6 +291,29 @@ struct PerformanceFoundationV068231 {
     std::uint64_t type53_legacy_pair_interpolations_elided_v06824026 = 0u;
 };
 
+// 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller
+// diagnostic sweep.  These are current capacity lower bounds, not allocator
+// ownership claims, and never participate in scientific decisions.
+struct FixedLiveOwnerMemoryV06824028 {
+    std::uint64_t persistent_scratch_bytes = 0u;
+    std::uint64_t persistent_record_cache_bytes = 0u;
+    std::uint64_t persistent_contribution_bytes = 0u;
+    std::uint64_t persistent_population_bytes = 0u;
+    std::uint64_t persistent_spectral_bytes = 0u;
+    std::uint64_t persistent_element_solver_bytes = 0u;
+    std::uint64_t persistent_continuum_bytes = 0u;
+    std::uint64_t last_source_workspace_capacity_bytes = 0u;
+    std::uint64_t compact_record_capacity_bytes = 0u;
+    std::uint64_t rich_record_capacity_bytes = 0u;
+    std::uint64_t prepared_bound_free_capacity_bytes = 0u;
+    std::uint64_t execution_plan_capacity_bytes = 0u;
+    std::uint64_t retained_state_capacity_bytes = 0u;
+};
+
+void capture_fixed_live_owner_memory_v06824028(
+    const xstar_fixed_state_context* context,
+    FixedLiveOwnerMemoryV06824028& out);
+
 void capture_performance_foundation_v068231(
     const xstar_fixed_state_context* context,
     PerformanceFoundationV068231& out);

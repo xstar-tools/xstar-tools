@@ -4587,6 +4587,9 @@ struct xstar_fixed_state_context_impl {
     // production runs retain the accepted .40.2.4 ownership/lifetime.
     bool ion_family_diagnostics_enabled_v06824025 = false;
     std::vector<std::uint8_t> ion_unique_record_seen_v06824025;
+    // 0.6.82.40.2.8: enables boundary-level owner sampling only.  The hot
+    // evaluator receives no additional clocks or branches from this flag.
+    bool fixed_controller_diagnostics_enabled_v06824028 = false;
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
@@ -19082,6 +19085,88 @@ void capture_publication_state_v0682292(
     out.brems_cooling = context->last_clbrems;
 }
 
+void capture_fixed_live_owner_memory_v06824028(
+    const xstar_fixed_state_context* context,
+    FixedLiveOwnerMemoryV06824028& out) {
+    out = FixedLiveOwnerMemoryV06824028{};
+    if (!context || !context->fixed_controller_diagnostics_enabled_v06824028) return;
+
+    out.persistent_scratch_bytes = context->scratch_v068231.reserved_bytes();
+    const auto scratch = context->scratch_v068231.reserved_breakdown_bytes_v0682352();
+    out.persistent_record_cache_bytes = scratch[0];
+    out.persistent_contribution_bytes = scratch[1];
+    out.persistent_population_bytes = scratch[2];
+    out.persistent_spectral_bytes = scratch[3];
+    out.persistent_element_solver_bytes = scratch[4];
+    out.persistent_continuum_bytes = scratch[5];
+
+    const auto capacity_bytes = [](const auto& values) -> std::uint64_t {
+        using Value = typename std::decay_t<decltype(values)>::value_type;
+        return static_cast<std::uint64_t>(values.capacity()) * sizeof(Value);
+    };
+    const auto map_inline_bytes = [](const auto& values) -> std::uint64_t {
+        using Value = typename std::decay_t<decltype(values)>::value_type;
+        return static_cast<std::uint64_t>(values.size()) * sizeof(Value);
+    };
+
+    out.last_source_workspace_capacity_bytes =
+        capacity_bytes(context->last_source_lte_populations_v064894) +
+        capacity_bytes(context->last_source_rcem_v064894) +
+        capacity_bytes(context->last_source_oplin_v064894) +
+        capacity_bytes(context->last_source_cemab_v064894) +
+        capacity_bytes(context->last_source_cabab_v064894) +
+        capacity_bytes(context->last_source_opakab_v064894) +
+        capacity_bytes(context->last_source_rccemis_v064894) +
+        capacity_bytes(context->last_source_opakc_v064894) +
+        capacity_bytes(context->last_source_opakcont_v064894) +
+        capacity_bytes(context->last_source_fline_v064894) +
+        capacity_bytes(context->last_source_flinel_v064894) +
+        capacity_bytes(context->last_source_pprint4_flinel_v068229331) +
+        capacity_bytes(context->last_source_elum_v064894) +
+        capacity_bytes(context->last_source_line_profile_workspace_v064894);
+
+    out.compact_record_capacity_bytes =
+        capacity_bytes(context->last_compact_record_product_diagnostics_v06823611);
+    out.rich_record_capacity_bytes = capacity_bytes(context->last_record_diagnostics);
+    for (const auto& item : context->last_record_diagnostics) {
+        out.rich_record_capacity_bytes +=
+            static_cast<std::uint64_t>(item.evaluated.generic_bound_free_offset_ryd_v0648120.capacity() +
+                                       item.evaluated.generic_bound_free_sigma_cm2_v0648120.capacity()) * sizeof(double);
+        if (item.evaluated.bound_free_payload_v06823087)
+            out.rich_record_capacity_bytes += sizeof(BoundFreeEvaluatedPayloadV06823087);
+    }
+
+    out.prepared_bound_free_capacity_bytes =
+        capacity_bytes(context->bound_free_prepared_v064895) +
+        capacity_bytes(context->bound_free_context_by_slot_v0682371) +
+        context->bound_free_perf_v064895.reduced_sgbar_capacity_bytes_current_v06823613 +
+        context->bound_free_perf_v064895.full_sgbar_capacity_bytes_current_v06823613;
+
+    out.execution_plan_capacity_bytes =
+        capacity_bytes(context->flat_record_indices_v068237) +
+        capacity_bytes(context->element_execution_plan_v068237) +
+        capacity_bytes(context->bound_free_slot_by_record_v0682371);
+    for (const auto& plan : context->element_execution_plan_v068237) {
+        out.execution_plan_capacity_bytes += capacity_bytes(plan.preliminary_source);
+        out.execution_plan_capacity_bytes += capacity_bytes(plan.preliminary_legacy);
+        out.execution_plan_capacity_bytes += capacity_bytes(plan.data_type_counts);
+        out.execution_plan_capacity_bytes += map_inline_bytes(plan.pass2_by_window);
+        for (const auto& selection : plan.pass2_by_window)
+            out.execution_plan_capacity_bytes += capacity_bytes(selection.second);
+    }
+
+    out.retained_state_capacity_bytes =
+        capacity_bytes(context->source_leveltemp_energy_workspace_v06481231) +
+        sizeof(context->source_levwk_rnisi_workspace_v06828) +
+        map_inline_bytes(context->retained_active_stage_windows) +
+        map_inline_bytes(context->last_source_ionization_rates_v0682292) +
+        map_inline_bytes(context->last_source_recombination_rates_v0682292);
+    for (const auto& item : context->last_source_ionization_rates_v0682292)
+        out.retained_state_capacity_bytes += capacity_bytes(item.second);
+    for (const auto& item : context->last_source_recombination_rates_v0682292)
+        out.retained_state_capacity_bytes += capacity_bytes(item.second);
+}
+
 void capture_performance_foundation_v068231(
     const xstar_fixed_state_context* context,
     PerformanceFoundationV068231& out) {
@@ -19258,6 +19343,8 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     if (ptr->ion_family_diagnostics_enabled_v06824025) {
         ptr->ion_unique_record_seen_v06824025.assign(ptr->program.records.size(), 0u);
     }
+    ptr->fixed_controller_diagnostics_enabled_v06824028 =
+        environment_flag("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS");
     ptr->source_leveltemp_energy_workspace_v06481231.assign(
         kSourceLeveltempNdlV06481231, 0.0);
     if (ptr->program.records.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
