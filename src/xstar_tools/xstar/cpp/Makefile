@@ -24,10 +24,9 @@ V064897_NATIVE ?= 0
 
 V068240_OPT_LEVEL ?= 3
 V068240_LTO ?= 0
-V068240_PGO_MODE ?= $(V064897_PGO_MODE)
+V068240_PGO_MODE ?= off
 V068240_PROFILE_DIR ?= $(if $(filter-out $(CURDIR)/.v064897_pgo,$(V064897_PROFILE_DIR)),$(V064897_PROFILE_DIR),$(CURDIR)/.v068240_pgo)
-V068240_NATIVE ?= $(V064897_NATIVE)
-V068240_BUILD_PROFILE ?= portable-o3
+V068240_NATIVE ?= 0
 V0682401_PRODUCTION_COMPILER ?= GCC
 
 ifeq ($(filter $(V068240_OPT_LEVEL),2 3),)
@@ -58,7 +57,6 @@ endif
 ifeq ($(V068240_NATIVE),1)
   override CXXFLAGS += -march=native
 endif
-override CPPFLAGS += -DXSTAR_V068240_BUILD_PROFILE=\"$(V068240_BUILD_PROFILE)\"
 ifneq ($(findstring -ffast-math,$(CXXFLAGS)),)
   $(error v0.6.82.40.1 rejects -ffast-math)
 endif
@@ -96,7 +94,7 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.82.40.2.18.2
+PACKAGE_VERSION ?= 0.6.82.40.2.19
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16.5
@@ -226,7 +224,6 @@ print-config:
 	@echo V068240_PGO_MODE=$(V068240_PGO_MODE)
 	@echo V068240_PROFILE_DIR=$(V068240_PROFILE_DIR)
 	@echo V068240_NATIVE=$(V068240_NATIVE)
-	@echo V068240_BUILD_PROFILE=$(V068240_BUILD_PROFILE)
 	@echo V0682401_PRODUCTION_COMPILER=$(V0682401_PRODUCTION_COMPILER)
 	@echo V068240_CXXFLAGS=$(CXXFLAGS)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)

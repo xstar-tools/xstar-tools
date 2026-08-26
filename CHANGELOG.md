@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.19 - controller residual attribution - 2026-08-26
+
+- Returns production behavior to the accepted `.2.17` performance path through the `.2.18.2` rejection closure: post-zone allocator trimming defaults to historical, while `.2.13-.2.17` accepted optimizations remain frozen.
+- Makes the established portable strict-FP compiler policy the literal C++ build default: `V068240_OPT_LEVEL=3`, `V068240_LTO=0`, `V068240_PGO_MODE=off`, and `V068240_NATIVE=0`. `V068240_BUILD_PROFILE` is removed from the normal build contract; the supported default host build is simply `make -C src/xstar_tools/xstar/cpp -j2 xstar-cpp`. Explicit compiler experiment overrides remain available through the four variables.
+- Adds attribution-only coarse timers around controller orchestration phases outside `evaluate_record()`: controller setup, radial-loop total, controller tail, per-zone pre-controller setup, post-DSEC bookkeeping, post-boundary/pre-SAVD work, SAVD/detail streaming, post-SAVD work, and zone epilogue.
+- Adds an exact top-level controller partition and derived radial-pass overhead/coverage markers so the remaining `.2.17` controller residual can be localized without changing scientific arithmetic, traversal, contribution order, controller decisions, ownership, publication semantics, or ABI.
+- Qualification is measurement-only and C++ first. Required acceptance uses the low-`xi` `c_xim3` case and existing Phase-A FORTRAN canonical science/STEP comparison. No optimization gate and no multi-element run are required for `.2.19`. An optional workstation `multi_xip1` measurement may be run after low-`xi` closure to test whether the dominant residual category scales to the broad model; it is explicitly not an acceptance prerequisite.
+- No clock is added inside `evaluate_record()` or the record evaluator. No multi-element performance change is attempted in this revision.
+
 ## 0.6.82.40.2.18.2 - post-zone allocator trim rejection closure - 2026-08-26
 
 - Records the repeated same-binary `.2.18.1` host result as a rejection of post-zone trim elision for production: science, diagnostics, RSS, and all four detail FITS payloads remained exact, but only 1 of 3 adjacent historical/optimized pairs favored the optimized mode and the repeatability gate rejected promotion.
