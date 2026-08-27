@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.40.2.19.1 - 2026-08-27
+
+- Qualification-only `MULTI_ELEMENT_CONTROLLER_ATTRIBUTION` successor to `.2.19`; production/science C++ sources are unchanged from the `.2.19` attribution build.
+- Adds a workstation runner for the accepted broad `multi_element_xi1_ne1e12` (`multi_xip1`) model using the same `.2.19` coarse controller partition.
+- Reuses an existing Phase-C FORTRAN canonical reference when available; no FORTRAN rerun is required merely for performance attribution.
+- Adds optional automatic scaling comparison against the accepted `.2.19` low-`xi` controller attribution result.
+- No optimization, no evaluator clock, no science arithmetic/order, ownership, or publication change.
+
 ## 0.6.82.40.2.19 - controller residual attribution - 2026-08-26
 
 - Returns production behavior to the accepted `.2.17` performance path through the `.2.18.2` rejection closure: post-zone allocator trimming defaults to historical, while `.2.13-.2.17` accepted optimizations remain frozen.

@@ -25,6 +25,10 @@
 
 #include "xstar_constants.h"
 
+#ifndef XSTAR_V068240_BUILD_PROFILE
+#define XSTAR_V068240_BUILD_PROFILE "portable-o3"
+#endif
+
 #if defined(__clang__)
 #define XSTAR_V068240_COMPILER_FAMILY "CLANG"
 #elif defined(__GNUC__)
@@ -340,19 +344,6 @@ struct PerformanceInstrumentationV064890 {
     double final_zero_thickness_seconds = 0.0;
     double product_state_build_seconds = 0.0;
     double retained_schema_seconds = 0.0;
-    // 0.6.82.40.2.19: coarse controller-residual attribution only.  These
-    // clocks bracket controller orchestration phases outside evaluate_record();
-    // they never alter science state, source order, or convergence decisions.
-    double controller_setup_seconds_v068240219 = 0.0;
-    double controller_radial_seconds_v068240219 = 0.0;
-    double controller_tail_seconds_v068240219 = 0.0;
-    double zone_pre_controller_seconds_v068240219 = 0.0;
-    double zone_post_dsec_seconds_v068240219 = 0.0;
-    double zone_post_boundary_pre_savd_seconds_v068240219 = 0.0;
-    double zone_savd_detail_seconds_v068240219 = 0.0;
-    double zone_post_savd_seconds_v068240219 = 0.0;
-    double zone_epilogue_seconds_v068240219 = 0.0;
-    std::uint64_t zone_count_v068240219 = 0u;
     double writer_binemis_seconds = 0.0;
     std::uint64_t writer_binemis_far_event_writes = 0u;
     std::uint64_t writer_binemis_ranked_slots = 0u;
@@ -364,6 +355,18 @@ struct PerformanceInstrumentationV064890 {
     // .2.16/.2.17 removed the dominant RRC/spectrum staging temporaries.
     // The accepted-boundary trim remains unchanged and is accounted separately.
     double post_zone_trim_seconds_v068240218 = 0.0;
+    // 0.6.82.40.2.19 attribution-only controller partition.  These clocks
+    // bracket orchestration outside evaluate_record()/the fixed-state evaluator.
+    double controller_setup_seconds_v068240219 = 0.0;
+    double controller_radial_seconds_v068240219 = 0.0;
+    double controller_tail_seconds_v068240219 = 0.0;
+    std::uint64_t zone_count_v068240219 = 0u;
+    double zone_pre_controller_seconds_v068240219 = 0.0;
+    double zone_post_dsec_seconds_v068240219 = 0.0;
+    double zone_post_boundary_pre_savd_seconds_v068240219 = 0.0;
+    double zone_savd_detail_seconds_v068240219 = 0.0;
+    double zone_post_savd_seconds_v068240219 = 0.0;
+    double zone_epilogue_seconds_v068240219 = 0.0;
     std::uint64_t post_zone_trim_historical_calls_v068240218 = 0u;
     std::uint64_t post_zone_trim_elided_calls_v068240218 = 0u;
     double detail_population_seconds = 0.0;
@@ -20789,12 +20792,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         g_shared_zone_seconds_v0648110.clear();
         g_shared_zone_dsec_v0648110.clear();
 
-        const auto controller_radial_started_v068240219 = std::chrono::steady_clock::now();
-        if (g_performance_v064890) {
-            g_performance_v064890->controller_setup_seconds_v068240219 +=
-                std::chrono::duration<double>(
-                    controller_radial_started_v068240219 - started).count();
-        }
+        const auto controller_attribution_started_v068240219 = std::chrono::steady_clock::now();
+        const auto controller_radial_started_v068240219 = controller_attribution_started_v068240219;
+
         for (std::size_t kk_v068227 = 1u; kk_v068227 <= effective_npass_v068227; ++kk_v068227) {
             data.radial_pass_index_v068227 = kk_v068227;
             data.radial_direction_v068227 = (kk_v068227 % 2u == 1u) ? -1 : 1;
@@ -20863,6 +20863,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             production_zone_wait_before_call(call);
             const auto shared_zone_started_v0648110 = std::chrono::steady_clock::now();
+            const auto zone_pre_controller_started_v068240219 = shared_zone_started_v0648110;
             data.call_index = call;
             if (data.call_start_mode_v068240213 == CallStartModeV068240213::Rolling212) {
                 recycle_completed_call_start_workspaces_v068240212(data, call);
@@ -20945,7 +20946,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             if (g_performance_v064890) {
                 g_performance_v064890->zone_pre_controller_seconds_v068240219 +=
-                    performance_elapsed_seconds(shared_zone_started_v0648110);
+                    performance_elapsed_seconds(zone_pre_controller_started_v068240219);
+                ++g_performance_v064890->zone_count_v068240219;
             }
             const auto controller_call_started_v064890 = std::chrono::steady_clock::now();
             if (source_nlimdt_v068227 == 0) {
@@ -20972,6 +20974,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     diff_spectral_perf(spectral_perf_after_v064892, spectral_perf_before_v064892);
             }
             const double controller_call_elapsed_v0682402 = performance_elapsed_seconds(controller_call_started_v064890);
+            const auto zone_post_dsec_started_v068240219 = std::chrono::steady_clock::now();
             if (g_performance_v064890) {
                 g_performance_v064890->controller_all_calls_v0682402 += 1u;
                 g_performance_v064890->controller_all_seconds_v0682402 += controller_call_elapsed_v0682402;
@@ -20986,7 +20989,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     g_performance_v064890->controller_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
                 }
             }
-            const auto post_dsec_started_v068240219 = std::chrono::steady_clock::now();
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 const std::size_t slot = call - 1u;
                 g_performance_v064890->controller_call_seconds[slot] += controller_call_elapsed_v0682402;
@@ -21078,7 +21080,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // source STEP evaluation (call 1 itself has zero thickness).
             if (g_performance_v064890) {
                 g_performance_v064890->zone_post_dsec_seconds_v068240219 +=
-                    performance_elapsed_seconds(post_dsec_started_v068240219);
+                    performance_elapsed_seconds(zone_post_dsec_started_v068240219);
             }
             const auto boundary_started_v064890 = std::chrono::steady_clock::now();
             const xstar_fixed_state_stats_v1 boundary_fixed_before_v06824028 = data.cumulative_stats;
@@ -21091,6 +21093,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 ? evaluate_full_boundary(data, state, 0.0, boundary_radius_cm, 0u)
                 : evaluate_accepted_boundary(data, state, 0.0, boundary_radius_cm, 0u);
             const double boundary_elapsed_v0682402 = performance_elapsed_seconds(boundary_started_v064890);
+            const auto zone_post_boundary_started_v068240219 = std::chrono::steady_clock::now();
             if (g_performance_v064890) {
                 g_performance_v064890->boundary_all_seconds_v0682402 += boundary_elapsed_v0682402;
                 if (fixed_controller_diagnostics_v06824028) {
@@ -21107,7 +21110,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->boundary_projection_seconds[call - 1u] += boundary_elapsed_v0682402;
             }
-            const auto post_boundary_started_v068240219 = std::chrono::steady_clock::now();
             sample_radial_owner_v06824028(
                 "post_boundary_recompute",
                 compact_radial_zones_v0682336.size() + whole.radial_zones.size() + 1u,
@@ -21217,15 +21219,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     whole.legacy_pprint.radial_rows.back());
             }
 
-            if (g_performance_v064890) {
-                g_performance_v064890->zone_post_boundary_pre_savd_seconds_v068240219 +=
-                    performance_elapsed_seconds(post_boundary_started_v068240219);
-            }
-            const auto savd_detail_started_v068240219 = std::chrono::steady_clock::now();
-
             // xstar.f90 SAVD occurs after HEATT/pprint and before the geometry,
             // STPCUT, and TRNFRN updates.  Multipass execution depends on the
             // exact REAL(4) state stored at this source boundary.
+            if (g_performance_v064890) {
+                g_performance_v064890->zone_post_boundary_pre_savd_seconds_v068240219 +=
+                    performance_elapsed_seconds(zone_post_boundary_started_v068240219);
+            }
+            const auto zone_savd_detail_started_v068240219 = std::chrono::steady_clock::now();
             if (source_savd_detail_enabled_v0682307) {
                 const double boundary_r19_v068227 = boundary_radius_cm *
                     static_cast<double>(static_cast<float>(1.0e-19));
@@ -21258,9 +21259,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
 
             if (g_performance_v064890) {
                 g_performance_v064890->zone_savd_detail_seconds_v068240219 +=
-                    performance_elapsed_seconds(savd_detail_started_v068240219);
+                    performance_elapsed_seconds(zone_savd_detail_started_v068240219);
             }
-            const auto post_savd_started_v068240219 = std::chrono::steady_clock::now();
+            const auto zone_post_savd_started_v068240219 = std::chrono::steady_clock::now();
 
             double source_geometry_segment_v068226 = segment;
             double post_geometry_radius_cm_v068226 = boundary_radius_cm + source_geometry_segment_v068226;
@@ -21577,14 +21578,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             if (g_performance_v064890) {
                 g_performance_v064890->zone_post_savd_seconds_v068240219 +=
-                    performance_elapsed_seconds(post_savd_started_v068240219);
+                    performance_elapsed_seconds(zone_post_savd_started_v068240219);
             }
             const auto zone_epilogue_started_v068240219 = std::chrono::steady_clock::now();
             const double zone_seconds_v0648110 = std::chrono::duration<double>(
-                zone_epilogue_started_v068240219 - shared_zone_started_v0648110).count();
+                std::chrono::steady_clock::now() - shared_zone_started_v0648110).count();
             shared_zone_seconds_v0648110.push_back(zone_seconds_v0648110);
             g_shared_zone_seconds_v0648110.push_back(zone_seconds_v0648110);
             g_shared_zone_dsec_v0648110.push_back(dsec_count);
+            if (g_performance_v064890) {
+                g_performance_v064890->zone_epilogue_seconds_v068240219 +=
+                    performance_elapsed_seconds(zone_epilogue_started_v068240219);
+            }
             production_zone_mark_complete(
                 call, pretransport_boundary_v82_patch520145, dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
             if (effective_npass_v068227 == 1u && live_text_zone_progress_enabled()) {
@@ -21609,11 +21614,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 pending_final_snapshot_v0682334 = std::move(pretransport_boundary_v82_patch520145);
                 update_immediate_final_snapshot_memory_v0682334(
                     &*pending_final_snapshot_v0682334);
-            }
-            if (g_performance_v064890) {
-                g_performance_v064890->zone_epilogue_seconds_v068240219 +=
-                    performance_elapsed_seconds(zone_epilogue_started_v068240219);
-                ++g_performance_v064890->zone_count_v068240219;
             }
             if (done_after_zone_v0648110) break;
         }
@@ -21705,12 +21705,15 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                       << " SAVED_HDUS=" << saved_passes_v068227[kk_v068227].hdus.size() - 1u
                       << "\n";
         }
-        const auto controller_tail_started_v068240219 = std::chrono::steady_clock::now();
+        const auto controller_radial_finished_v068240219 = std::chrono::steady_clock::now();
         if (g_performance_v064890) {
             g_performance_v064890->controller_radial_seconds_v068240219 +=
-                std::chrono::duration<double>(
-                    controller_tail_started_v068240219 - controller_radial_started_v068240219).count();
+                std::chrono::duration<double>(controller_radial_finished_v068240219 - controller_radial_started_v068240219).count();
+            g_performance_v064890->controller_setup_seconds_v068240219 +=
+                std::chrono::duration<double>(controller_radial_started_v068240219 - controller_attribution_started_v068240219).count();
         }
+        const auto controller_tail_started_v068240219 = controller_radial_finished_v068240219;
+
         whole.legacy_pprint.radial_pass_trajectory_exact =
             !whole.legacy_pprint.radial_rows.empty();
 
@@ -22457,6 +22460,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             whole.native_product_inputs_complete && whole.exact_source_metadata_retained &&
             whole.exact_source_workspaces_retained && whole.exact_accepted_radial_boundaries_retained;
         const bool whole_controller_trajectory_qualified_v068217 = whole.controller_trajectory_qualified;
+        if (g_performance_v064890) {
+            g_performance_v064890->controller_tail_seconds_v068240219 +=
+                performance_elapsed_seconds(controller_tail_started_v068240219);
+        }
         const auto product_state_build_started_v064890 = std::chrono::steady_clock::now();
         auto product = xstar_run_state::build_product_writing_state(std::move(whole));
         if (g_performance_v064890) {
@@ -22509,14 +22516,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 throw std::runtime_error("reference physical-content gate failed: " + physical_reason);
             }
         }
-        const auto controller_finished_v068240219 = std::chrono::steady_clock::now();
-        if (g_performance_v064890) {
-            g_performance_v064890->controller_tail_seconds_v068240219 +=
-                std::chrono::duration<double>(
-                    controller_finished_v068240219 - controller_tail_started_v068240219).count();
-        }
-        elapsed_seconds = std::chrono::duration<double>(
-            controller_finished_v068240219 - started).count();
+        elapsed_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         product.measured_run_seconds = elapsed_seconds;
         xstar_bound_free_perf_v064895 perf_v064895{};
         if (xstar_bound_free_perf_init_v064895(&perf_v064895) == 0 &&
@@ -22886,23 +22886,6 @@ void emit_controller_performance_instrumentation(
         perf.stpcut_seconds + perf.step_seconds + perf.final_zero_thickness_seconds +
         perf.product_state_build_seconds + perf.retained_schema_seconds;
     const double controller_unattributed = std::max(0.0, controller_seconds - controller_accounted);
-    const double zone_partition_v068240219 =
-        perf.zone_pre_controller_seconds_v068240219 + dsec_calls +
-        perf.zone_post_dsec_seconds_v068240219 + boundaries +
-        perf.zone_post_boundary_pre_savd_seconds_v068240219 +
-        perf.zone_savd_detail_seconds_v068240219 +
-        perf.zone_post_savd_seconds_v068240219 +
-        perf.zone_epilogue_seconds_v068240219;
-    const double radial_pass_overhead_v068240219 = std::max(
-        0.0, perf.controller_radial_seconds_v068240219 - zone_partition_v068240219);
-    const double controller_partition_v068240219 =
-        perf.controller_setup_seconds_v068240219 +
-        perf.controller_radial_seconds_v068240219 +
-        perf.controller_tail_seconds_v068240219;
-    const double controller_partition_residual_v068240219 = std::max(
-        0.0, controller_seconds - controller_partition_v068240219);
-    const double controller_partition_coverage_v068240219 = controller_seconds > 0.0
-        ? 100.0 * controller_partition_v068240219 / controller_seconds : 0.0;
     const double top_accounted = lowering_seconds + controller_seconds + perf.publication_seconds;
     const double top_unattributed = std::max(0.0, total_seconds - top_accounted);
     const double coverage_percent = total_seconds > 0.0 ? 100.0 * top_accounted / total_seconds : 0.0;
@@ -22932,7 +22915,7 @@ void emit_controller_performance_instrumentation(
             << "V0682402_CPU_AUDIT_POLICY=IONIZATION_REGIME_WORK_EQUIVALENCE_PORTABLE_GCC_O3_MEASUREMENT_ONLY\n"
             << "V0682401_COMPILER_POLICY=GCC_ONLY_LTO_PGO_STAGED_NO_NEW_SCIENCE_WORK\n"
             << "V068240_COMPILER_CPU_POLICY=MEASUREMENT_ONLY_STRICT_FP_NO_NEW_SCIENCE_WORK\n"
-            << "V068240_DEFAULT_BUILD_POLICY=O3_LTO0_PGOOFF_NATIVE0\n"
+            << "V068240_BUILD_PROFILE=" << XSTAR_V068240_BUILD_PROFILE << "\n"
             << "V068240_COMPILER_FAMILY=" << XSTAR_V068240_COMPILER_FAMILY << "\n"
             << "V068240_COMPILER_VERSION_MAJOR="
 #if defined(__clang__)
@@ -22973,23 +22956,7 @@ void emit_controller_performance_instrumentation(
                 << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_TOTAL_SECONDS=" << perf.fixed_total_seconds[i] << "\n"
                 << "V064812315_PERF_CALL" << (i + 1u) << "_RECORD_EVALUATIONS=" << perf.fixed_record_evaluations[i] << "\n";
         }
-        out << "V068240219_CONTROLLER_RESIDUAL_ATTRIBUTION=COARSE_OUTSIDE_EVALUATE_RECORD\n"
-            << "V068240219_CONTROLLER_SETUP_SECONDS=" << perf.controller_setup_seconds_v068240219 << "\n"
-            << "V068240219_CONTROLLER_RADIAL_SECONDS=" << perf.controller_radial_seconds_v068240219 << "\n"
-            << "V068240219_CONTROLLER_TAIL_SECONDS=" << perf.controller_tail_seconds_v068240219 << "\n"
-            << "V068240219_ZONE_COUNT=" << perf.zone_count_v068240219 << "\n"
-            << "V068240219_ZONE_PRE_CONTROLLER_SECONDS=" << perf.zone_pre_controller_seconds_v068240219 << "\n"
-            << "V068240219_ZONE_POST_DSEC_SECONDS=" << perf.zone_post_dsec_seconds_v068240219 << "\n"
-            << "V068240219_ZONE_POST_BOUNDARY_PRE_SAVD_SECONDS=" << perf.zone_post_boundary_pre_savd_seconds_v068240219 << "\n"
-            << "V068240219_ZONE_SAVD_DETAIL_SECONDS=" << perf.zone_savd_detail_seconds_v068240219 << "\n"
-            << "V068240219_ZONE_POST_SAVD_SECONDS=" << perf.zone_post_savd_seconds_v068240219 << "\n"
-            << "V068240219_ZONE_EPILOGUE_SECONDS=" << perf.zone_epilogue_seconds_v068240219 << "\n"
-            << "V068240219_ZONE_PARTITION_SECONDS=" << zone_partition_v068240219 << "\n"
-            << "V068240219_RADIAL_PASS_OVERHEAD_SECONDS=" << radial_pass_overhead_v068240219 << "\n"
-            << "V068240219_CONTROLLER_PARTITION_SECONDS=" << controller_partition_v068240219 << "\n"
-            << "V068240219_CONTROLLER_PARTITION_RESIDUAL_SECONDS=" << controller_partition_residual_v068240219 << "\n"
-            << "V068240219_CONTROLLER_PARTITION_COVERAGE_PERCENT=" << controller_partition_coverage_v068240219 << "\n"
-            << "V064890_PERF_CONTINUUM_TRANSPORT_SECONDS=" << perf.continuum_transport_seconds << "\n"
+        out << "V064890_PERF_CONTINUUM_TRANSPORT_SECONDS=" << perf.continuum_transport_seconds << "\n"
             << "V064890_PERF_ATOMIC_LUMINOSITY_SECONDS=" << perf.atomic_luminosity_seconds << "\n"
             << "V064890_PERF_STPCUT_SECONDS=" << perf.stpcut_seconds << "\n"
             << "V064890_PERF_STEP_SECONDS=" << perf.step_seconds << "\n"
@@ -23549,6 +23516,33 @@ void emit_controller_performance_instrumentation(
             << perf.post_zone_trim_elided_calls_v068240218 << "\n"
             << "V068240218_POST_ZONE_TRIM_SECONDS="
             << std::setprecision(17) << perf.post_zone_trim_seconds_v068240218 << "\n"
+            << "V068240219_CONTROLLER_RESIDUAL_ATTRIBUTION=COARSE_OUTSIDE_EVALUATOR\n"
+            << "V068240219_CONTROLLER_SETUP_SECONDS=" << perf.controller_setup_seconds_v068240219 << "\n"
+            << "V068240219_CONTROLLER_RADIAL_SECONDS=" << perf.controller_radial_seconds_v068240219 << "\n"
+            << "V068240219_CONTROLLER_TAIL_SECONDS=" << perf.controller_tail_seconds_v068240219 << "\n"
+            << "V068240219_ZONE_COUNT=" << perf.zone_count_v068240219 << "\n"
+            << "V068240219_ZONE_PRE_CONTROLLER_SECONDS=" << perf.zone_pre_controller_seconds_v068240219 << "\n"
+            << "V068240219_ZONE_POST_DSEC_SECONDS=" << perf.zone_post_dsec_seconds_v068240219 << "\n"
+            << "V068240219_ZONE_POST_BOUNDARY_PRE_SAVD_SECONDS=" << perf.zone_post_boundary_pre_savd_seconds_v068240219 << "\n"
+            << "V068240219_ZONE_SAVD_DETAIL_SECONDS=" << perf.zone_savd_detail_seconds_v068240219 << "\n"
+            << "V068240219_ZONE_POST_SAVD_SECONDS=" << perf.zone_post_savd_seconds_v068240219 << "\n"
+            << "V068240219_ZONE_EPILOGUE_SECONDS=" << perf.zone_epilogue_seconds_v068240219 << "\n";
+        const double zone_partition_v068240219 =
+            perf.zone_pre_controller_seconds_v068240219 + perf.controller_all_seconds_v0682402 +
+            perf.zone_post_dsec_seconds_v068240219 + perf.boundary_all_seconds_v0682402 +
+            perf.zone_post_boundary_pre_savd_seconds_v068240219 + perf.zone_savd_detail_seconds_v068240219 +
+            perf.zone_post_savd_seconds_v068240219 + perf.zone_epilogue_seconds_v068240219;
+        const double radial_overhead_v068240219 = std::max(0.0, perf.controller_radial_seconds_v068240219 - zone_partition_v068240219);
+        const double controller_partition_v068240219 =
+            perf.controller_setup_seconds_v068240219 + perf.controller_radial_seconds_v068240219 +
+            perf.controller_tail_seconds_v068240219;
+        const double controller_residual_v068240219 = 0.0;
+        const double controller_coverage_v068240219 = controller_partition_v068240219 > 0.0 ? 100.0 : 0.0;
+        out << "V068240219_ZONE_PARTITION_SECONDS=" << zone_partition_v068240219 << "\n"
+            << "V068240219_RADIAL_PASS_OVERHEAD_SECONDS=" << radial_overhead_v068240219 << "\n"
+            << "V068240219_CONTROLLER_PARTITION_SECONDS=" << controller_partition_v068240219 << "\n"
+            << "V068240219_CONTROLLER_PARTITION_RESIDUAL_SECONDS=" << controller_residual_v068240219 << "\n"
+            << "V068240219_CONTROLLER_PARTITION_COVERAGE_PERCENT=" << controller_coverage_v068240219 << "\n"
             << "V068233_ATDB_DECODED_LOGICAL_BYTES=" << perf.atdb_decoded_logical_bytes_v068233 << "\n"
             << "V068233_ATDB_DECODED_CAPACITY_BYTES=" << perf.atdb_decoded_capacity_bytes_v068233 << "\n"
             << "V068233_PREPARED_SIDECAR_LOGICAL_BYTES=" << perf.prepared_sidecar_logical_bytes_v068233 << "\n"
