@@ -367,6 +367,20 @@ struct PerformanceInstrumentationV064890 {
     double zone_savd_detail_seconds_v068240219 = 0.0;
     double zone_post_savd_seconds_v068240219 = 0.0;
     double zone_epilogue_seconds_v068240219 = 0.0;
+    // 0.6.82.40.2.20 attribution-only accepted-boundary partition. These
+    // clocks surround the exact accepted-boundary recompute and never enter
+    // evaluate_record()/record evaluation.
+    std::uint64_t boundary_attributed_calls_v068240220 = 0u;
+    std::uint64_t accepted_boundary_wrapper_calls_v068240220 = 0u;
+    double boundary_policy_seconds_v068240220 = 0.0;
+    double boundary_last_dsec_release_seconds_v068240220 = 0.0;
+    double boundary_allocator_trim_seconds_v068240220 = 0.0;
+    double boundary_pre_recompute_telemetry_seconds_v068240220 = 0.0;
+    double boundary_full_setup_seconds_v068240220 = 0.0;
+    double boundary_fixed_state_seconds_v068240220 = 0.0;
+    double boundary_postsolve_capture_seconds_v068240220 = 0.0;
+    double boundary_finalize_seconds_v068240220 = 0.0;
+    double boundary_post_recompute_telemetry_seconds_v068240220 = 0.0;
     std::uint64_t post_zone_trim_historical_calls_v068240218 = 0u;
     std::uint64_t post_zone_trim_elided_calls_v068240218 = 0u;
     double detail_population_seconds = 0.0;
@@ -17980,7 +17994,12 @@ FixedDsecSnapshot evaluate_full_boundary(
     const xstar_thermal_state_v1& accepted_state,
     double delta_radius_cm,
     double radius_cm,
-    std::size_t transport_plane) {
+    std::size_t transport_plane,
+    bool attribute_boundary_v068240220 = false) {
+    const auto boundary_full_setup_started_v068240220 = std::chrono::steady_clock::now();
+    if (attribute_boundary_v068240220 && g_performance_v064890) {
+        ++g_performance_v064890->boundary_attributed_calls_v068240220;
+    }
     FixedDsecSnapshot snapshot = make_iteration_snapshot(data, accepted_state);
     snapshot.kind = "final";
     (void)delta_radius_cm;
@@ -18054,10 +18073,20 @@ FixedDsecSnapshot evaluate_full_boundary(
     }
     write_fixed_radial_input(data, input, snapshot.sequence);
     write_postsolve_fixed_input_capture(data, input, snapshot);
+    if (attribute_boundary_v068240220 && g_performance_v064890) {
+        g_performance_v064890->boundary_full_setup_seconds_v068240220 +=
+            performance_elapsed_seconds(boundary_full_setup_started_v068240220);
+    }
+    const auto boundary_fixed_state_started_v068240220 = std::chrono::steady_clock::now();
     const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
         data.fixed_context, &input, &output, &source, &data.cumulative_stats,
         message.data(), message.size());
+    if (attribute_boundary_v068240220 && g_performance_v064890) {
+        g_performance_v064890->boundary_fixed_state_seconds_v068240220 +=
+            performance_elapsed_seconds(boundary_fixed_state_started_v068240220);
+    }
     if (rc != 0) throw std::runtime_error(std::string("accepted boundary evaluation failed: ") + message.data());
+    const auto boundary_postsolve_started_v068240220 = std::chrono::steady_clock::now();
     if (g_performance_v064890) {
         const auto rss_v06823611 = current_rss_bytes_v068233();
         const auto heap_v06823611 = current_heap_snapshot_v0682352();
@@ -18113,8 +18142,18 @@ FixedDsecSnapshot evaluate_full_boundary(
     snapshot.continuum_cooling = output.continuum_cooling;
     attach_native_thermal_components(data.fixed_context, snapshot);
     attach_native_product_diagnostics(data.fixed_context, snapshot);
-
-    return finalize_accepted_boundary_snapshot(data, std::move(snapshot));
+    if (attribute_boundary_v068240220 && g_performance_v064890) {
+        g_performance_v064890->boundary_postsolve_capture_seconds_v068240220 +=
+            performance_elapsed_seconds(boundary_postsolve_started_v068240220);
+    }
+    const auto boundary_finalize_started_v068240220 = std::chrono::steady_clock::now();
+    auto finalized_boundary_v068240220 =
+        finalize_accepted_boundary_snapshot(data, std::move(snapshot));
+    if (attribute_boundary_v068240220 && g_performance_v064890) {
+        g_performance_v064890->boundary_finalize_seconds_v068240220 +=
+            performance_elapsed_seconds(boundary_finalize_started_v068240220);
+    }
+    return finalized_boundary_v068240220;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -18278,6 +18317,7 @@ FixedDsecSnapshot evaluate_accepted_boundary(
     double delta_radius_cm,
     double radius_cm,
     std::size_t transport_plane) {
+    const auto boundary_policy_started_v068240220 = std::chrono::steady_clock::now();
     const char* force_legacy = std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
     const char* experimental_reuse = std::getenv("XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE");
     const bool force_legacy_enabled = force_legacy && std::string(force_legacy) == "1";
@@ -18289,6 +18329,12 @@ FixedDsecSnapshot evaluate_accepted_boundary(
     // is proven byte-exact against this path.
     if (force_legacy_enabled || !experimental_reuse_enabled) {
         ++data.accepted_boundary_legacy_count_v064894;
+        if (g_performance_v064890) {
+            ++g_performance_v064890->accepted_boundary_wrapper_calls_v068240220;
+            g_performance_v064890->boundary_policy_seconds_v068240220 +=
+                performance_elapsed_seconds(boundary_policy_started_v068240220);
+        }
+        const auto boundary_release_started_v068240220 = std::chrono::steady_clock::now();
         // 0.6.82.36.7: the exact-recompute branch has already consumed the
         // accepted DSEC scalar state.  Ordinary production never promotes the
         // retained DSEC workspace here, so release that full snapshot before
@@ -18315,10 +18361,20 @@ FixedDsecSnapshot evaluate_accepted_boundary(
                              current_rss_bytes_v068233());
             }
         }
+        if (g_performance_v064890) {
+            g_performance_v064890->boundary_last_dsec_release_seconds_v068240220 +=
+                performance_elapsed_seconds(boundary_release_started_v068240220);
+        }
         // 0.6.82.36.12: DSEC/root-finding has just released temporary
         // allocation families. Return free glibc arena pages before allocating
         // the exact accepted-boundary product state.
+        const auto boundary_trim_started_v068240220 = std::chrono::steady_clock::now();
         allocator_trim_checkpoint_v06823612();
+        if (g_performance_v064890) {
+            g_performance_v064890->boundary_allocator_trim_seconds_v068240220 +=
+                performance_elapsed_seconds(boundary_trim_started_v068240220);
+        }
+        const auto boundary_pretelemetry_started_v068240220 = std::chrono::steady_clock::now();
         if (g_performance_v064890) {
             const auto rss_v06823611 = current_rss_bytes_v068233();
             const auto heap_v06823611 = current_heap_snapshot_v0682352();
@@ -18331,12 +18387,21 @@ FixedDsecSnapshot evaluate_accepted_boundary(
             g_performance_v064890->heap_before_accepted_boundary_fordblks_peak_v06823611 = std::max(
                 g_performance_v064890->heap_before_accepted_boundary_fordblks_peak_v06823611, heap_v06823611.fordblks);
         }
+        if (g_performance_v064890) {
+            g_performance_v064890->boundary_pre_recompute_telemetry_seconds_v068240220 +=
+                performance_elapsed_seconds(boundary_pretelemetry_started_v068240220);
+        }
         auto recomputed_v0682367 = evaluate_full_boundary(
-            data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
+            data, accepted_state, delta_radius_cm, radius_cm, transport_plane, true);
+        const auto boundary_posttelemetry_started_v068240220 = std::chrono::steady_clock::now();
         if (g_performance_v064890) {
             g_performance_v064890->accepted_boundary_rss_after_recompute_peak_v0682367 =
                 std::max(g_performance_v064890->accepted_boundary_rss_after_recompute_peak_v0682367,
                          current_rss_bytes_v068233());
+        }
+        if (g_performance_v064890) {
+            g_performance_v064890->boundary_post_recompute_telemetry_seconds_v068240220 +=
+                performance_elapsed_seconds(boundary_posttelemetry_started_v068240220);
         }
         return recomputed_v0682367;
     }
@@ -21090,7 +21155,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             // fresh full fixed-state solve so STPCUT owns newly generated
             // line/RRC opacities for plane 2.
             auto boundary = source_nlimdt_v068227 == 0
-                ? evaluate_full_boundary(data, state, 0.0, boundary_radius_cm, 0u)
+                ? evaluate_full_boundary(data, state, 0.0, boundary_radius_cm, 0u, true)
                 : evaluate_accepted_boundary(data, state, 0.0, boundary_radius_cm, 0u);
             const double boundary_elapsed_v0682402 = performance_elapsed_seconds(boundary_started_v064890);
             const auto zone_post_boundary_started_v068240219 = std::chrono::steady_clock::now();
@@ -23538,11 +23603,45 @@ void emit_controller_performance_instrumentation(
             perf.controller_tail_seconds_v068240219;
         const double controller_residual_v068240219 = 0.0;
         const double controller_coverage_v068240219 = controller_partition_v068240219 > 0.0 ? 100.0 : 0.0;
+        const double boundary_partition_v068240220 =
+            perf.boundary_policy_seconds_v068240220 +
+            perf.boundary_last_dsec_release_seconds_v068240220 +
+            perf.boundary_allocator_trim_seconds_v068240220 +
+            perf.boundary_pre_recompute_telemetry_seconds_v068240220 +
+            perf.boundary_full_setup_seconds_v068240220 +
+            perf.boundary_fixed_state_seconds_v068240220 +
+            perf.boundary_postsolve_capture_seconds_v068240220 +
+            perf.boundary_finalize_seconds_v068240220 +
+            perf.boundary_post_recompute_telemetry_seconds_v068240220;
+        const double boundary_residual_v068240220 =
+            std::max(0.0, perf.boundary_all_seconds_v0682402 - boundary_partition_v068240220);
+        const double boundary_coverage_v068240220 = perf.boundary_all_seconds_v0682402 > 0.0
+            ? 100.0 * boundary_partition_v068240220 / perf.boundary_all_seconds_v0682402 : 0.0;
+        const std::uint64_t boundary_direct_full_calls_v068240220 =
+            perf.boundary_attributed_calls_v068240220 >= perf.accepted_boundary_wrapper_calls_v068240220
+                ? perf.boundary_attributed_calls_v068240220 - perf.accepted_boundary_wrapper_calls_v068240220
+                : 0u;
         out << "V068240219_ZONE_PARTITION_SECONDS=" << zone_partition_v068240219 << "\n"
             << "V068240219_RADIAL_PASS_OVERHEAD_SECONDS=" << radial_overhead_v068240219 << "\n"
             << "V068240219_CONTROLLER_PARTITION_SECONDS=" << controller_partition_v068240219 << "\n"
             << "V068240219_CONTROLLER_PARTITION_RESIDUAL_SECONDS=" << controller_residual_v068240219 << "\n"
             << "V068240219_CONTROLLER_PARTITION_COVERAGE_PERCENT=" << controller_coverage_v068240219 << "\n"
+            << "V068240220_ACCEPTED_BOUNDARY_ATTRIBUTION=COARSE_OUTSIDE_EVALUATOR\n"
+            << "V068240220_BOUNDARY_ATTRIBUTED_CALLS=" << perf.boundary_attributed_calls_v068240220 << "\n"
+            << "V068240220_ACCEPTED_BOUNDARY_WRAPPER_CALLS=" << perf.accepted_boundary_wrapper_calls_v068240220 << "\n"
+            << "V068240220_DIRECT_FULL_BOUNDARY_CALLS=" << boundary_direct_full_calls_v068240220 << "\n"
+            << "V068240220_BOUNDARY_POLICY_SECONDS=" << perf.boundary_policy_seconds_v068240220 << "\n"
+            << "V068240220_LAST_DSEC_RELEASE_SECONDS=" << perf.boundary_last_dsec_release_seconds_v068240220 << "\n"
+            << "V068240220_ALLOCATOR_TRIM_SECONDS=" << perf.boundary_allocator_trim_seconds_v068240220 << "\n"
+            << "V068240220_PRE_RECOMPUTE_TELEMETRY_SECONDS=" << perf.boundary_pre_recompute_telemetry_seconds_v068240220 << "\n"
+            << "V068240220_FULL_BOUNDARY_SETUP_SECONDS=" << perf.boundary_full_setup_seconds_v068240220 << "\n"
+            << "V068240220_FIXED_STATE_RECOMPUTE_SECONDS=" << perf.boundary_fixed_state_seconds_v068240220 << "\n"
+            << "V068240220_POSTSOLVE_CAPTURE_SECONDS=" << perf.boundary_postsolve_capture_seconds_v068240220 << "\n"
+            << "V068240220_FINALIZE_SNAPSHOT_SECONDS=" << perf.boundary_finalize_seconds_v068240220 << "\n"
+            << "V068240220_POST_RECOMPUTE_TELEMETRY_SECONDS=" << perf.boundary_post_recompute_telemetry_seconds_v068240220 << "\n"
+            << "V068240220_BOUNDARY_PARTITION_SECONDS=" << boundary_partition_v068240220 << "\n"
+            << "V068240220_BOUNDARY_PARTITION_RESIDUAL_SECONDS=" << boundary_residual_v068240220 << "\n"
+            << "V068240220_BOUNDARY_PARTITION_COVERAGE_PERCENT=" << boundary_coverage_v068240220 << "\n"
             << "V068233_ATDB_DECODED_LOGICAL_BYTES=" << perf.atdb_decoded_logical_bytes_v068233 << "\n"
             << "V068233_ATDB_DECODED_CAPACITY_BYTES=" << perf.atdb_decoded_capacity_bytes_v068233 << "\n"
             << "V068233_PREPARED_SIDECAR_LOGICAL_BYTES=" << perf.prepared_sidecar_logical_bytes_v068233 << "\n"

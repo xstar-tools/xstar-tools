@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.20 - 2026-08-27
+
+- Attribution-only `ACCEPTED_BOUNDARY_ATTRIBUTION` successor to `.2.19.1`; no scientific arithmetic/order, controller decision, source traversal, publication schema, or ABI is changed.
+- Formally records the workstation `.2.19.1` `multi_element_xi1_ne1e12` result as science-EXACT against the accepted `.39` broad run: all science HDU raw payloads in all nine FITS products are byte-identical after excluding the `PARAMETERS` metadata HDU, and the 390,000-line STEP logs differ only in one model-name line and seven timing lines.
+- Workstation `.2.19.1` broad performance: 688.459 s internal / 691.86 s wall / 3,646,176 kB peak RSS versus `.39` 1036.524 s internal / 1039.84 s wall / 3,925,616 kB peak RSS.
+- Adds coarse accepted-boundary timers around, but never inside, the fixed-state evaluator: policy/wrapper, last-DSEC release, allocator trim, pre-recompute telemetry, full-boundary setup/allocation, fixed-state recompute, postsolve/product capture, snapshot finalization, and post-recompute telemetry.
+- The new boundary partition is compared against the existing `BOUNDARY_SECONDS` timer and reports partition coverage/residual plus component ranking.
+- Host qualification runs only the workstation `multi_element_xi1_ne1e12` model and requires exact science against the accepted `.2.19.1` run when that reference is supplied or auto-detected. No optimization is attempted in this revision.
+- Plain build policy remains `-O3`, LTO off, PGO off, native tuning off; `V068240_BUILD_PROFILE` remains removed.
+
 ## 0.6.82.40.2.19.1 - 2026-08-27
 
 - Qualification-only `MULTI_ELEMENT_CONTROLLER_ATTRIBUTION` successor to `.2.19`; production/science C++ sources are unchanged from the `.2.19` attribution build.
