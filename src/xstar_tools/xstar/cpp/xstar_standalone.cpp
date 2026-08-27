@@ -671,6 +671,15 @@ const char* post_zone_trim_mode_name_v068240218(PostZoneTrimModeV068240218 mode)
     return mode == PostZoneTrimModeV068240218::Historical ? "HISTORICAL" : "OPTIMIZED";
 }
 
+const char* type50_consume_mode_name_v068240221() {
+    const char* raw = std::getenv("XSTAR_V068240221_TYPE50_CONSUME_MODE");
+    if (!raw || !*raw || std::string(raw) == "optimized" ||
+        std::string(raw) == "OPTIMIZED") return "OPTIMIZED";
+    if (std::string(raw) == "historical" || std::string(raw) == "HISTORICAL")
+        return "HISTORICAL";
+    return "INVALID";
+}
+
 void allocator_trim_checkpoint_v06823612() {
     if (!g_performance_v064890) return;
     auto& perf = *g_performance_v064890;
@@ -24270,6 +24279,7 @@ void emit_spectral_performance_instrumentation(
             << "V064812331_TYPE50_DECOMP_TRAPEZOID_SECONDS="<<type50_decomp_trapezoid_seconds_v064812331<<"\n"
             << "V064812331_TYPE50_DECOMP_BOUNDARY_REBIN_SECONDS="<<type50_decomp_boundary_rebin_seconds_v064812331<<"\n"
             << "V064812331_TYPE50_DECOMP_OPAKC_SECONDS="<<type50_decomp_opakc_seconds_v064812331<<"\n";
+        out << "V068240221_TYPE50_CONSUME_MODE=" << type50_consume_mode_name_v068240221() << "\n";
         out << "V064812332_TYPE50_TMPOP_PREP_PROFILES="<<type50_tmpop_profiles_v064812332<<"\n"
             << "V064812332_TYPE50_TMPOP_PREP_BLOCKS="<<type50_tmpop_blocks_v064812332<<"\n"
             << "V064812332_TYPE50_TMPOP_PREP_POINTS="<<type50_tmpop_points_v064812332<<"\n"

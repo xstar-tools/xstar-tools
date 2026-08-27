@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.21 - 2026-08-27
+
+- `BOUNDARY_TYPE50_COMBINED_PREP_HOT_PATH` candidate following the accepted `.2.20` boundary attribution; `.2.20` showed that 335.713 s of 337.219 s (99.55%) of broad accepted-boundary time is the fixed-state recompute itself.
+- Existing fixed-state telemetry further localizes the broad boundary cost: all-fixed spectral work is ~256.36 s and Type-50 profile work is ~148.38 s for 2,600,785 profiles, so Type-50 is the first optimization target inside the recompute.
+- Adds `XSTAR_V068240221_TYPE50_CONSUME_MODE=historical|optimized`; candidate production default is `optimized`, while `historical` restores the frozen `.2.20` cursor-advance consume path for same-binary A/B.
+- Optimized mode combines the two previously science-safe 12.3.32 AVX2 preparation operations (`tmpop` and adjacent `tmpe`) in the same four-lane block. The accepted profile formula, scalar trapezoid recurrence, lane order, output-bin advancement, and opacity accumulation order remain unchanged.
+- No new clock is added inside the record evaluator or Type-50 recurrence. Existing 12.3.32 preparation counters prove path activation.
+- Workstation qualification runs only `multi_element_xi1_ne1e12`, requires exact science payloads/normalized STEP content historical-to-optimized and against accepted `.2.20`, requires >=3% Type-50 improvement and >=0.5% whole-run internal improvement, and guards fixed-state recompute, spectral, wall, RSS, traversal/contribution, detail-RRC, and detail-spectrum nonregression.
+- Plain build defaults remain `-O3`, LTO off, PGO off, native tuning off, with no `V068240_BUILD_PROFILE`.
+
 ## 0.6.82.40.2.20 - 2026-08-27
 
 - Attribution-only `ACCEPTED_BOUNDARY_ATTRIBUTION` successor to `.2.19.1`; no scientific arithmetic/order, controller decision, source traversal, publication schema, or ABI is changed.
