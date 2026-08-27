@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.22 - 2026-08-27
+
+- Attribution-only `LOW_XI_FIXED_COST_PARITY_ATTRIBUTION` revision based directly on accepted `0.6.82.40.2.20`; production C/C++ sources/headers are unchanged from `.2.20`.
+- Formally closes the rejected `.2.21/.2.21.1` Type-50 combined-preparation experiment. Type-50 profile/core, detail spectrum staging, detail RRC staging, contribution-list hot path, post-pass traversal, and call-start workspace are CLOSED unless a future profile provides genuinely new evidence.
+- Runs only controlled C5 `c_xim3` (`rlogxi=-3`) and normalizes current C++ fixed-state cost to milliseconds per fixed call against the existing instrumented Phase-A FORTRAN `HMC_ALL` measurement.
+- Separates spectral from non-spectral fixed-state cost using C++ fixed spectral versus FORTRAN `EMISAB_ALL + EMIS_ALL`, so the remaining per-fixed excess can be localized without assuming raw family timers are directly comparable across implementations.
+- Reuses the existing `.40.2.5` family timer/counters and unique-residency diagnostics; no new clock is added inside `evaluate_record()` or any atomic record evaluator.
+- Adds repeated-invariant analysis for continuum geometry reuse, Type-53 reduced/full geometry reuse versus dynamic integrals, evaluations per unique record, payload-traffic amplification, and existing container/workspace reuse counters.
+- Reads existing Phase-A FORTRAN audit data and optional current same-host FORTRAN `xstar.time.txt`; the runner does not execute FORTRAN and does not authorize Phase C or multi-element execution.
+- Plain build policy remains `-O3`, LTO off, PGO off, native tuning off, with no `V068240_BUILD_PROFILE`.
+
 ## 0.6.82.40.2.21.1 - 2026-08-27
 
 - Qualification-only `LOW_XI_TYPE50_COMBINED_PREP_QUALIFICATION`; production C/C++ source/header content is unchanged from `.2.21`.

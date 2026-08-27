@@ -1260,9 +1260,8 @@ static int run_inline_farwing_profile_prepared_consume(
     double e00, double deleused, const double* epi, int n,
     int mlmin, int mlmax, int ml1min, int first_core, int last_core,
     double* opakc, long long* updated_bins) {
-    // 0.6.82.40.2.21: allow the two previously independent AVX2 preparation
-    // steps to run together. The scalar recurrence and lane order are still
-    // replayed exactly; only tmpop/tmpe preparation moves into the four-lane block.
+    static_assert(!(PrepareTmpopV064812332 && PrepareTmpeV064812332),
+        "12.3.32 preparation experiments must remain independent");
     constexpr int ml2 = 10000;
     auto energy_for = [=](int point) {
         return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
@@ -1414,24 +1413,7 @@ static int run_inline_farwing_profile_prepared_consume(
             const __m256d profiles = _mm256_div_pd(raw, norm4); \
             double e0, e1, e2, e3; \
             XSTAR_V064812332_EXTRACT4(energies, e0, e1, e2, e3); \
-            if constexpr (PrepareTmpopV064812332 && PrepareTmpeV064812332) { \
-                const __m256d tmpops = _mm256_mul_pd(optpp4, profiles); \
-                const __m256d prev_shift = _mm256_permute4x64_pd(energies, _MM_SHUFFLE(2, 1, 0, 0)); \
-                const __m256d prev0 = _mm256_set1_pd(state.previous_energy); \
-                const __m256d previous = _mm256_blend_pd(prev_shift, prev0, 0x1); \
-                const __m256d tmpe4 = _mm256_andnot_pd(sign, _mm256_sub_pd(energies, previous)); \
-                double o0, o1, o2, o3, t0, t1, t2, t3; \
-                XSTAR_V064812332_EXTRACT4(tmpops, o0, o1, o2, o3); \
-                XSTAR_V064812332_EXTRACT4(tmpe4, t0, t1, t2, t3); \
-                consume_vector_point(e0, 0.0, o0, t0); \
-                consume_vector_point(e1, 0.0, o1, t1); \
-                consume_vector_point(e2, 0.0, o2, t2); \
-                consume_vector_point(e3, 0.0, o3, t3); \
-                ++g_type50_tmpop_prep_blocks_v064812332; \
-                g_type50_tmpop_prep_points_v064812332 += 4u; \
-                ++g_type50_tmpe_prep_blocks_v064812332; \
-                g_type50_tmpe_prep_points_v064812332 += 4u; \
-            } else if constexpr (PrepareTmpopV064812332) { \
+            if constexpr (PrepareTmpopV064812332) { \
                 const __m256d tmpops = _mm256_mul_pd(optpp4, profiles); \
                 double t0, t1, t2, t3; \
                 XSTAR_V064812332_EXTRACT4(tmpops, t0, t1, t2, t3); \
@@ -1867,16 +1849,6 @@ static int apply_line_profile_optimized(
         env_truthy("XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP");
     static const bool enable_tmpe_prep_v064812332 =
         env_truthy("XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP");
-    static const bool combined_prepare_v068240221 = [] {
-        const char* mode = std::getenv("XSTAR_V068240221_TYPE50_CONSUME_MODE");
-        if (!mode || !*mode || std::strcmp(mode, "optimized") == 0 ||
-            std::strcmp(mode, "OPTIMIZED") == 0) return true;
-        if (std::strcmp(mode, "historical") == 0 ||
-            std::strcmp(mode, "HISTORICAL") == 0) return false;
-        std::fprintf(stderr,
-            "XSTAR_V068240221_TYPE50_CONSUME_MODE must be historical or optimized\n");
-        return false;
-    }();
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
     if (production_inline_avx2_v064812328 && decompose_v064812328) {
@@ -1961,12 +1933,6 @@ static int apply_line_profile_optimized(
             ++g_type50_hint_profiles_v064812329;
             run_inline_farwing_profile_hinted_consume<false,true,false>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-        } else if (combined_prepare_v068240221 &&
-                   !enable_tmpop_prep_v064812332 && !enable_tmpe_prep_v064812332) {
-            ++g_type50_tmpop_prep_profiles_v064812332;
-            ++g_type50_tmpe_prep_profiles_v064812332;
-            run_inline_farwing_profile_prepared_consume<false,false,true,true,true>(
-                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         } else if (enable_tmpop_prep_v064812332 && !enable_tmpe_prep_v064812332) {
             ++g_type50_tmpop_prep_profiles_v064812332;
             run_inline_farwing_profile_prepared_consume<false,false,true,true,false>(
@@ -1976,9 +1942,9 @@ static int apply_line_profile_optimized(
             run_inline_farwing_profile_prepared_consume<false,false,true,false,true>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         } else {
-            // Historical cursor fallback. Explicit legacy 12.3.32 flags retain
-            // their old independent behavior; .2.21 combined preparation is
-            // selected above only when neither legacy experiment flag is set.
+            // 12.3.31 production remains frozen in 12.3.32.  If both experiment
+            // flags are accidentally set, deliberately run production rather
+            // than combining the two candidates.
             if (decompose_cursor_v064812331) {
                 decompose_cursor_profile(
                     optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,
@@ -1997,8 +1963,6 @@ static int apply_line_profile_optimized(
         write_message(errbuf, errbuf_size,
             force_12330_hint_consume_v064812331 ?
                 "v064812331 exact 12.3.30 hinted consume fallback" :
-            combined_prepare_v068240221 && !enable_tmpop_prep_v064812332 && !enable_tmpe_prep_v064812332 ?
-                "v068240221 combined AVX2 tmpop+tmpe preparation" :
             enable_tmpop_prep_v064812332 && !enable_tmpe_prep_v064812332 ?
                 "v064812332 independent AVX2 tmpop preparation experiment" :
             enable_tmpe_prep_v064812332 && !enable_tmpop_prep_v064812332 ?
