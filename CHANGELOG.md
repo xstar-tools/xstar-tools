@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.23 - 2026-08-27
+
+- Adds `LOW_XI_DYNAMIC_STATE_REUSE_ATTRIBUTION`, branching directly from the accepted `.2.20` production/science path; `.2.21/.2.21.1` Type-50 experiments remain rejected and are not carried forward.
+- Attribution/instrumentation only: no scientific rate, continuum, solver, controller, publication, source-order, accumulation-order, or ABI behavior is changed.
+- Adds diagnostic-only `XSTAR_LOW_XI_DYNAMIC_STATE_DIAGNOSTICS=1` with no new per-record clock. Existing fixed-call fingerprints are reused to count exact unique temperature, density, BREMSA, tau, population, Type-53-base, collision-scalar, and composite states.
+- Adds one-previous-signature-per-record Type-53 diagnostics to distinguish first observations, same-fixed duplicates, cross-fixed exact reuse, dynamic-state changes, and record-local `ptmp` reuse.
+- Adds analogous scalar-state reuse diagnostics for collision Types 51/56/63/77. Diagnostic storage is allocated only when explicitly enabled.
+- Host qualification is same-binary/same-host `c_xim3` CONTROL vs DIAGNOSTIC with exact science/work gates and bounded diagnostic perturbation; no multi-element run and Phase C remains blocked.
+- Keeps Type-50 profile/core, detail spectrum, detail RRC, contribution-list hot path, post-pass traversal, and call-start workspace formally CLOSED unless a future profile provides new evidence.
+
 ## 0.6.82.40.2.22 - 2026-08-27
 
 - Attribution-only `LOW_XI_FIXED_COST_PARITY_ATTRIBUTION` revision based directly on accepted `0.6.82.40.2.20`; production C/C++ sources/headers are unchanged from `.2.20`.

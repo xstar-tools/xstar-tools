@@ -368,6 +368,31 @@ std::uint64_t binary64_sequence_fnv1a(const std::vector<double>& values) {
     return binary64_sequence_fnv1a(values.data(), values.size());
 }
 
+// 0.6.82.40.2.23: diagnostic-only exact-bit state signatures.  These helpers
+// never feed scientific arithmetic; they summarize already-computed inputs.
+std::uint64_t binary64_bits_v068240223(double value) noexcept {
+    std::uint64_t bits = 0u;
+    static_assert(sizeof(bits) == sizeof(value), "binary64 size mismatch");
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+std::uint64_t fnv1a_mix_u64_v068240223(std::uint64_t hash, std::uint64_t value) noexcept {
+    constexpr std::uint64_t prime = 1099511628211ULL;
+    for (unsigned shift = 0; shift < 64; shift += 8) {
+        hash ^= (value >> shift) & 0xffULL;
+        hash *= prime;
+    }
+    return hash;
+}
+
+std::uint64_t state_signature_v068240223(
+    std::initializer_list<std::uint64_t> values) noexcept {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (const std::uint64_t value : values) hash = fnv1a_mix_u64_v068240223(hash, value);
+    return hash;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement hex u64 as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
@@ -4785,6 +4810,30 @@ struct xstar_fixed_state_context_impl {
     // production runs retain the accepted .40.2.4 ownership/lifetime.
     bool ion_family_diagnostics_enabled_v06824025 = false;
     std::vector<std::uint8_t> ion_unique_record_seen_v06824025;
+    // 0.6.82.40.2.23: dynamic-state reuse diagnostics.  Storage is allocated
+    // only for the explicit low-xi diagnostic mode; production ownership is
+    // unchanged.  Per-record arrays retain only the immediately preceding
+    // exact-bit signature so the census does not grow with evaluation count.
+    bool dynamic_state_reuse_diagnostics_enabled_v068240223 = false;
+    std::unordered_set<std::uint64_t> dynamic_temperature_states_v068240223;
+    std::unordered_set<std::uint64_t> dynamic_density_states_v068240223;
+    std::unordered_set<std::uint64_t> dynamic_bremsa_states_v068240223;
+    std::unordered_set<std::uint64_t> dynamic_tau_states_v068240223;
+    std::unordered_set<std::uint64_t> dynamic_population_states_v068240223;
+    std::unordered_set<std::uint64_t> dynamic_type53_base_states_v068240223;
+    std::unordered_set<std::uint64_t> dynamic_collision_scalar_states_v068240223;
+    std::unordered_set<std::uint64_t> dynamic_composite_states_v068240223;
+    bool dynamic_last_composite_valid_v068240223 = false;
+    std::uint64_t dynamic_last_composite_v068240223 = 0u;
+    std::uint64_t dynamic_current_type53_base_signature_v068240223 = 0u;
+    std::uint64_t dynamic_current_collision_scalar_signature_v068240223 = 0u;
+    std::vector<std::uint64_t> dynamic_type53_last_signature_by_record_v068240223;
+    std::vector<std::uint64_t> dynamic_type53_last_ptmp_by_record_v068240223;
+    std::vector<std::uint8_t> dynamic_type53_seen_by_record_v068240223;
+    std::vector<std::uint64_t> dynamic_type53_last_generation_by_record_v068240223;
+    std::vector<std::uint64_t> dynamic_collision_last_signature_by_record_v068240223;
+    std::vector<std::uint8_t> dynamic_collision_seen_by_record_v068240223;
+    std::vector<std::uint64_t> dynamic_collision_last_generation_by_record_v068240223;
     // 0.6.82.40.2.8: enables boundary-level owner sampling only.  The hot
     // evaluator receives no additional clocks or branches from this flag.
     bool fixed_controller_diagnostics_enabled_v06824028 = false;
@@ -7817,6 +7866,74 @@ bool evaluate_type53_source_integral(
     return valid;
 }
 
+void record_dynamic_fixed_state_v068240223(
+    xstar_fixed_state_context_impl& ctx,
+    const xstar_fixed_state_input_v1& input) {
+    if (!ctx.dynamic_state_reuse_diagnostics_enabled_v068240223) return;
+    auto& perf = ctx.perf_foundation_v068231;
+    ++perf.dynamic_fixed_calls_v068240223;
+
+    const std::uint64_t temperature_bits = binary64_bits_v068240223(input.temperature_k);
+    const std::uint64_t density_signature = state_signature_v068240223({
+        binary64_bits_v068240223(input.electron_density_cm3),
+        binary64_bits_v068240223(input.hydrogen_density_cm3)});
+    const std::uint64_t tau_signature = state_signature_v068240223({
+        ctx.last_input_tau_in_fingerprint, ctx.last_input_tau_out_fingerprint});
+    const std::uint64_t population_signature = state_signature_v068240223({
+        ctx.last_input_xilevg_fingerprint, ctx.last_input_bilevg_fingerprint,
+        ctx.last_input_rnisg_fingerprint});
+    const std::uint64_t type53_base_signature = state_signature_v068240223({
+        temperature_bits, binary64_bits_v068240223(input.electron_density_cm3),
+        ctx.last_input_bremsa_fingerprint});
+    const std::uint64_t collision_scalar_signature = state_signature_v068240223({
+        temperature_bits, binary64_bits_v068240223(input.electron_density_cm3),
+        binary64_bits_v068240223(input.hydrogen_density_cm3)});
+    const double effective_covering =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
+            ? input.dsec_covering_fraction : input.covering_fraction;
+    const std::uint64_t composite_signature = state_signature_v068240223({
+        type53_base_signature, tau_signature, population_signature,
+        binary64_bits_v068240223(input.electron_fraction_xee),
+        binary64_bits_v068240223(effective_covering)});
+
+    ctx.dynamic_temperature_states_v068240223.insert(temperature_bits);
+    ctx.dynamic_density_states_v068240223.insert(density_signature);
+    ctx.dynamic_bremsa_states_v068240223.insert(ctx.last_input_bremsa_fingerprint);
+    ctx.dynamic_tau_states_v068240223.insert(tau_signature);
+    ctx.dynamic_population_states_v068240223.insert(population_signature);
+    ctx.dynamic_type53_base_states_v068240223.insert(type53_base_signature);
+    ctx.dynamic_collision_scalar_states_v068240223.insert(collision_scalar_signature);
+    ctx.dynamic_composite_states_v068240223.insert(composite_signature);
+
+    perf.dynamic_unique_temperature_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_temperature_states_v068240223.size());
+    perf.dynamic_unique_density_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_density_states_v068240223.size());
+    perf.dynamic_unique_bremsa_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_bremsa_states_v068240223.size());
+    perf.dynamic_unique_tau_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_tau_states_v068240223.size());
+    perf.dynamic_unique_population_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_population_states_v068240223.size());
+    perf.dynamic_unique_type53_base_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_type53_base_states_v068240223.size());
+    perf.dynamic_unique_collision_scalar_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_collision_scalar_states_v068240223.size());
+    perf.dynamic_unique_composite_states_v068240223 =
+        static_cast<std::uint64_t>(ctx.dynamic_composite_states_v068240223.size());
+
+    if (ctx.dynamic_last_composite_valid_v068240223) {
+        if (ctx.dynamic_last_composite_v068240223 == composite_signature)
+            ++perf.dynamic_fixed_composite_repeats_v068240223;
+        else
+            ++perf.dynamic_fixed_composite_changes_v068240223;
+    }
+    ctx.dynamic_last_composite_v068240223 = composite_signature;
+    ctx.dynamic_last_composite_valid_v068240223 = true;
+    ctx.dynamic_current_type53_base_signature_v068240223 = type53_base_signature;
+    ctx.dynamic_current_collision_scalar_signature_v068240223 = collision_scalar_signature;
+}
+
 struct RateEvaluationContextV064894 {
     double ne = 0.0;
     double t4 = 0.0;
@@ -7834,6 +7951,12 @@ struct RateEvaluationContextV064894 {
     // 0.6.82.40.2.6 observation counters are kept in the already-private
     // performance foundation; this pointer never escapes the fixed context.
     xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v06824026 = nullptr;
+    // 0.6.82.40.2.23 diagnostic state.  The two signatures are computed once
+    // per fixed evaluation from already-owned fingerprints/scalars and then
+    // compared against the prior exact state for each hot record.
+    xstar_fixed_state_context_impl* dynamic_diag_context_v068240223 = nullptr;
+    std::uint64_t type53_base_signature_v068240223 = 0u;
+    std::uint64_t collision_scalar_signature_v068240223 = 0u;
     bool force_legacy_bound_free = false;
     std::uint64_t reduced_energy_hash = 0;
     std::uint64_t full_energy_hash = 0;
@@ -7844,6 +7967,80 @@ struct RateEvaluationContextV064894 {
     const double* type59_full_source_bremsa = nullptr;
     std::size_t type59_full_source_count = 0;
 };
+
+void record_type53_dynamic_state_v068240223(
+    const Program& program,
+    const ProgramRecord& record,
+    const RateEvaluationContextV064894& rate_context,
+    double ptmp_sum) {
+    auto* ctx = rate_context.dynamic_diag_context_v068240223;
+    if (!ctx || !ctx->dynamic_state_reuse_diagnostics_enabled_v068240223) return;
+    const std::ptrdiff_t raw_index = &record - program.records.data();
+    if (raw_index < 0) return;
+    const std::size_t index = static_cast<std::size_t>(raw_index);
+    if (index >= ctx->dynamic_type53_seen_by_record_v068240223.size()) return;
+    auto& perf = ctx->perf_foundation_v068231;
+    const std::uint64_t ptmp_bits = binary64_bits_v068240223(ptmp_sum);
+    const std::uint64_t signature = state_signature_v068240223({
+        rate_context.type53_base_signature_v068240223, ptmp_bits});
+    const std::uint64_t generation = ctx->state_generation + 1u;
+    ++perf.type53_dynamic_observations_v068240223;
+    if (ctx->dynamic_type53_seen_by_record_v068240223[index] == 0u) {
+        ctx->dynamic_type53_seen_by_record_v068240223[index] = 1u;
+        ++perf.type53_dynamic_first_observations_v068240223;
+    } else {
+        const bool same = ctx->dynamic_type53_last_signature_by_record_v068240223[index] == signature;
+        const bool same_fixed =
+            ctx->dynamic_type53_last_generation_by_record_v068240223[index] == generation;
+        if (same) {
+            ++perf.type53_dynamic_signature_repeats_v068240223;
+            if (same_fixed) ++perf.type53_dynamic_same_fixed_repeats_v068240223;
+            else ++perf.type53_dynamic_cross_fixed_repeats_v068240223;
+        } else {
+            ++perf.type53_dynamic_signature_changes_v068240223;
+        }
+        if (ctx->dynamic_type53_last_ptmp_by_record_v068240223[index] == ptmp_bits)
+            ++perf.type53_ptmp_repeats_v068240223;
+        else
+            ++perf.type53_ptmp_changes_v068240223;
+    }
+    ctx->dynamic_type53_last_signature_by_record_v068240223[index] = signature;
+    ctx->dynamic_type53_last_ptmp_by_record_v068240223[index] = ptmp_bits;
+    ctx->dynamic_type53_last_generation_by_record_v068240223[index] = generation;
+}
+
+void record_collision_dynamic_state_v068240223(
+    const Program& program,
+    const ProgramRecord& record,
+    const RateEvaluationContextV064894& rate_context) {
+    auto* ctx = rate_context.dynamic_diag_context_v068240223;
+    if (!ctx || !ctx->dynamic_state_reuse_diagnostics_enabled_v068240223) return;
+    const std::ptrdiff_t raw_index = &record - program.records.data();
+    if (raw_index < 0) return;
+    const std::size_t index = static_cast<std::size_t>(raw_index);
+    if (index >= ctx->dynamic_collision_seen_by_record_v068240223.size()) return;
+    auto& perf = ctx->perf_foundation_v068231;
+    const std::uint64_t signature = rate_context.collision_scalar_signature_v068240223;
+    const std::uint64_t generation = ctx->state_generation + 1u;
+    ++perf.collision_dynamic_observations_v068240223;
+    if (ctx->dynamic_collision_seen_by_record_v068240223[index] == 0u) {
+        ctx->dynamic_collision_seen_by_record_v068240223[index] = 1u;
+        ++perf.collision_dynamic_first_observations_v068240223;
+    } else {
+        const bool same = ctx->dynamic_collision_last_signature_by_record_v068240223[index] == signature;
+        const bool same_fixed =
+            ctx->dynamic_collision_last_generation_by_record_v068240223[index] == generation;
+        if (same) {
+            ++perf.collision_dynamic_signature_repeats_v068240223;
+            if (same_fixed) ++perf.collision_dynamic_same_fixed_repeats_v068240223;
+            else ++perf.collision_dynamic_cross_fixed_repeats_v068240223;
+        } else {
+            ++perf.collision_dynamic_signature_changes_v068240223;
+        }
+    }
+    ctx->dynamic_collision_last_signature_by_record_v068240223[index] = signature;
+    ctx->dynamic_collision_last_generation_by_record_v068240223[index] = generation;
+}
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Build rate evaluation context from the source-ordered inputs required by the next calculation stage.
@@ -8091,6 +8288,11 @@ EvaluatedRecord evaluate_record(
     out.line_energy_ev = execution_v0682375.line_energy_ev;
     out.atomic_mass_amu = execution_v0682375.atomic_mass_amu;
     out.natural_width_ev = execution_v0682375.natural_width_ev;
+
+    if (execution_v0682375.data_type == 51 || execution_v0682375.data_type == 56 ||
+        execution_v0682375.data_type == 63 || execution_v0682375.data_type == 77) {
+        record_collision_dynamic_state_v068240223(program, record, rate_context);
+    }
 
     switch (execution_v0682375.opcode) {
         case XSTAR_FIXED_OPCODE_SIMPLE_UCALC: {
@@ -8491,6 +8693,8 @@ EvaluatedRecord evaluate_record(
                     program, record, execution_v0682375, calc_hmc_input, source_threshold, false, false,
                     record_context.valid ? &record_context : nullptr, false, rate_context);
             xstar_element_contribution_v1 source_shadow{};
+            record_type53_dynamic_state_v068240223(
+                program, record, rate_context, contract_ptmp1 + contract_ptmp2);
             const bool source_exact = evaluate_type53_source_integral(
                 r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
@@ -13110,6 +13314,7 @@ int run_impl(
     ctx.last_input_xilevg_fingerprint = binary64_sequence_fnv1a(input.global_xilevg, input.global_level_count);
     ctx.last_input_bilevg_fingerprint = binary64_sequence_fnv1a(input.global_bilevg, input.global_level_count);
     ctx.last_input_rnisg_fingerprint = binary64_sequence_fnv1a(input.global_rnisg, input.global_level_count);
+    record_dynamic_fixed_state_v068240223(ctx, input);
     const int helium_matrix_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_TYPE");
     const int helium_preliminary_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_PRELIMINARY_TYPE");
     const int helium_source_position_ablation = environment_data_type("XSTAR_HELIUM_ABLATE_SOURCE_POSITION");
@@ -13721,6 +13926,13 @@ int run_impl(
         &ctx.bound_free_context_by_slot_v0682371;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
     rate_context_v064894.perf_foundation_v06824026 = &perf_foundation_v068231;
+    if (ctx.dynamic_state_reuse_diagnostics_enabled_v068240223) {
+        rate_context_v064894.dynamic_diag_context_v068240223 = &ctx;
+        rate_context_v064894.type53_base_signature_v068240223 =
+            ctx.dynamic_current_type53_base_signature_v068240223;
+        rate_context_v064894.collision_scalar_signature_v068240223 =
+            ctx.dynamic_current_collision_scalar_signature_v068240223;
+    }
     const bool use_compact_bound_free_revisit_v06823614 =
         native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
         !environment_flag("XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT");
@@ -19824,6 +20036,27 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
         environment_flag("XSTAR_IONIZATION_FAMILY_DIAGNOSTICS");
     if (ptr->ion_family_diagnostics_enabled_v06824025) {
         ptr->ion_unique_record_seen_v06824025.assign(ptr->program.records.size(), 0u);
+    }
+    ptr->dynamic_state_reuse_diagnostics_enabled_v068240223 =
+        environment_flag("XSTAR_LOW_XI_DYNAMIC_STATE_DIAGNOSTICS");
+    if (ptr->dynamic_state_reuse_diagnostics_enabled_v068240223) {
+        constexpr std::size_t expected_low_xi_fixed_states_v068240223 = 8192u;
+        ptr->dynamic_temperature_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        ptr->dynamic_density_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        ptr->dynamic_bremsa_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        ptr->dynamic_tau_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        ptr->dynamic_population_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        ptr->dynamic_type53_base_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        ptr->dynamic_collision_scalar_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        ptr->dynamic_composite_states_v068240223.reserve(expected_low_xi_fixed_states_v068240223);
+        const std::size_t record_count_v068240223 = ptr->program.records.size();
+        ptr->dynamic_type53_last_signature_by_record_v068240223.assign(record_count_v068240223, 0u);
+        ptr->dynamic_type53_last_ptmp_by_record_v068240223.assign(record_count_v068240223, 0u);
+        ptr->dynamic_type53_seen_by_record_v068240223.assign(record_count_v068240223, 0u);
+        ptr->dynamic_type53_last_generation_by_record_v068240223.assign(record_count_v068240223, 0u);
+        ptr->dynamic_collision_last_signature_by_record_v068240223.assign(record_count_v068240223, 0u);
+        ptr->dynamic_collision_seen_by_record_v068240223.assign(record_count_v068240223, 0u);
+        ptr->dynamic_collision_last_generation_by_record_v068240223.assign(record_count_v068240223, 0u);
     }
     ptr->fixed_controller_diagnostics_enabled_v06824028 =
         environment_flag("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS");
