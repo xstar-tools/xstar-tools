@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.24 - 2026-08-27
+
+- Add `TYPE53_PHOTO_COMPONENT_REUSE`, based directly on the accepted `0.6.82.40.2.20` production lineage.
+- Reuse only the reduced-grid Type-53 radiation-dependent photo/heating accumulators (`sumr`, `sumh`, `sumh2`) when the reduced BREMSA vector is bitwise-identical to the retained radiation generation.
+- Keep the Milne/recombination accumulators (`sumi`, `sumc`, `sumc2`), temperature/density/escape arithmetic, threshold-opacity publication, record order, and accumulation order live and unchanged on every Type-53 evaluation.
+- Use an exact binary64 BREMSA-vector comparison once per fixed-state evaluation; geometry rebuilds invalidate the per-record photo cache. No hash-only science key is used.
+- Add same-binary `historical|optimized` control through `XSTAR_V068240224_TYPE53_PHOTO_MODE` and counters for radiation generations, cache builds/hits, and executed/elided photo intervals.
+- Qualification scope is controlled H+He+C only: `xi=-3` same-host performance A/B first, followed by `xi=+1,+4` exact-science closure. No multi-element run and no Phase-C authorization.
+- Preserve the frozen closures: Type-50 profile/core, detail spectrum staging, detail RRC staging, contribution-list hot path, post-pass traversal, and call-start workspace remain CLOSED unless new profiling evidence appears.
+
 ## 0.6.82.40.2.23 - 2026-08-27
 
 - Adds `LOW_XI_DYNAMIC_STATE_REUSE_ATTRIBUTION`, branching directly from the accepted `.2.20` production/science path; `.2.21/.2.21.1` Type-50 experiments remain rejected and are not carried forward.

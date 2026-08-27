@@ -311,35 +311,17 @@ struct PerformanceFoundationV068231 {
     std::uint64_t type53_legacy_pair_interpolations_executed_v06824026 = 0u;
     std::uint64_t type53_legacy_pair_interpolations_elided_v06824026 = 0u;
 
-    // 0.6.82.40.2.23: diagnostic-only low-xi dynamic-state reuse census.
-    // These counters contain no scientific inputs and are updated only when
-    // XSTAR_LOW_XI_DYNAMIC_STATE_DIAGNOSTICS=1.  No clocks are added to the
-    // record evaluator.
-    std::uint64_t dynamic_fixed_calls_v068240223 = 0u;
-    std::uint64_t dynamic_unique_temperature_states_v068240223 = 0u;
-    std::uint64_t dynamic_unique_density_states_v068240223 = 0u;
-    std::uint64_t dynamic_unique_bremsa_states_v068240223 = 0u;
-    std::uint64_t dynamic_unique_tau_states_v068240223 = 0u;
-    std::uint64_t dynamic_unique_population_states_v068240223 = 0u;
-    std::uint64_t dynamic_unique_type53_base_states_v068240223 = 0u;
-    std::uint64_t dynamic_unique_collision_scalar_states_v068240223 = 0u;
-    std::uint64_t dynamic_unique_composite_states_v068240223 = 0u;
-    std::uint64_t dynamic_fixed_composite_repeats_v068240223 = 0u;
-    std::uint64_t dynamic_fixed_composite_changes_v068240223 = 0u;
-    std::uint64_t type53_dynamic_observations_v068240223 = 0u;
-    std::uint64_t type53_dynamic_first_observations_v068240223 = 0u;
-    std::uint64_t type53_dynamic_signature_repeats_v068240223 = 0u;
-    std::uint64_t type53_dynamic_same_fixed_repeats_v068240223 = 0u;
-    std::uint64_t type53_dynamic_cross_fixed_repeats_v068240223 = 0u;
-    std::uint64_t type53_dynamic_signature_changes_v068240223 = 0u;
-    std::uint64_t type53_ptmp_repeats_v068240223 = 0u;
-    std::uint64_t type53_ptmp_changes_v068240223 = 0u;
-    std::uint64_t collision_dynamic_observations_v068240223 = 0u;
-    std::uint64_t collision_dynamic_first_observations_v068240223 = 0u;
-    std::uint64_t collision_dynamic_signature_repeats_v068240223 = 0u;
-    std::uint64_t collision_dynamic_same_fixed_repeats_v068240223 = 0u;
-    std::uint64_t collision_dynamic_cross_fixed_repeats_v068240223 = 0u;
-    std::uint64_t collision_dynamic_signature_changes_v068240223 = 0u;
+    // 0.6.82.40.2.24: exact radiation-generation reuse for the reduced-grid
+    // Type-53 photo/heating stream.  These counters are observational only;
+    // no public ABI is changed.
+    std::uint64_t type53_photo_radiation_builds_v068240224 = 0u;
+    std::uint64_t type53_photo_radiation_reuses_v068240224 = 0u;
+    std::uint64_t type53_photo_historical_calls_v068240224 = 0u;
+    std::uint64_t type53_photo_optimized_calls_v068240224 = 0u;
+    std::uint64_t type53_photo_cache_builds_v068240224 = 0u;
+    std::uint64_t type53_photo_cache_hits_v068240224 = 0u;
+    std::uint64_t type53_photo_intervals_executed_v068240224 = 0u;
+    std::uint64_t type53_photo_intervals_elided_v068240224 = 0u;
 };
 
 // 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller

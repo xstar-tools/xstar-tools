@@ -23501,59 +23501,41 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.type53_legacy_pair_interpolations_executed_v06824026 << "\n"
             << "V06824026_TYPE53_LEGACY_PAIR_INTERPOLATIONS_ELIDED="
             << perf.foundation_v068231.type53_legacy_pair_interpolations_elided_v06824026 << "\n";
-        // 0.6.82.40.2.23: diagnostic-only exact-bit dynamic-state reuse
-        // census.  All values remain zero when the explicit diagnostic mode
-        // is disabled; no scientific arithmetic depends on these counters.
-        out << "V068240223_DYNAMIC_FIXED_CALLS="
-            << perf.foundation_v068231.dynamic_fixed_calls_v068240223 << "\n"
-            << "V068240223_UNIQUE_TEMPERATURE_STATES="
-            << perf.foundation_v068231.dynamic_unique_temperature_states_v068240223 << "\n"
-            << "V068240223_UNIQUE_DENSITY_STATES="
-            << perf.foundation_v068231.dynamic_unique_density_states_v068240223 << "\n"
-            << "V068240223_UNIQUE_BREMSA_STATES="
-            << perf.foundation_v068231.dynamic_unique_bremsa_states_v068240223 << "\n"
-            << "V068240223_UNIQUE_TAU_STATES="
-            << perf.foundation_v068231.dynamic_unique_tau_states_v068240223 << "\n"
-            << "V068240223_UNIQUE_POPULATION_STATES="
-            << perf.foundation_v068231.dynamic_unique_population_states_v068240223 << "\n"
-            << "V068240223_UNIQUE_TYPE53_BASE_STATES="
-            << perf.foundation_v068231.dynamic_unique_type53_base_states_v068240223 << "\n"
-            << "V068240223_UNIQUE_COLLISION_SCALAR_STATES="
-            << perf.foundation_v068231.dynamic_unique_collision_scalar_states_v068240223 << "\n"
-            << "V068240223_UNIQUE_COMPOSITE_STATES="
-            << perf.foundation_v068231.dynamic_unique_composite_states_v068240223 << "\n"
-            << "V068240223_FIXED_COMPOSITE_REPEATS="
-            << perf.foundation_v068231.dynamic_fixed_composite_repeats_v068240223 << "\n"
-            << "V068240223_FIXED_COMPOSITE_CHANGES="
-            << perf.foundation_v068231.dynamic_fixed_composite_changes_v068240223 << "\n"
-            << "V068240223_TYPE53_DYNAMIC_OBSERVATIONS="
-            << perf.foundation_v068231.type53_dynamic_observations_v068240223 << "\n"
-            << "V068240223_TYPE53_FIRST_OBSERVATIONS="
-            << perf.foundation_v068231.type53_dynamic_first_observations_v068240223 << "\n"
-            << "V068240223_TYPE53_SIGNATURE_REPEATS="
-            << perf.foundation_v068231.type53_dynamic_signature_repeats_v068240223 << "\n"
-            << "V068240223_TYPE53_SAME_FIXED_REPEATS="
-            << perf.foundation_v068231.type53_dynamic_same_fixed_repeats_v068240223 << "\n"
-            << "V068240223_TYPE53_CROSS_FIXED_REPEATS="
-            << perf.foundation_v068231.type53_dynamic_cross_fixed_repeats_v068240223 << "\n"
-            << "V068240223_TYPE53_SIGNATURE_CHANGES="
-            << perf.foundation_v068231.type53_dynamic_signature_changes_v068240223 << "\n"
-            << "V068240223_TYPE53_PTMP_REPEATS="
-            << perf.foundation_v068231.type53_ptmp_repeats_v068240223 << "\n"
-            << "V068240223_TYPE53_PTMP_CHANGES="
-            << perf.foundation_v068231.type53_ptmp_changes_v068240223 << "\n"
-            << "V068240223_COLLISION_DYNAMIC_OBSERVATIONS="
-            << perf.foundation_v068231.collision_dynamic_observations_v068240223 << "\n"
-            << "V068240223_COLLISION_FIRST_OBSERVATIONS="
-            << perf.foundation_v068231.collision_dynamic_first_observations_v068240223 << "\n"
-            << "V068240223_COLLISION_SIGNATURE_REPEATS="
-            << perf.foundation_v068231.collision_dynamic_signature_repeats_v068240223 << "\n"
-            << "V068240223_COLLISION_SAME_FIXED_REPEATS="
-            << perf.foundation_v068231.collision_dynamic_same_fixed_repeats_v068240223 << "\n"
-            << "V068240223_COLLISION_CROSS_FIXED_REPEATS="
-            << perf.foundation_v068231.collision_dynamic_cross_fixed_repeats_v068240223 << "\n"
-            << "V068240223_COLLISION_SIGNATURE_CHANGES="
-            << perf.foundation_v068231.collision_dynamic_signature_changes_v068240223 << "\n";
+        const auto photo_calls_v068240224 =
+            perf.foundation_v068231.type53_photo_historical_calls_v068240224 +
+            perf.foundation_v068231.type53_photo_optimized_calls_v068240224;
+        const auto photo_cache_total_v068240224 =
+            perf.foundation_v068231.type53_photo_cache_builds_v068240224 +
+            perf.foundation_v068231.type53_photo_cache_hits_v068240224;
+        out << "V068240224_TYPE53_PHOTO_MODE="
+            << ((perf.foundation_v068231.type53_photo_optimized_calls_v068240224 > 0u &&
+                 perf.foundation_v068231.type53_photo_historical_calls_v068240224 == 0u)
+                    ? "OPTIMIZED"
+                    : (perf.foundation_v068231.type53_photo_historical_calls_v068240224 > 0u &&
+                       perf.foundation_v068231.type53_photo_optimized_calls_v068240224 == 0u)
+                        ? "HISTORICAL" : "MIXED") << "\n"
+            << "V068240224_TYPE53_PHOTO_RADIATION_BUILDS="
+            << perf.foundation_v068231.type53_photo_radiation_builds_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_RADIATION_REUSES="
+            << perf.foundation_v068231.type53_photo_radiation_reuses_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_HISTORICAL_CALLS="
+            << perf.foundation_v068231.type53_photo_historical_calls_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_OPTIMIZED_CALLS="
+            << perf.foundation_v068231.type53_photo_optimized_calls_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_CACHE_BUILDS="
+            << perf.foundation_v068231.type53_photo_cache_builds_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_CACHE_HITS="
+            << perf.foundation_v068231.type53_photo_cache_hits_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_INTERVALS_EXECUTED="
+            << perf.foundation_v068231.type53_photo_intervals_executed_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_INTERVALS_ELIDED="
+            << perf.foundation_v068231.type53_photo_intervals_elided_v068240224 << "\n"
+            << "V068240224_TYPE53_PHOTO_CACHE_HIT_PERCENT="
+            << (photo_cache_total_v068240224 > 0u
+                    ? 100.0 * static_cast<double>(perf.foundation_v068231.type53_photo_cache_hits_v068240224) /
+                        static_cast<double>(photo_cache_total_v068240224)
+                    : 0.0) << "\n"
+            << "V068240224_TYPE53_PHOTO_CALLS=" << photo_calls_v068240224 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {
