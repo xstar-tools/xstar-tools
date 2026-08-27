@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.24.1 - 2026-08-27
+
+- Add qualification-only `TYPE53_PHOTO_COMPONENT_REUSE_BALANCED_QUALIFICATION` on top of `.2.24`; production C/C++ source/header files are unchanged from `.2.24`.
+- Preserve the original `.2.24` materiality thresholds without relaxation after the first host result narrowly missed the fixed-rate gate (`0.972586662` versus required `<=0.97`).
+- Run low-`xi` C5 only in balanced same-binary `H1 -> O1 -> O2 -> H2` order to reduce thermal/frequency drift.
+- Use geometric means of the two historical and two optimized measurements for fixed-rate, fixed-total, internal-total, wall, and RSS qualification ratios.
+- Require exact science and exact fixed/work counts across all four runs and against the canonical Phase-A FORTRAN low-`xi` science reference.
+- Carry forward the already closed `.2.24` `xi=+1,+4` science qualification by production-source identity; no `+1/+4` rerun, no multi-element run, and no Phase-C authorization.
+- Continue to freeze Type-50 profile/core, detail spectrum staging, detail RRC staging, contribution-list hot path, post-pass traversal, and call-start workspace.
+
 ## 0.6.82.40.2.24 - 2026-08-27
 
 - Add `TYPE53_PHOTO_COMPONENT_REUSE`, based directly on the accepted `0.6.82.40.2.20` production lineage.
