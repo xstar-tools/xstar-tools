@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.21.1 - 2026-08-27
+
+- Qualification-only `LOW_XI_TYPE50_COMBINED_PREP_QUALIFICATION`; production C/C++ source/header content is unchanged from `.2.21`.
+- Re-tests the `.2.21` historical/optimized Type-50 combined `tmpop`/adjacent-`tmpe` AVX2 preparation on only the controlled C5 low-ionization case `c_xim3` (`rlogxi=-3`, `ne=1e12`, `cfrac=0`, `emult=0.25`).
+- Requires exact science historical-to-optimized and exact science for both modes against an accepted current low-xi reference.
+- Promotion gates require Type-50 profile ratio <=0.97, fixed-spectral ratio <=1.00, fixed-total ratio <=1.00, whole-run internal ratio <=0.995, wall ratio <=1.00, RSS ratio <=1.03, unchanged Type-50 work counts, and <=1.05 guards on traversal orchestration, contribution list, detail-RRC, and detail-spectrum.
+- The workstation broad `.2.21` result remains REJECT: the optimized Type-50 combined preparation regressed Type-50 by ~3.37% and whole-run wall by ~0.77% for `multi_element_xi1_ne1e12`. `.2.21.1` does not reinterpret or override that result; it only tests regime sensitivity at low xi.
+- No FORTRAN execution, no multi-element run, no laptop run, and no Phase C authorization are part of this qualification revision.
+
 ## 0.6.82.40.2.21 - 2026-08-27
 
 - `BOUNDARY_TYPE50_COMBINED_PREP_HOT_PATH` candidate following the accepted `.2.20` boundary attribution; `.2.20` showed that 335.713 s of 337.219 s (99.55%) of broad accepted-boundary time is the fixed-state recompute itself.
