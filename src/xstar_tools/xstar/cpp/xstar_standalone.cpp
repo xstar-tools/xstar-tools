@@ -23501,20 +23501,37 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.type53_legacy_pair_interpolations_executed_v06824026 << "\n"
             << "V06824026_TYPE53_LEGACY_PAIR_INTERPOLATIONS_ELIDED="
             << perf.foundation_v068231.type53_legacy_pair_interpolations_elided_v06824026 << "\n";
-        // 0.6.82.40.2.25: Type-51 duplicate legacy evaluator census.
-        {
-            const char* raw_v068240225 = std::getenv("XSTAR_V068240225_TYPE51_LEGACY_MODE");
-            const bool historical_v068240225 =
-                raw_v068240225 && std::string(raw_v068240225) == "historical";
-            out << "V068240225_TYPE51_LEGACY_MODE="
-                << (historical_v068240225 ? "HISTORICAL" : "ELIDED") << "\n"
-                << "V068240225_TYPE51_CANONICAL_EVALUATIONS="
-                << perf.foundation_v068231.type51_canonical_evaluations_v068240225 << "\n"
-                << "V068240225_TYPE51_LEGACY_EVALUATIONS_EXECUTED="
-                << perf.foundation_v068231.type51_legacy_evaluations_executed_v068240225 << "\n"
-                << "V068240225_TYPE51_LEGACY_EVALUATIONS_ELIDED="
-                << perf.foundation_v068231.type51_legacy_evaluations_elided_v068240225 << "\n";
-        }
+        // 0.6.82.40.2.26: no-clock Type-53 recombination/Milne dynamic
+        // attribution.  The source phint53 kernel has no tabulated temperature
+        // bracket; ACTIVE/CUTOFF_INTERVALS expose its literal exptsto<200
+        // temperature-dependent boundary instead.
+        out << "V068240226_TYPE53_RECOMB_ATTRIBUTION_MODE="
+            << (perf.foundation_v068231.type53_recomb_attr_enabled_v068240226 ? "ENABLED" : "DISABLED") << "\n"
+            << "V068240226_TYPE53_OBSERVATIONS=" << perf.foundation_v068231.type53_recomb_observations_v068240226 << "\n"
+            << "V068240226_TYPE53_PREPARED_GEOMETRY_OBSERVATIONS=" << perf.foundation_v068231.type53_recomb_prepared_geometry_observations_v068240226 << "\n"
+            << "V068240226_TYPE53_LOCAL_GEOMETRY_OBSERVATIONS=" << perf.foundation_v068231.type53_recomb_local_geometry_observations_v068240226 << "\n"
+            << "V068240226_TYPE53_REDUCED_GRID_OBSERVATIONS=" << perf.foundation_v068231.type53_recomb_reduced_grid_observations_v068240226 << "\n"
+            << "V068240226_TYPE53_FULL_GRID_OBSERVATIONS=" << perf.foundation_v068231.type53_recomb_full_grid_observations_v068240226 << "\n"
+            << "V068240226_TYPE53_INTEGRATION_INTERVALS=" << perf.foundation_v068231.type53_recomb_integration_intervals_v068240226 << "\n"
+            << "V068240226_TYPE53_RECOMB_ACTIVE_INTERVALS=" << perf.foundation_v068231.type53_recomb_active_intervals_v068240226 << "\n"
+            << "V068240226_TYPE53_RECOMB_CUTOFF_INTERVALS=" << perf.foundation_v068231.type53_recomb_cutoff_intervals_v068240226 << "\n"
+            << "V068240226_TYPE53_THRESHOLD_PUBLICATION_OBSERVATIONS=" << perf.foundation_v068231.type53_recomb_threshold_publication_observations_v068240226 << "\n"
+            << "V068240226_TYPE53_UNIQUE_TEMPERATURE_STATES=" << perf.foundation_v068231.type53_recomb_unique_temperature_states_v068240226 << "\n"
+            << "V068240226_TYPE53_UNIQUE_DENSITY_STATES=" << perf.foundation_v068231.type53_recomb_unique_density_states_v068240226 << "\n"
+            << "V068240226_TYPE53_UNIQUE_PTMP_STATES=" << perf.foundation_v068231.type53_recomb_unique_ptmp_states_v068240226 << "\n"
+            << "V068240226_TYPE53_UNIQUE_THERMAL_STATES=" << perf.foundation_v068231.type53_recomb_unique_thermal_states_v068240226 << "\n"
+            << "V068240226_TYPE53_UNIQUE_STATIC_STATES=" << perf.foundation_v068231.type53_recomb_unique_static_states_v068240226 << "\n"
+            << "V068240226_TYPE53_UNIQUE_CUTOFF_SIGNATURES=" << perf.foundation_v068231.type53_recomb_unique_cutoff_signatures_v068240226 << "\n"
+            << "V068240226_TYPE53_PREVIOUS_STATIC_COMPARISONS=" << perf.foundation_v068231.type53_recomb_previous_static_comparisons_v068240226 << "\n"
+            << "V068240226_TYPE53_PREV_TEMPERATURE_REUSE=" << perf.foundation_v068231.type53_recomb_prev_temperature_reuse_v068240226 << "\n"
+            << "V068240226_TYPE53_PREV_DENSITY_REUSE=" << perf.foundation_v068231.type53_recomb_prev_density_reuse_v068240226 << "\n"
+            << "V068240226_TYPE53_PREV_PTMP_REUSE=" << perf.foundation_v068231.type53_recomb_prev_ptmp_reuse_v068240226 << "\n"
+            << "V068240226_TYPE53_PREV_THERMAL_REUSE=" << perf.foundation_v068231.type53_recomb_prev_thermal_reuse_v068240226 << "\n"
+            << "V068240226_TYPE53_PREV_DRIVER_REUSE=" << perf.foundation_v068231.type53_recomb_prev_driver_reuse_v068240226 << "\n"
+            << "V068240226_TYPE53_PREV_RNIST_REUSE=" << perf.foundation_v068231.type53_recomb_prev_rnist_reuse_v068240226 << "\n"
+            << "V068240226_TYPE53_PREV_CUTOFF_SPAN_REUSE=" << perf.foundation_v068231.type53_recomb_prev_cutoff_span_reuse_v068240226 << "\n"
+            << "V068240226_TYPE53_STATE_SEQUENCE_FINGERPRINT=" << perf.foundation_v068231.type53_recomb_state_sequence_fingerprint_v068240226 << "\n"
+            << "V068240226_TYPE53_STATIC_SEQUENCE_FINGERPRINT=" << perf.foundation_v068231.type53_recomb_static_sequence_fingerprint_v068240226 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

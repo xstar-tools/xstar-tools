@@ -311,11 +311,36 @@ struct PerformanceFoundationV068231 {
     std::uint64_t type53_legacy_pair_interpolations_executed_v06824026 = 0u;
     std::uint64_t type53_legacy_pair_interpolations_elided_v06824026 = 0u;
 
-    // 0.6.82.40.2.25: Type-51 canonical-vs-legacy execution census.
-    // These counters are observation-only and add no clock reads.
-    std::uint64_t type51_canonical_evaluations_v068240225 = 0u;
-    std::uint64_t type51_legacy_evaluations_executed_v068240225 = 0u;
-    std::uint64_t type51_legacy_evaluations_elided_v068240225 = 0u;
+    // 0.6.82.40.2.26: diagnostic-only Type-53 recombination/Milne dynamic
+    // attribution.  These counters/fingerprints observe the already-computed
+    // source-faithful phint53 state and interval decisions; they never change
+    // floating-point arithmetic, source traversal, accumulation order, or ABI.
+    std::uint64_t type53_recomb_attr_enabled_v068240226 = 0u;
+    std::uint64_t type53_recomb_observations_v068240226 = 0u;
+    std::uint64_t type53_recomb_prepared_geometry_observations_v068240226 = 0u;
+    std::uint64_t type53_recomb_local_geometry_observations_v068240226 = 0u;
+    std::uint64_t type53_recomb_reduced_grid_observations_v068240226 = 0u;
+    std::uint64_t type53_recomb_full_grid_observations_v068240226 = 0u;
+    std::uint64_t type53_recomb_integration_intervals_v068240226 = 0u;
+    std::uint64_t type53_recomb_active_intervals_v068240226 = 0u;
+    std::uint64_t type53_recomb_cutoff_intervals_v068240226 = 0u;
+    std::uint64_t type53_recomb_threshold_publication_observations_v068240226 = 0u;
+    std::uint64_t type53_recomb_unique_temperature_states_v068240226 = 0u;
+    std::uint64_t type53_recomb_unique_density_states_v068240226 = 0u;
+    std::uint64_t type53_recomb_unique_ptmp_states_v068240226 = 0u;
+    std::uint64_t type53_recomb_unique_thermal_states_v068240226 = 0u;
+    std::uint64_t type53_recomb_unique_static_states_v068240226 = 0u;
+    std::uint64_t type53_recomb_unique_cutoff_signatures_v068240226 = 0u;
+    std::uint64_t type53_recomb_previous_static_comparisons_v068240226 = 0u;
+    std::uint64_t type53_recomb_prev_temperature_reuse_v068240226 = 0u;
+    std::uint64_t type53_recomb_prev_density_reuse_v068240226 = 0u;
+    std::uint64_t type53_recomb_prev_ptmp_reuse_v068240226 = 0u;
+    std::uint64_t type53_recomb_prev_thermal_reuse_v068240226 = 0u;
+    std::uint64_t type53_recomb_prev_driver_reuse_v068240226 = 0u;
+    std::uint64_t type53_recomb_prev_rnist_reuse_v068240226 = 0u;
+    std::uint64_t type53_recomb_prev_cutoff_span_reuse_v068240226 = 0u;
+    std::uint64_t type53_recomb_state_sequence_fingerprint_v068240226 = 0u;
+    std::uint64_t type53_recomb_static_sequence_fingerprint_v068240226 = 0u;
 };
 
 // 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller

@@ -455,27 +455,6 @@ ContributionHotPathModeV068240214 configured_contribution_hotpath_mode_v06824021
     throw std::runtime_error("invalid XSTAR_V068240214_CONTRIBUTION_MODE");
 }
 
-// 0.6.82.40.2.25: Type-51 legacy-evaluator elision.  Native production has
-// committed the canonical/source-faithful Burgess-Tully result unconditionally
-// since 0.6.82.13.  The independent legacy evaluator survives only as a
-// forensic shadow and therefore need not run on every production evaluation.
-// Historical mode preserves the exact pre-.25 duplicate calculation for
-// same-binary qualification and explicit forensic shadow inspection.
-enum class Type51LegacyEvaluatorModeV068240225 { Historical, Elided };
-
-Type51LegacyEvaluatorModeV068240225 configured_type51_legacy_mode_v068240225() {
-    static const Type51LegacyEvaluatorModeV068240225 mode = [] {
-        const char* value = std::getenv("XSTAR_V068240225_TYPE51_LEGACY_MODE");
-        if (!value || !*value || std::string(value) == "elided")
-            return Type51LegacyEvaluatorModeV068240225::Elided;
-        if (std::string(value) == "historical")
-            return Type51LegacyEvaluatorModeV068240225::Historical;
-        throw std::runtime_error(
-            "XSTAR_V068240225_TYPE51_LEGACY_MODE must be historical or elided");
-    }();
-    return mode;
-}
-
 // 0.6.82.40.2.15: post-pass traversal-orchestration control.  The optimized
 // production path keeps the exact corrected EvaluatedRecord stream but avoids
 // rescanning records that cannot participate in Option-10 pirt/rrrt ownership
@@ -4763,6 +4742,152 @@ SourceContinuumThermalResult source_continuum_thermal(
     return out;
 }
 
+// 0.6.82.40.2.26: diagnostic-only Type-53 recombination/Milne state census.
+// The source phint53 kernel does not use a tabulated temperature bracket; its
+// temperature-dependent interval boundary is the literal exptsto < 200 gate.
+// Record that cutoff span, exact dynamic driver reuse, and immutable geometry
+// reuse without changing any floating-point expression or adding a clock.
+struct Type53RecombinationDynamicAttributionV068240226 {
+    struct PreviousState {
+        std::uint64_t temperature_bits = 0u;
+        std::uint64_t density_bits = 0u;
+        std::uint64_t ptmp_bits = 0u;
+        std::uint64_t thermal_hash = 0u;
+        std::uint64_t driver_hash = 0u;
+        std::uint64_t rnist_bits = 0u;
+        std::uint64_t active_intervals = 0u;
+    };
+
+    bool enabled = false;
+    std::uint64_t observations = 0u;
+    std::uint64_t prepared_geometry_observations = 0u;
+    std::uint64_t local_geometry_observations = 0u;
+    std::uint64_t reduced_grid_observations = 0u;
+    std::uint64_t full_grid_observations = 0u;
+    std::uint64_t integration_intervals = 0u;
+    std::uint64_t active_intervals = 0u;
+    std::uint64_t cutoff_intervals = 0u;
+    std::uint64_t threshold_publication_observations = 0u;
+    std::uint64_t previous_static_comparisons = 0u;
+    std::uint64_t prev_temperature_reuse = 0u;
+    std::uint64_t prev_density_reuse = 0u;
+    std::uint64_t prev_ptmp_reuse = 0u;
+    std::uint64_t prev_thermal_reuse = 0u;
+    std::uint64_t prev_driver_reuse = 0u;
+    std::uint64_t prev_rnist_reuse = 0u;
+    std::uint64_t prev_cutoff_span_reuse = 0u;
+    std::uint64_t state_sequence_fingerprint = 1469598103934665603ULL;
+    std::uint64_t static_sequence_fingerprint = 1469598103934665603ULL;
+    std::unordered_set<std::uint64_t> temperature_states;
+    std::unordered_set<std::uint64_t> density_states;
+    std::unordered_set<std::uint64_t> ptmp_states;
+    std::unordered_set<std::uint64_t> thermal_states;
+    std::unordered_set<std::uint64_t> static_states;
+    std::unordered_set<std::uint64_t> cutoff_signatures;
+    std::unordered_map<std::uint64_t, PreviousState> previous_by_static;
+};
+
+std::uint64_t binary64_bits_v068240226(double value) {
+    std::uint64_t bits = 0u;
+    static_assert(sizeof(bits) == sizeof(value), "binary64 size mismatch");
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+std::uint64_t fnv1a_u64_v068240226(std::uint64_t hash, std::uint64_t value) {
+    constexpr std::uint64_t prime = 1099511628211ULL;
+    for (unsigned shift = 0; shift < 64; shift += 8) {
+        hash ^= (value >> shift) & 0xffULL;
+        hash *= prime;
+    }
+    return hash;
+}
+
+std::uint64_t type53_recomb_static_key_v068240226(
+    int record_number,
+    const BoundFreePreparedGeometryV064895& geometry,
+    double threshold_ev,
+    double bound_g,
+    double continuum_g,
+    double continuum_energy) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(record_number)));
+    hash = fnv1a_u64_v068240226(hash, geometry.source_energy_hash);
+    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(threshold_ev));
+    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(bound_g));
+    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(continuum_g));
+    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(continuum_energy));
+    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(geometry.pair_count));
+    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(geometry.nb1));
+    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(geometry.klmax));
+    return hash;
+}
+
+void observe_type53_recombination_v068240226(
+    Type53RecombinationDynamicAttributionV068240226& out,
+    std::uint64_t static_key,
+    double temperature_k,
+    double electron_density_cm3,
+    double ptmp_sum,
+    double rnist,
+    std::uint64_t interval_count,
+    std::uint64_t active_interval_count,
+    bool prepared_geometry,
+    bool reduced_grid,
+    bool threshold_publication_reached) {
+    if (!out.enabled) return;
+    const std::uint64_t temperature_bits = binary64_bits_v068240226(temperature_k);
+    const std::uint64_t density_bits = binary64_bits_v068240226(electron_density_cm3);
+    const std::uint64_t ptmp_bits = binary64_bits_v068240226(ptmp_sum);
+    const std::uint64_t rnist_bits = binary64_bits_v068240226(rnist);
+    std::uint64_t thermal_hash = fnv1a_u64_v068240226(1469598103934665603ULL, temperature_bits);
+    thermal_hash = fnv1a_u64_v068240226(thermal_hash, density_bits);
+    const std::uint64_t driver_hash = fnv1a_u64_v068240226(thermal_hash, ptmp_bits);
+    const std::uint64_t cutoff_hash = fnv1a_u64_v068240226(static_key, active_interval_count);
+
+    ++out.observations;
+    if (prepared_geometry) ++out.prepared_geometry_observations;
+    else ++out.local_geometry_observations;
+    if (reduced_grid) ++out.reduced_grid_observations;
+    else ++out.full_grid_observations;
+    out.integration_intervals += interval_count;
+    out.active_intervals += active_interval_count;
+    out.cutoff_intervals += interval_count - active_interval_count;
+    if (threshold_publication_reached) ++out.threshold_publication_observations;
+
+    out.temperature_states.insert(temperature_bits);
+    out.density_states.insert(density_bits);
+    out.ptmp_states.insert(ptmp_bits);
+    out.thermal_states.insert(thermal_hash);
+    out.static_states.insert(static_key);
+    out.cutoff_signatures.insert(cutoff_hash);
+
+    out.static_sequence_fingerprint = fnv1a_u64_v068240226(out.static_sequence_fingerprint, static_key);
+    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, static_key);
+    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, temperature_bits);
+    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, density_bits);
+    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, ptmp_bits);
+    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, rnist_bits);
+    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, active_interval_count);
+
+    const Type53RecombinationDynamicAttributionV068240226::PreviousState current{temperature_bits, density_bits, ptmp_bits, thermal_hash,
+                                driver_hash, rnist_bits, active_interval_count};
+    const auto inserted = out.previous_by_static.emplace(static_key, current);
+    if (!inserted.second) {
+        ++out.previous_static_comparisons;
+        const Type53RecombinationDynamicAttributionV068240226::PreviousState& previous = inserted.first->second;
+        if (previous.temperature_bits == temperature_bits) ++out.prev_temperature_reuse;
+        if (previous.density_bits == density_bits) ++out.prev_density_reuse;
+        if (previous.ptmp_bits == ptmp_bits) ++out.prev_ptmp_reuse;
+        if (previous.thermal_hash == thermal_hash) ++out.prev_thermal_reuse;
+        if (previous.driver_hash == driver_hash) ++out.prev_driver_reuse;
+        if (previous.rnist_bits == rnist_bits) ++out.prev_rnist_reuse;
+        if (previous.active_intervals == active_interval_count) ++out.prev_cutoff_span_reuse;
+        inserted.first->second = current;
+    }
+}
+
+
 struct xstar_fixed_state_context_impl {
     Program program;
     // 0.6.82.31: persistent allocation/workspace foundation.  This storage is
@@ -4809,6 +4934,8 @@ struct xstar_fixed_state_context_impl {
     // 0.6.82.40.2.8: enables boundary-level owner sampling only.  The hot
     // evaluator receives no additional clocks or branches from this flag.
     bool fixed_controller_diagnostics_enabled_v06824028 = false;
+    // 0.6.82.40.2.26: opt-in dynamic Type-53 recombination/Milne attribution.
+    Type53RecombinationDynamicAttributionV068240226 type53_recomb_attribution_v068240226{};
     // 0.6.82.40.2.14: resolve contribution hot-path mode once per context so
     // the fixed-state hot path never performs repeated environment parsing.
     bool contribution_hotpath_mode_initialized_v068240214 = false;
@@ -7521,7 +7648,8 @@ bool evaluate_type53_source_integral(
     bool phextrap_pairs,
     xstar_element_contribution_v1& contribution,
     Type53SourceShadow* shadow,
-    const BoundFreePreparedGeometryV064895* prepared_geometry = nullptr
+    const BoundFreePreparedGeometryV064895* prepared_geometry = nullptr,
+    Type53RecombinationDynamicAttributionV068240226* recomb_attribution_v068240226 = nullptr
 ) {
     if (!payload || real_count < 4 || real_count % 2 != 0) return false;
     const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
@@ -7693,6 +7821,35 @@ bool evaluate_type53_source_integral(
         threshold_publication_reached = true;
     }
 
+    if (recomb_attribution_v068240226 && recomb_attribution_v068240226->enabled && !type49_semantics) {
+        // Diagnostic-only exact decision census.  Source energies are strictly
+        // increasing, so find the first interval whose *previous* endpoint has
+        // exptst >= 200 using the identical subtraction/division/comparison as
+        // the source loop.  This keeps all .2.20 production-loop instructions
+        // untouched when attribution is disabled.
+        int active_end_v068240226 = nb1;
+        int lo_v068240226 = nb1;
+        int hi_v068240226 = klmax;
+        while (lo_v068240226 < hi_v068240226) {
+            const int mid_v068240226 = lo_v068240226 + (hi_v068240226 - lo_v068240226) / 2;
+            const double previous_exptst_v068240226 =
+                (source_energy_ev[mid_v068240226] - threshold_ev) / bktm;
+            if (previous_exptst_v068240226 < 200.0) lo_v068240226 = mid_v068240226 + 1;
+            else hi_v068240226 = mid_v068240226;
+        }
+        active_end_v068240226 = lo_v068240226;
+        const std::uint64_t recomb_active_intervals_v068240226 =
+            static_cast<std::uint64_t>(std::max(0, active_end_v068240226 - nb1));
+        const std::uint64_t static_key_v068240226 = type53_recomb_static_key_v068240226(
+            record_number, *geometry, threshold_ev, bound_g, continuum_g, continuum_energy);
+        observe_type53_recombination_v068240226(
+            *recomb_attribution_v068240226, static_key_v068240226,
+            input.temperature_k, input.electron_density_cm3, ptmp_sum, rnist,
+            static_cast<std::uint64_t>(std::max(0, klmax - nb1)),
+            recomb_active_intervals_v068240226, prepared_geometry != nullptr,
+            has_dsec_radiation, threshold_publication_reached);
+    }
+
     // The immutable v0.6.47.2 source evaluation of the near-threshold
     // He I Type-53 record 688 lands one representable double below the
     // otherwise source-equivalent C++ accumulation.  Preserve that literal
@@ -7855,6 +8012,7 @@ struct RateEvaluationContextV064894 {
     // 0.6.82.40.2.6 observation counters are kept in the already-private
     // performance foundation; this pointer never escapes the fixed context.
     xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v06824026 = nullptr;
+    Type53RecombinationDynamicAttributionV068240226* type53_recomb_attribution_v068240226 = nullptr;
     bool force_legacy_bound_free = false;
     std::uint64_t reduced_energy_hash = 0;
     std::uint64_t full_energy_hash = 0;
@@ -8516,7 +8674,8 @@ EvaluatedRecord evaluate_record(
                 r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record_id_v0682375, false, false,
-                source_shadow, &out.bound_free_payload().type53_shadow_v0682374(), prepared_reduced_v064895);
+                source_shadow, &out.bound_free_payload().type53_shadow_v0682374(), prepared_reduced_v064895,
+                rate_context.type53_recomb_attribution_v068240226);
             if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
                 ++rate_context.bound_free_perf->reduced_dynamic_integrals;
 
@@ -9323,12 +9482,9 @@ EvaluatedRecord evaluate_record(
             if (execution_v0682375.real_count != 7 && execution_v0682375.real_count != 11) break;
 
             // Evaluate the canonical/source-faithful representation first.
-            // 0.6.82.40.2.25: this is the only committed production result.
-            // The independent legacy evaluator is retained only in explicit
-            // historical mode for same-binary forensic/shadow comparison.
-            if (rate_context.perf_foundation_v06824026) {
-                ++rate_context.perf_foundation_v06824026->type51_canonical_evaluations_v068240225;
-            }
+            // The legacy evaluator remains the committed compatibility path
+            // wherever it produces a finite result, preserving all accepted
+            // pre-0.6.82.2 outputs.
             const auto bt = type51_upsilon(
                 r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
             );
@@ -9368,10 +9524,10 @@ EvaluatedRecord evaluate_record(
                 source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
             }};
 
-            // 0.6.82.40.2.25: the legacy Type-51 answer is diagnostic-only.
-            // Leave explicit NaN sentinels in the shadow when elided so no
-            // consumer can mistake an absent legacy evaluation for a physical
-            // zero.  Historical mode executes the exact pre-.25 arithmetic.
+            const double legacy_ups = type51_upsilon_legacy(
+                r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
+            );
+            const bool legacy_valid = std::isfinite(legacy_ups);
             std::array<double,6> legacy_ans{{
                 std::numeric_limits<double>::quiet_NaN(),
                 std::numeric_limits<double>::quiet_NaN(),
@@ -9380,39 +9536,25 @@ EvaluatedRecord evaluate_record(
                 std::numeric_limits<double>::quiet_NaN(),
                 std::numeric_limits<double>::quiet_NaN(),
             }};
-            const bool execute_legacy_v068240225 =
-                configured_type51_legacy_mode_v068240225() ==
-                Type51LegacyEvaluatorModeV068240225::Historical;
-            if (execute_legacy_v068240225) {
-                if (rate_context.perf_foundation_v06824026) {
-                    ++rate_context.perf_foundation_v06824026->type51_legacy_evaluations_executed_v068240225;
-                }
-                const double legacy_ups = type51_upsilon_legacy(
-                    r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
-                );
-                const bool legacy_valid = std::isfinite(legacy_ups);
-                if (legacy_valid) {
-                    const double legacy_root_t = std::sqrt(input.temperature_k);
-                    const double legacy_kt_ev =
-                        xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
-                    const double legacy_qex =
-                        xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
-                        std::exp(-delta_ev / legacy_kt_ev) /
-                        (lower.statistical_weight * legacy_root_t);
-                    const double legacy_qde =
-                        xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
-                        (upper.statistical_weight * legacy_root_t);
-                    legacy_ans = {{
-                        legacy_qex * ne,
-                        legacy_qde * ne,
-                        0.0,
-                        0.0,
-                        legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                        legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                    }};
-                }
-            } else if (rate_context.perf_foundation_v06824026) {
-                ++rate_context.perf_foundation_v06824026->type51_legacy_evaluations_elided_v068240225;
+            if (legacy_valid) {
+                const double legacy_root_t = std::sqrt(input.temperature_k);
+                const double legacy_kt_ev =
+                    xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+                const double legacy_qex =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
+                    std::exp(-delta_ev / legacy_kt_ev) /
+                    (lower.statistical_weight * legacy_root_t);
+                const double legacy_qde =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
+                    (upper.statistical_weight * legacy_root_t);
+                legacy_ans = {{
+                    legacy_qex * ne,
+                    legacy_qde * ne,
+                    0.0,
+                    0.0,
+                    legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                    legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                }};
             }
             // v0.6.82.12: canonical ucalc Type-51 is element-independent and
             // is now the normal native-production contract for every active
@@ -9429,9 +9571,10 @@ EvaluatedRecord evaluate_record(
             // 0.6.82.13: every C++ backend commits the canonical Type-51
             // result.  Historical flags/legacy arithmetic are diagnostic-only.
             const bool source_faithful_committed = true;
-            c.ans1 = source_ans[0]; c.ans2 = source_ans[1];
-            c.ans3 = source_ans[2]; c.ans4 = source_ans[3];
-            c.ans5 = source_ans[4]; c.ans6 = source_ans[5];
+            const auto& committed = source_faithful_committed ? source_ans : legacy_ans;
+            c.ans1 = committed[0]; c.ans2 = committed[1];
+            c.ans3 = committed[2]; c.ans4 = committed[3];
+            c.ans5 = committed[4]; c.ans6 = committed[5];
 
             auto& shadow = out.mutable_type51_shadow_v06823615();
             shadow.valid = true;
@@ -13758,6 +13901,9 @@ int run_impl(
         &ctx.bound_free_context_by_slot_v0682371;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
     rate_context_v064894.perf_foundation_v06824026 = &perf_foundation_v068231;
+    rate_context_v064894.type53_recomb_attribution_v068240226 =
+        ctx.type53_recomb_attribution_v068240226.enabled
+            ? &ctx.type53_recomb_attribution_v068240226 : nullptr;
     const bool use_compact_bound_free_revisit_v06823614 =
         native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
         !environment_flag("XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT");
@@ -19714,6 +19860,42 @@ void capture_performance_foundation_v068231(
     out.bound_free_predecoded_context_hits_v0682371 =
         bf_v06823613.predecoded_context_hits_v0682371;
 
+    // 0.6.82.40.2.26: collapse the opt-in exact-state census into scalar
+    // counters for the standalone performance stream.  Set iteration order is
+    // never exposed; only exact cardinalities and insertion-order fingerprints
+    // are published.
+    {
+        const auto& a = context->type53_recomb_attribution_v068240226;
+        out.type53_recomb_attr_enabled_v068240226 = a.enabled ? 1u : 0u;
+        if (a.enabled) {
+            out.type53_recomb_observations_v068240226 = a.observations;
+            out.type53_recomb_prepared_geometry_observations_v068240226 = a.prepared_geometry_observations;
+            out.type53_recomb_local_geometry_observations_v068240226 = a.local_geometry_observations;
+            out.type53_recomb_reduced_grid_observations_v068240226 = a.reduced_grid_observations;
+            out.type53_recomb_full_grid_observations_v068240226 = a.full_grid_observations;
+            out.type53_recomb_integration_intervals_v068240226 = a.integration_intervals;
+            out.type53_recomb_active_intervals_v068240226 = a.active_intervals;
+            out.type53_recomb_cutoff_intervals_v068240226 = a.cutoff_intervals;
+            out.type53_recomb_threshold_publication_observations_v068240226 = a.threshold_publication_observations;
+            out.type53_recomb_unique_temperature_states_v068240226 = a.temperature_states.size();
+            out.type53_recomb_unique_density_states_v068240226 = a.density_states.size();
+            out.type53_recomb_unique_ptmp_states_v068240226 = a.ptmp_states.size();
+            out.type53_recomb_unique_thermal_states_v068240226 = a.thermal_states.size();
+            out.type53_recomb_unique_static_states_v068240226 = a.static_states.size();
+            out.type53_recomb_unique_cutoff_signatures_v068240226 = a.cutoff_signatures.size();
+            out.type53_recomb_previous_static_comparisons_v068240226 = a.previous_static_comparisons;
+            out.type53_recomb_prev_temperature_reuse_v068240226 = a.prev_temperature_reuse;
+            out.type53_recomb_prev_density_reuse_v068240226 = a.prev_density_reuse;
+            out.type53_recomb_prev_ptmp_reuse_v068240226 = a.prev_ptmp_reuse;
+            out.type53_recomb_prev_thermal_reuse_v068240226 = a.prev_thermal_reuse;
+            out.type53_recomb_prev_driver_reuse_v068240226 = a.prev_driver_reuse;
+            out.type53_recomb_prev_rnist_reuse_v068240226 = a.prev_rnist_reuse;
+            out.type53_recomb_prev_cutoff_span_reuse_v068240226 = a.prev_cutoff_span_reuse;
+            out.type53_recomb_state_sequence_fingerprint_v068240226 = a.state_sequence_fingerprint;
+            out.type53_recomb_static_sequence_fingerprint_v068240226 = a.static_sequence_fingerprint;
+        }
+    }
+
     // 0.6.82.40.2.5: convert the diagnostic touched-record bitmap into an
     // exact union of virtual payload pages reachable by each target type.
     // This is done only when the final performance snapshot is captured, not
@@ -19864,6 +20046,18 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     }
     ptr->fixed_controller_diagnostics_enabled_v06824028 =
         environment_flag("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS");
+    ptr->type53_recomb_attribution_v068240226.enabled =
+        environment_flag("XSTAR_V068240226_TYPE53_RECOMB_ATTRIBUTION");
+    if (ptr->type53_recomb_attribution_v068240226.enabled) {
+        auto& a = ptr->type53_recomb_attribution_v068240226;
+        a.temperature_states.reserve(4096u);
+        a.density_states.reserve(8192u);
+        a.ptmp_states.reserve(65536u);
+        a.thermal_states.reserve(8192u);
+        a.static_states.reserve(1024u);
+        a.cutoff_signatures.reserve(65536u);
+        a.previous_by_static.reserve(1024u);
+    }
     ptr->source_leveltemp_energy_workspace_v06481231.assign(
         kSourceLeveltempNdlV06481231, 0.0);
     if (ptr->program.records.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.26 - 2026-08-27
+
+- Attribution-only `TYPE53_RECOMBINATION_DYNAMIC_ATTRIBUTION`, branched directly from accepted production baseline `0.6.82.40.2.20`; rejected `.2.21/.2.21.1`, `.2.24/.2.24.1`, and `.2.25` production changes are not carried forward.
+- Adds opt-in `XSTAR_V068240226_TYPE53_RECOMB_ATTRIBUTION=1` diagnostics around the already-computed canonical Type-53 `phint53`/Milne state. Ordinary production behavior is unchanged.
+- Adds no clock inside `evaluate_type53_source_integral()` or any per-record evaluator. Diagnostics record exact binary64 state cardinalities/fingerprints, prepared-vs-local geometry ownership, reduced-vs-full grid observations, total Type-53 integration intervals, recombination-active intervals, the literal source `exptsto < 200` cutoff intervals, and same-static-record reuse of temperature, density, `ptmp`, thermal driver, `rnist`, and cutoff span.
+- The source `phint53.f90` path has no tabulated temperature bracket; `.2.26` therefore attributes the actual temperature-dependent recombination boundary used by the source algorithm: the `exptsto < 200` interval gate.
+- Host qualification is intentionally narrow: one same-host/same-binary C5 `xi=-3` CONTROL -> DIAGNOSTIC pair, exact science/work closure against the existing Phase-A canonical FORTRAN products, and reuse of existing FORTRAN audit counters. No FORTRAN rerun, no `xi=+1/+4` closure yet, no multi-element run, and no Phase C.
+- Existing same-host Phase-A evidence is carried only as an attribution clue: FORTRAN reports `V0682351_FORTRAN_UCALC_TYPE53=2061048`, while the C++ low-`xi` audit reports `V0682351_CPP_EVAL_TYPE53=2181960` (120,912 more, ratio ~1.058665). The runner labels this comparison `CLUE_ONLY_NOT_EQUIVALENCE_PROOF` until semantic call ownership is resolved.
+- Plain build policy remains `-O3`, LTO off, PGO off, native tuning off; exact science/output parity remains the primary gate.
+
 ## 0.6.82.40.2.25 - 2026-08-27
 
 TYPE51_LEGACY_EVALUATOR_ELISION
