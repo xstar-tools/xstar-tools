@@ -23545,6 +23545,27 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.continuum_hot_brcems_capacity_reuses_v068240230 << "\n"
             << "V068240230_CONTINUUM_POW_MODE_HOISTS="
             << perf.foundation_v068231.continuum_hot_pow_mode_hoists_v068240230 << "\n";
+        const auto traversal31_historical_v068240231 =
+            perf.foundation_v068231.element_traversal_hot_historical_fixed_calls_v068240231;
+        const auto traversal31_optimized_v068240231 =
+            perf.foundation_v068231.element_traversal_hot_optimized_fixed_calls_v068240231;
+        const char* traversal31_mode_v068240231 =
+            traversal31_optimized_v068240231 > 0u && traversal31_historical_v068240231 == 0u ? "OPTIMIZED" :
+            traversal31_historical_v068240231 > 0u && traversal31_optimized_v068240231 == 0u ? "HISTORICAL" :
+            traversal31_historical_v068240231 == 0u && traversal31_optimized_v068240231 == 0u ? "UNOBSERVED" : "MIXED";
+        out << "V068240231_ELEMENT_TRAVERSAL_MODE=" << traversal31_mode_v068240231 << "\n"
+            << "V068240231_HISTORICAL_FIXED_CALLS=" << traversal31_historical_v068240231 << "\n"
+            << "V068240231_OPTIMIZED_FIXED_CALLS=" << traversal31_optimized_v068240231 << "\n"
+            << "V068240231_RSS_SAMPLES_ELIDED="
+            << perf.foundation_v068231.element_traversal_rss_samples_elided_v068240231 << "\n"
+            << "V068240231_PRELIMINARY_AUDITS_ELIDED="
+            << perf.foundation_v068231.element_traversal_preliminary_audits_elided_v068240231 << "\n"
+            << "V068240231_SPARSE_AUDITS_ELIDED="
+            << perf.foundation_v068231.element_traversal_sparse_audits_elided_v068240231 << "\n"
+            << "V068240231_RESIDUAL_AUDITS_ELIDED="
+            << perf.foundation_v068231.element_traversal_residual_audits_elided_v068240231 << "\n"
+            << "V068240231_SELECTION_AUDITS_ELIDED="
+            << perf.foundation_v068231.element_traversal_selection_audits_elided_v068240231 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

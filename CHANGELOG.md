@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.31 - Element traversal hot path - 2026-08-28
+
+- Branches directly from low-xi accepted `0.6.82.40.2.30`, carrying forward the exact Type-53 static-kernel and continuum-workspace optimizations; rejected `.2.28` exponent reuse is not carried.
+- Adds same-binary `XSTAR_V068240231_ELEMENT_TRAVERSAL_MODE=historical|optimized`; production defaults to `optimized`. Historical preserves the `.2.30` traversal-observation path for A/B qualification.
+- Optimized mode removes production-only observation overhead from element traversal without changing record selection, evaluation, contribution order, matrix construction, solve arithmetic, population mapback, or spectral ownership.
+- Elides the five per-element `/proc/self/statm` RSS samples inherited from `.39` (about 94,050 procfs samples for the C5 low-xi 18,810 element solves). `XSTAR_V068240231_DEEP_TRAVERSAL_TELEMETRY=1` restores those probes when memory forensics are explicitly requested. External `/usr/bin/time` peak RSS remains the qualification memory authority.
+- Resolves fixed-call-invariant call/source sequence and full-traversal controls once per fixed call in optimized mode, and bypasses no-op preliminary/sparse/residual/traversal audit dispatches when their forensic output paths are unset.
+- No clock is added inside `evaluate_record()` or any record/bin loop; no arithmetic, cutoff, source ordering, accumulation ordering, controller decision, or publication schema changes are permitted.
+- Low-xi qualification is balanced historical/optimized same-binary A/B with `.2.30` continuum held optimized. Primary materiality gate: traversal ratio `<=0.900`; fixed-total `<=0.960`; internal/wall `<=0.980`; RSS `<=1.030`; exact science/work and zero path fallback required. `xi=+1,+4` science closure follows only after low-xi ACCEPT. No multi-element run.
+- After host `.31`, the next planned version is `.2.32 REMAINING_CONTROLLER_CROSS_LANGUAGE_ATTRIBUTION`, partitioning DSEC/controller non-fixed, accepted-boundary non-fixed, SAVD/detail staging, post-boundary/pre-SAVD, radial/controller orchestration, publication/FITS, unattributed controller, and top-level/process overhead. Spectral emissivity and element solver remain deferred because `.2.29` measured C++ faster than FORTRAN in both.
+
 ## 0.6.82.40.2.30 - Continuum workspace hot path - 2026-08-28
 
 - Branch directly from accepted `0.6.82.40.2.27`; rejected `.2.28` and attribution-only `.2.29` production changes are not carried forward.
