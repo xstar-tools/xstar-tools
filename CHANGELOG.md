@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.40.2.32.1 - Remaining controller attribution FORTRAN helper correction - 2026-08-28
+
+- Host-qualification-only correction to `0.6.82.40.2.32`; C++ production/science sources and the eight-way attribution schema are unchanged.
+- Fix `build_fortran_remaining_controller_attribution_0_6_82_40_2_32.sh`: the `.2.29` prerequisite patch is a traditional `xstar/...` patch and remains `-p0`, while the `.2.32` incremental Git-format patch carries `a/xstar/...` / `b/xstar/...` paths and is now applied with `--batch --forward -p1`.
+- The original host failure occurred after the `.2.29` prerequisite applied successfully; the `.2.32` delta then prompted for `xstar/src/xstar/xstar.f90` because it was incorrectly invoked with `-p0`.
+- Preserve all `V068240232_*` C++/FORTRAN timing markers so `.2.32` result parsing and the existing eight-region comparison remain source-compatible.
+- No science arithmetic/order, controller decision, work count, ABI, publication schema, or performance implementation changes.
+
 ## 0.6.82.40.2.32 - Remaining controller cross-language attribution - 2026-08-28
 
 - Attribution-only successor to accepted `0.6.82.40.2.30`; rejected `.2.31` traversal-observation changes are not carried forward.
