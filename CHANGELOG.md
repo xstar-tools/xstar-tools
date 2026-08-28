@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.29 - Fixed non-evaluator cross-language attribution - 2026-08-28
+
+- Attribution-only successor to accepted `0.6.82.40.2.27`; rejected `.2.28` Type-53 exponent reuse is not carried forward. The `.2.27` optimized Type-53 static kernel remains the production path.
+- Adds a same-host low-`xi` C5 cross-language attribution runner that compares one `.2.29` C++ run with the existing instrumented FORTRAN reference and reports wall/internal excess plus matched and coverage-equivalent fixed-phase buckets.
+- Treats C++ fixed-total vs FORTRAN `HMC_ALL + EMISAB_ALL + EMIS_ALL` as a coverage-equivalent aggregate, not a call-for-call identity; narrower mismatched scopes remain explicitly clue-only and are never used as parity claims.
+- Adds direct comparison of the 18,810 element-solve calls against FORTRAN `MSOLVELUCY`, and preserves the already established spectral vs emissivity comparison. The runner emits absolute excess seconds as well as ratios so optimization priority follows time actually available to recover.
+- Adds an optional FORTRAN HMC continuum-tail timing delta around `comp2 + freef + bremem + heatf`; the existing `HMC_ALL` and `HMC_ELEMENT` timers then isolate the remaining outer mapping/commit/setup residual without new per-element clocks. No `ucalc`, record, ion-rate, or interval-loop clock is introduced.
+- Science, fixed-work, frozen-mode, C API ABI, production-zone ABI, traversal order, accumulation order, controller decisions, and publication schema are unchanged. No optimization and no multi-element run are authorized in `.2.29`.
+
 ## 0.6.82.40.2.28 - Type-53 recombination exponent reuse - 2026-08-27
 
 - Carries forward accepted `.2.27` Type-53 static-kernel preparation (`bbnurj` plus fixed-call `t4/q2/bktm`) and adds only exact recombination-exponent reuse; `.2.27` remains forced optimized in `.2.28` A/B qualification so historical `.2.28` means the accepted `.2.27` production path.

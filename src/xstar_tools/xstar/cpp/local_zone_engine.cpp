@@ -485,27 +485,6 @@ Type53StaticKernelModeV068240227 configured_type53_static_kernel_mode_v068240227
     throw std::runtime_error("invalid XSTAR_V068240227_TYPE53_STATIC_KERNEL_MODE");
 }
 
-// 0.6.82.40.2.28: exact Type-53 recombination exponent reuse.  Historical
-// preserves the .2.27 evaluator, while optimized reuses only exact binary64
-// exponent values previously produced for the same record/grid/temperature.
-enum class Type53ExponentReuseModeV068240228 { Historical, Optimized };
-
-Type53ExponentReuseModeV068240228 configured_type53_exponent_reuse_mode_v068240228() {
-    const char* value = std::getenv("XSTAR_V068240228_TYPE53_EXPONENT_REUSE_MODE");
-    if (!value || !*value || std::string(value) == "optimized")
-        return Type53ExponentReuseModeV068240228::Optimized;
-    if (std::string(value) == "historical")
-        return Type53ExponentReuseModeV068240228::Historical;
-    throw std::runtime_error("invalid XSTAR_V068240228_TYPE53_EXPONENT_REUSE_MODE");
-}
-
-std::uint64_t binary64_payload_v068240228(double value) {
-    std::uint64_t bits = 0u;
-    static_assert(sizeof(bits) == sizeof(value), "binary64 size mismatch");
-    std::memcpy(&bits, &value, sizeof(bits));
-    return bits;
-}
-
 // v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
 // This records the legacy approximation, the already-computed source-faithful
 // phint53 shadow, and the actually committed answers for the two call-1
@@ -1843,23 +1822,9 @@ struct Type53StaticKernelV068240227 {
     double bktm = 0.0;
 };
 
-struct Type53RecombinationExponentCacheV068240228 {
-    bool temperature_valid = false;
-    std::uint64_t temperature_bits = 0u;
-    std::uint64_t source_energy_hash = 0u;
-    std::uint64_t threshold_bits = 0u;
-    int base_index = 0;
-    std::size_t valid_prefix = 0u;
-    std::vector<double> exptmpp;
-};
-
 struct BoundFreePreparedRecordCacheV064895 {
     BoundFreePreparedGeometryV064895 reduced;
     BoundFreePreparedGeometryV064895 full;
-    // 0.6.82.40.2.28: dynamic Type-53 exponent caches are kept separate
-    // from immutable prepared geometry and separately for reduced/full grids.
-    Type53RecombinationExponentCacheV068240228 reduced_type53_exponent_v068240228;
-    Type53RecombinationExponentCacheV068240228 full_type53_exponent_v068240228;
 };
 
 struct BoundFreePerfCountersV064895 {
@@ -7581,8 +7546,7 @@ bool evaluate_type53_source_integral(
     xstar_element_contribution_v1& contribution,
     Type53SourceShadow* shadow,
     const BoundFreePreparedGeometryV064895* prepared_geometry = nullptr,
-    const Type53StaticKernelV068240227* static_kernel_v068240227 = nullptr,
-    Type53RecombinationExponentCacheV068240228* exponent_cache_v068240228 = nullptr
+    const Type53StaticKernelV068240227* static_kernel_v068240227 = nullptr
 ) {
     if (!payload || real_count < 4 || real_count % 2 != 0) return false;
     const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
@@ -7652,29 +7616,6 @@ bool evaluate_type53_source_integral(
             source_index_v068240227 - geometry->sgbar_base_index);
         return geometry->type53_bbnurj_v068240227[offset_v068240227];
     };
-    const bool exponent_reuse_ready_v068240228 =
-        !type49_semantics && exponent_cache_v068240228 && geometry &&
-        exponent_cache_v068240228->temperature_valid &&
-        exponent_cache_v068240228->source_energy_hash == geometry->source_energy_hash &&
-        exponent_cache_v068240228->threshold_bits == binary64_payload_v068240228(threshold_ev) &&
-        exponent_cache_v068240228->base_index == geometry->sgbar_base_index &&
-        exponent_cache_v068240228->exptmpp.size() == geometry->sgbar.size();
-    const auto exponent_value_v068240228 = [&](int source_index_v068240228, double exptst_v068240228) -> double {
-        if (!exponent_reuse_ready_v068240228 ||
-            source_index_v068240228 < exponent_cache_v068240228->base_index)
-            return type53_expo(-exptst_v068240228);
-        const std::size_t offset_v068240228 = static_cast<std::size_t>(
-            source_index_v068240228 - exponent_cache_v068240228->base_index);
-        if (offset_v068240228 < exponent_cache_v068240228->valid_prefix)
-            return exponent_cache_v068240228->exptmpp[offset_v068240228];
-        const double value_v068240228 = type53_expo(-exptst_v068240228);
-        if (offset_v068240228 < exponent_cache_v068240228->exptmpp.size()) {
-            exponent_cache_v068240228->exptmpp[offset_v068240228] = value_v068240228;
-            if (offset_v068240228 == exponent_cache_v068240228->valid_prefix)
-                ++exponent_cache_v068240228->valid_prefix;
-        }
-        return value_v068240228;
-    };
 
     constexpr double kBoltzmannErgK = xstar_constants::kBoltzmannErgPerK;
     constexpr double kKtEvPerT4 = xstar_constants::kLegacyBoltzmannEvPerT4;
@@ -7713,7 +7654,7 @@ bool evaluate_type53_source_integral(
     double temphp = temprp * epiip;
     double temphp2 = temprp * (epiip - threshold_ev);
     double exptst = (epiip - threshold_ev) / bktm;
-    double exptmpp = exponent_value_v068240228(nb1, exptst);
+    double exptmpp = type53_expo(-exptst);
     double bbnurjp = static_kernel_ready_v068240227
         ? static_bbnurj_at_v068240227(nb1)
         : std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
@@ -7749,7 +7690,7 @@ bool evaluate_type53_source_integral(
         // the nb1+2 threshold publication point, clamping opakab to zero.
         exptmpp = 0.0;
         if (previous_exptst < 200.0) {
-            exptmpp = exponent_value_v068240228(kl + 1, exptst);
+            exptmpp = type53_expo(-exptst);
             bbnurjp = static_kernel_ready_v068240227
                 ? static_bbnurj_at_v068240227(kl + 1)
                 : std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
@@ -7789,7 +7730,7 @@ bool evaluate_type53_source_integral(
         double source_exptmpp = 0.0;
         if (previous_expt < 200.0) {
             const double next_expt = (source_energy_ev[publish_kl + 1] - threshold_ev) / bktm;
-            source_exptmpp = exponent_value_v068240228(publish_kl + 1, next_expt);
+            source_exptmpp = type53_expo(-next_expt);
         }
         threshold_abs_sigma_cm2 = source_sgtp;
         threshold_stimulated_sigma_cm2 = rnist * source_exptmpp * source_sgtp * ptmp_sum;
@@ -7960,11 +7901,6 @@ struct RateEvaluationContextV064894 {
     // expressions and consumed only by Type-53 prepared geometry.
     Type53StaticKernelV068240227 type53_static_kernel_v068240227{};
     xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v068240227 = nullptr;
-    // 0.6.82.40.2.28 exact exponent-reuse control.  This is resolved once per
-    // fixed-state evaluation; the hot interval loop performs no env lookup.
-    Type53ExponentReuseModeV068240228 type53_exponent_reuse_mode_v068240228 =
-        Type53ExponentReuseModeV068240228::Optimized;
-    xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v068240228 = nullptr;
     // 0.6.82.40.2.6 observation counters are kept in the already-private
     // performance foundation; this pointer never escapes the fixed context.
     xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v06824026 = nullptr;
@@ -7993,8 +7929,6 @@ RateEvaluationContextV064894 make_rate_evaluation_context(
     context.kt_ev = kBoltzmannEvK * input.temperature_k;
     context.type53_static_kernel_v068240227.mode =
         configured_type53_static_kernel_mode_v068240227();
-    context.type53_exponent_reuse_mode_v068240228 =
-        configured_type53_exponent_reuse_mode_v068240228();
     if (context.type53_static_kernel_v068240227.mode ==
         Type53StaticKernelModeV068240227::Optimized) {
         context.type53_static_kernel_v068240227.t4 = input.temperature_k / 1.0e4;
@@ -8189,65 +8123,6 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
         else ++rate_context.bound_free_perf->reduced_geometry_reuses;
     }
     return &geometry;
-}
-
-Type53RecombinationExponentCacheV068240228* prepare_type53_exponent_cache_v068240228(
-    const Program& program,
-    const ProgramRecord& record,
-    const xstar_fixed_state_input_v1& eval_input,
-    const BoundFreePreparedGeometryV064895* geometry,
-    bool full_grid,
-    const RateEvaluationContextV064894& rate_context) {
-    auto* perf_v068240228 = rate_context.perf_foundation_v068240228;
-    if (rate_context.type53_exponent_reuse_mode_v068240228 ==
-        Type53ExponentReuseModeV068240228::Historical) {
-        if (perf_v068240228) ++perf_v068240228->type53_exponent_historical_calls_v068240228;
-        return nullptr;
-    }
-    if (perf_v068240228) ++perf_v068240228->type53_exponent_optimized_calls_v068240228;
-    if (!geometry || !geometry->valid || geometry->type49_semantics || !rate_context.bound_free_cache) {
-        if (perf_v068240228) ++perf_v068240228->type53_exponent_fallback_calls_v068240228;
-        return nullptr;
-    }
-    const std::uint32_t slot_v068240228 =
-        bound_free_slot_v0682371(program, record, rate_context);
-    if (slot_v068240228 == std::numeric_limits<std::uint32_t>::max() ||
-        static_cast<std::size_t>(slot_v068240228) >= rate_context.bound_free_cache->size()) {
-        if (perf_v068240228) ++perf_v068240228->type53_exponent_fallback_calls_v068240228;
-        return nullptr;
-    }
-    auto& record_cache_v068240228 =
-        (*rate_context.bound_free_cache)[static_cast<std::size_t>(slot_v068240228)];
-    auto& cache_v068240228 = full_grid
-        ? record_cache_v068240228.full_type53_exponent_v068240228
-        : record_cache_v068240228.reduced_type53_exponent_v068240228;
-    const std::uint64_t threshold_bits_v068240228 =
-        binary64_payload_v068240228(geometry->threshold_ev);
-    const bool geometry_match_v068240228 =
-        cache_v068240228.source_energy_hash == geometry->source_energy_hash &&
-        cache_v068240228.threshold_bits == threshold_bits_v068240228 &&
-        cache_v068240228.base_index == geometry->sgbar_base_index &&
-        cache_v068240228.exptmpp.size() == geometry->sgbar.size();
-    if (!geometry_match_v068240228) {
-        cache_v068240228.temperature_valid = false;
-        cache_v068240228.source_energy_hash = geometry->source_energy_hash;
-        cache_v068240228.threshold_bits = threshold_bits_v068240228;
-        cache_v068240228.base_index = geometry->sgbar_base_index;
-        cache_v068240228.valid_prefix = 0u;
-        cache_v068240228.exptmpp.resize(geometry->sgbar.size());
-    }
-    const std::uint64_t temperature_bits_v068240228 =
-        binary64_payload_v068240228(eval_input.temperature_k);
-    if (cache_v068240228.temperature_valid &&
-        cache_v068240228.temperature_bits == temperature_bits_v068240228) {
-        if (perf_v068240228) ++perf_v068240228->type53_exponent_temperature_hits_v068240228;
-    } else {
-        cache_v068240228.temperature_valid = true;
-        cache_v068240228.temperature_bits = temperature_bits_v068240228;
-        cache_v068240228.valid_prefix = 0u;
-        if (perf_v068240228) ++perf_v068240228->type53_exponent_temperature_misses_v068240228;
-    }
-    return &cache_v068240228;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -8705,16 +8580,13 @@ EvaluatedRecord evaluate_record(
                 prepared_bound_free_geometry(
                     program, record, execution_v0682375, calc_hmc_input, source_threshold, false, false,
                     record_context.valid ? &record_context : nullptr, false, rate_context);
-            Type53RecombinationExponentCacheV068240228* exponent_cache_reduced_v068240228 =
-                prepare_type53_exponent_cache_v068240228(
-                    program, record, calc_hmc_input, prepared_reduced_v064895, false, rate_context);
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record_id_v0682375, false, false,
                 source_shadow, &out.bound_free_payload().type53_shadow_v0682374(), prepared_reduced_v064895,
-                &rate_context.type53_static_kernel_v068240227, exponent_cache_reduced_v068240228);
+                &rate_context.type53_static_kernel_v068240227);
             if (rate_context.perf_foundation_v068240227) {
                 if (rate_context.type53_static_kernel_v068240227.mode == Type53StaticKernelModeV068240227::Optimized) {
                     ++rate_context.perf_foundation_v068240227->type53_static_optimized_calls_v068240227;
@@ -10542,9 +10414,6 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
         program, record, execution_v0682375, full_input, evaluated.bound_free_payload().bound_free_threshold_ev_v064895,
         type49, type49, record_context.valid ? &record_context : nullptr,
         true, rate_context);
-    Type53RecombinationExponentCacheV068240228* exponent_cache_full_v068240228 = type49 ? nullptr :
-        prepare_type53_exponent_cache_v068240228(
-            program, record, full_input, prepared, true, rate_context);
     xstar_element_contribution_v1 contribution{};
     const bool ok = evaluate_type53_source_integral(
         r, pair_real_count, lower, upper, full_input,
@@ -10552,7 +10421,7 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
         evaluated.bound_free_payload().bound_free_ptmp_sum_v064895,
         row46_contract, record_context.valid ? &record_context : nullptr,
         record.record, type49, type49, contribution, &shadow, prepared,
-        type49 ? nullptr : &rate_context.type53_static_kernel_v068240227, exponent_cache_full_v068240228);
+        type49 ? nullptr : &rate_context.type53_static_kernel_v068240227);
     if (!type49 && rate_context.perf_foundation_v068240227) {
         if (rate_context.type53_static_kernel_v068240227.mode == Type53StaticKernelModeV068240227::Optimized) {
             ++rate_context.perf_foundation_v068240227->type53_static_optimized_calls_v068240227;
@@ -10622,16 +10491,13 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free_v06823614(
         program, record, execution_v0682375, full_input, revisit.threshold_ev,
         type49, type49, record_context.valid ? &record_context : nullptr,
         true, rate_context);
-    Type53RecombinationExponentCacheV068240228* exponent_cache_full_v068240228 = type49 ? nullptr :
-        prepare_type53_exponent_cache_v068240228(
-            program, record, full_input, prepared, true, rate_context);
     xstar_element_contribution_v1 contribution{};
     const bool ok = evaluate_type53_source_integral(
         r, pair_real_count, lower, upper, full_input,
         revisit.threshold_ev, revisit.ptmp_sum,
         row46_contract, record_context.valid ? &record_context : nullptr,
         record.record, type49, type49, contribution, &shadow, prepared,
-        type49 ? nullptr : &rate_context.type53_static_kernel_v068240227, exponent_cache_full_v068240228);
+        type49 ? nullptr : &rate_context.type53_static_kernel_v068240227);
     if (!type49 && rate_context.perf_foundation_v068240227) {
         if (rate_context.type53_static_kernel_v068240227.mode == Type53StaticKernelModeV068240227::Optimized) {
             ++rate_context.perf_foundation_v068240227->type53_static_optimized_calls_v068240227;
@@ -13978,7 +13844,6 @@ int run_impl(
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
     rate_context_v064894.perf_foundation_v06824026 = &perf_foundation_v068231;
     rate_context_v064894.perf_foundation_v068240227 = &perf_foundation_v068231;
-    rate_context_v064894.perf_foundation_v068240228 = &perf_foundation_v068231;
     if (rate_context_v064894.type53_static_kernel_v068240227.mode ==
         Type53StaticKernelModeV068240227::Optimized) {
         ++perf_foundation_v068231.type53_static_fixed_contexts_v068240227;
@@ -19887,9 +19752,7 @@ void capture_fixed_live_owner_memory_v06824028(
     for (const auto& cache_v068240227 : context->bound_free_prepared_v064895) {
         out.prepared_bound_free_capacity_bytes +=
             static_cast<std::uint64_t>(cache_v068240227.reduced.type53_bbnurj_v068240227.capacity()) * sizeof(double) +
-            static_cast<std::uint64_t>(cache_v068240227.full.type53_bbnurj_v068240227.capacity()) * sizeof(double) +
-            static_cast<std::uint64_t>(cache_v068240227.reduced_type53_exponent_v068240228.exptmpp.capacity()) * sizeof(double) +
-            static_cast<std::uint64_t>(cache_v068240227.full_type53_exponent_v068240228.exptmpp.capacity()) * sizeof(double);
+            static_cast<std::uint64_t>(cache_v068240227.full.type53_bbnurj_v068240227.capacity()) * sizeof(double);
     }
 
     out.execution_plan_capacity_bytes =
@@ -20002,9 +19865,7 @@ void capture_performance_foundation_v068231(
                         static_cast<std::uint64_t>(cache_v06824025.reduced.sgbar.capacity()) * sizeof(double) +
                         static_cast<std::uint64_t>(cache_v06824025.full.sgbar.capacity()) * sizeof(double) +
                         static_cast<std::uint64_t>(cache_v06824025.reduced.type53_bbnurj_v068240227.capacity()) * sizeof(double) +
-                        static_cast<std::uint64_t>(cache_v06824025.full.type53_bbnurj_v068240227.capacity()) * sizeof(double) +
-                        static_cast<std::uint64_t>(cache_v06824025.reduced_type53_exponent_v068240228.exptmpp.capacity()) * sizeof(double) +
-                        static_cast<std::uint64_t>(cache_v06824025.full_type53_exponent_v068240228.exptmpp.capacity()) * sizeof(double);
+                        static_cast<std::uint64_t>(cache_v06824025.full.type53_bbnurj_v068240227.capacity()) * sizeof(double);
                 }
             }
         }

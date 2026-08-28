@@ -319,14 +319,6 @@ struct PerformanceFoundationV068231 {
     std::uint64_t type53_static_fixed_contexts_v068240227 = 0u;
     std::uint64_t type53_static_geometry_builds_v068240227 = 0u;
     std::uint64_t type53_static_bbnurj_values_prepared_v068240227 = 0u;
-
-    // 0.6.82.40.2.28: aggregate exact Type-53 exponent-reuse path counts.
-    // No counter is incremented per integration interval.
-    std::uint64_t type53_exponent_historical_calls_v068240228 = 0u;
-    std::uint64_t type53_exponent_optimized_calls_v068240228 = 0u;
-    std::uint64_t type53_exponent_fallback_calls_v068240228 = 0u;
-    std::uint64_t type53_exponent_temperature_hits_v068240228 = 0u;
-    std::uint64_t type53_exponent_temperature_misses_v068240228 = 0u;
 };
 
 // 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller
