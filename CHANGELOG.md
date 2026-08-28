@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.33 - DSEC callback workspace hot path - 2026-08-28
+
+- Branch directly from accepted `0.6.82.40.2.30`; rejected `.2.31` traversal telemetry elision and rejected `.2.28` exponent reuse are not carried forward. Attribution-only `.2.32/.2.32.1` inform the target but do not contribute production science changes.
+- Add same-binary `XSTAR_V068240233_DSEC_CALLBACK_WORKSPACE_MODE=historical|optimized`; optimized is the ordinary-production default while reference/diagnostic trajectories remain historical.
+- Reuse the previous ordinary DSEC `FixedDsecSnapshot` output capacities across callback evaluations and retain one small recycle owner across accepted-boundary release for populations, LTE populations, spectrum, opacity, continuum spectrum, and detail projection buffers.
+- Ordinary optimized DSEC snapshots no longer copy immutable `radiation_energy_ev`/`radiation_flux`; accepted-boundary publication remains the frozen exact recompute path and explicit boundary-reuse/diagnostic modes fall back to the historical fully materialized snapshot.
+- Reuse caller-owned capacity for the source-detail global projection without changing alias traversal or write order. No thermal-controller arithmetic, temperature/electron secant logic, fixed-state science, contribution order, or ABI changes. No hot-loop/per-record clocks are added.
+- Qualification begins with balanced same-host C5 `xi=-3` historical/optimized A/B against the measured +26.09 s DSEC/controller non-fixed excess. `xi=+1,+4` science closure follows only after the low-`xi` performance gate accepts; no multi-element run is included.
+- Follow-on after host `.33`: `0.6.82.40.2.34 SAVD_STAGING_HOT_PATH`, targeting the measured +9.29 s SAVD staging residual outside detail leaves.
+
 ## 0.6.82.40.2.32.1 - Remaining controller attribution FORTRAN helper correction - 2026-08-28
 
 - Host-qualification-only correction to `0.6.82.40.2.32`; C++ production/science sources and the eight-way attribution schema are unchanged.
