@@ -23522,6 +23522,25 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.type53_static_geometry_builds_v068240227 << "\n"
             << "V068240227_TYPE53_STATIC_BBNURJ_VALUES_PREPARED="
             << perf.foundation_v068231.type53_static_bbnurj_values_prepared_v068240227 << "\n";
+        const auto type53_exponent_historical_v068240228 =
+            perf.foundation_v068231.type53_exponent_historical_calls_v068240228;
+        const auto type53_exponent_optimized_v068240228 =
+            perf.foundation_v068231.type53_exponent_optimized_calls_v068240228;
+        const char* type53_exponent_mode_v068240228 =
+            type53_exponent_optimized_v068240228 > 0u && type53_exponent_historical_v068240228 == 0u ? "OPTIMIZED" :
+            type53_exponent_historical_v068240228 > 0u && type53_exponent_optimized_v068240228 == 0u ? "HISTORICAL" :
+            type53_exponent_historical_v068240228 == 0u && type53_exponent_optimized_v068240228 == 0u ? "UNOBSERVED" : "MIXED";
+        out << "V068240228_TYPE53_EXPONENT_REUSE_MODE=" << type53_exponent_mode_v068240228 << "\n"
+            << "V068240228_TYPE53_EXPONENT_HISTORICAL_CALLS="
+            << type53_exponent_historical_v068240228 << "\n"
+            << "V068240228_TYPE53_EXPONENT_OPTIMIZED_CALLS="
+            << type53_exponent_optimized_v068240228 << "\n"
+            << "V068240228_TYPE53_EXPONENT_FALLBACK_CALLS="
+            << perf.foundation_v068231.type53_exponent_fallback_calls_v068240228 << "\n"
+            << "V068240228_TYPE53_EXPONENT_TEMPERATURE_HITS="
+            << perf.foundation_v068231.type53_exponent_temperature_hits_v068240228 << "\n"
+            << "V068240228_TYPE53_EXPONENT_TEMPERATURE_MISSES="
+            << perf.foundation_v068231.type53_exponent_temperature_misses_v068240228 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

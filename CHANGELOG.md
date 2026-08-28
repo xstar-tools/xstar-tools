@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.28 - Type-53 recombination exponent reuse - 2026-08-27
+
+- Carries forward accepted `.2.27` Type-53 static-kernel preparation (`bbnurj` plus fixed-call `t4/q2/bktm`) and adds only exact recombination-exponent reuse; `.2.27` remains forced optimized in `.2.28` A/B qualification so historical `.2.28` means the accepted `.2.27` production path.
+- Adds same-binary `XSTAR_V068240228_TYPE53_EXPONENT_REUSE_MODE=historical|optimized`; ordinary candidate production defaults to `optimized`.
+- Keeps one persistent exponent cache per Type-53 record and per reduced/full prepared grid. Cache identity includes the exact source-energy hash, threshold IEEE-754 payload, compact source-index base/length, and exact temperature IEEE-754 payload.
+- On a temperature/cache miss, the existing interval loop computes `type53_expo(-exptst)` at exactly the same source positions and only while the existing previous-exponent `<200` cutoff is active; values are stored as produced. On an exact-temperature hit, those binary64 values are reused without changing `exptst`, cutoff decisions, `rnist`, escape factors, `tempip`, or `sumi/sumc/sumc2` accumulation order.
+- Type-49 is excluded. No approximation table, interpolation, reassociation, SIMD reduction, `-ffast-math`, or `-Ofast` is introduced. No per-record/per-interval clock or diagnostic counter is added.
+- Exponent-vector capacity is included in existing prepared-bound-free/live-owner and per-type cache telemetry.
+- Qualification is staged: balanced same-host C5 `xi=-3` H1/O1/O2/H2 first with exact science/work gates and a preregistered `>=3%` fixed-rate materiality target; `xi=+1,+4` science closure is blocked until low-`xi` acceptance. No multi-element run is authorized in this candidate.
+
 ## 0.6.82.40.2.27 - Type-53 recombination static-kernel preparation - 2026-08-27
 
 - Branches directly from accepted `0.6.82.40.2.20`; rejected `.2.24/.2.24.1` Type-53 photo caching and `.2.25` Type-51 legacy elision are not carried forward.
