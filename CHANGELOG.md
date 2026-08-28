@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.34 - SAVD staging hot path - 2026-08-28
+
+- Branch directly from accepted `0.6.82.40.2.30`; rejected `.2.31` traversal and `.2.33` DSEC-workspace experiments are not carried forward. `.2.32/.32.1` are attribution evidence only.
+- Target the measured low-`xi` SAVD staging residual (~9.29 s outside the already-optimized detail writer leaves) without changing detail writer arithmetic, row order, or FITS schema.
+- Add same-binary `XSTAR_V068240234_SAVD_STAGING_MODE=historical|optimized`; production defaults to `optimized`. Historical mode retains the literal `.2.30` transient SAVD snapshot -> copied `FixedEvaluationState` staging path.
+- Optimized mode is reachable only for the existing ordinary `npass=1` incremental-detail stream. It keeps the exact SAVD REAL(4)/FITS-E3 quantization boundary but moves the already-quantized transient `FixedDsecSnapshot` into the one-zone publication state instead of deep-copying it a second time, and skips sparse UNSAVD-membership scans that are unused by single-pass execution.
+- Preserve **all `npass>1` / multipass behavior**: retained `NativeSavedShell` ownership, sparse SAVD row membership, UNSAVD restore, pass directionality, terminal SAVD records, per-pass detail publication, and repeated-pass controller state remain on the historical path unchanged.
+- `.2.27` Type-53 and `.2.30` continuum optimizations remain frozen. No controller/science arithmetic, source accumulation order, detail RRC/spectrum leaf arithmetic, secant logic, or hot-loop clocks are changed.
+- Qualification starts with balanced same-host C5 `xi=-3` historical/optimized A/B, then `xi=+1,+4` science closure only after low-`xi` acceptance. No multi-element run.
+
 ## 0.6.82.40.2.33 - DSEC callback workspace hot path - 2026-08-28
 
 - Branch directly from accepted `0.6.82.40.2.30`; rejected `.2.31` traversal telemetry elision and rejected `.2.28` exponent reuse are not carried forward. Attribution-only `.2.32/.2.32.1` inform the target but do not contribute production science changes.

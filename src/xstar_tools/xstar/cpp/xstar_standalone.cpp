@@ -304,20 +304,6 @@ struct PerformanceInstrumentationV064890 {
     double boundary_fixed_seconds_v06824028 = 0.0;
     double boundary_nonfixed_seconds_v06824028 = 0.0;
     std::uint64_t boundary_fixed_calls_v06824028 = 0u;
-    // 0.6.82.40.2.33: ordinary-production DSEC callback workspace reuse.
-    // Aggregate counters only; no clock is added to the callback or fixed evaluator.
-    std::uint64_t dsec_workspace_historical_calls_v068240233 = 0u;
-    std::uint64_t dsec_workspace_optimized_calls_v068240233 = 0u;
-    std::uint64_t dsec_workspace_fallback_calls_v068240233 = 0u;
-    std::uint64_t dsec_workspace_last_iteration_reuses_v068240233 = 0u;
-    std::uint64_t dsec_workspace_boundary_recycles_v068240233 = 0u;
-    std::uint64_t dsec_workspace_population_capacity_reuses_v068240233 = 0u;
-    std::uint64_t dsec_workspace_lte_capacity_reuses_v068240233 = 0u;
-    std::uint64_t dsec_workspace_spectrum_capacity_reuses_v068240233 = 0u;
-    std::uint64_t dsec_workspace_opacity_capacity_reuses_v068240233 = 0u;
-    std::uint64_t dsec_workspace_continuum_capacity_reuses_v068240233 = 0u;
-    std::uint64_t dsec_workspace_detail_capacity_reuses_v068240233 = 0u;
-    std::uint64_t dsec_workspace_radiation_values_elided_v068240233 = 0u;
     std::vector<RadialOwnerSampleV06824028> radial_owner_samples_v06824028;
     std::size_t radial_owner_peak_index_v06824028 = std::numeric_limits<std::size_t>::max();
     // 0.6.82.40.2.11 production call-start lifetime telemetry.
@@ -535,6 +521,13 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t heap_after_final_uordblks_v0682352 = 0u;
     std::uint64_t heap_after_final_hblkhd_v0682352 = 0u;
     std::uint64_t saved_shells_streamed_v068233 = 0u;
+    // 0.6.82.40.2.34: single-pass SAVD staging ownership experiment.
+    // These counters are observation-only; multipass SAVD/UNSAVD always stays
+    // on the historical retained-shell path.
+    std::uint64_t savd_staging_historical_calls_v068240234 = 0u;
+    std::uint64_t savd_staging_optimized_calls_v068240234 = 0u;
+    std::uint64_t savd_staging_move_conversions_v068240234 = 0u;
+    std::uint64_t savd_staging_multipass_historical_calls_v068240234 = 0u;
     // 0.6.82.33.2: explicit accounting for the full accepted-boundary
     // families exposed by the .33.1 C5 RSS staircase. Diagnostic only.
     std::uint64_t final_snapshots_current_bytes_v0682332 = 0u;
@@ -4215,34 +4208,6 @@ CallStartModeV068240213 configured_call_start_mode_v068240213(
         return CallStartModeV068240213::Historical;
     }
     return CallStartModeV068240213::Single;
-}
-
-// 0.6.82.40.2.33: preserve a literal historical callback arm for balanced
-// same-binary qualification.  Optimized is the ordinary-production default.
-enum class DsecCallbackWorkspaceModeV068240233 : std::uint8_t {
-    Historical = 0u,
-    Optimized = 1u,
-};
-
-const char* dsec_callback_workspace_mode_name_v068240233(
-    DsecCallbackWorkspaceModeV068240233 mode) {
-    return mode == DsecCallbackWorkspaceModeV068240233::Optimized ? "optimized" : "historical";
-}
-
-DsecCallbackWorkspaceModeV068240233 configured_dsec_callback_workspace_mode_v068240233(
-    bool reference_trajectory_mode, bool reference_diagnostics_enabled) {
-    if (reference_trajectory_mode || reference_diagnostics_enabled) {
-        return DsecCallbackWorkspaceModeV068240233::Historical;
-    }
-    const char* requested = std::getenv("XSTAR_V068240233_DSEC_CALLBACK_WORKSPACE_MODE");
-    if (!requested || !*requested || std::string(requested) == "optimized") {
-        return DsecCallbackWorkspaceModeV068240233::Optimized;
-    }
-    if (std::string(requested) == "historical") {
-        return DsecCallbackWorkspaceModeV068240233::Historical;
-    }
-    throw std::runtime_error("invalid XSTAR_V068240233_DSEC_CALLBACK_WORKSPACE_MODE: " +
-        std::string(requested));
 }
 
 // 0.6.82.40.2.11: production only needs the current call-start payload.
@@ -12999,12 +12964,6 @@ struct StandaloneControllerDataV67 {
     std::filesystem::path sequence23_diagnostic_dir;
     std::vector<FixedDsecSnapshot> snapshots;
     FixedDsecSnapshot last_iteration;
-    // .2.33 owns at most one ordinary-production recycle snapshot.  It is
-    // populated only across accepted-boundary release; within one DSEC loop
-    // last_iteration itself is moved into the next callback and reused.
-    FixedDsecSnapshot dsec_recycle_workspace_v068240233;
-    DsecCallbackWorkspaceModeV068240233 dsec_callback_workspace_mode_v068240233 =
-        DsecCallbackWorkspaceModeV068240233::Optimized;
     std::string last_error;
     // v82 patch 5.16: fail-closed diagnostic full-trajectory continuation.
     bool diagnostic_full_trajectory_continue = false;
@@ -14024,54 +13983,6 @@ std::vector<double> source_detail_global_projection(
     }
     return dense;
 }
-
-// 0.6.82.40.2.33 capacity-preserving form used only by the optimized
-// ordinary-production DSEC callback.  The source traversal and alias write
-// order are identical to source_detail_global_projection(); only the caller-
-// owned output vector lifetime changes.
-void source_detail_global_projection_into_v068240233(
-    const StandaloneControllerDataV67& data,
-    const std::vector<double>& pre_mapback,
-    const std::map<int, std::array<int,4>>& windows,
-    std::vector<double>& dense) {
-    dense.assign(data.global_level_count, 0.0);
-    if (!data.program || pre_mapback.empty() || windows.empty()) return;
-
-    const auto write_aliases = [&](std::size_t packed_row, double value) {
-        bool wrote = false;
-        if (packed_row < data.population_global_level_aliases.size()) {
-            const auto& aliases = data.population_global_level_aliases[packed_row];
-            for (const int global : aliases) {
-                if (global <= 0 || static_cast<std::size_t>(global) > dense.size()) continue;
-                dense[static_cast<std::size_t>(global - 1)] = value;
-                wrote = true;
-            }
-        }
-        if (!wrote && packed_row < data.population_global_level_index.size()) {
-            const int global = data.population_global_level_index[packed_row];
-            if (global > 0 && static_cast<std::size_t>(global) <= dense.size()) {
-                dense[static_cast<std::size_t>(global - 1)] = value;
-            }
-        }
-    };
-
-    for (const auto& element : data.program->element_metadata) {
-        const auto found = windows.find(element.atomic_number);
-        if (found == windows.end()) continue;
-        const auto& window = found->second;
-        const int max_stage = window[1];
-        const int full_row_start = window[2];
-        const int full_row_end = window[3];
-        if (full_row_start < 1 || full_row_end < full_row_start) continue;
-        for (int full_row = full_row_start; full_row <= full_row_end; ++full_row) {
-            if (max_stage < element.atomic_number && full_row == full_row_end) continue;
-            const std::size_t packed = static_cast<std::size_t>(element.row_offset + full_row - 1);
-            if (packed >= pre_mapback.size()) continue;
-            write_aliases(packed, pre_mapback[packed]);
-        }
-    }
-}
-
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement commit call2 to call3 global state in the standalone controller/front-end workflow without duplicating the scientific kernels.
@@ -16491,112 +16402,6 @@ FixedDsecSnapshot make_iteration_snapshot(
     return snapshot;
 }
 
-// 0.6.82.40.2.33: transfer only the repeatedly-sized ordinary DSEC buffers.
-// All diagnostic/publication owners remain historical and are destroyed with
-// their source snapshot.  The transfer changes ownership only.
-void take_dsec_reusable_buffers_v068240233(
-    FixedDsecSnapshot& source, FixedDsecSnapshot& target) {
-    target.populations = std::move(source.populations);
-    target.lte_populations = std::move(source.lte_populations);
-    target.continuum_spectrum = std::move(source.continuum_spectrum);
-    target.spectrum = std::move(source.spectrum);
-    target.opacity = std::move(source.opacity);
-    target.source_detail_pre_mapback_populations =
-        std::move(source.source_detail_pre_mapback_populations);
-    target.source_detail_global_xilevg = std::move(source.source_detail_global_xilevg);
-}
-
-bool dsec_callback_workspace_eligible_v068240233(
-    const StandaloneControllerDataV67& data) {
-    if (data.dsec_callback_workspace_mode_v068240233 !=
-        DsecCallbackWorkspaceModeV068240233::Optimized) return false;
-    if (data.writing_final_snapshot || data.reference_trajectory_mode ||
-        data.reference_diagnostics_enabled || data.retain_prefix_diagnostics ||
-        data.diagnostic_full_trajectory_continue) return false;
-    // Boundary-workspace replay explicitly consumes the historical retained
-    // DSEC snapshot.  Keep that diagnostic/experimental path byte-for-byte.
-    if (const char* reuse = std::getenv("XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE")) {
-        if (*reuse && std::string(reuse) == "1") return false;
-    }
-    // Explicit snapshot/trajectory diagnostics require historical materialized
-    // radiation arrays and owner surfaces.
-    static constexpr const char* diagnostic_envs[] = {
-        "XSTAR_V0648123350_ATTRIBUTION_DIR",
-        "XSTAR_C5_DSEC_TRACE_DIR",
-        "XSTAR_FE_CALL1_THERMAL_DIAG_DIR",
-        "XSTAR_ALL_ELEMENT_FIXED_PARITY_DIR",
-        "XSTAR_V06481235_O7_CALL1_ATTRIBUTION_DIR",
-        "XSTAR_V06481238_O7_STATE_DIR",
-        "XSTAR_V06481221_CA_ATTRIBUTION_DIR",
-        "XSTAR_V77_SEQUENCE2_QUALIFICATION_DIR"
-    };
-    for (const char* name : diagnostic_envs) {
-        const char* value = std::getenv(name);
-        if (value && *value) return false;
-    }
-    return true;
-}
-
-FixedDsecSnapshot make_iteration_snapshot_reuse_v068240233(
-    StandaloneControllerDataV67& data, const xstar_thermal_state_v1& trial) {
-    FixedDsecSnapshot snapshot;
-    bool reused_last = false;
-    if (data.last_iteration.kind == "dsec") {
-        take_dsec_reusable_buffers_v068240233(data.last_iteration, snapshot);
-        data.last_iteration = FixedDsecSnapshot{};
-        reused_last = true;
-    } else {
-        take_dsec_reusable_buffers_v068240233(data.dsec_recycle_workspace_v068240233, snapshot);
-        data.dsec_recycle_workspace_v068240233 = FixedDsecSnapshot{};
-    }
-
-    if (g_performance_v064890) {
-        ++g_performance_v064890->dsec_workspace_optimized_calls_v068240233;
-        if (reused_last) ++g_performance_v064890->dsec_workspace_last_iteration_reuses_v068240233;
-        const auto rows = static_cast<std::size_t>(data.program_info.population_rows);
-        const auto bins = data.energy.size();
-        if (snapshot.populations.capacity() >= rows)
-            ++g_performance_v064890->dsec_workspace_population_capacity_reuses_v068240233;
-        if (snapshot.lte_populations.capacity() >= rows)
-            ++g_performance_v064890->dsec_workspace_lte_capacity_reuses_v068240233;
-        if (snapshot.spectrum.capacity() >= bins)
-            ++g_performance_v064890->dsec_workspace_spectrum_capacity_reuses_v068240233;
-        if (snapshot.opacity.capacity() >= bins)
-            ++g_performance_v064890->dsec_workspace_opacity_capacity_reuses_v068240233;
-        if (snapshot.continuum_spectrum.capacity() >= bins)
-            ++g_performance_v064890->dsec_workspace_continuum_capacity_reuses_v068240233;
-        if (snapshot.source_detail_global_xilevg.capacity() >= data.global_level_count)
-            ++g_performance_v064890->dsec_workspace_detail_capacity_reuses_v068240233;
-        g_performance_v064890->dsec_workspace_radiation_values_elided_v068240233 +=
-            static_cast<std::uint64_t>(2u * bins);
-    }
-
-    snapshot.kind = "dsec";
-    snapshot.call_index = data.call_index;
-    snapshot.evaluation_index = ++data.evaluation_index;
-    if (snapshot.call_index < 1u) {
-        throw std::runtime_error("standalone source call index below 1");
-    }
-    // Optimized production is never the frozen reference trajectory.
-    snapshot.sequence = data.next_sequence++;
-    data.current_sequence = snapshot.sequence;
-    ++data.evaluations;
-    snapshot.temperature_t4 = trial.temperature_t4;
-    snapshot.hydrogen_density_cm3 = trial.hydrogen_density_cm3;
-    snapshot.electron_fraction_input = trial.electron_fraction_xee;
-    snapshot.populations.assign(static_cast<std::size_t>(data.program_info.population_rows), 0.0);
-    snapshot.spectrum.assign(data.energy.size(), 0.0);
-    snapshot.opacity.assign(data.energy.size(), 0.0);
-    snapshot.continuum_spectrum.assign(data.energy.size(), 0.0);
-    // radiation_energy_ev/radiation_flux are immutable/caller-owned during an
-    // ordinary DSEC trial.  They are intentionally not copied into the
-    // transient snapshot; accepted-boundary publication uses its own exact
-    // recompute and diagnostic/reference modes stay historical.
-    snapshot.radiation_energy_ev.clear();
-    snapshot.radiation_flux.clear();
-    return snapshot;
-}
-
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute attach native thermal components as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
@@ -17153,18 +16958,7 @@ int standalone_iteration_evaluator(
     }
     try {
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
-        const bool optimized_dsec_workspace_v068240233 =
-            dsec_callback_workspace_eligible_v068240233(*data);
-        FixedDsecSnapshot snapshot = optimized_dsec_workspace_v068240233
-            ? make_iteration_snapshot_reuse_v068240233(*data, *trial)
-            : make_iteration_snapshot(*data, *trial);
-        if (!optimized_dsec_workspace_v068240233 && g_performance_v064890) {
-            ++g_performance_v064890->dsec_workspace_historical_calls_v068240233;
-            if (data->dsec_callback_workspace_mode_v068240233 ==
-                DsecCallbackWorkspaceModeV068240233::Optimized) {
-                ++g_performance_v064890->dsec_workspace_fallback_calls_v068240233;
-            }
-        }
+        FixedDsecSnapshot snapshot = make_iteration_snapshot(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
             std::cerr << "V048746255172582_EVALUATION_BEGIN=" << snapshot.sequence
                       << " CALL=" << snapshot.call_index
@@ -17358,14 +17152,8 @@ int standalone_iteration_evaluator(
         capture_source_detail_publication_state(
             data->fixed_context, snapshot.source_detail_pre_mapback_populations,
             snapshot.source_detail_active_windows);
-        if (optimized_dsec_workspace_v068240233) {
-            source_detail_global_projection_into_v068240233(
-                *data, snapshot.source_detail_pre_mapback_populations,
-                snapshot.source_detail_active_windows, snapshot.source_detail_global_xilevg);
-        } else {
-            snapshot.source_detail_global_xilevg = source_detail_global_projection(
-                *data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
-        }
+        snapshot.source_detail_global_xilevg = source_detail_global_projection(
+            *data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
         if (v0648123350_target_projection) {
             snapshot.rcem.resize(source.rcem_count); snapshot.oplin.resize(source.oplin_count);
             snapshot.elum.resize(source.elum_count); snapshot.cemab.resize(source.cemab_count);
@@ -18573,16 +18361,6 @@ FixedDsecSnapshot evaluate_accepted_boundary(
                     std::max(g_performance_v064890->accepted_boundary_rss_before_release_peak_v0682367,
                              current_rss_bytes_v068233());
             }
-            if (data.dsec_callback_workspace_mode_v068240233 ==
-                    DsecCallbackWorkspaceModeV068240233::Optimized &&
-                !data.reference_trajectory_mode && !data.reference_diagnostics_enabled &&
-                !data.retain_prefix_diagnostics && !data.diagnostic_full_trajectory_continue) {
-                take_dsec_reusable_buffers_v068240233(
-                    data.last_iteration, data.dsec_recycle_workspace_v068240233);
-                if (g_performance_v064890) {
-                    ++g_performance_v064890->dsec_workspace_boundary_recycles_v068240233;
-                }
-            }
             data.last_iteration = FixedDsecSnapshot{};
             if (g_performance_v064890) {
                 g_performance_v064890->accepted_boundary_rss_after_release_peak_v0682367 =
@@ -19586,6 +19364,187 @@ void source_real4_vector_v068227(std::vector<double>& values) {
     for (double& value : values) value = source_real4_v068227(value);
 }
 
+enum class SavdStagingModeV068240234 { Historical, Optimized };
+
+SavdStagingModeV068240234 savd_staging_mode_v068240234() {
+    static const SavdStagingModeV068240234 mode = [] {
+        const char* raw = std::getenv("XSTAR_V068240234_SAVD_STAGING_MODE");
+        if (!raw || !*raw || std::string(raw) == "optimized") {
+            return SavdStagingModeV068240234::Optimized;
+        }
+        if (std::string(raw) == "historical") {
+            return SavdStagingModeV068240234::Historical;
+        }
+        throw std::runtime_error(
+            "XSTAR_V068240234_SAVD_STAGING_MODE must be historical or optimized");
+    }();
+    return mode;
+}
+
+const char* savd_staging_mode_name_v068240234(SavdStagingModeV068240234 mode) {
+    return mode == SavdStagingModeV068240234::Historical ? "HISTORICAL" : "OPTIMIZED";
+}
+
+// 0.6.82.40.2.34: the historical single-pass SAVD stream first deep-copies the
+// accepted FixedDsecSnapshot into NativeSavedShellV068227, applies the source
+// REAL(4)/FITS-E3 save boundary, and then deep-copies that quantized snapshot a
+// second time into FixedEvaluationState for the detail writers.  Multipass
+// requires the retained NativeSavedShell and sparse SAVD membership unchanged.
+// Ordinary npass=1 streaming does not.  Move the already-quantized transient
+// snapshot into its publication owner instead of cloning it again.
+xstar_run_state::FixedEvaluationState move_real_native_snapshot_v068240234(
+        FixedDsecSnapshot&& source,
+        double delta_radius_cm) {
+    xstar_run_state::FixedEvaluationState target;
+    target.kind = std::move(source.kind);
+    target.sequence = source.sequence;
+    target.call_index = source.call_index;
+    target.evaluation_index = source.evaluation_index;
+    target.temperature_t4 = source.temperature_t4;
+    target.hydrogen_density_cm3 = source.hydrogen_density_cm3;
+    target.electron_fraction_input = source.electron_fraction_input;
+    target.computed_electron_fraction = source.computed_electron_fraction;
+    target.charge_residual = source.charge_residual;
+    target.hmctot = source.hmctot;
+    target.total_heating = source.total_heating;
+    target.total_cooling = source.total_cooling;
+    target.element_heating = source.element_heating;
+    target.element_cooling = source.element_cooling;
+    target.continuum_heating = source.continuum_heating;
+    target.continuum_cooling = source.continuum_cooling;
+    target.hydrogen_heating = source.hydrogen_heating;
+    target.hydrogen_cooling = source.hydrogen_cooling;
+    target.hydrogen_heating2 = source.hydrogen_heating2;
+    target.hydrogen_cooling2 = source.hydrogen_cooling2;
+    target.helium_heating = source.helium_heating;
+    target.helium_cooling = source.helium_cooling;
+    target.helium_heating2 = source.helium_heating2;
+    target.helium_cooling2 = source.helium_cooling2;
+    target.magnesium_heating = source.magnesium_heating;
+    target.magnesium_cooling = source.magnesium_cooling;
+    target.magnesium_heating2 = source.magnesium_heating2;
+    target.magnesium_cooling2 = source.magnesium_cooling2;
+    target.compton_heating = source.compton_heating;
+    target.compton_cooling = source.compton_cooling;
+    target.free_free_heating = source.free_free_heating;
+    target.brems_cooling = source.brems_cooling;
+    target.thermal_families_native = source.thermal_families_native;
+    target.runtime_state_abi = source.dsec_runtime_state_abi;
+    target.source_global_xilevg = std::move(source.source_global_xilevg);
+    target.source_global_rnisg = std::move(source.source_global_rnisg);
+    target.source_global_bilevg = std::move(source.source_global_bilevg);
+    target.source_global_gammag = std::move(source.source_global_gammag);
+    target.source_global_alphag = std::move(source.source_global_alphag);
+    target.source_global_igammamaxg = std::move(source.source_global_igammamaxg);
+    target.source_global_ialphamaxg = std::move(source.source_global_ialphamaxg);
+    target.source_ion_stage_fractions = std::move(source.source_ion_stage_fractions);
+    target.source_ionization_rates = std::move(source.source_ionization_rates);
+    target.source_recombination_rates = std::move(source.source_recombination_rates);
+    target.source_detail_pre_mapback_populations = std::move(source.source_detail_pre_mapback_populations);
+    target.source_detail_active_windows = std::move(source.source_detail_active_windows);
+    target.source_detail_global_xilevg = std::move(source.source_detail_global_xilevg);
+    target.populations = std::move(source.populations);
+    target.radiation_energy_ev = std::move(source.radiation_energy_ev);
+    target.radiation_flux = std::move(source.radiation_flux);
+    target.source_continuum_tau_workspace_count = source.source_continuum_tau_workspace_count;
+    target.continuum_tau_in = std::move(source.continuum_tau_in);
+    target.continuum_tau_out = std::move(source.continuum_tau_out);
+    target.continuum_spectrum = std::move(source.continuum_spectrum);
+    target.spectrum = std::move(source.spectrum);
+    target.opacity = std::move(source.opacity);
+    auto& ws = target.source_workspace;
+    ws.lte_populations = std::move(source.lte_populations);
+    ws.rcem = std::move(source.rcem);
+    ws.oplin = std::move(source.oplin);
+    ws.tau0 = std::move(source.tau0);
+    ws.elum = std::move(source.elum);
+    ws.cemab = std::move(source.cemab);
+    ws.elumab = std::move(source.elumab);
+    ws.cabab = std::move(source.cabab);
+    ws.opakab = std::move(source.opakab);
+    ws.tauc = std::move(source.tauc);
+    ws.rccemis = std::move(source.rccemis);
+    ws.opakc = std::move(source.opakc);
+    ws.opakcont = std::move(source.opakcont);
+    ws.flinel = std::move(source.flinel);
+    ws.pprint4_opakc = std::move(source.pprint4_opakc);
+    ws.pprint4_rccemis = std::move(source.pprint4_rccemis);
+    ws.pprint4_brcems = std::move(source.pprint4_brcems);
+    ws.pprint4_flinel = std::move(source.pprint4_flinel);
+    ws.zrems = std::move(source.zrems);
+    ws.dpthc = std::move(source.dpthc);
+    ws.dpthcont = std::move(source.dpthcont);
+    ws.zremsz = std::move(source.zremsz);
+    ws.line_profile_workspace = std::move(source.line_profile_workspace);
+    ws.native_line_count = source.native_line_count;
+    ws.native_continuum_count = source.native_continuum_count;
+
+    const std::size_t n = target.radiation_energy_ev.size();
+    if (n > 0 && ws.zrems.empty() && ws.dpthc.empty() &&
+        ws.dpthcont.empty() && ws.zremsz.empty()) {
+        if (target.continuum_tau_in.size() != n) target.continuum_tau_in.assign(n, 0.0);
+        if (target.continuum_tau_out.size() != n) target.continuum_tau_out.assign(n, 0.0);
+        ws.dpthcont.assign(2 * n, 0.0);
+        ws.dpthc.assign(2 * n, 0.0);
+        for (std::size_t i = 0; i < n; ++i) {
+            const double tau = std::max(0.0, finite_or((i < target.opacity.size() ? target.opacity[i] : 0.0), 0.0)) * std::max(delta_radius_cm, 0.0);
+            target.continuum_tau_in[i] = tau;
+            target.continuum_tau_out[i] = tau;
+            ws.dpthcont[i] = tau;
+            ws.dpthcont[n + i] = tau;
+            ws.dpthc[i] = tau;
+            ws.dpthc[n + i] = tau;
+        }
+        ws.zrems.assign(5 * n, 0.0);
+        for (std::size_t i = 0; i < n; ++i) {
+            const double incident = i < target.radiation_flux.size() ? target.radiation_flux[i] : 0.0;
+            const double cont = i < target.continuum_spectrum.size() ? target.continuum_spectrum[i] : 0.0;
+            const double spec = i < target.spectrum.size() ? target.spectrum[i] : 0.0;
+            ws.zrems[i] = incident;
+            ws.zrems[n + i] = cont;
+            ws.zrems[2 * n + i] = spec;
+            ws.zrems[3 * n + i] = (i < target.opacity.size() ? target.opacity[i] : 0.0);
+            ws.zrems[4 * n + i] = spec + cont;
+        }
+        ws.zremsz = target.radiation_flux;
+        if (ws.opakc.empty()) ws.opakc = target.opacity;
+        if (ws.rccemis.empty()) {
+            ws.rccemis.assign(2 * n, 0.0);
+            for (std::size_t i = 0; i < n; ++i) {
+                const double cont = i < target.continuum_spectrum.size() ? target.continuum_spectrum[i] : 0.0;
+                ws.rccemis[i] = cont;
+                ws.rccemis[n + i] = cont;
+            }
+        }
+        if (ws.elumab.empty()) {
+            ws.elumab = vector_has_nonzero(ws.cemab) ? ws.cemab : ws.rccemis;
+        }
+        if (ws.tauc.empty()) {
+            ws.tauc.assign(2 * n, 0.0);
+            for (std::size_t i = 0; i < n; ++i) {
+                ws.tauc[i] = target.continuum_tau_in[i];
+                ws.tauc[n + i] = target.continuum_tau_out[i];
+            }
+        }
+    }
+
+    ws.level_identity_exact = true;
+    ws.lte_populations_exact = !ws.lte_populations.empty();
+    ws.line_workspace_exact = !ws.rcem.empty() || !ws.oplin.empty() || !ws.elum.empty();
+    ws.line_tau_workspace_exact = !ws.tau0.empty();
+    ws.rrc_workspace_exact = !ws.cemab.empty() || !ws.cabab.empty() || !ws.opakab.empty() || !ws.rccemis.empty();
+    ws.rrc_tau_workspace_exact = !ws.tauc.empty();
+    ws.continuum_workspace_exact = !ws.opakc.empty() || !target.opacity.empty();
+    ws.accumulated_output_workspace_exact = n > 0 &&
+        ws.zrems.size() == 5u * n && ws.dpthc.size() == 2u * n &&
+        ws.dpthcont.size() == 2u * n && ws.zremsz.size() == n;
+    ws.line_profile_workspace_exact = true;
+
+    target.record_product_diagnostics = std::move(source.record_product_diagnostics);
+    target.element_thermal_products = std::move(source.element_thermal_products);
+    return target;
+}
+
 NativeSavedShellV068227 make_saved_shell_v068227(
     const FixedDsecSnapshot& source,
     const xstar_atdb_runtime::ProgramStorage& program,
@@ -19597,60 +19556,64 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     double electron_fraction,
     double hydrogen_density_cm3,
     double zeta,
-    bool terminal_record) {
+    bool terminal_record,
+    bool retain_sparse_membership_v068240234 = true) {
     NativeSavedShellV068227 out;
     out.snapshot = source;
 
-    // fstepr.f90 writes only source level roles with xilev > 1.d-34.
-    // Determine membership before TFLOAT rounding, exactly as the source does.
-    std::vector<std::uint8_t> level_seen_v0682273(source.source_global_xilevg.size(), 0u);
-    for (const auto& id_v0682273 : program.detail_level_identities) {
-        if (id_v0682273.global_index <= 0) continue;
-        const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.global_index - 1);
-        if (slot_v0682273 >= source.source_global_xilevg.size() || level_seen_v0682273[slot_v0682273]) continue;
-        if (source.source_global_xilevg[slot_v0682273] > 1.0e-34) {
-            out.saved_level_slots_v0682273.push_back(slot_v0682273);
-            level_seen_v0682273[slot_v0682273] = 1u;
+    if (retain_sparse_membership_v068240234) {
+        // fstepr.f90 writes only source level roles with xilev > 1.d-34.
+        // Determine membership before TFLOAT rounding, exactly as the source does.
+        std::vector<std::uint8_t> level_seen_v0682273(source.source_global_xilevg.size(), 0u);
+        for (const auto& id_v0682273 : program.detail_level_identities) {
+            if (id_v0682273.global_index <= 0) continue;
+            const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.global_index - 1);
+            if (slot_v0682273 >= source.source_global_xilevg.size() || level_seen_v0682273[slot_v0682273]) continue;
+            if (source.source_global_xilevg[slot_v0682273] > 1.0e-34) {
+                out.saved_level_slots_v0682273.push_back(slot_v0682273);
+                level_seen_v0682273[slot_v0682273] = 1u;
+            }
         }
-    }
 
-    // fstepr2.f90 first requires a non-negligible line emissivity/opacity and
-    // then excludes rate types 14 and 9 plus invalid wavelength identities.
-    const std::size_t line_stride_v0682273 = source.oplin.size();
-    for (const auto& id_v0682273 : program.line_identities) {
-        if (id_v0682273.line_index <= 0) continue;
-        const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.line_index);
-        if (slot_v0682273 >= line_stride_v0682273) continue;
-        if (id_v0682273.rate_type == 14 || id_v0682273.rate_type == 9) continue;
-        const double wave_v0682273 = std::abs(id_v0682273.wavelength_angstrom);
-        if (!(wave_v0682273 > 0.1 && wave_v0682273 < 9.0e9)) continue;
-        const double rin_v0682273 = slot_v0682273 < source.rcem.size() ? source.rcem[slot_v0682273] : 0.0;
-        const double rout_v0682273 = line_stride_v0682273 + slot_v0682273 < source.rcem.size()
-            ? source.rcem[line_stride_v0682273 + slot_v0682273] : 0.0;
-        const double op_v0682273 = source.oplin[slot_v0682273];
-        if (rin_v0682273 > 1.0e-64 || rout_v0682273 > 1.0e-64 || op_v0682273 > 1.0e-64) {
-            out.saved_line_slots_v0682273.push_back(slot_v0682273);
+        // fstepr2.f90 first requires a non-negligible line emissivity/opacity and
+        // then excludes rate types 14 and 9 plus invalid wavelength identities.
+        const std::size_t line_stride_v0682273 = source.oplin.size();
+        for (const auto& id_v0682273 : program.line_identities) {
+            if (id_v0682273.line_index <= 0) continue;
+            const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.line_index);
+            if (slot_v0682273 >= line_stride_v0682273) continue;
+            if (id_v0682273.rate_type == 14 || id_v0682273.rate_type == 9) continue;
+            const double wave_v0682273 = std::abs(id_v0682273.wavelength_angstrom);
+            if (!(wave_v0682273 > 0.1 && wave_v0682273 < 9.0e9)) continue;
+            const double rin_v0682273 = slot_v0682273 < source.rcem.size() ? source.rcem[slot_v0682273] : 0.0;
+            const double rout_v0682273 = line_stride_v0682273 + slot_v0682273 < source.rcem.size()
+                ? source.rcem[line_stride_v0682273 + slot_v0682273] : 0.0;
+            const double op_v0682273 = source.oplin[slot_v0682273];
+            if (rin_v0682273 > 1.0e-64 || rout_v0682273 > 1.0e-64 || op_v0682273 > 1.0e-64) {
+                out.saved_line_slots_v0682273.push_back(slot_v0682273);
+            }
         }
-    }
 
-    // fstepr3.f90 writes only rate-type-7 source RRC identities whose local
-    // emissivity/absorption/opacity exceeds 1.e-36.
-    const std::size_t rrc_stride_v0682273 = source.opakab.size();
-    std::vector<std::uint8_t> rrc_seen_v0682273(rrc_stride_v0682273, 0u);
-    for (const auto& id_v0682273 : program.source_rrc_identities) {
-        if (id_v0682273.continuum_index <= 0) continue;
-        const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.continuum_index);
-        if (slot_v0682273 >= rrc_stride_v0682273 || rrc_seen_v0682273[slot_v0682273]) continue;
-        const double cin_v0682273 = slot_v0682273 < source.cemab.size() ? source.cemab[slot_v0682273] : 0.0;
-        const double cout_v0682273 = rrc_stride_v0682273 + slot_v0682273 < source.cemab.size()
-            ? source.cemab[rrc_stride_v0682273 + slot_v0682273] : 0.0;
-        const double cab_v0682273 = slot_v0682273 < source.cabab.size() ? source.cabab[slot_v0682273] : 0.0;
-        const double opa_v0682273 = source.opakab[slot_v0682273];
-        if (cin_v0682273 > 1.0e-36 || cout_v0682273 > 1.0e-36 ||
-            cab_v0682273 > 1.0e-36 || opa_v0682273 > 1.0e-36) {
-            out.saved_rrc_slots_v0682273.push_back(slot_v0682273);
-            rrc_seen_v0682273[slot_v0682273] = 1u;
+        // fstepr3.f90 writes only rate-type-7 source RRC identities whose local
+        // emissivity/absorption/opacity exceeds 1.e-36.
+        const std::size_t rrc_stride_v0682273 = source.opakab.size();
+        std::vector<std::uint8_t> rrc_seen_v0682273(rrc_stride_v0682273, 0u);
+        for (const auto& id_v0682273 : program.source_rrc_identities) {
+            if (id_v0682273.continuum_index <= 0) continue;
+            const std::size_t slot_v0682273 = static_cast<std::size_t>(id_v0682273.continuum_index);
+            if (slot_v0682273 >= rrc_stride_v0682273 || rrc_seen_v0682273[slot_v0682273]) continue;
+            const double cin_v0682273 = slot_v0682273 < source.cemab.size() ? source.cemab[slot_v0682273] : 0.0;
+            const double cout_v0682273 = rrc_stride_v0682273 + slot_v0682273 < source.cemab.size()
+                ? source.cemab[rrc_stride_v0682273 + slot_v0682273] : 0.0;
+            const double cab_v0682273 = slot_v0682273 < source.cabab.size() ? source.cabab[slot_v0682273] : 0.0;
+            const double opa_v0682273 = source.opakab[slot_v0682273];
+            if (cin_v0682273 > 1.0e-36 || cout_v0682273 > 1.0e-36 ||
+                cab_v0682273 > 1.0e-36 || opa_v0682273 > 1.0e-36) {
+                out.saved_rrc_slots_v0682273.push_back(slot_v0682273);
+                rrc_seen_v0682273[slot_v0682273] = 1u;
+            }
         }
+
     }
 
     // savd.f90 persists xilev/rnist, rcem/oplin/tau0, cemab/cabab/opakab/tauc,
@@ -19716,12 +19679,45 @@ xstar_run_state::RadialZoneState saved_shell_radial_zone_v068233(
     return zone;
 }
 
+
+xstar_run_state::RadialZoneState move_saved_shell_radial_zone_v068240234(
+    NativeSavedShellV068227&& saved,
+    std::size_t pass_index,
+    std::size_t zone_index) {
+    xstar_run_state::AcceptedControllerState accepted;
+    accepted.call_index = saved.snapshot.call_index;
+    accepted.accepted_sequence = saved.snapshot.sequence;
+    accepted.acceptance_reason = "0.6.82.40.2.34 single-pass SAVD move publication surface";
+    const double saved_temperature_t4_v068240234 = saved.snapshot.temperature_t4;
+    accepted.evaluation = move_real_native_snapshot_v068240234(std::move(saved.snapshot), 0.0);
+
+    xstar_run_state::RadialZoneState zone;
+    zone.zone_index = zone_index;
+    zone.pass_index = pass_index;
+    zone.radius_cm = saved.radius_cm;
+    zone.outer_radius_cm = saved.step_size_cm;
+    zone.delta_radius_cm = saved.radial_depth_cm;
+    zone.density_cm3 = saved.hydrogen_density_cm3;
+    zone.pressure_dyn_cm2 = saved.pressure_dyn_cm2;
+    zone.log_ionization_parameter = saved.zeta;
+    zone.ionization_parameter = std::isfinite(saved.zeta) ? std::pow(10.0, saved.zeta) : 0.0;
+    zone.column_density_cm2 = saved.column_cm2;
+    zone.temperature_t4 = saved_temperature_t4_v068240234;
+    zone.electron_fraction = saved.electron_fraction;
+    zone.provisional_from_controller = false;
+    zone.accepted_boundary_exact = true;
+    zone.boundary_provenance = "0.6.82.40.2.34 source SAVD FITS-E3/REAL4 moved detail surface";
+    zone.accepted_controller = std::move(accepted);
+    return zone;
+}
+
 void stream_saved_shell_detail_v068233(
     xstar_run_state::ProductWritingState& stream_state,
-    const NativeSavedShellV068227& saved,
+    NativeSavedShellV068227& saved,
     std::size_t pass_index,
     std::size_t zone_index,
-    const std::filesystem::path& output_dir) {
+    const std::filesystem::path& output_dir,
+    bool move_quantized_snapshot_v068240234 = false) {
     if (zone_index == 1u) {
         const std::string prefix = "xo" + (pass_index < 10u ? std::string("0") : std::string()) +
             std::to_string(pass_index) + "_";
@@ -19741,7 +19737,19 @@ void stream_saved_shell_detail_v068233(
             2u * scratch.capacity);
     }
     stream_state.radial_zones.clear();
-    stream_state.radial_zones.push_back(saved_shell_radial_zone_v068233(saved, pass_index, zone_index));
+    if (move_quantized_snapshot_v068240234) {
+        stream_state.radial_zones.push_back(
+            move_saved_shell_radial_zone_v068240234(std::move(saved), pass_index, zone_index));
+        if (g_performance_v064890) {
+            ++g_performance_v064890->savd_staging_optimized_calls_v068240234;
+            ++g_performance_v064890->savd_staging_move_conversions_v068240234;
+        }
+    } else {
+        stream_state.radial_zones.push_back(saved_shell_radial_zone_v068233(saved, pass_index, zone_index));
+        if (g_performance_v064890) {
+            ++g_performance_v064890->savd_staging_historical_calls_v068240234;
+        }
+    }
     stream_state.native_detail_state_retained = true;
     stream_state.exact_source_workspaces_retained =
         stream_state.radial_zones.front().accepted_controller.evaluation.source_workspace.complete();
@@ -20314,14 +20322,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             data.reference_trajectory_mode && diagnostic_attribution_enabled();
         data.call_start_mode_v068240213 = configured_call_start_mode_v068240213(
             data.reference_trajectory_mode, data.reference_diagnostics_enabled);
-        data.dsec_callback_workspace_mode_v068240233 =
-            configured_dsec_callback_workspace_mode_v068240233(
-                data.reference_trajectory_mode, data.reference_diagnostics_enabled);
         std::cout << "V068240213_CALL_START_MODE="
                   << call_start_mode_name_v068240213(data.call_start_mode_v068240213) << "\n"
-                  << "V068240233_DSEC_CALLBACK_WORKSPACE_MODE_REQUESTED="
-                  << dsec_callback_workspace_mode_name_v068240233(
-                         data.dsec_callback_workspace_mode_v068240233) << "\n"
                   << "V068240218_POST_ZONE_TRIM_MODE="
                   << post_zone_trim_mode_name_v068240218(post_zone_trim_mode_v068240218()) << "\n";
         // 5.20.17 production never uses the old fail-open full-trajectory continuation.
@@ -20609,6 +20611,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         const bool incremental_detail_stream_v068233 =
             source_savd_detail_enabled_v0682307 && effective_npass_v068227 == 1u &&
             !data.reference_diagnostics_enabled && !data.diagnostic_full_trajectory_continue;
+        const auto savd_staging_mode_selected_v068240234 = savd_staging_mode_v068240234();
+        // .2.34 is deliberately single-pass only.  npass>1 retains the exact
+        // NativeSavedShell SAVD/UNSAVD ownership, sparse membership, terminal
+        // records, pass directionality, and per-pass detail publication.
+        const bool savd_staging_optimized_active_v068240234 =
+            incremental_detail_stream_v068233 && effective_npass_v068227 == 1u &&
+            savd_staging_mode_selected_v068240234 == SavdStagingModeV068240234::Optimized;
         // 0.6.82.33.4: keep the historically sensitive multipass and all
         // reference/diagnostic trajectories on the established retained
         // finals path. Only ordinary single-pass production transfers each
@@ -21545,12 +21554,17 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     data.cumulative_depth_cm, segment,
                     data.cumulative_column_cm2,
                     boundary.electron_fraction_input,
-                    boundary.hydrogen_density_cm3, boundary_zeta_v068227, false);
+                    boundary.hydrogen_density_cm3, boundary_zeta_v068227, false,
+                    !savd_staging_optimized_active_v068240234);
                 if (incremental_detail_stream_v068233) {
                     stream_saved_shell_detail_v068233(
                         *incremental_detail_state_v068233, saved_shell_v068233,
-                        kk_v068227, call, std::filesystem::path(options.output_dir));
+                        kk_v068227, call, std::filesystem::path(options.output_dir),
+                        savd_staging_optimized_active_v068240234);
                 } else {
+                    if (g_performance_v064890 && effective_npass_v068227 > 1u) {
+                        ++g_performance_v064890->savd_staging_multipass_historical_calls_v068240234;
+                    }
                     saved_passes_v068227[kk_v068227].insert_after_hdu(
                         call + 1u, std::move(saved_shell_v068233));
                     update_saved_pass_memory_v068233(saved_passes_v068227);
@@ -21968,13 +21982,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     params.pressure_dyn_cm2, current_radius_cm_v068227,
                     data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
                     data.cumulative_column_cm2, state.electron_fraction_xee,
-                    state.hydrogen_density_cm3, terminal_zeta_v068227, true);
+                    state.hydrogen_density_cm3, terminal_zeta_v068227, true,
+                    !savd_staging_optimized_active_v068240234);
                 if (incremental_detail_stream_v068233) {
                     stream_saved_shell_detail_v068233(
                         *incremental_detail_state_v068233, terminal_saved_shell_v068233,
                         kk_v068227, accepted_boundary_count_v0682334 + 1u,
-                        std::filesystem::path(options.output_dir));
+                        std::filesystem::path(options.output_dir),
+                        savd_staging_optimized_active_v068240234);
                 } else {
+                    if (g_performance_v064890 && effective_npass_v068227 > 1u) {
+                        ++g_performance_v064890->savd_staging_multipass_historical_calls_v068240234;
+                    }
                     saved_passes_v068227[kk_v068227].insert_after_hdu(
                         accepted_boundary_count_v0682334 + 1u, std::move(terminal_saved_shell_v068233));
                     update_saved_pass_memory_v068233(saved_passes_v068227);
@@ -23360,25 +23379,6 @@ void emit_controller_performance_instrumentation(
             << "V06824028_CONTROLLER_DSEC_FIXED_SECONDS=" << perf.controller_fixed_seconds_v06824028 << "\n"
             << "V06824028_CONTROLLER_DSEC_NONFIXED_SECONDS=" << perf.controller_nonfixed_seconds_v06824028 << "\n"
             << "V06824028_CONTROLLER_DSEC_FIXED_CALLS=" << perf.controller_fixed_calls_v06824028 << "\n"
-            << "V068240233_DSEC_CALLBACK_WORKSPACE_MODE="
-            << (perf.dsec_workspace_optimized_calls_v068240233 > 0u &&
-                perf.dsec_workspace_historical_calls_v068240233 == 0u ? "OPTIMIZED" :
-                perf.dsec_workspace_historical_calls_v068240233 > 0u &&
-                perf.dsec_workspace_optimized_calls_v068240233 == 0u ? "HISTORICAL" :
-                perf.dsec_workspace_historical_calls_v068240233 == 0u &&
-                perf.dsec_workspace_optimized_calls_v068240233 == 0u ? "UNOBSERVED" : "MIXED") << "\n"
-            << "V068240233_DSEC_CALLBACK_HISTORICAL_CALLS=" << perf.dsec_workspace_historical_calls_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_OPTIMIZED_CALLS=" << perf.dsec_workspace_optimized_calls_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_FALLBACK_CALLS=" << perf.dsec_workspace_fallback_calls_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_LAST_ITERATION_REUSES=" << perf.dsec_workspace_last_iteration_reuses_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_BOUNDARY_RECYCLES=" << perf.dsec_workspace_boundary_recycles_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_POPULATION_CAPACITY_REUSES=" << perf.dsec_workspace_population_capacity_reuses_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_LTE_CAPACITY_REUSES=" << perf.dsec_workspace_lte_capacity_reuses_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_SPECTRUM_CAPACITY_REUSES=" << perf.dsec_workspace_spectrum_capacity_reuses_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_OPACITY_CAPACITY_REUSES=" << perf.dsec_workspace_opacity_capacity_reuses_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_CONTINUUM_CAPACITY_REUSES=" << perf.dsec_workspace_continuum_capacity_reuses_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_DETAIL_CAPACITY_REUSES=" << perf.dsec_workspace_detail_capacity_reuses_v068240233 << "\n"
-            << "V068240233_DSEC_CALLBACK_RADIATION_VALUES_ELIDED=" << perf.dsec_workspace_radiation_values_elided_v068240233 << "\n"
             << "V06824028_BOUNDARY_SECONDS=" << perf.boundary_all_seconds_v0682402 << "\n"
             << "V06824028_BOUNDARY_FIXED_SECONDS=" << perf.boundary_fixed_seconds_v06824028 << "\n"
             << "V06824028_BOUNDARY_NONFIXED_SECONDS=" << perf.boundary_nonfixed_seconds_v06824028 << "\n"
@@ -23871,6 +23871,16 @@ void emit_controller_performance_instrumentation(
             << "V068233_DETAL3_ROWS_STREAMED=" << perf.detal3_rows_streamed_v068233 << "\n"
             << "V068233_DETAL4_ROWS_STREAMED=" << perf.detal4_rows_streamed_v068233 << "\n"
             << "V068233_SAVED_SHELLS_STREAMED=" << perf.saved_shells_streamed_v068233 << "\n"
+            << "V068240234_SAVD_STAGING_MODE="
+            << savd_staging_mode_name_v068240234(savd_staging_mode_v068240234()) << "\n"
+            << "V068240234_SAVD_STAGING_HISTORICAL_CALLS="
+            << perf.savd_staging_historical_calls_v068240234 << "\n"
+            << "V068240234_SAVD_STAGING_OPTIMIZED_CALLS="
+            << perf.savd_staging_optimized_calls_v068240234 << "\n"
+            << "V068240234_SAVD_STAGING_MOVE_CONVERSIONS="
+            << perf.savd_staging_move_conversions_v068240234 << "\n"
+            << "V068240234_SAVD_STAGING_MULTIPASS_HISTORICAL_CALLS="
+            << perf.savd_staging_multipass_historical_calls_v068240234 << "\n"
             << "V068240218_POST_ZONE_TRIM_MODE="
             << post_zone_trim_mode_name_v068240218(post_zone_trim_mode_v068240218()) << "\n"
             << "V068240218_POST_ZONE_TRIM_HISTORICAL_CALLS="
@@ -24115,6 +24125,16 @@ void emit_controller_performance_instrumentation(
             << "V068233_DETAL3_ROWS_STREAMED=" << perf.detal3_rows_streamed_v068233 << "\n"
             << "V068233_DETAL4_ROWS_STREAMED=" << perf.detal4_rows_streamed_v068233 << "\n"
             << "V068233_SAVED_SHELLS_STREAMED=" << perf.saved_shells_streamed_v068233 << "\n"
+            << "V068240234_SAVD_STAGING_MODE="
+            << savd_staging_mode_name_v068240234(savd_staging_mode_v068240234()) << "\n"
+            << "V068240234_SAVD_STAGING_HISTORICAL_CALLS="
+            << perf.savd_staging_historical_calls_v068240234 << "\n"
+            << "V068240234_SAVD_STAGING_OPTIMIZED_CALLS="
+            << perf.savd_staging_optimized_calls_v068240234 << "\n"
+            << "V068240234_SAVD_STAGING_MOVE_CONVERSIONS="
+            << perf.savd_staging_move_conversions_v068240234 << "\n"
+            << "V068240234_SAVD_STAGING_MULTIPASS_HISTORICAL_CALLS="
+            << perf.savd_staging_multipass_historical_calls_v068240234 << "\n"
             << "V068233_RSS_AFTER_ATDB_BYTES=" << perf.rss_after_atdb_bytes_v068233 << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
