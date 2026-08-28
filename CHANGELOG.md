@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.35 - DSEC non-fixed fine attribution - 2026-08-28
+
+- Attribution-only successor to accepted `.2.34`; the accepted `.2.27` Type-53 static-kernel, `.2.30` continuum-workspace, and `.2.34` SAVD-staging optimizations remain in place unchanged.
+- Split the broad low-`xi` DSEC non-fixed bucket into eight requested regions using only coarse standalone/controller/fixed-call boundary timers. No clock is added to `local_zone_engine.cpp`, `evaluate_record()`, record traversal, or continuum/bin loops.
+- Measure the full external `xstar_fixed_state_run_with_source_workspaces_v1()` wall time independently from the fixed engine's cumulative `stats.total_seconds`; define untimed fixed-engine pre/post overhead as external fixed-call wall minus internally reported fixed total.
+- Close the existing DSEC non-fixed bucket exactly: region 1 is outer DSEC wall minus total evaluator callback; region 3 is callback wall minus regions 4/7/8; region 6 is region 4 minus region 5. Raw thermal-engine orchestration, raw pre-fixed callback time, and the small controller/callback shell closure terms are emitted separately rather than hidden.
+- Regions 7 and 8 time, respectively, post-fixed diagnostic/publication extraction and the global population/map-back commit through callback return.
+- Add a low-`xi` C5 attribution runner and static checker. Qualification has no optimization gate; it requires canonical science, fixed-work equivalence, accepted-mode retention, callback/evaluation count agreement, and exact accounting closure. No multi-element run is included.
+
 ## 0.6.82.40.2.34 - SAVD staging hot path - 2026-08-28
 
 - Branch directly from accepted `0.6.82.40.2.30`; rejected `.2.31` traversal and `.2.33` DSEC-workspace experiments are not carried forward. `.2.32/.32.1` are attribution evidence only.
