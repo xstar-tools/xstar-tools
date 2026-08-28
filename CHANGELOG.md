@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.27 - Type-53 recombination static-kernel preparation - 2026-08-27
+
+- Branches directly from accepted `0.6.82.40.2.20`; rejected `.2.24/.2.24.1` Type-53 photo caching and `.2.25` Type-51 legacy elision are not carried forward.
+- Adds same-binary `XSTAR_V068240227_TYPE53_STATIC_KERNEL_MODE=historical|optimized`; ordinary candidate production defaults to `optimized`, while `historical` preserves the `.2.20` Type-53 dynamic expressions for A/B qualification.
+- In optimized Type-53 prepared geometry only, caches the exact historical binary64 `bbnurjp = pow(min(2e4,E),3)*1.571e22*2` values alongside the compact `sgbar` source span. Type-49 geometry and arithmetic are unchanged.
+- Precomputes the exact `.2.20` fixed-call Type-53 scalars `t4`, `q2`, and `bktm` once in `RateEvaluationContext`; `rnist`, density/statistical-weight combination, escape factor, cutoff decision, `tempip`, and `sumi/sumc/sumc2` accumulation remain in the original record/interval order.
+- Adds private aggregate path counters only; no clock or per-interval diagnostic increment is added to the Type-53 evaluator. C API and production-zone ABI values remain frozen.
+- Qualification is staged: balanced same-host low-`xi` C5 H1/O1/O2/H2 first with exact science/work gates and a preregistered `>=3%` fixed-rate materiality target; `xi=+1,+4` science closure is permitted only after that low-`xi` gate accepts. No multi-element run is authorized yet.
+
 ## 0.6.82.40.2.26 - 2026-08-27
 
 - Attribution-only `TYPE53_RECOMBINATION_DYNAMIC_ATTRIBUTION`, branched directly from accepted production baseline `0.6.82.40.2.20`; rejected `.2.21/.2.21.1`, `.2.24/.2.24.1`, and `.2.25` production changes are not carried forward.

@@ -471,6 +471,20 @@ TraversalHotPathModeV068240215 configured_traversal_hotpath_mode_v068240215() {
     throw std::runtime_error("invalid XSTAR_V068240215_TRAVERSAL_MODE");
 }
 
+// 0.6.82.40.2.27: Type-53 recombination static-kernel preparation.  The
+// optimized mode changes only where record-static/fixed-call scalar values are
+// computed; the source phint53/Milne accumulation order is untouched.
+enum class Type53StaticKernelModeV068240227 { Historical, Optimized };
+
+Type53StaticKernelModeV068240227 configured_type53_static_kernel_mode_v068240227() {
+    const char* value = std::getenv("XSTAR_V068240227_TYPE53_STATIC_KERNEL_MODE");
+    if (!value || !*value || std::string(value) == "optimized")
+        return Type53StaticKernelModeV068240227::Optimized;
+    if (std::string(value) == "historical")
+        return Type53StaticKernelModeV068240227::Historical;
+    throw std::runtime_error("invalid XSTAR_V068240227_TYPE53_STATIC_KERNEL_MODE");
+}
+
 // v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
 // This records the legacy approximation, the already-computed source-faithful
 // phint53 shadow, and the actually committed answers for the two call-1
@@ -1794,6 +1808,18 @@ struct BoundFreePreparedGeometryV064895 {
     bool exact_threshold_publication_reached = false;
     int exact_publish_kl = -1;
     double exact_publish_sgtp = 0.0;
+    // 0.6.82.40.2.27: Type-53-only record/grid-static Milne factor.  Values
+    // are built with the exact historical expression after sgbar compaction
+    // and share the same source-index base.  Type-49 remains untouched.
+    bool type53_static_kernel_prepared_v068240227 = false;
+    std::vector<double> type53_bbnurj_v068240227;
+};
+
+struct Type53StaticKernelV068240227 {
+    Type53StaticKernelModeV068240227 mode = Type53StaticKernelModeV068240227::Optimized;
+    double t4 = 0.0;
+    double q2 = 0.0;
+    double bktm = 0.0;
 };
 
 struct BoundFreePreparedRecordCacheV064895 {
@@ -4742,152 +4768,6 @@ SourceContinuumThermalResult source_continuum_thermal(
     return out;
 }
 
-// 0.6.82.40.2.26: diagnostic-only Type-53 recombination/Milne state census.
-// The source phint53 kernel does not use a tabulated temperature bracket; its
-// temperature-dependent interval boundary is the literal exptsto < 200 gate.
-// Record that cutoff span, exact dynamic driver reuse, and immutable geometry
-// reuse without changing any floating-point expression or adding a clock.
-struct Type53RecombinationDynamicAttributionV068240226 {
-    struct PreviousState {
-        std::uint64_t temperature_bits = 0u;
-        std::uint64_t density_bits = 0u;
-        std::uint64_t ptmp_bits = 0u;
-        std::uint64_t thermal_hash = 0u;
-        std::uint64_t driver_hash = 0u;
-        std::uint64_t rnist_bits = 0u;
-        std::uint64_t active_intervals = 0u;
-    };
-
-    bool enabled = false;
-    std::uint64_t observations = 0u;
-    std::uint64_t prepared_geometry_observations = 0u;
-    std::uint64_t local_geometry_observations = 0u;
-    std::uint64_t reduced_grid_observations = 0u;
-    std::uint64_t full_grid_observations = 0u;
-    std::uint64_t integration_intervals = 0u;
-    std::uint64_t active_intervals = 0u;
-    std::uint64_t cutoff_intervals = 0u;
-    std::uint64_t threshold_publication_observations = 0u;
-    std::uint64_t previous_static_comparisons = 0u;
-    std::uint64_t prev_temperature_reuse = 0u;
-    std::uint64_t prev_density_reuse = 0u;
-    std::uint64_t prev_ptmp_reuse = 0u;
-    std::uint64_t prev_thermal_reuse = 0u;
-    std::uint64_t prev_driver_reuse = 0u;
-    std::uint64_t prev_rnist_reuse = 0u;
-    std::uint64_t prev_cutoff_span_reuse = 0u;
-    std::uint64_t state_sequence_fingerprint = 1469598103934665603ULL;
-    std::uint64_t static_sequence_fingerprint = 1469598103934665603ULL;
-    std::unordered_set<std::uint64_t> temperature_states;
-    std::unordered_set<std::uint64_t> density_states;
-    std::unordered_set<std::uint64_t> ptmp_states;
-    std::unordered_set<std::uint64_t> thermal_states;
-    std::unordered_set<std::uint64_t> static_states;
-    std::unordered_set<std::uint64_t> cutoff_signatures;
-    std::unordered_map<std::uint64_t, PreviousState> previous_by_static;
-};
-
-std::uint64_t binary64_bits_v068240226(double value) {
-    std::uint64_t bits = 0u;
-    static_assert(sizeof(bits) == sizeof(value), "binary64 size mismatch");
-    std::memcpy(&bits, &value, sizeof(bits));
-    return bits;
-}
-
-std::uint64_t fnv1a_u64_v068240226(std::uint64_t hash, std::uint64_t value) {
-    constexpr std::uint64_t prime = 1099511628211ULL;
-    for (unsigned shift = 0; shift < 64; shift += 8) {
-        hash ^= (value >> shift) & 0xffULL;
-        hash *= prime;
-    }
-    return hash;
-}
-
-std::uint64_t type53_recomb_static_key_v068240226(
-    int record_number,
-    const BoundFreePreparedGeometryV064895& geometry,
-    double threshold_ev,
-    double bound_g,
-    double continuum_g,
-    double continuum_energy) {
-    std::uint64_t hash = 1469598103934665603ULL;
-    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(record_number)));
-    hash = fnv1a_u64_v068240226(hash, geometry.source_energy_hash);
-    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(threshold_ev));
-    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(bound_g));
-    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(continuum_g));
-    hash = fnv1a_u64_v068240226(hash, binary64_bits_v068240226(continuum_energy));
-    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(geometry.pair_count));
-    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(geometry.nb1));
-    hash = fnv1a_u64_v068240226(hash, static_cast<std::uint64_t>(geometry.klmax));
-    return hash;
-}
-
-void observe_type53_recombination_v068240226(
-    Type53RecombinationDynamicAttributionV068240226& out,
-    std::uint64_t static_key,
-    double temperature_k,
-    double electron_density_cm3,
-    double ptmp_sum,
-    double rnist,
-    std::uint64_t interval_count,
-    std::uint64_t active_interval_count,
-    bool prepared_geometry,
-    bool reduced_grid,
-    bool threshold_publication_reached) {
-    if (!out.enabled) return;
-    const std::uint64_t temperature_bits = binary64_bits_v068240226(temperature_k);
-    const std::uint64_t density_bits = binary64_bits_v068240226(electron_density_cm3);
-    const std::uint64_t ptmp_bits = binary64_bits_v068240226(ptmp_sum);
-    const std::uint64_t rnist_bits = binary64_bits_v068240226(rnist);
-    std::uint64_t thermal_hash = fnv1a_u64_v068240226(1469598103934665603ULL, temperature_bits);
-    thermal_hash = fnv1a_u64_v068240226(thermal_hash, density_bits);
-    const std::uint64_t driver_hash = fnv1a_u64_v068240226(thermal_hash, ptmp_bits);
-    const std::uint64_t cutoff_hash = fnv1a_u64_v068240226(static_key, active_interval_count);
-
-    ++out.observations;
-    if (prepared_geometry) ++out.prepared_geometry_observations;
-    else ++out.local_geometry_observations;
-    if (reduced_grid) ++out.reduced_grid_observations;
-    else ++out.full_grid_observations;
-    out.integration_intervals += interval_count;
-    out.active_intervals += active_interval_count;
-    out.cutoff_intervals += interval_count - active_interval_count;
-    if (threshold_publication_reached) ++out.threshold_publication_observations;
-
-    out.temperature_states.insert(temperature_bits);
-    out.density_states.insert(density_bits);
-    out.ptmp_states.insert(ptmp_bits);
-    out.thermal_states.insert(thermal_hash);
-    out.static_states.insert(static_key);
-    out.cutoff_signatures.insert(cutoff_hash);
-
-    out.static_sequence_fingerprint = fnv1a_u64_v068240226(out.static_sequence_fingerprint, static_key);
-    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, static_key);
-    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, temperature_bits);
-    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, density_bits);
-    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, ptmp_bits);
-    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, rnist_bits);
-    out.state_sequence_fingerprint = fnv1a_u64_v068240226(out.state_sequence_fingerprint, active_interval_count);
-
-    const Type53RecombinationDynamicAttributionV068240226::PreviousState current{temperature_bits, density_bits, ptmp_bits, thermal_hash,
-                                driver_hash, rnist_bits, active_interval_count};
-    const auto inserted = out.previous_by_static.emplace(static_key, current);
-    if (!inserted.second) {
-        ++out.previous_static_comparisons;
-        const Type53RecombinationDynamicAttributionV068240226::PreviousState& previous = inserted.first->second;
-        if (previous.temperature_bits == temperature_bits) ++out.prev_temperature_reuse;
-        if (previous.density_bits == density_bits) ++out.prev_density_reuse;
-        if (previous.ptmp_bits == ptmp_bits) ++out.prev_ptmp_reuse;
-        if (previous.thermal_hash == thermal_hash) ++out.prev_thermal_reuse;
-        if (previous.driver_hash == driver_hash) ++out.prev_driver_reuse;
-        if (previous.rnist_bits == rnist_bits) ++out.prev_rnist_reuse;
-        if (previous.active_intervals == active_interval_count) ++out.prev_cutoff_span_reuse;
-        inserted.first->second = current;
-    }
-}
-
-
 struct xstar_fixed_state_context_impl {
     Program program;
     // 0.6.82.31: persistent allocation/workspace foundation.  This storage is
@@ -4934,8 +4814,6 @@ struct xstar_fixed_state_context_impl {
     // 0.6.82.40.2.8: enables boundary-level owner sampling only.  The hot
     // evaluator receives no additional clocks or branches from this flag.
     bool fixed_controller_diagnostics_enabled_v06824028 = false;
-    // 0.6.82.40.2.26: opt-in dynamic Type-53 recombination/Milne attribution.
-    Type53RecombinationDynamicAttributionV068240226 type53_recomb_attribution_v068240226{};
     // 0.6.82.40.2.14: resolve contribution hot-path mode once per context so
     // the fixed-state hot path never performs repeated environment parsing.
     bool contribution_hotpath_mode_initialized_v068240214 = false;
@@ -7415,7 +7293,8 @@ BoundFreePreparedGeometryV064895 prepare_bound_free_geometry(
     double threshold_ev,
     bool type49_semantics,
     bool phextrap_pairs,
-    const Type53RecordContext* record_context
+    const Type53RecordContext* record_context,
+    bool prepare_type53_static_kernel_v068240227 = false
 ) {
     BoundFreePreparedGeometryV064895 out;
     if (!payload || real_count < 4 || real_count % 2 != 0 || !source_energy_ev || source_bin_count < 3)
@@ -7616,6 +7495,24 @@ BoundFreePreparedGeometryV064895 prepare_bound_free_geometry(
         out.sgbar_base_index = compact_begin_v06823613;
     }
 
+    // 0.6.82.40.2.27: prepare the exact record/grid-static bbnurj factor once
+    // with immutable geometry.  This removes repeated pow() work from the
+    // dynamic Type-53 Milne interval loop without moving rnist, ptmp, density,
+    // temperature, or any accumulated product across an arithmetic boundary.
+    if (prepare_type53_static_kernel_v068240227 && !type49_semantics) {
+        out.type53_bbnurj_v068240227.resize(out.sgbar.size());
+        for (std::size_t offset_v068240227 = 0;
+             offset_v068240227 < out.type53_bbnurj_v068240227.size();
+             ++offset_v068240227) {
+            const int source_index_v068240227 =
+                out.sgbar_base_index + static_cast<int>(offset_v068240227);
+            const double epiip_v068240227 = source_energy_ev[source_index_v068240227];
+            out.type53_bbnurj_v068240227[offset_v068240227] =
+                std::pow(std::min(2.0e4, epiip_v068240227), 3.0) * 1.571e22 * 2.0;
+        }
+        out.type53_static_kernel_prepared_v068240227 = true;
+    }
+
     out.valid = true;
     out.source_bin_count = source_bin_count;
     out.source_energy_hash = binary64_sequence_fnv1a(source_energy_ev, source_bin_count);
@@ -7649,7 +7546,7 @@ bool evaluate_type53_source_integral(
     xstar_element_contribution_v1& contribution,
     Type53SourceShadow* shadow,
     const BoundFreePreparedGeometryV064895* prepared_geometry = nullptr,
-    Type53RecombinationDynamicAttributionV068240226* recomb_attribution_v068240226 = nullptr
+    const Type53StaticKernelV068240227* static_kernel_v068240227 = nullptr
 ) {
     if (!payload || real_count < 4 || real_count % 2 != 0) return false;
     const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
@@ -7709,11 +7606,24 @@ bool evaluate_type53_source_integral(
             source_index_v06823613 - sgbar_base_v06823613);
         return offset_v06823613 < sgbar.size() ? sgbar[offset_v06823613] : 0.0;
     };
+    const bool static_kernel_ready_v068240227 =
+        !type49_semantics && static_kernel_v068240227 &&
+        static_kernel_v068240227->mode == Type53StaticKernelModeV068240227::Optimized &&
+        geometry->type53_static_kernel_prepared_v068240227 &&
+        geometry->type53_bbnurj_v068240227.size() == geometry->sgbar.size();
+    const auto static_bbnurj_at_v068240227 = [&](int source_index_v068240227) -> double {
+        const std::size_t offset_v068240227 = static_cast<std::size_t>(
+            source_index_v068240227 - geometry->sgbar_base_index);
+        return geometry->type53_bbnurj_v068240227[offset_v068240227];
+    };
 
     constexpr double kBoltzmannErgK = xstar_constants::kBoltzmannErgPerK;
     constexpr double kKtEvPerT4 = xstar_constants::kLegacyBoltzmannEvPerT4;
-    const double t4 = input.temperature_k / 1.0e4;
-    const double q2 = 2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
+    const double t4 = static_kernel_ready_v068240227
+        ? static_kernel_v068240227->t4 : input.temperature_k / 1.0e4;
+    const double q2 = static_kernel_ready_v068240227
+        ? static_kernel_v068240227->q2
+        : 2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
     const double bound_g = row46_contract ? row46_contract->bound_statistical_weight
         : (record_context && record_context->valid ? record_context->bound_statistical_weight : lower.statistical_weight);
     const double continuum_g = std::max(row46_contract ? row46_contract->continuum_statistical_weight
@@ -7726,7 +7636,9 @@ bool evaluate_type53_source_integral(
         ? std::max(0.0, kType53RydEv * payload[0])
         : std::max(0.0, ethtmp + kType53RydEv * payload[0]);
     const double rnist = rnissel * type53_expo(-exponent_energy / kKtEvPerT4 / std::max(t4, 1.0e-300));
-    const double bktm = kBoltzmannErgK * input.temperature_k / kErgPerEv;
+    const double bktm = static_kernel_ready_v068240227
+        ? static_kernel_v068240227->bktm
+        : kBoltzmannErgK * input.temperature_k / kErgPerEv;
     if (!(bktm > 0.0)) return false;
 
     double sumr = 0.0;
@@ -7743,7 +7655,9 @@ bool evaluate_type53_source_integral(
     double temphp2 = temprp * (epiip - threshold_ev);
     double exptst = (epiip - threshold_ev) / bktm;
     double exptmpp = type53_expo(-exptst);
-    double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+    double bbnurjp = static_kernel_ready_v068240227
+        ? static_bbnurj_at_v068240227(nb1)
+        : std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
     double tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp / epiip * ptmp_sum : 0.0;
     double tempcp = tempip * epiip;
     double tempcp2 = tempip * (epiip - threshold_ev);
@@ -7777,7 +7691,9 @@ bool evaluate_type53_source_integral(
         exptmpp = 0.0;
         if (previous_exptst < 200.0) {
             exptmpp = type53_expo(-exptst);
-            bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+            bbnurjp = static_kernel_ready_v068240227
+                ? static_bbnurj_at_v068240227(kl + 1)
+                : std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
             const double tempi = tempip;
             const double tempip_unescaped = epiip != 0.0
                 ? rnist * bbnurjp * sgtpp * exptmpp * 12.56 / epiip : 0.0;
@@ -7819,35 +7735,6 @@ bool evaluate_type53_source_integral(
         threshold_abs_sigma_cm2 = source_sgtp;
         threshold_stimulated_sigma_cm2 = rnist * source_exptmpp * source_sgtp * ptmp_sum;
         threshold_publication_reached = true;
-    }
-
-    if (recomb_attribution_v068240226 && recomb_attribution_v068240226->enabled && !type49_semantics) {
-        // Diagnostic-only exact decision census.  Source energies are strictly
-        // increasing, so find the first interval whose *previous* endpoint has
-        // exptst >= 200 using the identical subtraction/division/comparison as
-        // the source loop.  This keeps all .2.20 production-loop instructions
-        // untouched when attribution is disabled.
-        int active_end_v068240226 = nb1;
-        int lo_v068240226 = nb1;
-        int hi_v068240226 = klmax;
-        while (lo_v068240226 < hi_v068240226) {
-            const int mid_v068240226 = lo_v068240226 + (hi_v068240226 - lo_v068240226) / 2;
-            const double previous_exptst_v068240226 =
-                (source_energy_ev[mid_v068240226] - threshold_ev) / bktm;
-            if (previous_exptst_v068240226 < 200.0) lo_v068240226 = mid_v068240226 + 1;
-            else hi_v068240226 = mid_v068240226;
-        }
-        active_end_v068240226 = lo_v068240226;
-        const std::uint64_t recomb_active_intervals_v068240226 =
-            static_cast<std::uint64_t>(std::max(0, active_end_v068240226 - nb1));
-        const std::uint64_t static_key_v068240226 = type53_recomb_static_key_v068240226(
-            record_number, *geometry, threshold_ev, bound_g, continuum_g, continuum_energy);
-        observe_type53_recombination_v068240226(
-            *recomb_attribution_v068240226, static_key_v068240226,
-            input.temperature_k, input.electron_density_cm3, ptmp_sum, rnist,
-            static_cast<std::uint64_t>(std::max(0, klmax - nb1)),
-            recomb_active_intervals_v068240226, prepared_geometry != nullptr,
-            has_dsec_radiation, threshold_publication_reached);
     }
 
     // The immutable v0.6.47.2 source evaluation of the near-threshold
@@ -8009,10 +7896,14 @@ struct RateEvaluationContextV064894 {
     const std::vector<std::uint32_t>* bound_free_slot_by_record_v0682371 = nullptr;
     const std::vector<Type53RecordContext>* bound_free_context_by_slot_v0682371 = nullptr;
     BoundFreePerfCountersV064895* bound_free_perf = nullptr;
+    // 0.6.82.40.2.27 fixed-call Type-53 scalars.  In optimized mode these
+    // are computed once per fixed-state evaluation with the exact historical
+    // expressions and consumed only by Type-53 prepared geometry.
+    Type53StaticKernelV068240227 type53_static_kernel_v068240227{};
+    xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v068240227 = nullptr;
     // 0.6.82.40.2.6 observation counters are kept in the already-private
     // performance foundation; this pointer never escapes the fixed context.
     xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v06824026 = nullptr;
-    Type53RecombinationDynamicAttributionV068240226* type53_recomb_attribution_v068240226 = nullptr;
     bool force_legacy_bound_free = false;
     std::uint64_t reduced_energy_hash = 0;
     std::uint64_t full_energy_hash = 0;
@@ -8036,6 +7927,16 @@ RateEvaluationContextV064894 make_rate_evaluation_context(
     context.t4 = input.temperature_k / 1.0e4;
     context.sqrt_t4 = std::sqrt(std::max(context.t4, 1.0e-300));
     context.kt_ev = kBoltzmannEvK * input.temperature_k;
+    context.type53_static_kernel_v068240227.mode =
+        configured_type53_static_kernel_mode_v068240227();
+    if (context.type53_static_kernel_v068240227.mode ==
+        Type53StaticKernelModeV068240227::Optimized) {
+        context.type53_static_kernel_v068240227.t4 = input.temperature_k / 1.0e4;
+        context.type53_static_kernel_v068240227.q2 =
+            2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
+        context.type53_static_kernel_v068240227.bktm =
+            xstar_constants::kBoltzmannErgPerK * input.temperature_k / kErgPerEv;
+    }
     context.calc_emisab_workspace = calc_emisab_workspace;
     // The calc_hmc input differs from the controller input only by the
     // reduced epim/bremsam pointers.  Construct it once per fixed-state
@@ -8145,10 +8046,14 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
     const int expected_phextrap_max = phextrap_pairs && record_context &&
         record_context->phextrap_max_points > 0 ? record_context->phextrap_max_points
         : static_cast<int>(count);
+    const bool prepare_type53_static_kernel_v068240227 =
+        !type49_semantics && rate_context.type53_static_kernel_v068240227.mode ==
+            Type53StaticKernelModeV068240227::Optimized;
     const bool reusable = geometry.valid && geometry.source_bin_count == count &&
         geometry.source_energy_hash == expected_hash && geometry.threshold_ev == threshold_ev &&
         geometry.type49_semantics == type49_semantics && geometry.phextrap_pairs == phextrap_pairs &&
-        geometry.phextrap_max_points == expected_phextrap_max;
+        geometry.phextrap_max_points == expected_phextrap_max &&
+        geometry.type53_static_kernel_prepared_v068240227 == prepare_type53_static_kernel_v068240227;
     if (!reusable) {
         const std::uint64_t old_capacity_bytes_v06823613 =
             static_cast<std::uint64_t>(geometry.sgbar.capacity()) * sizeof(double);
@@ -8161,8 +8066,14 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
         geometry = prepare_bound_free_geometry(
             program.reals.data() + execution_v0682375.real_offset,
             record_context && record_context->valid ? record_context->pair_real_count : execution_v0682375.real_count,
-            energy, count, threshold_ev, type49_semantics, phextrap_pairs, record_context);
+            energy, count, threshold_ev, type49_semantics, phextrap_pairs, record_context,
+            prepare_type53_static_kernel_v068240227);
         if (!geometry.valid) return nullptr;
+        if (prepare_type53_static_kernel_v068240227 && rate_context.perf_foundation_v068240227) {
+            ++rate_context.perf_foundation_v068240227->type53_static_geometry_builds_v068240227;
+            rate_context.perf_foundation_v068240227->type53_static_bbnurj_values_prepared_v068240227 +=
+                static_cast<std::uint64_t>(geometry.type53_bbnurj_v068240227.size());
+        }
         const std::uint64_t new_capacity_bytes_v06823613 =
             static_cast<std::uint64_t>(geometry.sgbar.capacity()) * sizeof(double);
         const std::uint64_t new_dense_bytes_v06823613 =
@@ -8675,7 +8586,18 @@ EvaluatedRecord evaluate_record(
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record_id_v0682375, false, false,
                 source_shadow, &out.bound_free_payload().type53_shadow_v0682374(), prepared_reduced_v064895,
-                rate_context.type53_recomb_attribution_v068240226);
+                &rate_context.type53_static_kernel_v068240227);
+            if (rate_context.perf_foundation_v068240227) {
+                if (rate_context.type53_static_kernel_v068240227.mode == Type53StaticKernelModeV068240227::Optimized) {
+                    ++rate_context.perf_foundation_v068240227->type53_static_optimized_calls_v068240227;
+                    if (!prepared_reduced_v064895 ||
+                        !prepared_reduced_v064895->type53_static_kernel_prepared_v068240227) {
+                        ++rate_context.perf_foundation_v068240227->type53_static_fallback_calls_v068240227;
+                    }
+                } else {
+                    ++rate_context.perf_foundation_v068240227->type53_static_historical_calls_v068240227;
+                }
+            }
             if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
                 ++rate_context.bound_free_perf->reduced_dynamic_integrals;
 
@@ -10498,7 +10420,17 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free(
         evaluated.bound_free_payload().bound_free_threshold_ev_v064895,
         evaluated.bound_free_payload().bound_free_ptmp_sum_v064895,
         row46_contract, record_context.valid ? &record_context : nullptr,
-        record.record, type49, type49, contribution, &shadow, prepared);
+        record.record, type49, type49, contribution, &shadow, prepared,
+        type49 ? nullptr : &rate_context.type53_static_kernel_v068240227);
+    if (!type49 && rate_context.perf_foundation_v068240227) {
+        if (rate_context.type53_static_kernel_v068240227.mode == Type53StaticKernelModeV068240227::Optimized) {
+            ++rate_context.perf_foundation_v068240227->type53_static_optimized_calls_v068240227;
+            if (!prepared || !prepared->type53_static_kernel_prepared_v068240227)
+                ++rate_context.perf_foundation_v068240227->type53_static_fallback_calls_v068240227;
+        } else {
+            ++rate_context.perf_foundation_v068240227->type53_static_historical_calls_v068240227;
+        }
+    }
     if (!ok) return Type53SourceShadow{};
     if (rate_context.bound_free_perf) {
         ++rate_context.bound_free_perf->full_dynamic_integrals;
@@ -10564,7 +10496,17 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free_v06823614(
         r, pair_real_count, lower, upper, full_input,
         revisit.threshold_ev, revisit.ptmp_sum,
         row46_contract, record_context.valid ? &record_context : nullptr,
-        record.record, type49, type49, contribution, &shadow, prepared);
+        record.record, type49, type49, contribution, &shadow, prepared,
+        type49 ? nullptr : &rate_context.type53_static_kernel_v068240227);
+    if (!type49 && rate_context.perf_foundation_v068240227) {
+        if (rate_context.type53_static_kernel_v068240227.mode == Type53StaticKernelModeV068240227::Optimized) {
+            ++rate_context.perf_foundation_v068240227->type53_static_optimized_calls_v068240227;
+            if (!prepared || !prepared->type53_static_kernel_prepared_v068240227)
+                ++rate_context.perf_foundation_v068240227->type53_static_fallback_calls_v068240227;
+        } else {
+            ++rate_context.perf_foundation_v068240227->type53_static_historical_calls_v068240227;
+        }
+    }
     if (!ok) return Type53SourceShadow{};
     if (rate_context.bound_free_perf) {
         ++rate_context.bound_free_perf->full_dynamic_integrals;
@@ -13901,9 +13843,11 @@ int run_impl(
         &ctx.bound_free_context_by_slot_v0682371;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
     rate_context_v064894.perf_foundation_v06824026 = &perf_foundation_v068231;
-    rate_context_v064894.type53_recomb_attribution_v068240226 =
-        ctx.type53_recomb_attribution_v068240226.enabled
-            ? &ctx.type53_recomb_attribution_v068240226 : nullptr;
+    rate_context_v064894.perf_foundation_v068240227 = &perf_foundation_v068231;
+    if (rate_context_v064894.type53_static_kernel_v068240227.mode ==
+        Type53StaticKernelModeV068240227::Optimized) {
+        ++perf_foundation_v068231.type53_static_fixed_contexts_v068240227;
+    }
     const bool use_compact_bound_free_revisit_v06823614 =
         native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
         !environment_flag("XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT");
@@ -19805,6 +19749,11 @@ void capture_fixed_live_owner_memory_v06824028(
         capacity_bytes(context->bound_free_context_by_slot_v0682371) +
         context->bound_free_perf_v064895.reduced_sgbar_capacity_bytes_current_v06823613 +
         context->bound_free_perf_v064895.full_sgbar_capacity_bytes_current_v06823613;
+    for (const auto& cache_v068240227 : context->bound_free_prepared_v064895) {
+        out.prepared_bound_free_capacity_bytes +=
+            static_cast<std::uint64_t>(cache_v068240227.reduced.type53_bbnurj_v068240227.capacity()) * sizeof(double) +
+            static_cast<std::uint64_t>(cache_v068240227.full.type53_bbnurj_v068240227.capacity()) * sizeof(double);
+    }
 
     out.execution_plan_capacity_bytes =
         capacity_bytes(context->flat_record_indices_v068237) +
@@ -19860,42 +19809,6 @@ void capture_performance_foundation_v068231(
     out.bound_free_predecoded_context_hits_v0682371 =
         bf_v06823613.predecoded_context_hits_v0682371;
 
-    // 0.6.82.40.2.26: collapse the opt-in exact-state census into scalar
-    // counters for the standalone performance stream.  Set iteration order is
-    // never exposed; only exact cardinalities and insertion-order fingerprints
-    // are published.
-    {
-        const auto& a = context->type53_recomb_attribution_v068240226;
-        out.type53_recomb_attr_enabled_v068240226 = a.enabled ? 1u : 0u;
-        if (a.enabled) {
-            out.type53_recomb_observations_v068240226 = a.observations;
-            out.type53_recomb_prepared_geometry_observations_v068240226 = a.prepared_geometry_observations;
-            out.type53_recomb_local_geometry_observations_v068240226 = a.local_geometry_observations;
-            out.type53_recomb_reduced_grid_observations_v068240226 = a.reduced_grid_observations;
-            out.type53_recomb_full_grid_observations_v068240226 = a.full_grid_observations;
-            out.type53_recomb_integration_intervals_v068240226 = a.integration_intervals;
-            out.type53_recomb_active_intervals_v068240226 = a.active_intervals;
-            out.type53_recomb_cutoff_intervals_v068240226 = a.cutoff_intervals;
-            out.type53_recomb_threshold_publication_observations_v068240226 = a.threshold_publication_observations;
-            out.type53_recomb_unique_temperature_states_v068240226 = a.temperature_states.size();
-            out.type53_recomb_unique_density_states_v068240226 = a.density_states.size();
-            out.type53_recomb_unique_ptmp_states_v068240226 = a.ptmp_states.size();
-            out.type53_recomb_unique_thermal_states_v068240226 = a.thermal_states.size();
-            out.type53_recomb_unique_static_states_v068240226 = a.static_states.size();
-            out.type53_recomb_unique_cutoff_signatures_v068240226 = a.cutoff_signatures.size();
-            out.type53_recomb_previous_static_comparisons_v068240226 = a.previous_static_comparisons;
-            out.type53_recomb_prev_temperature_reuse_v068240226 = a.prev_temperature_reuse;
-            out.type53_recomb_prev_density_reuse_v068240226 = a.prev_density_reuse;
-            out.type53_recomb_prev_ptmp_reuse_v068240226 = a.prev_ptmp_reuse;
-            out.type53_recomb_prev_thermal_reuse_v068240226 = a.prev_thermal_reuse;
-            out.type53_recomb_prev_driver_reuse_v068240226 = a.prev_driver_reuse;
-            out.type53_recomb_prev_rnist_reuse_v068240226 = a.prev_rnist_reuse;
-            out.type53_recomb_prev_cutoff_span_reuse_v068240226 = a.prev_cutoff_span_reuse;
-            out.type53_recomb_state_sequence_fingerprint_v068240226 = a.state_sequence_fingerprint;
-            out.type53_recomb_static_sequence_fingerprint_v068240226 = a.static_sequence_fingerprint;
-        }
-    }
-
     // 0.6.82.40.2.5: convert the diagnostic touched-record bitmap into an
     // exact union of virtual payload pages reachable by each target type.
     // This is done only when the final performance snapshot is captured, not
@@ -19950,7 +19863,9 @@ void capture_performance_foundation_v068231(
                     out.ion_prepared_cache_bytes_by_type_v06824025[dt_v06824025] +=
                         sizeof(BoundFreePreparedRecordCacheV064895) + sizeof(Type53RecordContext) +
                         static_cast<std::uint64_t>(cache_v06824025.reduced.sgbar.capacity()) * sizeof(double) +
-                        static_cast<std::uint64_t>(cache_v06824025.full.sgbar.capacity()) * sizeof(double);
+                        static_cast<std::uint64_t>(cache_v06824025.full.sgbar.capacity()) * sizeof(double) +
+                        static_cast<std::uint64_t>(cache_v06824025.reduced.type53_bbnurj_v068240227.capacity()) * sizeof(double) +
+                        static_cast<std::uint64_t>(cache_v06824025.full.type53_bbnurj_v068240227.capacity()) * sizeof(double);
                 }
             }
         }
@@ -20046,18 +19961,6 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     }
     ptr->fixed_controller_diagnostics_enabled_v06824028 =
         environment_flag("XSTAR_FIXED_CONTROLLER_DIAGNOSTICS");
-    ptr->type53_recomb_attribution_v068240226.enabled =
-        environment_flag("XSTAR_V068240226_TYPE53_RECOMB_ATTRIBUTION");
-    if (ptr->type53_recomb_attribution_v068240226.enabled) {
-        auto& a = ptr->type53_recomb_attribution_v068240226;
-        a.temperature_states.reserve(4096u);
-        a.density_states.reserve(8192u);
-        a.ptmp_states.reserve(65536u);
-        a.thermal_states.reserve(8192u);
-        a.static_states.reserve(1024u);
-        a.cutoff_signatures.reserve(65536u);
-        a.previous_by_static.reserve(1024u);
-    }
     ptr->source_leveltemp_energy_workspace_v06481231.assign(
         kSourceLeveltempNdlV06481231, 0.0);
     if (ptr->program.records.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
