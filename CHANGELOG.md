@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.32 - Remaining controller cross-language attribution - 2026-08-28
+
+- Attribution-only successor to accepted `0.6.82.40.2.30`; rejected `.2.31` traversal-observation changes are not carried forward.
+- Preserve the accepted `.2.30` continuum workspace hot path and `.2.27` Type-53 static-kernel preparation exactly; no scientific arithmetic/order, controller decision, source traversal, publication schema, or ABI is changed.
+- Promote existing cumulative fixed-state deltas to always-on coarse bookkeeping for DSEC and accepted-boundary wrappers, without enabling the expensive deep radial-owner diagnostic mode and without adding clocks inside evaluators.
+- Split the final zero-thickness local recompute into fixed-state and non-fixed portions using the existing outer timer plus cumulative fixed-state statistics.
+- Qualification explicitly partitions the remaining C5 low-`xi` cross-language gap into DSEC/controller non-fixed overhead, accepted-boundary non-fixed overhead, SAVD/detail staging, post-boundary/pre-SAVD work, radial/controller orchestration, publication/FITS work, currently unattributed controller time, and process/top-level overhead.
+- An optional incremental FORTRAN timing patch (applied after the `.2.29` fine-HMC patch) adds only coarse timers for DSEC-contained HMC work and matched radial pre-SAVD/post-SAVD regions. No multi-element run is included.
+- `.2.31 ELEMENT_TRAVERSAL_HOT_PATH` is recorded as REJECTED: traversal ratio `0.998394577161`, wall ratio `0.997180789082`, only 1/2 paired traversal runs faster. Spectral emissivity and element solver remain deferred because `.2.29` measured both faster than FORTRAN.
+
 ## 0.6.82.40.2.31 - Element traversal hot path - 2026-08-28
 
 - Branches directly from low-xi accepted `0.6.82.40.2.30`, carrying forward the exact Type-53 static-kernel and continuum-workspace optimizations; rejected `.2.28` exponent reuse is not carried.

@@ -501,21 +501,6 @@ ContinuumWorkspaceHotPathModeV068240230 configured_continuum_workspace_hotpath_m
     throw std::runtime_error("invalid XSTAR_V068240230_CONTINUUM_WORKSPACE_MODE");
 }
 
-// 0.6.82.40.2.31: element-traversal production telemetry hot-path control.
-// Historical preserves the .2.30 per-element observation behavior. Optimized
-// leaves scientific traversal and arithmetic unchanged while eliding only
-// production-unneeded RSS/audit observation work.
-enum class ElementTraversalHotPathModeV068240231 { Historical, Optimized };
-
-ElementTraversalHotPathModeV068240231 configured_element_traversal_hotpath_mode_v068240231() {
-    const char* value = std::getenv("XSTAR_V068240231_ELEMENT_TRAVERSAL_MODE");
-    if (!value || !*value || std::string(value) == "optimized")
-        return ElementTraversalHotPathModeV068240231::Optimized;
-    if (std::string(value) == "historical")
-        return ElementTraversalHotPathModeV068240231::Historical;
-    throw std::runtime_error("invalid XSTAR_V068240231_ELEMENT_TRAVERSAL_MODE");
-}
-
 // v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
 // This records the legacy approximation, the already-computed source-faithful
 // phint53 shadow, and the actually committed answers for the two call-1
@@ -5007,11 +4992,6 @@ struct xstar_fixed_state_context_impl {
     TraversalHotPathModeV068240215 traversal_hotpath_mode_v068240215 =
         TraversalHotPathModeV068240215::Optimized;
     std::vector<Option10EndpointPlanV068240215> option10_endpoint_plan_by_record_v068240215;
-    // 0.6.82.40.2.31: separate control for production-only traversal
-    // observation overhead; .2.15 scientific traversal semantics remain frozen.
-    bool element_traversal_hotpath_mode_initialized_v068240231 = false;
-    ElementTraversalHotPathModeV068240231 element_traversal_hotpath_mode_v068240231 =
-        ElementTraversalHotPathModeV068240231::Optimized;
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
@@ -14119,46 +14099,6 @@ int run_impl(
     perf_foundation_v068231.bound_free_workspace_seconds +=
         elapsed(bound_free_workspace_started_v068231);
 
-    if (!ctx.element_traversal_hotpath_mode_initialized_v068240231) {
-        ctx.element_traversal_hotpath_mode_v068240231 =
-            configured_element_traversal_hotpath_mode_v068240231();
-        ctx.element_traversal_hotpath_mode_initialized_v068240231 = true;
-    }
-    const bool element_traversal_hotpath_optimized_v068240231 =
-        ctx.element_traversal_hotpath_mode_v068240231 ==
-        ElementTraversalHotPathModeV068240231::Optimized;
-    if (element_traversal_hotpath_optimized_v068240231)
-        ++perf_foundation_v068231.element_traversal_hot_optimized_fixed_calls_v068240231;
-    else
-        ++perf_foundation_v068231.element_traversal_hot_historical_fixed_calls_v068240231;
-
-    // Optimized .31 resolves immutable diagnostic controls once per fixed call.
-    // Historical intentionally preserves .2.30 lookup cadence for A/B control.
-    const int traversal_call_index_cached_v068240231 =
-        element_traversal_hotpath_optimized_v068240231
-            ? environment_data_type("XSTAR_NATIVE_CALL_INDEX") : 0;
-    const int traversal_source_sequence_cached_v068240231 =
-        element_traversal_hotpath_optimized_v068240231
-            ? environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") : 0;
-    const bool force_full_record_traversal_cached_v068240231 =
-        element_traversal_hotpath_optimized_v068240231
-            ? environment_flag("XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL") : false;
-    const bool deep_traversal_telemetry_v068240231 =
-        !element_traversal_hotpath_optimized_v068240231 ||
-        environment_flag("XSTAR_V068240231_DEEP_TRAVERSAL_TELEMETRY");
-    const bool preliminary_audit_requested_v068240231 =
-        std::getenv("XSTAR_V0648117_PRELIM_ION_BALANCE_RECORDS_PATH") != nullptr ||
-        std::getenv("XSTAR_V0648117_PRELIM_ION_BALANCE_STAGES_PATH") != nullptr;
-    const bool sparse_audit_requested_v068240231 =
-        std::getenv("XSTAR_V064812337_SPARSE_CACHE_AUDIT_PATH") != nullptr;
-    const bool residual_audit_requested_v068240231 =
-        std::getenv("XSTAR_V064812339_RESIDUAL_SCALING_AUDIT_PATH") != nullptr;
-    const bool traversal_selection_audit_requested_v068240231 =
-        std::getenv("XSTAR_V064812340_TRAVERSAL_SELECTION_AUDIT_PATH") != nullptr;
-    const char* option10_rate_provenance_path_cached_v068240231 =
-        element_traversal_hotpath_optimized_v068240231
-            ? std::getenv("XSTAR_V06822934_OPTION10_RATE_OWNERSHIP_PATH") : nullptr;
-
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
          element_slot_v064894 < ctx.program.elements.size();
@@ -14166,12 +14106,8 @@ int run_impl(
         const auto& element = ctx.program.elements[element_slot_v064894];
         const auto residual_element_started_v064812339 = clock_type::now();
         ResidualScalingAuditV064812339 residual_audit_v064812339;
-        residual_audit_v064812339.call_index = element_traversal_hotpath_optimized_v068240231
-            ? traversal_call_index_cached_v068240231
-            : environment_data_type("XSTAR_NATIVE_CALL_INDEX");
-        residual_audit_v064812339.source_sequence = element_traversal_hotpath_optimized_v068240231
-            ? traversal_source_sequence_cached_v068240231
-            : environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+        residual_audit_v064812339.call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
+        residual_audit_v064812339.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
         residual_audit_v064812339.element_z = element.element_z;
         residual_audit_v064812339.full_row_count = static_cast<std::size_t>(element.n_rows);
         auto& execution_plan_v068237 =
@@ -14427,13 +14363,8 @@ int run_impl(
             preliminary_records_v064812315, ctx.critical_ion_fraction,
             ctx.preliminary_type7_legacy_compat_v06481171, helium_preliminary_ablation_type);
         residual_audit_v064812339.preliminary_balance_seconds = elapsed(preliminary_balance_started_v064812339);
-        if (!element_traversal_hotpath_optimized_v068240231 ||
-            preliminary_audit_requested_v068240231) {
-            write_preliminary_ion_balance_audit(
-                element, preliminary, ctx.critical_ion_fraction);
-        } else {
-            ++perf_foundation_v068231.element_traversal_preliminary_audits_elided_v068240231;
-        }
+        write_preliminary_ion_balance_audit(
+            element, preliminary, ctx.critical_ion_fraction);
         // pprint(10) starts from calc_ion_rates totals for every source stage.
         // Retain that complete first-pass owner here; 0.6.82.29.3.4 below
         // overwrites active mml..mmu stages with calc_hmc_ion totals exactly
@@ -14487,9 +14418,7 @@ int run_impl(
             active.full_row_start, active.full_row_end}});
 
         const bool force_full_record_traversal_v064812315 =
-            element_traversal_hotpath_optimized_v068240231
-                ? force_full_record_traversal_cached_v068240231
-                : environment_flag("XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL");
+            environment_flag("XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL");
 
         // Pass 2 is the source calc_hmc_ion body: fully evaluate only records
         // owned by active ion stages.  Rate-7 records are deliberately retained
@@ -14771,12 +14700,7 @@ int run_impl(
             elapsed(sparse_cache_pass12_started_v064812337);
         sparse_cache_audit_v064812337.rate_seconds =
             stats.rate_seconds - sparse_cache_rate_before_v064812337;
-        if (!element_traversal_hotpath_optimized_v068240231 ||
-            sparse_audit_requested_v068240231) {
-            write_sparse_preliminary_cache_audit(sparse_cache_audit_v064812337);
-        } else {
-            ++perf_foundation_v068231.element_traversal_sparse_audits_elided_v068240231;
-        }
+        write_sparse_preliminary_cache_audit(sparse_cache_audit_v064812337);
         residual_audit_v064812339.preliminary_record_count = preliminary_cache_v064812337.size();
         residual_audit_v064812339.active_pass2_count = active_pass2_count_v064812337;
         residual_audit_v064812339.pass12_seconds = sparse_cache_audit_v064812337.pass12_seconds;
@@ -14810,12 +14734,8 @@ int run_impl(
         // returned by calc_hmc_ion.  Reconstruct that second-pass owner from
         // the corrected pass-2 EvaluatedRecord stream before publication.
         // This is publication state only; it does not feed the matrix solve.
-        if (native_production_v064897 && !defer_product_projection) {
-            if (deep_traversal_telemetry_v068240231)
-                sample_fixed_phase_rss_v068239(perf_foundation_v068231, 1u);
-            else
-                ++perf_foundation_v068231.element_traversal_rss_samples_elided_v068240231;
-        }
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 1u);
 
         const auto option10_ownership_started_v068240215 = clock_type::now();
         std::vector<double> historical_detailed_pirt_v068240215;
@@ -14832,9 +14752,7 @@ int run_impl(
         detailed_rrrt_v06822934.assign(static_cast<std::size_t>(element.element_z), 0.0);
 
         const char* option10_rate_provenance_path_v06822934 =
-            element_traversal_hotpath_optimized_v068240231
-                ? option10_rate_provenance_path_cached_v068240231
-                : std::getenv("XSTAR_V06822934_OPTION10_RATE_OWNERSHIP_PATH");
+            std::getenv("XSTAR_V06822934_OPTION10_RATE_OWNERSHIP_PATH");
         std::ofstream option10_rate_provenance_v06822934;
         if (option10_rate_provenance_path_v06822934 &&
             *option10_rate_provenance_path_v06822934) {
@@ -15364,10 +15282,7 @@ int run_impl(
             perf_foundation_v068231.postsolve_dead_inline_bytes_peak_v068239 = std::max(
                 perf_foundation_v068231.postsolve_dead_inline_bytes_peak_v068239,
                 discarded_v068239 * sizeof(EvaluatedRecord));
-            if (deep_traversal_telemetry_v068240231)
-                sample_fixed_phase_rss_v068239(perf_foundation_v068231, 2u);
-            else
-                ++perf_foundation_v068231.element_traversal_rss_samples_elided_v068240231;
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 2u);
         }
 
         // 0.6.82.30.8.6: removed an unused full copy of the contribution
@@ -15578,12 +15493,8 @@ int run_impl(
         residual_audit_v064812339.buffer_allocation_seconds = elapsed(buffer_allocation_started_v064812339);
         perf_foundation_v068231.matrix_workspace_seconds +=
             residual_audit_v064812339.buffer_allocation_seconds;
-        if (native_production_v064897 && !defer_product_projection) {
-            if (deep_traversal_telemetry_v068240231)
-                sample_fixed_phase_rss_v068239(perf_foundation_v068231, 3u);
-            else
-                ++perf_foundation_v068231.element_traversal_rss_samples_elided_v068240231;
-        }
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 3u);
         residual_audit_v064812339.active_buffer_matrix_bytes =
             (buffers.dense.capacity() + buffers.heat.capacity() + buffers.heat2.capacity()) * sizeof(double);
         residual_audit_v064812339.active_buffer_nonmatrix_bytes =
@@ -15644,12 +15555,8 @@ int run_impl(
         stats.element_seconds += residual_element_solve_seconds_v064812339;
         residual_audit_v064812339.element_solve_seconds = residual_element_solve_seconds_v064812339;
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
-        if (native_production_v064897 && !defer_product_projection) {
-            if (deep_traversal_telemetry_v068240231)
-                sample_fixed_phase_rss_v068239(perf_foundation_v068231, 4u);
-            else
-                ++perf_foundation_v068231.element_traversal_rss_samples_elided_v068240231;
-        }
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 4u);
         ++perf_foundation_v068231.element_solve_calls;
         if ((eout.status_flags & XSTAR_ELEMENT_STATUS_DENSE_RESCUE_USED) != 0u) {
             ++perf_foundation_v068231.dense_rescue_count_v0682364;
@@ -15988,12 +15895,8 @@ int run_impl(
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
-        if (native_production_v064897 && !defer_product_projection) {
-            if (deep_traversal_telemetry_v068240231)
-                sample_fixed_phase_rss_v068239(perf_foundation_v068231, 5u);
-            else
-                ++perf_foundation_v068231.element_traversal_rss_samples_elided_v068240231;
-        }
+        if (native_production_v064897 && !defer_product_projection)
+            sample_fixed_phase_rss_v068239(perf_foundation_v068231, 5u);
         perf_foundation_v068231.retained_array_seconds +=
             elapsed(retained_array_started_v068231);
         residual_audit_v064812339.full_population_shadow_bytes =
@@ -16063,18 +15966,8 @@ int run_impl(
                 perf_foundation_v068231.revisit_bytes_elided_peak_v06823614, elided_v06823614);
         }
         residual_audit_v064812339.element_to_mapback_seconds = elapsed(residual_element_started_v064812339);
-        if (!element_traversal_hotpath_optimized_v068240231 ||
-            residual_audit_requested_v068240231) {
-            write_residual_scaling_audit(residual_audit_v064812339);
-        } else {
-            ++perf_foundation_v068231.element_traversal_residual_audits_elided_v068240231;
-        }
-        if (!element_traversal_hotpath_optimized_v068240231 ||
-            traversal_selection_audit_requested_v068240231) {
-            write_traversal_selection_audit(traversal_audit_v064812340);
-        } else {
-            ++perf_foundation_v068231.element_traversal_selection_audits_elided_v068240231;
-        }
+        write_residual_scaling_audit(residual_audit_v064812339);
+        write_traversal_selection_audit(traversal_audit_v064812340);
 
         // Match local_zone.py exactly: accumulate explicit ion fractions
         // using (stage - 1), then add the fully stripped fraction at charge Z.

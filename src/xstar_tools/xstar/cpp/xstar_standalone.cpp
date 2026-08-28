@@ -342,6 +342,15 @@ struct PerformanceInstrumentationV064890 {
     double stpcut_seconds = 0.0;
     double step_seconds = 0.0;
     double final_zero_thickness_seconds = 0.0;
+    // 0.6.82.40.2.32 attribution-only final local xstarcalc split.
+    // The fixed-state delta comes from already-maintained cumulative stats;
+    // no clock is added inside the evaluator.
+    double final_zero_fixed_seconds_v068240232 = 0.0;
+    double final_zero_nonfixed_seconds_v068240232 = 0.0;
+    double final_zero_evaluate_seconds_v068240232 = 0.0;
+    double final_zero_evaluate_nonfixed_seconds_v068240232 = 0.0;
+    double final_zero_post_evaluate_seconds_v068240232 = 0.0;
+    std::uint64_t final_zero_fixed_calls_v068240232 = 0u;
     double product_state_build_seconds = 0.0;
     double retained_schema_seconds = 0.0;
     double writer_binemis_seconds = 0.0;
@@ -21043,16 +21052,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (g_performance_v064890) {
                 g_performance_v064890->controller_all_calls_v0682402 += 1u;
                 g_performance_v064890->controller_all_seconds_v0682402 += controller_call_elapsed_v0682402;
-                if (fixed_controller_diagnostics_v06824028) {
-                    const double fixed_delta_v06824028 = std::max(
-                        0.0, data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds);
-                    const std::uint64_t fixed_calls_delta_v06824028 =
-                        data.cumulative_stats.calls - fixed_stats_before_v064890.calls;
-                    g_performance_v064890->controller_fixed_seconds_v06824028 += fixed_delta_v06824028;
-                    g_performance_v064890->controller_nonfixed_seconds_v06824028 += std::max(
-                        0.0, controller_call_elapsed_v0682402 - fixed_delta_v06824028);
-                    g_performance_v064890->controller_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
-                }
+                // 0.6.82.40.2.32: always publish the coarse DSEC fixed/non-fixed
+                // split from cumulative fixed-state stats.  This is arithmetic
+                // on already-owned counters, not a new hot-path clock.  The
+                // expensive radial-owner sampling remains gated separately.
+                const double fixed_delta_v06824028 = std::max(
+                    0.0, data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds);
+                const std::uint64_t fixed_calls_delta_v06824028 =
+                    data.cumulative_stats.calls - fixed_stats_before_v064890.calls;
+                g_performance_v064890->controller_fixed_seconds_v06824028 += fixed_delta_v06824028;
+                g_performance_v064890->controller_nonfixed_seconds_v06824028 += std::max(
+                    0.0, controller_call_elapsed_v0682402 - fixed_delta_v06824028);
+                g_performance_v064890->controller_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
             }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 const std::size_t slot = call - 1u;
@@ -21161,16 +21172,17 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             const auto zone_post_boundary_started_v068240219 = std::chrono::steady_clock::now();
             if (g_performance_v064890) {
                 g_performance_v064890->boundary_all_seconds_v0682402 += boundary_elapsed_v0682402;
-                if (fixed_controller_diagnostics_v06824028) {
-                    const double fixed_delta_v06824028 = std::max(
-                        0.0, data.cumulative_stats.total_seconds - boundary_fixed_before_v06824028.total_seconds);
-                    const std::uint64_t fixed_calls_delta_v06824028 =
-                        data.cumulative_stats.calls - boundary_fixed_before_v06824028.calls;
-                    g_performance_v064890->boundary_fixed_seconds_v06824028 += fixed_delta_v06824028;
-                    g_performance_v064890->boundary_nonfixed_seconds_v06824028 += std::max(
-                        0.0, boundary_elapsed_v0682402 - fixed_delta_v06824028);
-                    g_performance_v064890->boundary_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
-                }
+                // 0.6.82.40.2.32: same coarse accepted-boundary split,
+                // always active and derived only from cumulative fixed-state
+                // counters plus the already-existing outer boundary timer.
+                const double fixed_delta_v06824028 = std::max(
+                    0.0, data.cumulative_stats.total_seconds - boundary_fixed_before_v06824028.total_seconds);
+                const std::uint64_t fixed_calls_delta_v06824028 =
+                    data.cumulative_stats.calls - boundary_fixed_before_v06824028.calls;
+                g_performance_v064890->boundary_fixed_seconds_v06824028 += fixed_delta_v06824028;
+                g_performance_v064890->boundary_nonfixed_seconds_v06824028 += std::max(
+                    0.0, boundary_elapsed_v0682402 - fixed_delta_v06824028);
+                g_performance_v064890->boundary_fixed_calls_v06824028 += fixed_calls_delta_v06824028;
             }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->boundary_projection_seconds[call - 1u] += boundary_elapsed_v0682402;
@@ -22358,10 +22370,22 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                     final_thermal_diagnostic_requested = true;
                 }
             }
+            const xstar_fixed_state_stats_v1 final_zero_fixed_before_v068240232 =
+                final_pprint_data.cumulative_stats;
+            const auto final_zero_evaluate_started_v068240232 =
+                std::chrono::steady_clock::now();
             auto final_pprint = evaluate_full_boundary(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
                 current_radius_cm_v068227, 0u);
+            const double final_zero_evaluate_elapsed_v068240232 =
+                performance_elapsed_seconds(final_zero_evaluate_started_v068240232);
+            const double final_zero_fixed_delta_v068240232 = std::max(
+                0.0, final_pprint_data.cumulative_stats.total_seconds -
+                    final_zero_fixed_before_v068240232.total_seconds);
+            const std::uint64_t final_zero_fixed_calls_delta_v068240232 =
+                final_pprint_data.cumulative_stats.calls -
+                final_zero_fixed_before_v068240232.calls;
             sample_final_boundary_v068240212(4u, data, &final_pprint_data, &final_pprint);
             if (final_thermal_diagnostic_requested) {
                 const auto parent = final_thermal_diagnostic_path.parent_path();
@@ -22485,7 +22509,22 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             whole.legacy_pprint.final_total_cooling = final_pprint.total_cooling;
             whole.legacy_pprint.final_hmctot = final_pprint.hmctot;
             if (g_performance_v064890) {
-                g_performance_v064890->final_zero_thickness_seconds += performance_elapsed_seconds(final_zero_thickness_started_v064890);
+                const double final_zero_elapsed_v068240232 =
+                    performance_elapsed_seconds(final_zero_thickness_started_v064890);
+                g_performance_v064890->final_zero_thickness_seconds +=
+                    final_zero_elapsed_v068240232;
+                g_performance_v064890->final_zero_fixed_seconds_v068240232 +=
+                    final_zero_fixed_delta_v068240232;
+                g_performance_v064890->final_zero_nonfixed_seconds_v068240232 += std::max(
+                    0.0, final_zero_elapsed_v068240232 - final_zero_fixed_delta_v068240232);
+                g_performance_v064890->final_zero_evaluate_seconds_v068240232 +=
+                    final_zero_evaluate_elapsed_v068240232;
+                g_performance_v064890->final_zero_evaluate_nonfixed_seconds_v068240232 += std::max(
+                    0.0, final_zero_evaluate_elapsed_v068240232 - final_zero_fixed_delta_v068240232);
+                g_performance_v064890->final_zero_post_evaluate_seconds_v068240232 += std::max(
+                    0.0, final_zero_elapsed_v068240232 - final_zero_evaluate_elapsed_v068240232);
+                g_performance_v064890->final_zero_fixed_calls_v068240232 +=
+                    final_zero_fixed_calls_delta_v068240232;
             }
             std::cout << "V048746255172582_PATCH52093_FINAL_ZERO_THICKNESS_EVALUATION=ACCEPT\n"
                       << "V048746255172582_PATCH520144_FINAL_WRITER_LOCAL_RECOMPUTE=XSTARCALC_HEATT_SOURCE_REAL_1E15\n"
@@ -23026,6 +23065,13 @@ void emit_controller_performance_instrumentation(
             << "V064890_PERF_STPCUT_SECONDS=" << perf.stpcut_seconds << "\n"
             << "V064890_PERF_STEP_SECONDS=" << perf.step_seconds << "\n"
             << "V064890_PERF_FINAL_ZERO_THICKNESS_SECONDS=" << perf.final_zero_thickness_seconds << "\n"
+            << "V068240232_FINAL_ZERO_FIXED_SECONDS=" << perf.final_zero_fixed_seconds_v068240232 << "\n"
+            << "V068240232_FINAL_ZERO_NONFIXED_SECONDS=" << perf.final_zero_nonfixed_seconds_v068240232 << "\n"
+            << "V068240232_FINAL_ZERO_EVALUATE_SECONDS=" << perf.final_zero_evaluate_seconds_v068240232 << "\n"
+            << "V068240232_FINAL_ZERO_EVALUATE_NONFIXED_SECONDS=" << perf.final_zero_evaluate_nonfixed_seconds_v068240232 << "\n"
+            << "V068240232_FINAL_ZERO_POST_EVALUATE_SECONDS=" << perf.final_zero_post_evaluate_seconds_v068240232 << "\n"
+            << "V068240232_FINAL_ZERO_FIXED_CALLS=" << perf.final_zero_fixed_calls_v068240232 << "\n"
+            << "V068240232_CONTROLLER_FIXED_DELTA_MODE=ALWAYS_COARSE_CUMULATIVE_NO_HOT_CLOCK\n"
             << "V064890_PERF_PRODUCT_STATE_BUILD_SECONDS=" << perf.product_state_build_seconds << "\n"
             << "V064890_PERF_RETAINED_SCHEMA_SECONDS=" << perf.retained_schema_seconds << "\n"
             << "V064890_PERF_WRITER_BINEMIS_SECONDS=" << perf.writer_binemis_seconds << "\n"
@@ -23545,27 +23591,6 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.continuum_hot_brcems_capacity_reuses_v068240230 << "\n"
             << "V068240230_CONTINUUM_POW_MODE_HOISTS="
             << perf.foundation_v068231.continuum_hot_pow_mode_hoists_v068240230 << "\n";
-        const auto traversal31_historical_v068240231 =
-            perf.foundation_v068231.element_traversal_hot_historical_fixed_calls_v068240231;
-        const auto traversal31_optimized_v068240231 =
-            perf.foundation_v068231.element_traversal_hot_optimized_fixed_calls_v068240231;
-        const char* traversal31_mode_v068240231 =
-            traversal31_optimized_v068240231 > 0u && traversal31_historical_v068240231 == 0u ? "OPTIMIZED" :
-            traversal31_historical_v068240231 > 0u && traversal31_optimized_v068240231 == 0u ? "HISTORICAL" :
-            traversal31_historical_v068240231 == 0u && traversal31_optimized_v068240231 == 0u ? "UNOBSERVED" : "MIXED";
-        out << "V068240231_ELEMENT_TRAVERSAL_MODE=" << traversal31_mode_v068240231 << "\n"
-            << "V068240231_HISTORICAL_FIXED_CALLS=" << traversal31_historical_v068240231 << "\n"
-            << "V068240231_OPTIMIZED_FIXED_CALLS=" << traversal31_optimized_v068240231 << "\n"
-            << "V068240231_RSS_SAMPLES_ELIDED="
-            << perf.foundation_v068231.element_traversal_rss_samples_elided_v068240231 << "\n"
-            << "V068240231_PRELIMINARY_AUDITS_ELIDED="
-            << perf.foundation_v068231.element_traversal_preliminary_audits_elided_v068240231 << "\n"
-            << "V068240231_SPARSE_AUDITS_ELIDED="
-            << perf.foundation_v068231.element_traversal_sparse_audits_elided_v068240231 << "\n"
-            << "V068240231_RESIDUAL_AUDITS_ELIDED="
-            << perf.foundation_v068231.element_traversal_residual_audits_elided_v068240231 << "\n"
-            << "V068240231_SELECTION_AUDITS_ELIDED="
-            << perf.foundation_v068231.element_traversal_selection_audits_elided_v068240231 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

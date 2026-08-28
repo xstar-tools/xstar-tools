@@ -329,15 +329,6 @@ struct PerformanceFoundationV068231 {
     std::uint64_t continuum_hot_diagnostic_capacity_reuses_v068240230 = 0u;
     std::uint64_t continuum_hot_brcems_capacity_reuses_v068240230 = 0u;
     std::uint64_t continuum_hot_pow_mode_hoists_v068240230 = 0u;
-
-    // 0.6.82.40.2.31: production-only element-traversal observation elision.
-    std::uint64_t element_traversal_hot_historical_fixed_calls_v068240231 = 0u;
-    std::uint64_t element_traversal_hot_optimized_fixed_calls_v068240231 = 0u;
-    std::uint64_t element_traversal_rss_samples_elided_v068240231 = 0u;
-    std::uint64_t element_traversal_preliminary_audits_elided_v068240231 = 0u;
-    std::uint64_t element_traversal_sparse_audits_elided_v068240231 = 0u;
-    std::uint64_t element_traversal_residual_audits_elided_v068240231 = 0u;
-    std::uint64_t element_traversal_selection_audits_elided_v068240231 = 0u;
 };
 
 // 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller
