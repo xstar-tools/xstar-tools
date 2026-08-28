@@ -455,6 +455,27 @@ ContributionHotPathModeV068240214 configured_contribution_hotpath_mode_v06824021
     throw std::runtime_error("invalid XSTAR_V068240214_CONTRIBUTION_MODE");
 }
 
+// 0.6.82.40.2.25: Type-51 legacy-evaluator elision.  Native production has
+// committed the canonical/source-faithful Burgess-Tully result unconditionally
+// since 0.6.82.13.  The independent legacy evaluator survives only as a
+// forensic shadow and therefore need not run on every production evaluation.
+// Historical mode preserves the exact pre-.25 duplicate calculation for
+// same-binary qualification and explicit forensic shadow inspection.
+enum class Type51LegacyEvaluatorModeV068240225 { Historical, Elided };
+
+Type51LegacyEvaluatorModeV068240225 configured_type51_legacy_mode_v068240225() {
+    static const Type51LegacyEvaluatorModeV068240225 mode = [] {
+        const char* value = std::getenv("XSTAR_V068240225_TYPE51_LEGACY_MODE");
+        if (!value || !*value || std::string(value) == "elided")
+            return Type51LegacyEvaluatorModeV068240225::Elided;
+        if (std::string(value) == "historical")
+            return Type51LegacyEvaluatorModeV068240225::Historical;
+        throw std::runtime_error(
+            "XSTAR_V068240225_TYPE51_LEGACY_MODE must be historical or elided");
+    }();
+    return mode;
+}
+
 // 0.6.82.40.2.15: post-pass traversal-orchestration control.  The optimized
 // production path keeps the exact corrected EvaluatedRecord stream but avoids
 // rescanning records that cannot participate in Option-10 pirt/rrrt ownership
@@ -469,23 +490,6 @@ TraversalHotPathModeV068240215 configured_traversal_hotpath_mode_v068240215() {
     if (std::string(value) == "historical")
         return TraversalHotPathModeV068240215::Historical;
     throw std::runtime_error("invalid XSTAR_V068240215_TRAVERSAL_MODE");
-}
-
-// 0.6.82.40.2.24: Type-53 photo-component reuse.  The optimized production
-// path reuses only the radiation-dependent photo/heating accumulators when
-// the reduced BREMSA vector is bitwise-identical to the previous fixed-state
-// radiation generation.  The Milne/recombination stream remains live and is
-// evaluated in the historical source order on every Type-53 call.  Historical
-// preserves the complete pre-.24 loop for same-binary qualification.
-enum class Type53PhotoReuseModeV068240224 { Historical, Optimized };
-
-Type53PhotoReuseModeV068240224 configured_type53_photo_reuse_mode_v068240224() {
-    const char* value = std::getenv("XSTAR_V068240224_TYPE53_PHOTO_MODE");
-    if (!value || !*value || std::string(value) == "optimized")
-        return Type53PhotoReuseModeV068240224::Optimized;
-    if (std::string(value) == "historical")
-        return Type53PhotoReuseModeV068240224::Historical;
-    throw std::runtime_error("invalid XSTAR_V068240224_TYPE53_PHOTO_MODE");
 }
 
 // v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
@@ -1813,22 +1817,9 @@ struct BoundFreePreparedGeometryV064895 {
     double exact_publish_sgtp = 0.0;
 };
 
-// 0.6.82.40.2.24: per-record reduced-grid cache for the Type-53
-// radiation-only photo/heating stream.  A cache entry is valid only for the
-// exact reduced BREMSA generation owned by the persistent fixed-state
-// context.  Geometry rebuilds explicitly invalidate this cache.
-struct Type53PhotoComponentCacheV068240224 {
-    bool valid = false;
-    std::uint64_t radiation_generation = 0u;
-    double sumr = 0.0;
-    double sumh = 0.0;
-    double sumh2 = 0.0;
-};
-
 struct BoundFreePreparedRecordCacheV064895 {
     BoundFreePreparedGeometryV064895 reduced;
     BoundFreePreparedGeometryV064895 full;
-    Type53PhotoComponentCacheV068240224 reduced_type53_photo_v068240224;
 };
 
 struct BoundFreePerfCountersV064895 {
@@ -1857,15 +1848,6 @@ struct BoundFreePerfCountersV064895 {
     std::uint64_t sgbar_dense_values_current_v06823613 = 0;
     // 0.6.82.37.1 compiled bound-free execution metadata counters.
     std::uint64_t predecoded_context_hits_v0682371 = 0;
-    // 0.6.82.40.2.24 Type-53 photo-component reuse telemetry.  These count
-    // only reduced-grid Type-53 production calls; Type-49/full-grid paths are
-    // intentionally excluded.
-    std::uint64_t type53_photo_historical_calls_v068240224 = 0u;
-    std::uint64_t type53_photo_optimized_calls_v068240224 = 0u;
-    std::uint64_t type53_photo_cache_builds_v068240224 = 0u;
-    std::uint64_t type53_photo_cache_hits_v068240224 = 0u;
-    std::uint64_t type53_photo_intervals_executed_v068240224 = 0u;
-    std::uint64_t type53_photo_intervals_elided_v068240224 = 0u;
 };
 
 struct Type53SourceShadow {
@@ -4815,16 +4797,6 @@ struct xstar_fixed_state_context_impl {
     std::vector<std::uint32_t> bound_free_slot_by_record_v0682371;
     std::vector<Type53RecordContext> bound_free_context_by_slot_v0682371;
     BoundFreePerfCountersV064895 bound_free_perf_v064895{};
-    // 0.6.82.40.2.24: exact reduced-BREMSA generation ownership for
-    // radiation-only Type-53 photo-component reuse.  The retained vector is
-    // ~999 doubles for the C5 reduced grid and is compared bit-for-bit once
-    // per fixed-state evaluation, never once per atomic record.
-    bool type53_photo_mode_initialized_v068240224 = false;
-    Type53PhotoReuseModeV068240224 type53_photo_mode_v068240224 =
-        Type53PhotoReuseModeV068240224::Optimized;
-    bool type53_photo_radiation_initialized_v068240224 = false;
-    std::uint64_t type53_photo_radiation_generation_v068240224 = 0u;
-    std::vector<double> type53_photo_last_reduced_bremsa_v068240224;
     xstar_element_engine_context* element_context = nullptr;
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
@@ -7549,10 +7521,7 @@ bool evaluate_type53_source_integral(
     bool phextrap_pairs,
     xstar_element_contribution_v1& contribution,
     Type53SourceShadow* shadow,
-    const BoundFreePreparedGeometryV064895* prepared_geometry = nullptr,
-    Type53PhotoComponentCacheV068240224* photo_cache_v068240224 = nullptr,
-    std::uint64_t photo_radiation_generation_v068240224 = 0u,
-    BoundFreePerfCountersV064895* photo_perf_v068240224 = nullptr
+    const BoundFreePreparedGeometryV064895* prepared_geometry = nullptr
 ) {
     if (!payload || real_count < 4 || real_count % 2 != 0) return false;
     const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
@@ -7632,33 +7601,18 @@ bool evaluate_type53_source_integral(
     const double bktm = kBoltzmannErgK * input.temperature_k / kErgPerEv;
     if (!(bktm > 0.0)) return false;
 
-    const bool photo_cache_hit_v068240224 =
-        photo_cache_v068240224 && photo_cache_v068240224->valid &&
-        photo_cache_v068240224->radiation_generation == photo_radiation_generation_v068240224;
-    if (photo_perf_v068240224) {
-        if (photo_cache_v068240224)
-            ++photo_perf_v068240224->type53_photo_optimized_calls_v068240224;
-        else
-            ++photo_perf_v068240224->type53_photo_historical_calls_v068240224;
-    }
-    double sumr = photo_cache_hit_v068240224 ? photo_cache_v068240224->sumr : 0.0;
-    double sumh = photo_cache_hit_v068240224 ? photo_cache_v068240224->sumh : 0.0;
-    double sumh2 = photo_cache_hit_v068240224 ? photo_cache_v068240224->sumh2 : 0.0;
+    double sumr = 0.0;
+    double sumh = 0.0;
+    double sumh2 = 0.0;
     double sumi = 0.0;
     double sumc = 0.0;
     double sumc2 = 0.0;
     double sgtpp = sgbar_at_v06823613(nb1);
-    double bremtmpp = 0.0;
+    double bremtmpp = source_bremsa[nb1] / 12.56;
     double epiip = source_energy_ev[nb1];
-    double temprp = 0.0;
-    double temphp = 0.0;
-    double temphp2 = 0.0;
-    if (!photo_cache_hit_v068240224) {
-        bremtmpp = source_bremsa[nb1] / 12.56;
-        temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
-        temphp = temprp * epiip;
-        temphp2 = temprp * (epiip - threshold_ev);
-    }
+    double temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
+    double temphp = temprp * epiip;
+    double temphp2 = temprp * (epiip - threshold_ev);
     double exptst = (epiip - threshold_ev) / bktm;
     double exptmpp = type53_expo(-exptst);
     double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
@@ -7672,21 +7626,19 @@ bool evaluate_type53_source_integral(
     while (kl < klmax && kl + 1 < n_grid) {
         const double sgtp = std::max(0.0, sgbar_at_v06823613(kl));
         sgtpp = sgbar_at_v06823613(kl + 1);
+        bremtmpp = source_bremsa[kl + 1] / 12.56;
         const double epii = source_energy_ev[kl];
         epiip = source_energy_ev[kl + 1];
+        const double tempr = temprp;
+        temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
         const double width = (epiip - epii) / 2.0;
-        if (!photo_cache_hit_v068240224) {
-            bremtmpp = source_bremsa[kl + 1] / 12.56;
-            const double tempr = temprp;
-            temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
-            sumr += tempr * width + temprp * width;
-            const double temph = temphp;
-            const double temph2 = temphp2;
-            temphp = temprp * epiip;
-            temphp2 = temprp * (epiip - threshold_ev);
-            sumh += temph * width + temphp * width;
-            sumh2 += temph2 * width + temphp2 * width;
-        }
+        sumr += tempr * width + temprp * width;
+        const double temph = temphp;
+        const double temph2 = temphp2;
+        temphp = temprp * epiip;
+        temphp2 = temprp * (epiip - threshold_ev);
+        sumh += temph * width + temphp * width;
+        sumh2 += temph2 * width + temphp2 * width;
         const double previous_exptst = exptst;
         exptst = (epiip - threshold_ev) / bktm;
         // v82 patch 5.14: phint53.f90 resets exptmpp to zero on every
@@ -7720,29 +7672,6 @@ bool evaluate_type53_source_integral(
             threshold_publication_reached = true;
         }
         ++kl;
-    }
-
-    if (photo_cache_v068240224) {
-        const std::uint64_t intervals_v068240224 =
-            static_cast<std::uint64_t>(std::max(0, klmax - nb1));
-        if (photo_cache_hit_v068240224) {
-            if (photo_perf_v068240224) {
-                ++photo_perf_v068240224->type53_photo_cache_hits_v068240224;
-                photo_perf_v068240224->type53_photo_intervals_elided_v068240224 +=
-                    intervals_v068240224;
-            }
-        } else {
-            photo_cache_v068240224->valid = true;
-            photo_cache_v068240224->radiation_generation = photo_radiation_generation_v068240224;
-            photo_cache_v068240224->sumr = sumr;
-            photo_cache_v068240224->sumh = sumh;
-            photo_cache_v068240224->sumh2 = sumh2;
-            if (photo_perf_v068240224) {
-                ++photo_perf_v068240224->type53_photo_cache_builds_v068240224;
-                photo_perf_v068240224->type53_photo_intervals_executed_v068240224 +=
-                    intervals_v068240224;
-            }
-        }
     }
 
     // v0.6.48.9.5: the exact nbinc-owned threshold sample is part of
@@ -7927,9 +7856,6 @@ struct RateEvaluationContextV064894 {
     // performance foundation; this pointer never escapes the fixed context.
     xstar_local_zone_internal::PerformanceFoundationV068231* perf_foundation_v06824026 = nullptr;
     bool force_legacy_bound_free = false;
-    Type53PhotoReuseModeV068240224 type53_photo_mode_v068240224 =
-        Type53PhotoReuseModeV068240224::Historical;
-    std::uint64_t type53_photo_radiation_generation_v068240224 = 0u;
     std::uint64_t reduced_energy_hash = 0;
     std::uint64_t full_energy_hash = 0;
     // Literal xstarcalc/bremsmap ownership for the Type59 bremsint(nb1)
@@ -8115,10 +8041,6 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
                 perf_v06823613.reduced_sgbar_dense_equivalent_bytes_peak_v06823613,
                 perf_v06823613.reduced_sgbar_dense_equivalent_bytes_current_v06823613);
             ++rate_context.bound_free_perf->reduced_geometry_builds;
-            // The photo-component cache is keyed to this exact reduced
-            // geometry.  Any geometry rebuild invalidates the cached sums,
-            // even if the radiation generation happens to be unchanged.
-            slot.reduced_type53_photo_v068240224.valid = false;
         }
         replace_counter_v06823613(
             perf_v06823613.sgbar_compact_values_current_v06823613,
@@ -8132,25 +8054,6 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
         else ++rate_context.bound_free_perf->reduced_geometry_reuses;
     }
     return &geometry;
-}
-
-Type53PhotoComponentCacheV068240224* prepared_type53_photo_cache_v068240224(
-    const Program& program,
-    const ProgramRecord& record,
-    const RateEvaluationContextV064894& rate_context) {
-    if (rate_context.force_legacy_bound_free || !rate_context.bound_free_cache ||
-        rate_context.type53_photo_mode_v068240224 != Type53PhotoReuseModeV068240224::Optimized ||
-        rate_context.type53_photo_radiation_generation_v068240224 == 0u) {
-        return nullptr;
-    }
-    const std::uint32_t slot_v068240224 =
-        bound_free_slot_v0682371(program, record, rate_context);
-    if (slot_v068240224 == std::numeric_limits<std::uint32_t>::max() ||
-        static_cast<std::size_t>(slot_v068240224) >= rate_context.bound_free_cache->size()) {
-        return nullptr;
-    }
-    return &(*rate_context.bound_free_cache)[static_cast<std::size_t>(slot_v068240224)]
-        .reduced_type53_photo_v068240224;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -8608,17 +8511,12 @@ EvaluatedRecord evaluate_record(
                 prepared_bound_free_geometry(
                     program, record, execution_v0682375, calc_hmc_input, source_threshold, false, false,
                     record_context.valid ? &record_context : nullptr, false, rate_context);
-            Type53PhotoComponentCacheV068240224* photo_cache_v068240224 =
-                prepared_type53_photo_cache_v068240224(program, record, rate_context);
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record_id_v0682375, false, false,
-                source_shadow, &out.bound_free_payload().type53_shadow_v0682374(), prepared_reduced_v064895,
-                photo_cache_v068240224,
-                rate_context.type53_photo_radiation_generation_v068240224,
-                rate_context.bound_free_perf);
+                source_shadow, &out.bound_free_payload().type53_shadow_v0682374(), prepared_reduced_v064895);
             if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
                 ++rate_context.bound_free_perf->reduced_dynamic_integrals;
 
@@ -9425,9 +9323,12 @@ EvaluatedRecord evaluate_record(
             if (execution_v0682375.real_count != 7 && execution_v0682375.real_count != 11) break;
 
             // Evaluate the canonical/source-faithful representation first.
-            // The legacy evaluator remains the committed compatibility path
-            // wherever it produces a finite result, preserving all accepted
-            // pre-0.6.82.2 outputs.
+            // 0.6.82.40.2.25: this is the only committed production result.
+            // The independent legacy evaluator is retained only in explicit
+            // historical mode for same-binary forensic/shadow comparison.
+            if (rate_context.perf_foundation_v06824026) {
+                ++rate_context.perf_foundation_v06824026->type51_canonical_evaluations_v068240225;
+            }
             const auto bt = type51_upsilon(
                 r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
             );
@@ -9467,10 +9368,10 @@ EvaluatedRecord evaluate_record(
                 source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
             }};
 
-            const double legacy_ups = type51_upsilon_legacy(
-                r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
-            );
-            const bool legacy_valid = std::isfinite(legacy_ups);
+            // 0.6.82.40.2.25: the legacy Type-51 answer is diagnostic-only.
+            // Leave explicit NaN sentinels in the shadow when elided so no
+            // consumer can mistake an absent legacy evaluation for a physical
+            // zero.  Historical mode executes the exact pre-.25 arithmetic.
             std::array<double,6> legacy_ans{{
                 std::numeric_limits<double>::quiet_NaN(),
                 std::numeric_limits<double>::quiet_NaN(),
@@ -9479,25 +9380,39 @@ EvaluatedRecord evaluate_record(
                 std::numeric_limits<double>::quiet_NaN(),
                 std::numeric_limits<double>::quiet_NaN(),
             }};
-            if (legacy_valid) {
-                const double legacy_root_t = std::sqrt(input.temperature_k);
-                const double legacy_kt_ev =
-                    xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
-                const double legacy_qex =
-                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
-                    std::exp(-delta_ev / legacy_kt_ev) /
-                    (lower.statistical_weight * legacy_root_t);
-                const double legacy_qde =
-                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
-                    (upper.statistical_weight * legacy_root_t);
-                legacy_ans = {{
-                    legacy_qex * ne,
-                    legacy_qde * ne,
-                    0.0,
-                    0.0,
-                    legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                    legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                }};
+            const bool execute_legacy_v068240225 =
+                configured_type51_legacy_mode_v068240225() ==
+                Type51LegacyEvaluatorModeV068240225::Historical;
+            if (execute_legacy_v068240225) {
+                if (rate_context.perf_foundation_v06824026) {
+                    ++rate_context.perf_foundation_v06824026->type51_legacy_evaluations_executed_v068240225;
+                }
+                const double legacy_ups = type51_upsilon_legacy(
+                    r, execution_v0682375.real_count, ints, execution_v0682375.int_count, input.temperature_k
+                );
+                const bool legacy_valid = std::isfinite(legacy_ups);
+                if (legacy_valid) {
+                    const double legacy_root_t = std::sqrt(input.temperature_k);
+                    const double legacy_kt_ev =
+                        xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+                    const double legacy_qex =
+                        xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
+                        std::exp(-delta_ev / legacy_kt_ev) /
+                        (lower.statistical_weight * legacy_root_t);
+                    const double legacy_qde =
+                        xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
+                        (upper.statistical_weight * legacy_root_t);
+                    legacy_ans = {{
+                        legacy_qex * ne,
+                        legacy_qde * ne,
+                        0.0,
+                        0.0,
+                        legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                        legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                    }};
+                }
+            } else if (rate_context.perf_foundation_v06824026) {
+                ++rate_context.perf_foundation_v06824026->type51_legacy_evaluations_elided_v068240225;
             }
             // v0.6.82.12: canonical ucalc Type-51 is element-independent and
             // is now the normal native-production contract for every active
@@ -9514,10 +9429,9 @@ EvaluatedRecord evaluate_record(
             // 0.6.82.13: every C++ backend commits the canonical Type-51
             // result.  Historical flags/legacy arithmetic are diagnostic-only.
             const bool source_faithful_committed = true;
-            const auto& committed = source_faithful_committed ? source_ans : legacy_ans;
-            c.ans1 = committed[0]; c.ans2 = committed[1];
-            c.ans3 = committed[2]; c.ans4 = committed[3];
-            c.ans5 = committed[4]; c.ans6 = committed[5];
+            c.ans1 = source_ans[0]; c.ans2 = source_ans[1];
+            c.ans3 = source_ans[2]; c.ans4 = source_ans[3];
+            c.ans5 = source_ans[4]; c.ans6 = source_ans[5];
 
             auto& shadow = out.mutable_type51_shadow_v06823615();
             shadow.valid = true;
@@ -13506,14 +13420,6 @@ int run_impl(
         ++perf_foundation_v068231.traversal_hotpath_optimized_calls_v068240215;
     else
         ++perf_foundation_v068231.traversal_hotpath_historical_calls_v068240215;
-    if (!ctx.type53_photo_mode_initialized_v068240224) {
-        ctx.type53_photo_mode_v068240224 =
-            configured_type53_photo_reuse_mode_v068240224();
-        ctx.type53_photo_mode_initialized_v068240224 = true;
-    }
-    const bool type53_photo_optimized_v068240224 =
-        native_production_v064897 && !retain_record_provenance_v064897 &&
-        ctx.type53_photo_mode_v068240224 == Type53PhotoReuseModeV068240224::Optimized;
     // 0.6.82.30.8.7: true-production DSEC consumes thermal/state outputs, not
     // the retained element-product diagnostic package.  Avoid deep-copying
     // contributions, populations and residual workspaces on those deferred
@@ -13839,27 +13745,6 @@ int run_impl(
             }
             ++perf_foundation_v068231.reduced_continuum_live_updates;
             type53_calc_emisab_workspace_v82_patch5181 = &scratch.reduced_continuum;
-            if (type53_photo_optimized_v068240224) {
-                const auto& current_bremsa_v068240224 = scratch.reduced_continuum.bremsam;
-                const bool same_radiation_v068240224 =
-                    ctx.type53_photo_radiation_initialized_v068240224 &&
-                    ctx.type53_photo_last_reduced_bremsa_v068240224.size() ==
-                        current_bremsa_v068240224.size() &&
-                    (current_bremsa_v068240224.empty() ||
-                     std::memcmp(
-                         current_bremsa_v068240224.data(),
-                         ctx.type53_photo_last_reduced_bremsa_v068240224.data(),
-                         current_bremsa_v068240224.size() * sizeof(double)) == 0);
-                if (!same_radiation_v068240224) {
-                    ctx.type53_photo_last_reduced_bremsa_v068240224.assign(
-                        current_bremsa_v068240224.begin(), current_bremsa_v068240224.end());
-                    ++ctx.type53_photo_radiation_generation_v068240224;
-                    ctx.type53_photo_radiation_initialized_v068240224 = true;
-                    ++perf_foundation_v068231.type53_photo_radiation_builds_v068240224;
-                } else {
-                    ++perf_foundation_v068231.type53_photo_radiation_reuses_v068240224;
-                }
-            }
         }
     }
     RateEvaluationContextV064894 rate_context_v064894 =
@@ -13873,12 +13758,6 @@ int run_impl(
         &ctx.bound_free_context_by_slot_v0682371;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
     rate_context_v064894.perf_foundation_v06824026 = &perf_foundation_v068231;
-    rate_context_v064894.type53_photo_mode_v068240224 =
-        type53_photo_optimized_v068240224
-            ? Type53PhotoReuseModeV068240224::Optimized
-            : Type53PhotoReuseModeV068240224::Historical;
-    rate_context_v064894.type53_photo_radiation_generation_v068240224 =
-        ctx.type53_photo_radiation_generation_v068240224;
     const bool use_compact_bound_free_revisit_v06823614 =
         native_production_v064897 && !rate_context_v064894.force_legacy_bound_free &&
         !environment_flag("XSTAR_V06823614_FORCE_RICH_BOUND_FREE_REVISIT");
@@ -19778,7 +19657,6 @@ void capture_fixed_live_owner_memory_v06824028(
     out.prepared_bound_free_capacity_bytes =
         capacity_bytes(context->bound_free_prepared_v064895) +
         capacity_bytes(context->bound_free_context_by_slot_v0682371) +
-        capacity_bytes(context->type53_photo_last_reduced_bremsa_v068240224) +
         context->bound_free_perf_v064895.reduced_sgbar_capacity_bytes_current_v06823613 +
         context->bound_free_perf_v064895.full_sgbar_capacity_bytes_current_v06823613;
 
@@ -19835,18 +19713,6 @@ void capture_performance_foundation_v068231(
         bf_v06823613.sgbar_dense_values_current_v06823613;
     out.bound_free_predecoded_context_hits_v0682371 =
         bf_v06823613.predecoded_context_hits_v0682371;
-    out.type53_photo_historical_calls_v068240224 =
-        bf_v06823613.type53_photo_historical_calls_v068240224;
-    out.type53_photo_optimized_calls_v068240224 =
-        bf_v06823613.type53_photo_optimized_calls_v068240224;
-    out.type53_photo_cache_builds_v068240224 =
-        bf_v06823613.type53_photo_cache_builds_v068240224;
-    out.type53_photo_cache_hits_v068240224 =
-        bf_v06823613.type53_photo_cache_hits_v068240224;
-    out.type53_photo_intervals_executed_v068240224 =
-        bf_v06823613.type53_photo_intervals_executed_v068240224;
-    out.type53_photo_intervals_elided_v068240224 =
-        bf_v06823613.type53_photo_intervals_elided_v068240224;
 
     // 0.6.82.40.2.5: convert the diagnostic touched-record bitmap into an
     // exact union of virtual payload pages reachable by each target type.

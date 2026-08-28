@@ -311,17 +311,11 @@ struct PerformanceFoundationV068231 {
     std::uint64_t type53_legacy_pair_interpolations_executed_v06824026 = 0u;
     std::uint64_t type53_legacy_pair_interpolations_elided_v06824026 = 0u;
 
-    // 0.6.82.40.2.24: exact radiation-generation reuse for the reduced-grid
-    // Type-53 photo/heating stream.  These counters are observational only;
-    // no public ABI is changed.
-    std::uint64_t type53_photo_radiation_builds_v068240224 = 0u;
-    std::uint64_t type53_photo_radiation_reuses_v068240224 = 0u;
-    std::uint64_t type53_photo_historical_calls_v068240224 = 0u;
-    std::uint64_t type53_photo_optimized_calls_v068240224 = 0u;
-    std::uint64_t type53_photo_cache_builds_v068240224 = 0u;
-    std::uint64_t type53_photo_cache_hits_v068240224 = 0u;
-    std::uint64_t type53_photo_intervals_executed_v068240224 = 0u;
-    std::uint64_t type53_photo_intervals_elided_v068240224 = 0u;
+    // 0.6.82.40.2.25: Type-51 canonical-vs-legacy execution census.
+    // These counters are observation-only and add no clock reads.
+    std::uint64_t type51_canonical_evaluations_v068240225 = 0u;
+    std::uint64_t type51_legacy_evaluations_executed_v068240225 = 0u;
+    std::uint64_t type51_legacy_evaluations_elided_v068240225 = 0u;
 };
 
 // 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller

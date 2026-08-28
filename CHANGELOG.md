@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.6.82.40.2.25 - 2026-08-27
+
+TYPE51_LEGACY_EVALUATOR_ELISION
+
+- Branch directly from the accepted 0.6.82.40.2.20 production baseline.
+- Keep canonical/source-faithful Type-51 Burgess-Tully answers and all source ordering unchanged.
+- Default production mode (`XSTAR_V068240225_TYPE51_LEGACY_MODE=elided`) skips the duplicate legacy Type-51 evaluator that only populated `legacy_ans` forensic shadow columns.
+- Preserve `historical` mode for same-binary qualification and explicit forensic comparison.
+- Leave elided legacy shadow values as NaN sentinels; canonical `shadow.ans` remains populated and remains the only downstream Type-51 shadow used by solve diagnostics.
+- Add observation-only counters for canonical evaluations, legacy evaluations executed, and legacy evaluations elided; no new hot-loop clocks.
+- Qualification: C5 `xi=-3` same-host historical/elided performance A/B first; `xi=+1,+4` exact science/work closure afterward; no multi-element run and no Phase-C authorization.
+- Preserve all current freezes, including Type-50 profile/core, detail spectrum/RRC staging, contribution-list hot path, post-pass traversal, call-start workspace, and the rejected Type-53 photo-component cache branch.
+
 ## 0.6.82.40.2.24.1 - 2026-08-27
 
 - Add qualification-only `TYPE53_PHOTO_COMPONENT_REUSE_BALANCED_QUALIFICATION` on top of `.2.24`; production C/C++ source/header files are unchanged from `.2.24`.
