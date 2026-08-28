@@ -319,6 +319,16 @@ struct PerformanceFoundationV068231 {
     std::uint64_t type53_static_fixed_contexts_v068240227 = 0u;
     std::uint64_t type53_static_geometry_builds_v068240227 = 0u;
     std::uint64_t type53_static_bbnurj_values_prepared_v068240227 = 0u;
+
+    // 0.6.82.40.2.30: continuum hot-path same-binary attribution.  These are
+    // fixed-call counters only; no bin-level counter or clock is introduced.
+    std::uint64_t continuum_hot_historical_calls_v068240230 = 0u;
+    std::uint64_t continuum_hot_optimized_calls_v068240230 = 0u;
+    std::uint64_t continuum_hot_fallback_calls_v068240230 = 0u;
+    std::uint64_t continuum_hot_workspace_reuses_v068240230 = 0u;
+    std::uint64_t continuum_hot_diagnostic_capacity_reuses_v068240230 = 0u;
+    std::uint64_t continuum_hot_brcems_capacity_reuses_v068240230 = 0u;
+    std::uint64_t continuum_hot_pow_mode_hoists_v068240230 = 0u;
 };
 
 // 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller

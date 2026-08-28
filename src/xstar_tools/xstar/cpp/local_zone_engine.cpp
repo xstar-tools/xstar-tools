@@ -485,6 +485,22 @@ Type53StaticKernelModeV068240227 configured_type53_static_kernel_mode_v068240227
     throw std::runtime_error("invalid XSTAR_V068240227_TYPE53_STATIC_KERNEL_MODE");
 }
 
+// 0.6.82.40.2.30: continuum workspace hot-path control.  Historical preserves
+// the accepted .2.27 continuum construction/materialization path.  Optimized
+// reuses the already-live reduced continuum workspace, persistent temporary
+// capacity, and one fixed-call qualification-mode read while preserving every
+// source arithmetic operation and accumulation order.
+enum class ContinuumWorkspaceHotPathModeV068240230 { Historical, Optimized };
+
+ContinuumWorkspaceHotPathModeV068240230 configured_continuum_workspace_hotpath_mode_v068240230() {
+    const char* value = std::getenv("XSTAR_V068240230_CONTINUUM_WORKSPACE_MODE");
+    if (!value || !*value || std::string(value) == "optimized")
+        return ContinuumWorkspaceHotPathModeV068240230::Optimized;
+    if (std::string(value) == "historical")
+        return ContinuumWorkspaceHotPathModeV068240230::Historical;
+    throw std::runtime_error("invalid XSTAR_V068240230_CONTINUUM_WORKSPACE_MODE");
+}
+
 // v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
 // This records the legacy approximation, the already-computed source-faithful
 // phint53 shadow, and the actually committed answers for the two call-1
@@ -4338,6 +4354,10 @@ struct FixedStatePersistentScratchV068231 {
     std::vector<double> spectral_line_profile_workspace_v0682392;
     ElementBuffers element_buffers;
     SourceContinuumWorkspace reduced_continuum;
+    // 0.6.82.40.2.30: capacity-only continuum hot-path scratch.  Values are
+    // overwritten in literal source order on every optimized fixed call.
+    std::vector<double> continuum_brcems_v068240230;
+    std::vector<double> continuum_map_values_v068240230;
     bool reduced_continuum_geometry_valid = false;
     std::size_t reduced_continuum_full_count = 0u;
     std::uint64_t reduced_continuum_energy_fingerprint = 0u;
@@ -4386,6 +4406,8 @@ struct FixedStatePersistentScratchV068231 {
         XSTAR_CAP_BYTES_V068231(reduced_continuum.epim);
         XSTAR_CAP_BYTES_V068231(reduced_continuum.bremsam);
         XSTAR_CAP_BYTES_V068231(reduced_continuum.bremsmap_index_one_based);
+        XSTAR_CAP_BYTES_V068231(continuum_brcems_v068240230);
+        XSTAR_CAP_BYTES_V068231(continuum_map_values_v068240230);
         const auto add_double = [&](const std::vector<double>& v) {
             total += static_cast<std::uint64_t>(v.capacity()) * sizeof(double);
         };
@@ -4462,6 +4484,8 @@ struct FixedStatePersistentScratchV068231 {
         // 5: reduced-continuum geometry.
         add(out[5], reduced_continuum.epim); add(out[5], reduced_continuum.bremsam);
         add(out[5], reduced_continuum.bremsmap_index_one_based);
+        add(out[5], continuum_brcems_v068240230);
+        add(out[5], continuum_map_values_v068240230);
         return out;
     }
 };
@@ -4755,6 +4779,149 @@ SourceContinuumThermalResult source_continuum_thermal(
         const double tmp2o = tmp2;
         tmp2 = brcems[k];
         auto& row = out.diagnostics[k];
+        if (k > 0) {
+            double contribution = (tmp2 + tmp2o) * (epi[k] - epi[k - 1]);
+            contribution = contribution * erg_per_ev;
+            contribution = contribution / 2.0;
+            clbrems += contribution;
+            row.clbrems_contribution = contribution;
+        }
+        row.running_clbrems = clbrems;
+    }
+    out.clbrems = clbrems;
+    return out;
+}
+
+// 0.6.82.40.2.30: exact hot-path form of source_continuum_thermal().  It
+// consumes the reduced workspace already prepared earlier in the same fixed
+// evaluation and writes diagnostics directly into the retained last-state
+// vector.  The loop bodies and floating-point accumulation order below are
+// intentionally literal copies of the accepted .2.27 source-faithful path.
+struct SourceContinuumThermalScalarsV068240230 {
+    SourceComp2Result compton;
+    double htfreef = 0.0;
+    double clbrems = 0.0;
+};
+
+SourceContinuumThermalScalarsV068240230 source_continuum_thermal_optimized_v068240230(
+    const SourceContinuumWorkspace& workspace,
+    double temperature_k,
+    double hydrogen_density,
+    double electron_fraction,
+    bool freef_real_exponent_pow,
+    std::vector<double>& brcems,
+    std::vector<ContinuumWorkspaceDiagnostic>& diagnostics
+) {
+    SourceContinuumThermalScalarsV068240230 out;
+    const auto& epi = workspace.epim;
+    const auto& bremsa = workspace.bremsam;
+    const std::size_t n = epi.size();
+    if (n == 0u || bremsa.size() != n || workspace.bremsmap_index_one_based.size() != n)
+        throw std::runtime_error("optimized source continuum workspace is incomplete");
+    diagnostics.assign(n, ContinuumWorkspaceDiagnostic{});
+
+    const double emc2 = static_cast<double>(static_cast<float>(5.11e5));
+    const double kt_per_t4 = static_cast<double>(static_cast<float>(xstar_constants::kLegacyBoltzmannEvPerT4));
+    const double sigma_t = static_cast<double>(static_cast<float>(6.6524587321e-25));
+    const double erg_per_ev = static_cast<double>(static_cast<float>(xstar_constants::kModernErgPerEv));
+    const double t4 = temperature_k / 1.0e4;
+    const double ekt = t4 * kt_per_t4;
+    const double xnx = hydrogen_density * electron_fraction;
+    const double sxx = 1.0 / (emc2 / (ekt + static_cast<double>(static_cast<float>(1.0e-10))));
+
+    double eee = epi[0];
+    double ee = eee / emc2;
+    double tmp1 = bremsa[0] * source_cmpfnc(ee, sxx);
+    double sum1 = 0.0;
+    [[maybe_unused]] double sum2 = 0.0;
+    double sum3 = 0.0;
+    for (std::size_t k = 0; k < n; ++k) {
+        auto& row = diagnostics[k];
+        row.reduced_bin_one_based = k + 1;
+        row.full_bin_one_based = workspace.bremsmap_index_one_based[k];
+        row.epim_ev = epi[k];
+        row.bremsam = bremsa[k];
+        if (k == 0) continue;
+        const double tmp1o = tmp1;
+        const double eeeo = eee;
+        const double eeo = ee;
+        eee = epi[k];
+        ee = eee / emc2;
+        tmp1 = bremsa[k] * source_cmpfnc(ee, sxx);
+        const double width = eee - eeeo;
+        const double c1 = (tmp1 + tmp1o) * width / 2.0;
+        const double c2 = (bremsa[k] + bremsa[k - 1]) * width / 2.0;
+        const double c3 = (bremsa[k] * ee + bremsa[k - 1] * eeo) * width / 2.0;
+        sum1 += c1;
+        sum2 += c2;
+        sum3 += c3;
+        row.bin_width_ev = width;
+        row.comp_sum1_contribution = c1;
+        row.comp_sum2_contribution = c2;
+        row.comp_sum3_contribution = c3;
+        row.cmp1_contribution = c3 * sigma_t;
+        row.cmp2_contribution = (c1 * sigma_t + c3 * sigma_t) / ekt;
+        row.htcomp_contribution = row.cmp1_contribution * xnx * erg_per_ev;
+        row.clcomp_contribution = ekt * row.cmp2_contribution * xnx * erg_per_ev;
+        row.running_cmp1 = sum3 * sigma_t;
+        row.running_cmp2 = (sum1 * sigma_t + sum3 * sigma_t) / ekt;
+        row.running_htcomp = row.running_cmp1 * xnx * erg_per_ev;
+        row.running_clcomp = ekt * row.running_cmp2 * xnx * erg_per_ev;
+    }
+    out.compton.cmp1 = sum3 * sigma_t;
+    out.compton.cmp2 = (sum1 * sigma_t + sum3 * sigma_t) / ekt;
+    out.compton.htcomp = out.compton.cmp1 * xnx * erg_per_ev;
+    out.compton.clcomp = ekt * out.compton.cmp2 * xnx * erg_per_ev;
+
+    const double freef_cc = static_cast<double>(static_cast<float>(2.614e-37));
+    const double ion_z2_factor = static_cast<double>(static_cast<float>(1.4));
+    const double enz2 = ion_z2_factor * xnx;
+    const double sqrt_t4 = std::sqrt(t4);
+    double opaff = 0.0;
+    double htfreef = 0.0;
+    for (std::size_t k = 0; k < n; ++k) {
+        const double opaffo = opaff;
+        const double temp = epi[k] / ekt;
+        double value = freef_cc * xnx;
+        value = value * enz2;
+        value = value / sqrt_t4;
+        const double epi_cube = freef_real_exponent_pow
+            ? std::pow(epi[k], 3.0)
+            : (epi[k] * epi[k] * epi[k]);
+        value = value / epi_cube;
+        value = value * (1.0 - std::exp(-temp));
+        opaff = value;
+        auto& row = diagnostics[k];
+        row.free_free_opacity_increment = opaff;
+        if (k > 0) {
+            double contribution = bremsa[k] * opaff + bremsa[k - 1] * opaffo;
+            contribution = contribution * erg_per_ev;
+            contribution = contribution * (epi[k] - epi[k - 1]);
+            contribution = contribution / 2.0;
+            htfreef += contribution;
+            row.htfreef_contribution = contribution;
+        }
+        row.running_htfreef = htfreef;
+    }
+    out.htfreef = htfreef;
+
+    const double brem_cc = static_cast<double>(static_cast<float>(1.032e-13));
+    brcems.assign(n, 0.0);
+    for (std::size_t k = 0; k < n; ++k) {
+        const double temp = epi[k] / ekt;
+        double brtmp = brem_cc * xnx;
+        brtmp = brtmp * enz2;
+        brtmp = brtmp * std::exp(-temp);
+        brtmp = brtmp / sqrt_t4;
+        brcems[k] = brtmp;
+        diagnostics[k].brcems = brtmp;
+    }
+    double clbrems = 0.0;
+    double tmp2 = 0.0;
+    for (std::size_t k = 0; k < n; ++k) {
+        const double tmp2o = tmp2;
+        tmp2 = brcems[k];
+        auto& row = diagnostics[k];
         if (k > 0) {
             double contribution = (tmp2 + tmp2o) * (epi[k] - epi[k - 1]);
             contribution = contribution * erg_per_ev;
@@ -16739,30 +16906,86 @@ int run_impl(
         const std::size_t comp_n = input.dsec_radiation_bin_count >= 2 ? input.dsec_radiation_bin_count : input.radiation_bin_count;
         const bool source_faithful_continuum =
             environment_flag("XSTAR_QUALIFICATION_CONTINUUM_WORKSPACE_SOURCE_FAITHFUL");
+        const auto continuum_hot_mode_v068240230 =
+            configured_continuum_workspace_hotpath_mode_v068240230();
+        const bool continuum_hot_optimized_v068240230 =
+            continuum_hot_mode_v068240230 == ContinuumWorkspaceHotPathModeV068240230::Optimized;
+        const bool freef_real_exponent_pow_v068240230 = continuum_hot_optimized_v068240230
+            ? environment_flag("XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW")
+            : false;
         SourceComp2Result comp;
         double computed_htfreef = 0.0;
         double computed_clbrems = 0.0;
         if (source_faithful_continuum) {
-            const auto continuum = source_continuum_thermal(
-                comp_energy, comp_bremsa, comp_n,
-                input.temperature_k, input.hydrogen_density_cm3, input.electron_fraction_xee
-            );
-            comp = continuum.compton;
-            computed_htfreef = continuum.htfreef;
-            computed_clbrems = continuum.clbrems;
-            ctx.last_continuum_workspace_source_faithful = true;
-            ctx.last_continuum_epim_count = continuum.workspace.epim.size();
-            ctx.last_continuum_epim_fingerprint = binary64_sequence_fnv1a(continuum.workspace.epim);
-            ctx.last_continuum_bremsam_count = continuum.workspace.bremsam.size();
-            ctx.last_continuum_bremsam_fingerprint = binary64_sequence_fnv1a(continuum.workspace.bremsam);
-            std::vector<double> map_values;
-            map_values.reserve(continuum.workspace.bremsmap_index_one_based.size());
-            for (const int value : continuum.workspace.bremsmap_index_one_based) {
-                map_values.push_back(static_cast<double>(value));
+            if (continuum_hot_optimized_v068240230 && type53_calc_emisab_workspace_v82_patch5181) {
+                const auto& continuum_workspace_v068240230 =
+                    *type53_calc_emisab_workspace_v82_patch5181;
+                if (ctx.last_continuum_workspace_diagnostics.capacity() >=
+                    continuum_workspace_v068240230.epim.size()) {
+                    ++perf_foundation_v068231.continuum_hot_diagnostic_capacity_reuses_v068240230;
+                }
+                if (ctx.scratch_v068231.continuum_brcems_v068240230.capacity() >=
+                    continuum_workspace_v068240230.epim.size()) {
+                    ++perf_foundation_v068231.continuum_hot_brcems_capacity_reuses_v068240230;
+                }
+                const auto continuum_v068240230 = source_continuum_thermal_optimized_v068240230(
+                    continuum_workspace_v068240230,
+                    input.temperature_k, input.hydrogen_density_cm3, input.electron_fraction_xee,
+                    freef_real_exponent_pow_v068240230,
+                    ctx.scratch_v068231.continuum_brcems_v068240230,
+                    ctx.last_continuum_workspace_diagnostics
+                );
+                comp = continuum_v068240230.compton;
+                computed_htfreef = continuum_v068240230.htfreef;
+                computed_clbrems = continuum_v068240230.clbrems;
+                ctx.last_continuum_workspace_source_faithful = true;
+                ctx.last_continuum_epim_count = continuum_workspace_v068240230.epim.size();
+                ctx.last_continuum_epim_fingerprint =
+                    binary64_sequence_fnv1a(continuum_workspace_v068240230.epim);
+                ctx.last_continuum_bremsam_count = continuum_workspace_v068240230.bremsam.size();
+                ctx.last_continuum_bremsam_fingerprint =
+                    binary64_sequence_fnv1a(continuum_workspace_v068240230.bremsam);
+                auto& map_values_v068240230 = ctx.scratch_v068231.continuum_map_values_v068240230;
+                map_values_v068240230.resize(continuum_workspace_v068240230.bremsmap_index_one_based.size());
+                for (std::size_t map_index_v068240230 = 0;
+                     map_index_v068240230 < continuum_workspace_v068240230.bremsmap_index_one_based.size();
+                     ++map_index_v068240230) {
+                    map_values_v068240230[map_index_v068240230] = static_cast<double>(
+                        continuum_workspace_v068240230.bremsmap_index_one_based[map_index_v068240230]);
+                }
+                ctx.last_continuum_bremsmap_count = map_values_v068240230.size();
+                ctx.last_continuum_bremsmap_fingerprint = binary64_sequence_fnv1a(map_values_v068240230);
+                ++perf_foundation_v068231.continuum_hot_optimized_calls_v068240230;
+                ++perf_foundation_v068231.continuum_hot_workspace_reuses_v068240230;
+                ++perf_foundation_v068231.continuum_hot_pow_mode_hoists_v068240230;
+            } else {
+                const auto continuum = source_continuum_thermal(
+                    comp_energy, comp_bremsa, comp_n,
+                    input.temperature_k, input.hydrogen_density_cm3, input.electron_fraction_xee
+                );
+                comp = continuum.compton;
+                computed_htfreef = continuum.htfreef;
+                computed_clbrems = continuum.clbrems;
+                ctx.last_continuum_workspace_source_faithful = true;
+                ctx.last_continuum_epim_count = continuum.workspace.epim.size();
+                ctx.last_continuum_epim_fingerprint = binary64_sequence_fnv1a(continuum.workspace.epim);
+                ctx.last_continuum_bremsam_count = continuum.workspace.bremsam.size();
+                ctx.last_continuum_bremsam_fingerprint = binary64_sequence_fnv1a(continuum.workspace.bremsam);
+                std::vector<double> map_values;
+                map_values.reserve(continuum.workspace.bremsmap_index_one_based.size());
+                for (const int value : continuum.workspace.bremsmap_index_one_based) {
+                    map_values.push_back(static_cast<double>(value));
+                }
+                ctx.last_continuum_bremsmap_count = map_values.size();
+                ctx.last_continuum_bremsmap_fingerprint = binary64_sequence_fnv1a(map_values);
+                ctx.last_continuum_workspace_diagnostics = continuum.diagnostics;
+                if (continuum_hot_optimized_v068240230) {
+                    ++perf_foundation_v068231.continuum_hot_optimized_calls_v068240230;
+                    ++perf_foundation_v068231.continuum_hot_fallback_calls_v068240230;
+                } else {
+                    ++perf_foundation_v068231.continuum_hot_historical_calls_v068240230;
+                }
             }
-            ctx.last_continuum_bremsmap_count = map_values.size();
-            ctx.last_continuum_bremsmap_fingerprint = binary64_sequence_fnv1a(map_values);
-            ctx.last_continuum_workspace_diagnostics = continuum.diagnostics;
         } else {
             comp = source_comp2(
                 comp_energy, comp_bremsa, comp_n,
@@ -16815,7 +17038,10 @@ int run_impl(
             const double enz2 = ion_z2_factor * xnx;
             const double stim = 1.0 - limited_exp(-e / std::max(ekt_source_ev, 1.0e-300));
             const double safe_e = std::max(e, 1.0e-30);
-            const double e_cube = environment_flag("XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW")
+            const bool freef_pow_for_bin_v068240230 = continuum_hot_optimized_v068240230
+                ? freef_real_exponent_pow_v068240230
+                : environment_flag("XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW");
+            const double e_cube = freef_pow_for_bin_v068240230
                 ? std::pow(safe_e, 3.0)
                 : safe_e * safe_e * safe_e;
             const double freef_opacity_v82_patch5203 = freef_cc * xnx * enz2 /

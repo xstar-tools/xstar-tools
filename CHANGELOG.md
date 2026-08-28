@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.30 - Continuum workspace hot path - 2026-08-28
+
+- Branch directly from accepted `0.6.82.40.2.27`; rejected `.2.28` and attribution-only `.2.29` production changes are not carried forward.
+- Reuse the already-live source-faithful 999-bin reduced continuum workspace instead of rebuilding its energy grid and full-grid mapping during the continuum phase.
+- Reuse persistent `brcems` and map-fingerprint capacity and write continuum diagnostics directly into the retained last-state vector, avoiding repeated allocation/copy while preserving every diagnostic value.
+- Hoist the accepted `XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW` mode lookup out of the optimized continuum bin loops; historical mode retains the `.2.27` lookup path for same-binary A/B qualification.
+- Preserve source arithmetic, loop order, cutoff behavior, Compton/free-free/bremsstrahlung accumulation order, exact diagnostics, fixed work, and all frozen science outputs; no per-bin/per-record clocks are added.
+- Qualification starts with balanced same-host C5 `xi=-3` historical/optimized A/B. `xi=+1,+4` science closure follows only after the preregistered low-`xi` performance gate passes; no multi-element run is included.
+- Follow-on performance roadmap: after continuum closure, re-attribute and optimize non-solver element traversal first, then re-examine spectral emissivity and element-solver implementation opportunities without assuming they are bottlenecks merely because they are large phases.
+
 ## 0.6.82.40.2.29 - Fixed non-evaluator cross-language attribution - 2026-08-28
 
 - Attribution-only successor to accepted `0.6.82.40.2.27`; rejected `.2.28` Type-53 exponent reuse is not carried forward. The `.2.27` optimized Type-53 static kernel remains the production path.

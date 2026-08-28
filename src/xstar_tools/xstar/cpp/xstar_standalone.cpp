@@ -23522,6 +23522,29 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.type53_static_geometry_builds_v068240227 << "\n"
             << "V068240227_TYPE53_STATIC_BBNURJ_VALUES_PREPARED="
             << perf.foundation_v068231.type53_static_bbnurj_values_prepared_v068240227 << "\n";
+        const auto continuum_hot_historical_v068240230 =
+            perf.foundation_v068231.continuum_hot_historical_calls_v068240230;
+        const auto continuum_hot_optimized_v068240230 =
+            perf.foundation_v068231.continuum_hot_optimized_calls_v068240230;
+        const char* continuum_hot_mode_v068240230 =
+            continuum_hot_optimized_v068240230 > 0u && continuum_hot_historical_v068240230 == 0u ? "OPTIMIZED" :
+            continuum_hot_historical_v068240230 > 0u && continuum_hot_optimized_v068240230 == 0u ? "HISTORICAL" :
+            continuum_hot_historical_v068240230 == 0u && continuum_hot_optimized_v068240230 == 0u ? "UNOBSERVED" : "MIXED";
+        out << "V068240230_CONTINUUM_WORKSPACE_MODE=" << continuum_hot_mode_v068240230 << "\n"
+            << "V068240230_CONTINUUM_HISTORICAL_CALLS="
+            << continuum_hot_historical_v068240230 << "\n"
+            << "V068240230_CONTINUUM_OPTIMIZED_CALLS="
+            << continuum_hot_optimized_v068240230 << "\n"
+            << "V068240230_CONTINUUM_FALLBACK_CALLS="
+            << perf.foundation_v068231.continuum_hot_fallback_calls_v068240230 << "\n"
+            << "V068240230_CONTINUUM_WORKSPACE_REUSES="
+            << perf.foundation_v068231.continuum_hot_workspace_reuses_v068240230 << "\n"
+            << "V068240230_CONTINUUM_DIAGNOSTIC_CAPACITY_REUSES="
+            << perf.foundation_v068231.continuum_hot_diagnostic_capacity_reuses_v068240230 << "\n"
+            << "V068240230_CONTINUUM_BRCEMS_CAPACITY_REUSES="
+            << perf.foundation_v068231.continuum_hot_brcems_capacity_reuses_v068240230 << "\n"
+            << "V068240230_CONTINUUM_POW_MODE_HOISTS="
+            << perf.foundation_v068231.continuum_hot_pow_mode_hoists_v068240230 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {
