@@ -329,6 +329,19 @@ struct PerformanceFoundationV068231 {
     std::uint64_t continuum_hot_diagnostic_capacity_reuses_v068240230 = 0u;
     std::uint64_t continuum_hot_brcems_capacity_reuses_v068240230 = 0u;
     std::uint64_t continuum_hot_pow_mode_hoists_v068240230 = 0u;
+
+    // 0.6.82.40.2.36: fixed-engine production-preamble hot-path telemetry.
+    // Fixed-call counters only; no record/bin-level clock or counter is added.
+    std::uint64_t fixed_preamble_historical_calls_v068240236 = 0u;
+    std::uint64_t fixed_preamble_optimized_calls_v068240236 = 0u;
+    std::uint64_t fixed_preamble_fallback_calls_v068240236 = 0u;
+    std::uint64_t fixed_preamble_environment_profile_builds_v068240236 = 0u;
+    std::uint64_t fixed_preamble_environment_profile_reuses_v068240236 = 0u;
+    std::uint64_t fixed_preamble_radiation_hash_builds_v068240236 = 0u;
+    std::uint64_t fixed_preamble_radiation_hash_reuses_v068240236 = 0u;
+    std::uint64_t fixed_preamble_diagnostic_hash_arrays_elided_v068240236 = 0u;
+    std::uint64_t fixed_preamble_diagnostic_hash_values_elided_v068240236 = 0u;
+    std::uint64_t fixed_preamble_empty_release_swaps_elided_v068240236 = 0u;
 };
 
 // 0.6.82.40.2.8: narrow live-owner view used only by the fixed/controller

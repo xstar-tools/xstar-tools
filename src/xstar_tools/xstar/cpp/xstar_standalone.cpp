@@ -304,19 +304,11 @@ struct PerformanceInstrumentationV064890 {
     double boundary_fixed_seconds_v06824028 = 0.0;
     double boundary_nonfixed_seconds_v06824028 = 0.0;
     std::uint64_t boundary_fixed_calls_v06824028 = 0u;
-    // 0.6.82.40.2.35 attribution-only DSEC non-fixed partition.  These are
-    // coarse callback/controller/fixed-call boundary timers only; no clock is
-    // inserted in evaluate_record(), record traversal, or continuum/bin loops.
-    bool dsec_fine_attribution_enabled_v068240235 = false;
-    std::uint64_t dsec_fine_callback_calls_v068240235 = 0u;
-    double dsec_fine_controller_outer_seconds_v068240235 = 0.0;
-    double dsec_fine_thermal_orchestration_raw_seconds_v068240235 = 0.0;
-    double dsec_fine_callback_seconds_v068240235 = 0.0;
-    double dsec_fine_pre_fixed_raw_seconds_v068240235 = 0.0;
-    double dsec_fine_external_fixed_call_seconds_v068240235 = 0.0;
-    double dsec_fine_fixed_reported_seconds_v068240235 = 0.0;
-    double dsec_fine_post_fixed_seconds_v068240235 = 0.0;
-    double dsec_fine_global_commit_seconds_v068240235 = 0.0;
+    // 0.6.82.40.2.36 qualification-only coarse fixed-call timing.  Enabled
+    // only by XSTAR_V068240236_PREAMBLE_TIMING=1; no record/bin clocks.
+    std::uint64_t fixed_preamble_timed_calls_v068240236 = 0u;
+    double fixed_preamble_external_call_seconds_v068240236 = 0.0;
+    double fixed_preamble_reported_total_seconds_v068240236 = 0.0;
     std::vector<RadialOwnerSampleV06824028> radial_owner_samples_v06824028;
     std::size_t radial_owner_peak_index_v06824028 = std::numeric_limits<std::size_t>::max();
     // 0.6.82.40.2.11 production call-start lifetime telemetry.
@@ -12823,9 +12815,6 @@ struct StandaloneControllerDataV67 {
     const xstar_atdb_runtime::ProductionParameters* parameters = nullptr;
     const xstar_atdb_runtime::ProgramStorage* program = nullptr;
     xstar_fixed_state_stats_v1 cumulative_stats{};
-    // .2.35 qualification-only timing gate.  Set once at standalone setup so
-    // the callback does not perform getenv work on every DSEC evaluation.
-    bool dsec_fine_attribution_enabled_v068240235 = false;
     std::vector<double> energy;
     std::vector<double> flux;
     std::vector<double> dsec_bremsa;
@@ -16957,6 +16946,34 @@ void write_postsolve_attribution(
     }
 }
 
+// 0.6.82.40.2.36: same-binary production-preamble control.  The mode is
+// process-invariant for a standalone run; historical leaves the accepted .34
+// fixed-engine path untouched.
+enum class FixedEnginePreambleModeV068240236 { Historical, Optimized };
+
+FixedEnginePreambleModeV068240236 fixed_engine_preamble_mode_v068240236() {
+    static const FixedEnginePreambleModeV068240236 mode = [] {
+        const char* raw = std::getenv("XSTAR_V068240236_FIXED_ENGINE_PREAMBLE_MODE");
+        if (!raw || !*raw || std::string(raw) == "optimized")
+            return FixedEnginePreambleModeV068240236::Optimized;
+        if (std::string(raw) == "historical")
+            return FixedEnginePreambleModeV068240236::Historical;
+        throw std::runtime_error(
+            "XSTAR_V068240236_FIXED_ENGINE_PREAMBLE_MODE must be historical or optimized");
+    }();
+    return mode;
+}
+
+const char* fixed_engine_preamble_mode_name_v068240236(
+    FixedEnginePreambleModeV068240236 mode) {
+    return mode == FixedEnginePreambleModeV068240236::Historical ? "HISTORICAL" : "OPTIMIZED";
+}
+
+bool fixed_engine_preamble_timing_enabled_v068240236() {
+    const char* raw = std::getenv("XSTAR_V068240236_PREAMBLE_TIMING");
+    return raw && std::string(raw) == "1";
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement standalone iteration evaluator in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
@@ -16973,12 +16990,6 @@ int standalone_iteration_evaluator(
         return 1;
     }
     try {
-        const bool dsec_fine_v068240235 = data->dsec_fine_attribution_enabled_v068240235 &&
-            g_performance_v064890 != nullptr;
-        std::chrono::steady_clock::time_point dsec_fine_callback_started_v068240235{};
-        if (dsec_fine_v068240235) {
-            dsec_fine_callback_started_v068240235 = std::chrono::steady_clock::now();
-        }
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
         FixedDsecSnapshot snapshot = make_iteration_snapshot(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
@@ -17130,6 +17141,27 @@ int standalone_iteration_evaluator(
             snapshot.kind == "dsec" && snapshot.call_index == 1u &&
             snapshot.evaluation_index == 1u && fe_matrix_diag_root_v06823083 &&
             *fe_matrix_diag_root_v06823083;
+        const char* c5_trace_v068240236 = std::getenv("XSTAR_C5_DSEC_TRACE_DIR");
+        const char* fe_thermal_diag_v068240236 = std::getenv("XSTAR_FE_CALL1_THERMAL_DIAG_DIR");
+        const bool explicit_diagnostic_v068240236 =
+            data->reference_trajectory_mode || data->reference_diagnostics_enabled ||
+            fe_matrix_diag_active_v06823083 ||
+            (c5_trace_v068240236 && *c5_trace_v068240236) ||
+            (fe_thermal_diag_v068240236 && *fe_thermal_diag_v068240236);
+        const bool preamble_eligible_v068240236 =
+            snapshot.kind == "dsec" && native_production_v06825 &&
+            !v0648123350_target_projection && !explicit_diagnostic_v068240236;
+        if (preamble_eligible_v068240236) {
+            input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_PREAMBLE_ELIGIBLE_V068240236;
+            if (fixed_engine_preamble_mode_v068240236() ==
+                FixedEnginePreambleModeV068240236::Optimized) {
+                input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_PREAMBLE_OPTIMIZED_V068240236;
+            }
+            if (snapshot.evaluation_index == 1u) {
+                input.runtime_state_flags |=
+                    XSTAR_FIXED_RUNTIME_STATE_DSEC_GRID_GENERATION_CHANGED_V068240236;
+            }
+        }
         const auto saved_env_v06823083 = [](const char* name) {
             const char* value = std::getenv(name);
             return std::make_pair(value != nullptr, value ? std::string(value) : std::string());
@@ -17148,28 +17180,21 @@ int standalone_iteration_evaluator(
             ::setenv("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR",
                      fe_matrix_diag_root_v06823083, 1);
         }
-        double fixed_reported_before_v068240235 = 0.0;
-        std::chrono::steady_clock::time_point fixed_call_started_v068240235{};
-        if (dsec_fine_v068240235) {
-            g_performance_v064890->dsec_fine_pre_fixed_raw_seconds_v068240235 +=
-                std::chrono::duration<double>(
-                    std::chrono::steady_clock::now() - dsec_fine_callback_started_v068240235).count();
-            fixed_reported_before_v068240235 = data->cumulative_stats.total_seconds;
-            fixed_call_started_v068240235 = std::chrono::steady_clock::now();
-        }
+        const bool preamble_timing_v068240236 =
+            preamble_eligible_v068240236 && fixed_engine_preamble_timing_enabled_v068240236();
+        const double preamble_reported_before_v068240236 = data->cumulative_stats.total_seconds;
+        const auto preamble_external_started_v068240236 = preamble_timing_v068240236
+            ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
             data->fixed_context, &input, &output, &source, &data->cumulative_stats,
             message.data(), message.size());
-        std::chrono::steady_clock::time_point post_fixed_started_v068240235{};
-        if (dsec_fine_v068240235) {
-            const auto fixed_call_finished_v068240235 = std::chrono::steady_clock::now();
-            g_performance_v064890->dsec_fine_external_fixed_call_seconds_v068240235 +=
-                std::chrono::duration<double>(
-                    fixed_call_finished_v068240235 - fixed_call_started_v068240235).count();
-            g_performance_v064890->dsec_fine_fixed_reported_seconds_v068240235 += std::max(
-                0.0, data->cumulative_stats.total_seconds - fixed_reported_before_v068240235);
-            ++g_performance_v064890->dsec_fine_callback_calls_v068240235;
-            post_fixed_started_v068240235 = fixed_call_finished_v068240235;
+        if (preamble_timing_v068240236 && g_performance_v064890) {
+            ++g_performance_v064890->fixed_preamble_timed_calls_v068240236;
+            g_performance_v064890->fixed_preamble_external_call_seconds_v068240236 +=
+                performance_elapsed_seconds(preamble_external_started_v068240236);
+            g_performance_v064890->fixed_preamble_reported_total_seconds_v068240236 +=
+                std::max(0.0, data->cumulative_stats.total_seconds -
+                    preamble_reported_before_v068240236);
         }
         const auto restore_env_v06823083 = [](const char* name,
                                                const std::pair<bool,std::string>& saved) {
@@ -17728,14 +17753,6 @@ int standalone_iteration_evaluator(
                 std::cout << "V048746255172582_PATCH52017_SEQUENCE23_CALLBACK_REFERENCE_PARITY=ACCEPT\n";
             }
         }
-        std::chrono::steady_clock::time_point global_commit_started_v068240235{};
-        if (dsec_fine_v068240235) {
-            const auto post_fixed_finished_v068240235 = std::chrono::steady_clock::now();
-            g_performance_v064890->dsec_fine_post_fixed_seconds_v068240235 +=
-                std::chrono::duration<double>(
-                    post_fixed_finished_v068240235 - post_fixed_started_v068240235).count();
-            global_commit_started_v068240235 = post_fixed_finished_v068240235;
-        }
         update_global_populations(*data, snapshot.populations, &snapshot.lte_populations);
         if (snapshot.kind == "dsec" && snapshot.call_index == 1u) {
             std::ostringstream state_tag_v064812324;
@@ -17805,11 +17822,6 @@ int standalone_iteration_evaluator(
                 set_callback_error(error, error_size, "V72_PROBE_STOP_AFTER_SEQUENCE");
                 return 70;
             }
-        }
-        if (dsec_fine_v068240235) {
-            g_performance_v064890->dsec_fine_global_commit_seconds_v068240235 +=
-                std::chrono::duration<double>(
-                    std::chrono::steady_clock::now() - global_commit_started_v068240235).count();
         }
         return 0;
     } catch (const std::exception& exc) {
@@ -20597,14 +20609,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
         }
         xstar_fixed_state_stats_init_v1(&data.cumulative_stats);
-        data.dsec_fine_attribution_enabled_v068240235 = [] {
-            const char* value = std::getenv("XSTAR_V068240235_DSEC_FINE_ATTRIBUTION");
-            return value && std::string(value) == "1";
-        }();
-        if (g_performance_v064890) {
-            g_performance_v064890->dsec_fine_attribution_enabled_v068240235 =
-                data.dsec_fine_attribution_enabled_v068240235;
-        }
 
         xstar_run_state::WholeRunAccumulatedState whole;
         whole.release = XSTAR_API_VERSION_STRING;
@@ -21350,14 +21354,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             if (g_performance_v064890) {
                 g_performance_v064890->controller_all_calls_v0682402 += 1u;
                 g_performance_v064890->controller_all_seconds_v0682402 += controller_call_elapsed_v0682402;
-                if (data.dsec_fine_attribution_enabled_v068240235 && source_nlimdt_v068227 != 0) {
-                    g_performance_v064890->dsec_fine_controller_outer_seconds_v068240235 +=
-                        controller_call_elapsed_v0682402;
-                    g_performance_v064890->dsec_fine_thermal_orchestration_raw_seconds_v068240235 +=
-                        stats.orchestration_seconds;
-                    g_performance_v064890->dsec_fine_callback_seconds_v068240235 +=
-                        stats.callback_seconds;
-                }
                 if (fixed_controller_diagnostics_v06824028) {
                     const double fixed_delta_v06824028 = std::max(
                         0.0, data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds);
@@ -23300,36 +23296,6 @@ void emit_controller_performance_instrumentation(
         perf.foundation_v068231.retained_array_seconds +
         perf.foundation_v068231.level_population_scratch_seconds;
 
-    // .2.35: exact outer DSEC non-fixed closure with nested fixed-call split.
-    // Region 1 is closed at the controller boundary (outer DSEC wall minus
-    // evaluator callback wall); the thermal engine's own orchestration timer is
-    // also emitted raw so the small controller-shell difference stays visible.
-    // Region 3 is closed at the callback boundary; its raw callback-entry to
-    // fixed-call timer is emitted separately.  Regions 4/5/6 are nested:
-    // external fixed wall = reported total + untimed fixed pre/post overhead.
-    const double dsec235_outer = perf.dsec_fine_controller_outer_seconds_v068240235;
-    const double dsec235_callback = perf.dsec_fine_callback_seconds_v068240235;
-    const double dsec235_external_fixed = perf.dsec_fine_external_fixed_call_seconds_v068240235;
-    const double dsec235_fixed_reported = perf.dsec_fine_fixed_reported_seconds_v068240235;
-    const double dsec235_post_fixed = perf.dsec_fine_post_fixed_seconds_v068240235;
-    const double dsec235_global_commit = perf.dsec_fine_global_commit_seconds_v068240235;
-    const double dsec235_region1 = dsec235_outer - dsec235_callback;
-    const double dsec235_region3 = dsec235_callback - dsec235_external_fixed -
-        dsec235_post_fixed - dsec235_global_commit;
-    const double dsec235_region6 = dsec235_external_fixed - dsec235_fixed_reported;
-    const double dsec235_controller_shell = dsec235_region1 -
-        perf.dsec_fine_thermal_orchestration_raw_seconds_v068240235;
-    const double dsec235_callback_shell = dsec235_region3 -
-        perf.dsec_fine_pre_fixed_raw_seconds_v068240235;
-    const double dsec235_partition = dsec235_region1 + dsec235_region3 +
-        dsec235_region6 + dsec235_post_fixed + dsec235_global_commit;
-    const double dsec235_legacy_nonfixed = dsec235_outer - dsec235_fixed_reported;
-    const double dsec235_nonfixed_closure = dsec235_partition - dsec235_legacy_nonfixed;
-    const double dsec235_callback_closure = dsec235_region3 + dsec235_external_fixed +
-        dsec235_post_fixed + dsec235_global_commit - dsec235_callback;
-    const double dsec235_fixed_split_closure = dsec235_fixed_reported + dsec235_region6 -
-        dsec235_external_fixed;
-
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V0682402_CPU_AUDIT_POLICY=IONIZATION_REGIME_WORK_EQUIVALENCE_PORTABLE_GCC_O3_MEASUREMENT_ONLY\n"
@@ -23480,32 +23446,6 @@ void emit_controller_performance_instrumentation(
             << "V06824028_CONTROLLER_DSEC_FIXED_SECONDS=" << perf.controller_fixed_seconds_v06824028 << "\n"
             << "V06824028_CONTROLLER_DSEC_NONFIXED_SECONDS=" << perf.controller_nonfixed_seconds_v06824028 << "\n"
             << "V06824028_CONTROLLER_DSEC_FIXED_CALLS=" << perf.controller_fixed_calls_v06824028 << "\n"
-            << std::setprecision(9)
-            << "V068240235_DSEC_FINE_ATTRIBUTION="
-            << (perf.dsec_fine_attribution_enabled_v068240235 ? "ENABLED" : "DISABLED") << "\n"
-            << "V068240235_DSEC_CALLBACK_CALLS=" << perf.dsec_fine_callback_calls_v068240235 << "\n"
-            << "V068240235_REGION1_THERMAL_CONTROLLER_ORCHESTRATION_SECONDS=" << dsec235_region1 << "\n"
-            << "V068240235_REGION1_THERMAL_STATS_RAW_ORCHESTRATION_SECONDS="
-            << perf.dsec_fine_thermal_orchestration_raw_seconds_v068240235 << "\n"
-            << "V068240235_REGION1_CONTROLLER_SHELL_SECONDS=" << dsec235_controller_shell << "\n"
-            << "V068240235_REGION2_TOTAL_EVALUATOR_CALLBACK_SECONDS=" << dsec235_callback << "\n"
-            << "V068240235_REGION3_STANDALONE_PRE_FIXED_SETUP_SECONDS=" << dsec235_region3 << "\n"
-            << "V068240235_REGION3_PRE_FIXED_RAW_SECONDS="
-            << perf.dsec_fine_pre_fixed_raw_seconds_v068240235 << "\n"
-            << "V068240235_REGION3_CALLBACK_SHELL_CLOSURE_SECONDS=" << dsec235_callback_shell << "\n"
-            << "V068240235_REGION4_EXTERNAL_FIXED_ENGINE_CALL_WALL_SECONDS=" << dsec235_external_fixed << "\n"
-            << "V068240235_REGION5_FIXED_ENGINE_REPORTED_TOTAL_SECONDS=" << dsec235_fixed_reported << "\n"
-            << "V068240235_REGION6_UNTIMED_FIXED_ENGINE_PRE_POST_OVERHEAD_SECONDS=" << dsec235_region6 << "\n"
-            << "V068240235_REGION7_POST_FIXED_DIAGNOSTIC_PUBLICATION_EXTRACTION_SECONDS=" << dsec235_post_fixed << "\n"
-            << "V068240235_REGION8_GLOBAL_POPULATION_MAPBACK_COMMIT_SECONDS=" << dsec235_global_commit << "\n"
-            << "V068240235_DSEC_OUTER_SECONDS=" << dsec235_outer << "\n"
-            << "V068240235_DSEC_NONFIXED_PARTITION_SECONDS=" << dsec235_partition << "\n"
-            << "V068240235_DSEC_NONFIXED_REFERENCE_SECONDS=" << dsec235_legacy_nonfixed << "\n"
-            << "V068240235_DSEC_NONFIXED_CLOSURE_ERROR_SECONDS=" << dsec235_nonfixed_closure << "\n"
-            << "V068240235_CALLBACK_SUBPARTITION_ERROR_SECONDS=" << dsec235_callback_closure << "\n"
-            << "V068240235_FIXED_CALL_SPLIT_ERROR_SECONDS=" << dsec235_fixed_split_closure << "\n"
-            << "V068240235_PER_RECORD_CLOCKS=NO\n"
-            << std::setprecision(6)
             << "V06824028_BOUNDARY_SECONDS=" << perf.boundary_all_seconds_v0682402 << "\n"
             << "V06824028_BOUNDARY_FIXED_SECONDS=" << perf.boundary_fixed_seconds_v06824028 << "\n"
             << "V06824028_BOUNDARY_NONFIXED_SECONDS=" << perf.boundary_nonfixed_seconds_v06824028 << "\n"
@@ -23926,6 +23866,40 @@ void emit_controller_performance_instrumentation(
             << perf.foundation_v068231.continuum_hot_brcems_capacity_reuses_v068240230 << "\n"
             << "V068240230_CONTINUUM_POW_MODE_HOISTS="
             << perf.foundation_v068231.continuum_hot_pow_mode_hoists_v068240230 << "\n";
+        const double fixed_preamble_untimed_v068240236 = std::max(
+            0.0, perf.fixed_preamble_external_call_seconds_v068240236 -
+                 perf.fixed_preamble_reported_total_seconds_v068240236);
+        out << "V068240236_FIXED_ENGINE_PREAMBLE_MODE="
+            << fixed_engine_preamble_mode_name_v068240236(
+                fixed_engine_preamble_mode_v068240236()) << "\n"
+            << "V068240236_PREAMBLE_HISTORICAL_CALLS="
+            << perf.foundation_v068231.fixed_preamble_historical_calls_v068240236 << "\n"
+            << "V068240236_PREAMBLE_OPTIMIZED_CALLS="
+            << perf.foundation_v068231.fixed_preamble_optimized_calls_v068240236 << "\n"
+            << "V068240236_PREAMBLE_FALLBACK_CALLS="
+            << perf.foundation_v068231.fixed_preamble_fallback_calls_v068240236 << "\n"
+            << "V068240236_ENVIRONMENT_PROFILE_BUILDS="
+            << perf.foundation_v068231.fixed_preamble_environment_profile_builds_v068240236 << "\n"
+            << "V068240236_ENVIRONMENT_PROFILE_REUSES="
+            << perf.foundation_v068231.fixed_preamble_environment_profile_reuses_v068240236 << "\n"
+            << "V068240236_RADIATION_HASH_BUILDS="
+            << perf.foundation_v068231.fixed_preamble_radiation_hash_builds_v068240236 << "\n"
+            << "V068240236_RADIATION_HASH_REUSES="
+            << perf.foundation_v068231.fixed_preamble_radiation_hash_reuses_v068240236 << "\n"
+            << "V068240236_DIAGNOSTIC_HASH_ARRAYS_ELIDED="
+            << perf.foundation_v068231.fixed_preamble_diagnostic_hash_arrays_elided_v068240236 << "\n"
+            << "V068240236_DIAGNOSTIC_HASH_VALUES_ELIDED="
+            << perf.foundation_v068231.fixed_preamble_diagnostic_hash_values_elided_v068240236 << "\n"
+            << "V068240236_EMPTY_RELEASE_SWAPS_ELIDED="
+            << perf.foundation_v068231.fixed_preamble_empty_release_swaps_elided_v068240236 << "\n"
+            << "V068240236_TIMED_FIXED_CALLS="
+            << perf.fixed_preamble_timed_calls_v068240236 << "\n"
+            << "V068240236_EXTERNAL_FIXED_CALL_SECONDS="
+            << perf.fixed_preamble_external_call_seconds_v068240236 << "\n"
+            << "V068240236_REPORTED_FIXED_TOTAL_SECONDS="
+            << perf.fixed_preamble_reported_total_seconds_v068240236 << "\n"
+            << "V068240236_UNTIMED_FIXED_PREAMBLE_SECONDS="
+            << fixed_preamble_untimed_v068240236 << "\n";
         for (std::size_t rt_v06824022 = 0;
              rt_v06824022 < perf.foundation_v068231.evaluated_records_by_rate_type_v06824022.size();
              ++rt_v06824022) {

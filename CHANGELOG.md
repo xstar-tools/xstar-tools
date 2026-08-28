@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.36 - FIXED_ENGINE_PRODUCTION_PREAMBLE_HOT_PATH - 2026-08-28
+
+- Branches directly from accepted `0.6.82.40.2.34`; `.2.35` remains attribution-only and is not production ancestry.
+- Adds an ordinary-production DSEC preamble fast path selected by `XSTAR_V068240236_FIXED_ENGINE_PREAMBLE_MODE=historical|optimized` (default optimized). General API, reference, and explicit diagnostic trajectories remain historical.
+- Caches invariant pre-`total_start` environment/qualification controls once per fixed context instead of reparsing dozens of environment variables on every DSEC evaluation.
+- Preserves the reduced-continuum radiation-grid cache contract: the full FNV hash is rebuilt at the first evaluation of each DSEC controller call (or pointer/count change), then reused only while that caller-owned grid generation is immutable.
+- Elides BREMSA/tau/global-level and non-owning full-grid fingerprints only on the ordinary production DSEC fast path; accepted-boundary/diagnostic/reference calls retain historical hashes.
+- Guards capacity-releasing `swap` calls when the targeted diagnostic container already has zero capacity; nonzero capacity is still released, preserving the `.2.34` memory ceiling.
+- Adds qualification-only coarse external fixed-call timing; no clocks are added inside `evaluate_record()`, record/rate traversal, or continuum/bin loops.
+- Qualification uses balanced same-host `xi=-3` historical/optimized A/B with `.2.27`, `.2.30`, and `.2.34` held optimized in both arms. Preregistered gates require external fixed-call ratio <=0.950, untimed-preamble ratio <=0.800, reported fixed ratio <=1.010, all-fixed ratio <=1.010, internal/wall ratio <=0.960, RSS ratio <=1.030, and both optimized pairs faster. `xi=+1,+4` science closure follows only after low-`xi` ACCEPT; no multi-element run.
+
 ## 0.6.82.40.2.35 - DSEC non-fixed fine attribution - 2026-08-28
 
 - Attribution-only successor to accepted `.2.34`; the accepted `.2.27` Type-53 static-kernel, `.2.30` continuum-workspace, and `.2.34` SAVD-staging optimizations remain in place unchanged.

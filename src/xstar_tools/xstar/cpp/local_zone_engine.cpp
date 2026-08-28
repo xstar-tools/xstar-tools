@@ -440,6 +440,104 @@ bool environment_flag(const char* name) {
     throw std::runtime_error(std::string("invalid environment flag: ") + name);
 }
 
+// 0.6.82.40.2.36: ordinary standalone DSEC holds the qualification/production
+// configuration invariant across thousands of fixed-state evaluations.  Cache
+// only the pre-total_start controls that run_impl repeatedly parsed.  General
+// API calls and diagnostic/reference paths never request this profile.
+struct ProductionPreambleEnvironmentV068240236 {
+    bool native_production = false;
+    bool force_096_record_provenance = false;
+    bool retain_thermal_diagonal_rows = false;
+    int helium_matrix_ablation_type = 0;
+    int helium_preliminary_ablation_type = 0;
+    int helium_source_position_ablation = 0;
+    int helium_matrix_ablation_row_type = 0;
+    int helium_matrix_ablation_row_min = 0;
+    int helium_matrix_ablation_row_max_raw = 0;
+    bool helium_unqualified_type53_ablation = false;
+    bool helium_unqualified_type71_ablation = false;
+    bool helium_unqualified_type99_ablation = false;
+    bool helium_solve_response = false;
+    bool all_element_solve_response = false;
+    bool all_element_solve_system = false;
+    bool source_compact_basis_seed = false;
+    bool matrix_construction_closure = false;
+    bool fixed_state_parity_closure = false;
+    bool thermal_component_parity_closure = false;
+    bool thermal_compact_population_closure = false;
+    bool native_sequence1_thermal_diagonal = false;
+    bool thermal_diagonal_domain_source_faithful = false;
+    bool independent_thermal_parity = false;
+    bool magnesium_primary_thermal_correction = false;
+    bool helium_non_type53_type50_energy_reduction = false;
+    bool magnesium_type50_primary_cooling_reduction = false;
+    bool magnesium_type50_thermal_channel_preservation = false;
+    bool helium_source_insertion_order = false;
+    bool type53_two_state_promotion = false;
+    bool type53_row46_coupled_replacement = false;
+    bool qualification_replacement = false;
+    bool magnesium_type50_escape_state = false;
+    bool magnesium_type50_endpoint_energy_transport = false;
+    bool qualification_ablation_is_one = false;
+    bool matrix_construction_closure_dir_present = false;
+    bool fixed_state_parity_closure_dir_present = false;
+    bool thermal_component_parity_closure_dir_present = false;
+    bool thermal_compact_population_closure_dir_present = false;
+};
+
+bool env_value_is_one_v068240236(const char* name) {
+    const char* value = std::getenv(name);
+    return value && std::string(value) == "1";
+}
+
+bool env_value_present_v068240236(const char* name) {
+    const char* value = std::getenv(name);
+    return value && *value;
+}
+
+ProductionPreambleEnvironmentV068240236 load_production_preamble_environment_v068240236() {
+    ProductionPreambleEnvironmentV068240236 p;
+    p.native_production = environment_flag("XSTAR_NATIVE_PRODUCTION");
+    p.force_096_record_provenance = environment_flag("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
+    p.retain_thermal_diagonal_rows = environment_flag("XSTAR_V06823612_RETAIN_THERMAL_DIAGONAL_DIAGNOSTICS");
+    p.helium_matrix_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_TYPE");
+    p.helium_preliminary_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_PRELIMINARY_TYPE");
+    p.helium_source_position_ablation = environment_data_type("XSTAR_HELIUM_ABLATE_SOURCE_POSITION");
+    p.helium_matrix_ablation_row_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_TYPE");
+    p.helium_matrix_ablation_row_min = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MIN");
+    p.helium_matrix_ablation_row_max_raw = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MAX");
+    p.helium_unqualified_type53_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE53");
+    p.helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
+    p.helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
+    p.helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
+    p.all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
+    p.all_element_solve_system = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM");
+    p.source_compact_basis_seed = environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
+    p.matrix_construction_closure = environment_flag("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
+    p.fixed_state_parity_closure = environment_flag("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE");
+    p.thermal_component_parity_closure = environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
+    p.thermal_compact_population_closure = environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+    p.native_sequence1_thermal_diagonal = environment_flag("XSTAR_NATIVE_SEQUENCE1_THERMAL_DIAGONAL_RECONSTRUCTION");
+    p.thermal_diagonal_domain_source_faithful = environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL");
+    p.independent_thermal_parity = environment_flag("XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY");
+    p.magnesium_primary_thermal_correction = environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
+    p.helium_non_type53_type50_energy_reduction = environment_flag("XSTAR_QUALIFICATION_HE_NON_TYPE53_TYPE50_ENERGY_REDUCTION");
+    p.magnesium_type50_primary_cooling_reduction = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_PRIMARY_COOLING_REDUCTION");
+    p.magnesium_type50_thermal_channel_preservation = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_THERMAL_CHANNEL_PRESERVATION");
+    p.helium_source_insertion_order = environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
+    p.type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+    p.type53_row46_coupled_replacement = environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
+    p.qualification_replacement = environment_flag("XSTAR_QUALIFICATION_REPLACEMENT");
+    p.magnesium_type50_escape_state = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE");
+    p.magnesium_type50_endpoint_energy_transport = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT");
+    p.qualification_ablation_is_one = env_value_is_one_v068240236("XSTAR_QUALIFICATION_ABLATION");
+    p.matrix_construction_closure_dir_present = env_value_present_v068240236("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
+    p.fixed_state_parity_closure_dir_present = env_value_present_v068240236("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
+    p.thermal_component_parity_closure_dir_present = env_value_present_v068240236("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
+    p.thermal_compact_population_closure_dir_present = env_value_present_v068240236("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+    return p;
+}
+
 // 0.6.82.40.2.14: contribution-list hot-path control.  The optimized mode is
 // production-only and preserves the exact source contribution order and
 // accumulation order; historical keeps the pre-.14 allocation/lookup path for
@@ -4992,6 +5090,17 @@ struct xstar_fixed_state_context_impl {
     TraversalHotPathModeV068240215 traversal_hotpath_mode_v068240215 =
         TraversalHotPathModeV068240215::Optimized;
     std::vector<Option10EndpointPlanV068240215> option10_endpoint_plan_by_record_v068240215;
+    // 0.6.82.40.2.36: private production-preamble cache.  No public ABI state.
+    bool production_preamble_environment_initialized_v068240236 = false;
+    ProductionPreambleEnvironmentV068240236 production_preamble_environment_v068240236{};
+    const double* production_preamble_radiation_ptr_v068240236 = nullptr;
+    std::size_t production_preamble_radiation_count_v068240236 = 0u;
+    std::uint64_t production_preamble_radiation_hash_v068240236 = 0u;
+    bool production_preamble_radiation_hash_valid_v068240236 = false;
+    const double* production_preamble_dsec_radiation_ptr_v068240236 = nullptr;
+    std::size_t production_preamble_dsec_radiation_count_v068240236 = 0u;
+    std::uint64_t production_preamble_dsec_radiation_hash_v068240236 = 0u;
+    bool production_preamble_dsec_radiation_hash_valid_v068240236 = false;
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
@@ -13313,9 +13422,40 @@ int run_impl(
     validate_io(input, output);
     const bool defer_product_projection =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
-    const bool native_production_v064897 = environment_flag("XSTAR_NATIVE_PRODUCTION");
-    const bool force_096_record_provenance_v064897 =
-        environment_flag("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
+    const bool preamble_eligible_v068240236 =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_PREAMBLE_ELIGIBLE_V068240236) != 0u;
+    const bool preamble_optimized_requested_v068240236 =
+        preamble_eligible_v068240236 &&
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_PREAMBLE_OPTIMIZED_V068240236) != 0u;
+    const ProductionPreambleEnvironmentV068240236* preamble_env_v068240236 = nullptr;
+    if (preamble_optimized_requested_v068240236) {
+        if (!ctx.production_preamble_environment_initialized_v068240236) {
+            ctx.production_preamble_environment_v068240236 =
+                load_production_preamble_environment_v068240236();
+            ctx.production_preamble_environment_initialized_v068240236 = true;
+            ++ctx.perf_foundation_v068231.fixed_preamble_environment_profile_builds_v068240236;
+        } else {
+            ++ctx.perf_foundation_v068231.fixed_preamble_environment_profile_reuses_v068240236;
+        }
+        preamble_env_v068240236 = &ctx.production_preamble_environment_v068240236;
+    }
+    const bool preamble_optimized_v068240236 =
+        preamble_optimized_requested_v068240236 && preamble_env_v068240236 &&
+        preamble_env_v068240236->native_production &&
+        !preamble_env_v068240236->force_096_record_provenance &&
+        !preamble_env_v068240236->retain_thermal_diagonal_rows;
+    if (preamble_eligible_v068240236) {
+        if (preamble_optimized_v068240236)
+            ++ctx.perf_foundation_v068231.fixed_preamble_optimized_calls_v068240236;
+        else
+            ++ctx.perf_foundation_v068231.fixed_preamble_historical_calls_v068240236;
+        if (preamble_optimized_requested_v068240236 && !preamble_optimized_v068240236)
+            ++ctx.perf_foundation_v068231.fixed_preamble_fallback_calls_v068240236;
+    }
+    const bool native_production_v064897 = preamble_optimized_v068240236
+        ? true : environment_flag("XSTAR_NATIVE_PRODUCTION");
+    const bool force_096_record_provenance_v064897 = preamble_optimized_v068240236
+        ? false : environment_flag("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
     const bool compact_record_products_v06823611 =
         native_production_v064897 && !force_096_record_provenance_v064897;
     // 0.6.82.36.12: the canonical thermal reducer consumes the immutable
@@ -13323,22 +13463,32 @@ int run_impl(
     // output-only forensic state and are not consumed by ordinary standalone
     // production science or FITS publication. Keep them for library/forensic
     // use, but do not materialize their large row/string surface in production.
-    const bool retain_thermal_diagonal_rows_v06823612 =
-        !native_production_v064897 ||
-        environment_flag("XSTAR_V06823612_RETAIN_THERMAL_DIAGONAL_DIAGNOSTICS");
+    const bool retain_thermal_diagonal_rows_v06823612 = preamble_optimized_v068240236
+        ? false
+        : (!native_production_v064897 ||
+           environment_flag("XSTAR_V06823612_RETAIN_THERMAL_DIAGONAL_DIAGNOSTICS"));
     std::uint64_t thermal_diagonal_rows_elided_v06823612 = 0u;
     ctx.last_record_product_compact_mode_v06823611 = compact_record_products_v06823611;
     if (compact_record_products_v06823611) {
         // A prior explicit forensic call may have left a very large rich-vector
         // capacity. Ordinary production never consumes it. Release it rather
         // than carrying that capacity into the accepted-boundary/DSEC path.
-        std::vector<NativeRecordDiagnostic>().swap(ctx.last_record_diagnostics);
+        if (!preamble_optimized_v068240236 || ctx.last_record_diagnostics.capacity() != 0u) {
+            std::vector<NativeRecordDiagnostic>().swap(ctx.last_record_diagnostics);
+        } else {
+            ++ctx.perf_foundation_v068231.fixed_preamble_empty_release_swaps_elided_v068240236;
+        }
         if (defer_product_projection) {
             // The compact accepted-boundary product has already been copied to
             // the standalone snapshot before a later DSEC call begins. DSEC
             // itself publishes no record products, so retain no stale capacity.
-            std::vector<CompactProductionRecordDiagnosticV06823611>().swap(
-                ctx.last_compact_record_product_diagnostics_v06823611);
+            if (!preamble_optimized_v068240236 ||
+                ctx.last_compact_record_product_diagnostics_v06823611.capacity() != 0u) {
+                std::vector<CompactProductionRecordDiagnosticV06823611>().swap(
+                    ctx.last_compact_record_product_diagnostics_v06823611);
+            } else {
+                ++ctx.perf_foundation_v068231.fixed_preamble_empty_release_swaps_elided_v068240236;
+            }
         } else {
             ctx.last_compact_record_product_diagnostics_v06823611.clear();
         }
@@ -13371,7 +13521,11 @@ int run_impl(
     if (retain_thermal_diagonal_rows_v06823612) {
         ctx.last_thermal_diagonal_diagnostics.clear();
     } else {
-        std::vector<ThermalDiagonalDiagnostic>().swap(ctx.last_thermal_diagonal_diagnostics);
+        if (!preamble_optimized_v068240236 || ctx.last_thermal_diagonal_diagnostics.capacity() != 0u) {
+            std::vector<ThermalDiagonalDiagnostic>().swap(ctx.last_thermal_diagonal_diagnostics);
+        } else {
+            ++ctx.perf_foundation_v068231.fixed_preamble_empty_release_swaps_elided_v068240236;
+        }
     }
     ctx.last_thermal_population_count = 0;
     ctx.last_thermal_population_fingerprint = 0;
@@ -13387,90 +13541,153 @@ int run_impl(
     ctx.last_turbulent_velocity_km_s = input.turbulent_velocity_km_s;
     ctx.last_radiation_bin_count = input.radiation_bin_count;
     ctx.last_input_radiation_count = input.radiation_bin_count;
-    ctx.last_input_radiation_fingerprint = binary64_sequence_fnv1a(input.radiation_energy_ev, input.radiation_bin_count);
     ctx.last_input_dsec_radiation_count = input.dsec_radiation_bin_count;
-    ctx.last_input_dsec_radiation_fingerprint = binary64_sequence_fnv1a(input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
     ctx.last_input_bremsa_count = input.dsec_radiation_bin_count;
-    ctx.last_input_bremsa_fingerprint = binary64_sequence_fnv1a(input.dsec_bremsa, input.dsec_radiation_bin_count);
     ctx.last_input_tau_count = input.continuum_tau_count;
-    ctx.last_input_tau_in_fingerprint = binary64_sequence_fnv1a(input.continuum_tau_in, input.continuum_tau_count);
-    ctx.last_input_tau_out_fingerprint = binary64_sequence_fnv1a(input.continuum_tau_out, input.continuum_tau_count);
     ctx.last_input_global_level_count = input.global_level_count;
-    ctx.last_input_xilevg_fingerprint = binary64_sequence_fnv1a(input.global_xilevg, input.global_level_count);
-    ctx.last_input_bilevg_fingerprint = binary64_sequence_fnv1a(input.global_bilevg, input.global_level_count);
-    ctx.last_input_rnisg_fingerprint = binary64_sequence_fnv1a(input.global_rnisg, input.global_level_count);
-    const int helium_matrix_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_TYPE");
-    const int helium_preliminary_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_PRELIMINARY_TYPE");
-    const int helium_source_position_ablation = environment_data_type("XSTAR_HELIUM_ABLATE_SOURCE_POSITION");
-    const int helium_matrix_ablation_row_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_TYPE");
-    const int helium_matrix_ablation_row_min = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MIN");
-    const int helium_matrix_ablation_row_max_raw = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MAX");
+    if (preamble_optimized_v068240236) {
+        const bool grid_generation_changed_v068240236 =
+            (input.runtime_state_flags &
+             XSTAR_FIXED_RUNTIME_STATE_DSEC_GRID_GENERATION_CHANGED_V068240236) != 0u;
+        const bool has_dsec_grid_v068240236 = input.dsec_radiation_energy_ev &&
+            input.dsec_radiation_bin_count > 0u;
+        if (has_dsec_grid_v068240236) {
+            const bool rebuild = grid_generation_changed_v068240236 ||
+                !ctx.production_preamble_dsec_radiation_hash_valid_v068240236 ||
+                ctx.production_preamble_dsec_radiation_ptr_v068240236 != input.dsec_radiation_energy_ev ||
+                ctx.production_preamble_dsec_radiation_count_v068240236 != input.dsec_radiation_bin_count;
+            if (rebuild) {
+                ctx.production_preamble_dsec_radiation_hash_v068240236 =
+                    binary64_sequence_fnv1a(input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+                ctx.production_preamble_dsec_radiation_ptr_v068240236 = input.dsec_radiation_energy_ev;
+                ctx.production_preamble_dsec_radiation_count_v068240236 = input.dsec_radiation_bin_count;
+                ctx.production_preamble_dsec_radiation_hash_valid_v068240236 = true;
+                ++ctx.perf_foundation_v068231.fixed_preamble_radiation_hash_builds_v068240236;
+            } else {
+                ++ctx.perf_foundation_v068231.fixed_preamble_radiation_hash_reuses_v068240236;
+            }
+            ctx.last_input_dsec_radiation_fingerprint =
+                ctx.production_preamble_dsec_radiation_hash_v068240236;
+            // The full radiation hash is diagnostic-only while the DSEC grid is
+            // the production reduced-continuum geometry owner.
+            ctx.last_input_radiation_fingerprint = 0u;
+            ++ctx.perf_foundation_v068231.fixed_preamble_diagnostic_hash_arrays_elided_v068240236;
+            ctx.perf_foundation_v068231.fixed_preamble_diagnostic_hash_values_elided_v068240236 +=
+                static_cast<std::uint64_t>(input.radiation_bin_count);
+        } else {
+            const bool rebuild = grid_generation_changed_v068240236 ||
+                !ctx.production_preamble_radiation_hash_valid_v068240236 ||
+                ctx.production_preamble_radiation_ptr_v068240236 != input.radiation_energy_ev ||
+                ctx.production_preamble_radiation_count_v068240236 != input.radiation_bin_count;
+            if (rebuild) {
+                ctx.production_preamble_radiation_hash_v068240236 =
+                    binary64_sequence_fnv1a(input.radiation_energy_ev, input.radiation_bin_count);
+                ctx.production_preamble_radiation_ptr_v068240236 = input.radiation_energy_ev;
+                ctx.production_preamble_radiation_count_v068240236 = input.radiation_bin_count;
+                ctx.production_preamble_radiation_hash_valid_v068240236 = true;
+                ++ctx.perf_foundation_v068231.fixed_preamble_radiation_hash_builds_v068240236;
+            } else {
+                ++ctx.perf_foundation_v068231.fixed_preamble_radiation_hash_reuses_v068240236;
+            }
+            ctx.last_input_radiation_fingerprint = ctx.production_preamble_radiation_hash_v068240236;
+            ctx.last_input_dsec_radiation_fingerprint = 0u;
+        }
+        ctx.last_input_bremsa_fingerprint = 0u;
+        ctx.last_input_tau_in_fingerprint = 0u;
+        ctx.last_input_tau_out_fingerprint = 0u;
+        ctx.last_input_xilevg_fingerprint = 0u;
+        ctx.last_input_bilevg_fingerprint = 0u;
+        ctx.last_input_rnisg_fingerprint = 0u;
+        ctx.perf_foundation_v068231.fixed_preamble_diagnostic_hash_arrays_elided_v068240236 += 6u;
+        ctx.perf_foundation_v068231.fixed_preamble_diagnostic_hash_values_elided_v068240236 +=
+            static_cast<std::uint64_t>(input.dsec_radiation_bin_count) +
+            2u * static_cast<std::uint64_t>(input.continuum_tau_count) +
+            3u * static_cast<std::uint64_t>(input.global_level_count);
+    } else {
+        ctx.last_input_radiation_fingerprint = binary64_sequence_fnv1a(input.radiation_energy_ev, input.radiation_bin_count);
+        ctx.last_input_dsec_radiation_fingerprint = binary64_sequence_fnv1a(input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+        ctx.last_input_bremsa_fingerprint = binary64_sequence_fnv1a(input.dsec_bremsa, input.dsec_radiation_bin_count);
+        ctx.last_input_tau_in_fingerprint = binary64_sequence_fnv1a(input.continuum_tau_in, input.continuum_tau_count);
+        ctx.last_input_tau_out_fingerprint = binary64_sequence_fnv1a(input.continuum_tau_out, input.continuum_tau_count);
+        ctx.last_input_xilevg_fingerprint = binary64_sequence_fnv1a(input.global_xilevg, input.global_level_count);
+        ctx.last_input_bilevg_fingerprint = binary64_sequence_fnv1a(input.global_bilevg, input.global_level_count);
+        ctx.last_input_rnisg_fingerprint = binary64_sequence_fnv1a(input.global_rnisg, input.global_level_count);
+    }
+    const int helium_matrix_ablation_type = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_matrix_ablation_type : environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_TYPE");
+    const int helium_preliminary_ablation_type = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_preliminary_ablation_type : environment_data_type("XSTAR_HELIUM_ABLATE_PRELIMINARY_TYPE");
+    const int helium_source_position_ablation = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_source_position_ablation : environment_data_type("XSTAR_HELIUM_ABLATE_SOURCE_POSITION");
+    const int helium_matrix_ablation_row_type = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_matrix_ablation_row_type : environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_TYPE");
+    const int helium_matrix_ablation_row_min = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_matrix_ablation_row_min : environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MIN");
+    const int helium_matrix_ablation_row_max_raw = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_matrix_ablation_row_max_raw : environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MAX");
     const int helium_matrix_ablation_row_max = helium_matrix_ablation_row_max_raw != 0
         ? helium_matrix_ablation_row_max_raw : helium_matrix_ablation_row_min;
-    const bool helium_unqualified_type53_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE53");
-    const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
-    const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
-    const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
-    const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
-    const bool all_element_solve_system = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM");
+    const bool helium_unqualified_type53_ablation = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_unqualified_type53_ablation : environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE53");
+    const bool helium_unqualified_type71_ablation = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_unqualified_type71_ablation : environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
+    const bool helium_unqualified_type99_ablation = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_unqualified_type99_ablation : environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
+    const bool helium_solve_response = preamble_optimized_v068240236 ? preamble_env_v068240236->helium_solve_response : environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
+    const bool all_element_solve_response = preamble_optimized_v068240236 ? preamble_env_v068240236->all_element_solve_response : environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
+    const bool all_element_solve_system = preamble_optimized_v068240236 ? preamble_env_v068240236->all_element_solve_system : environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM");
     // 0.6.82.36.3: true production historically enables the qualification
     // solve-system flag as part of the accepted source-faithful profile, but
     // that flag only requests diagnostic matrix copies; it does not change
     // matrix construction or solver arithmetic.  Do not let the historical
     // production profile force three output-only n*n matrix copies.
     const bool return_solve_system_diagnostics_v0682363 =
-        all_element_solve_system && !environment_flag("XSTAR_NATIVE_PRODUCTION");
-    const bool source_compact_basis_seed = environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
+        all_element_solve_system && !(preamble_optimized_v068240236
+            ? true : environment_flag("XSTAR_NATIVE_PRODUCTION"));
+    const bool source_compact_basis_seed = preamble_optimized_v068240236 ? preamble_env_v068240236->source_compact_basis_seed : environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
     const bool matrix_construction_closure =
-        environment_flag("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->matrix_construction_closure : environment_flag("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE"));
     const bool fixed_state_parity_closure =
-        environment_flag("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->fixed_state_parity_closure : environment_flag("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE"));
     const bool thermal_component_parity_closure =
-        environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->thermal_component_parity_closure : environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE"));
     const bool thermal_compact_population_closure =
-        environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->thermal_compact_population_closure : environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE"));
     const bool native_sequence1_thermal_diagonal =
-        environment_flag("XSTAR_NATIVE_SEQUENCE1_THERMAL_DIAGONAL_RECONSTRUCTION");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->native_sequence1_thermal_diagonal : environment_flag("XSTAR_NATIVE_SEQUENCE1_THERMAL_DIAGONAL_RECONSTRUCTION"));
     const bool thermal_diagonal_source_domain =
-        environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL") ||
+        (preamble_optimized_v068240236
+            ? preamble_env_v068240236->thermal_diagonal_domain_source_faithful
+            : environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL")) ||
         native_sequence1_thermal_diagonal;
     const bool independent_thermal_parity =
-        environment_flag("XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->independent_thermal_parity : environment_flag("XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY"));
     // Retain the established qualification control as an explicit assertion.
     // v46.21 generalizes its old Mg-only abundance correction to every element
     // through the shared source-order reducer; the flag no longer owns a
     // second multiplication.
     const bool magnesium_primary_thermal_correction =
-        environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->magnesium_primary_thermal_correction : environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION"));
     const bool helium_non_type53_type50_energy_reduction =
-        environment_flag("XSTAR_QUALIFICATION_HE_NON_TYPE53_TYPE50_ENERGY_REDUCTION");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->helium_non_type53_type50_energy_reduction : environment_flag("XSTAR_QUALIFICATION_HE_NON_TYPE53_TYPE50_ENERGY_REDUCTION"));
     const bool magnesium_type50_primary_cooling_reduction =
-        environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_PRIMARY_COOLING_REDUCTION");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->magnesium_type50_primary_cooling_reduction : environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_PRIMARY_COOLING_REDUCTION"));
     const bool magnesium_type50_thermal_channel_preservation =
-        environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_THERMAL_CHANNEL_PRESERVATION");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->magnesium_type50_thermal_channel_preservation : environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_THERMAL_CHANNEL_PRESERVATION"));
     const bool helium_source_insertion_order =
-        environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
-    const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->helium_source_insertion_order : environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER"));
+    const bool type53_two_state_promotion = preamble_optimized_v068240236 ? preamble_env_v068240236->type53_two_state_promotion : environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
     const bool type53_row46_coupled_replacement =
-        environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") || type53_two_state_promotion;
+        (preamble_optimized_v068240236 ? preamble_env_v068240236->type53_row46_coupled_replacement : environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT")) || type53_two_state_promotion;
     if (type53_row46_coupled_replacement &&
-        !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("type53 row46 replacement/promotion requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
-    if (helium_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (helium_solve_response && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("helium solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
-    if (all_element_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (all_element_solve_response && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("all-element solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
-    if (all_element_solve_system && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (all_element_solve_system && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("all-element solve-system diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
-    if (source_compact_basis_seed && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (source_compact_basis_seed && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("source compact-basis/seed restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (thermal_diagonal_source_domain &&
-        (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT") ||
+        (!(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) ||
          (!matrix_construction_closure && !native_sequence1_thermal_diagonal))) {
         throw std::runtime_error(
             "source-faithful thermal diagonal domain requires replacement and either matrix-construction closure or native sequence-1 reconstruction");
@@ -13499,42 +13716,46 @@ int run_impl(
     }
     if (helium_non_type53_type50_energy_reduction &&
         (!matrix_construction_closure || !thermal_diagonal_source_domain ||
-         !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
+         !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")))) {
         throw std::runtime_error(
             "helium non-Type53 Type-50 energy reduction requires replacement, matrix closure, and source-order Thermal reduction");
     }
     if (magnesium_type50_primary_cooling_reduction &&
         (!matrix_construction_closure || !thermal_diagonal_source_domain ||
-         !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT") ||
-         !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE"))) {
+         !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) ||
+         !(preamble_optimized_v068240236 ? preamble_env_v068240236->magnesium_type50_escape_state : environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE")))) {
         throw std::runtime_error(
             "magnesium Type-50 primary cooling reduction requires replacement, matrix closure, source-order Thermal reduction, and live escape state");
     }
     if (magnesium_type50_thermal_channel_preservation &&
         (!magnesium_type50_primary_cooling_reduction ||
-         !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT"))) {
+         !(preamble_optimized_v068240236 ? preamble_env_v068240236->magnesium_type50_endpoint_energy_transport : environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT")))) {
         throw std::runtime_error(
             "magnesium Type-50 Thermal-channel preservation requires primary cooling reduction and source endpoint-energy transport");
     }
-    if (matrix_construction_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (matrix_construction_closure && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("matrix-construction closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (matrix_construction_closure) {
-        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
-        if (!closure_dir || !*closure_dir) {
+        const char* closure_dir = preamble_optimized_v068240236 ? nullptr : std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
+        if (preamble_optimized_v068240236
+                ? !preamble_env_v068240236->matrix_construction_closure_dir_present
+                : (!closure_dir || !*closure_dir)) {
             throw std::runtime_error("matrix-construction closure directory is missing");
         }
     }
-    if (fixed_state_parity_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (fixed_state_parity_closure && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("fixed-state parity closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (fixed_state_parity_closure) {
-        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
-        if (!closure_dir || !*closure_dir) {
+        const char* closure_dir = preamble_optimized_v068240236 ? nullptr : std::getenv("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
+        if (preamble_optimized_v068240236
+                ? !preamble_env_v068240236->fixed_state_parity_closure_dir_present
+                : (!closure_dir || !*closure_dir)) {
             throw std::runtime_error("fixed-state parity closure directory is missing");
         }
     }
-    if (thermal_component_parity_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (thermal_component_parity_closure && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("thermal component parity closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     // v17.25.13: per-sequence thermal-component closure is a
@@ -13543,12 +13764,14 @@ int run_impl(
     // supplies only source thermal totals/hmctot/elcter diagnostics while
     // preserving raw native solve and committed populations.
     if (thermal_component_parity_closure) {
-        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
-        if (!closure_dir || !*closure_dir) {
+        const char* closure_dir = preamble_optimized_v068240236 ? nullptr : std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
+        if (preamble_optimized_v068240236
+                ? !preamble_env_v068240236->thermal_component_parity_closure_dir_present
+                : (!closure_dir || !*closure_dir)) {
             throw std::runtime_error("thermal component parity closure directory is missing");
         }
     }
-    if (thermal_compact_population_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (thermal_compact_population_closure && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("thermal compact-population closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     // v17.25.5: thermal compact-population closure is a source-order
@@ -13556,12 +13779,14 @@ int run_impl(
     // applied independently to a subset of active elements (Mg at sequence 16)
     // while the raw solve state and committed populations remain native.
     if (thermal_compact_population_closure) {
-        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
-        if (!closure_dir || !*closure_dir) {
+        const char* closure_dir = preamble_optimized_v068240236 ? nullptr : std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+        if (preamble_optimized_v068240236
+                ? !preamble_env_v068240236->thermal_compact_population_closure_dir_present
+                : (!closure_dir || !*closure_dir)) {
             throw std::runtime_error("thermal compact-population closure directory is missing");
         }
     }
-    if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+    if (helium_source_insertion_order && !(preamble_optimized_v068240236 ? preamble_env_v068240236->qualification_replacement : environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
         throw std::runtime_error("helium source insertion-order restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if ((helium_matrix_ablation_row_min == 0) != (helium_matrix_ablation_row_max == 0) ||
@@ -13571,8 +13796,11 @@ int run_impl(
     const bool any_helium_ablation = helium_matrix_ablation_type != 0 || helium_preliminary_ablation_type != 0 ||
         helium_source_position_ablation != 0 || helium_matrix_ablation_row_min != 0 ||
         helium_unqualified_type53_ablation || helium_unqualified_type71_ablation || helium_unqualified_type99_ablation;
-    const char* qualification_ablation = std::getenv("XSTAR_QUALIFICATION_ABLATION");
-    if (any_helium_ablation && (!qualification_ablation || std::string(qualification_ablation) != "1")) {
+    const char* qualification_ablation = preamble_optimized_v068240236 ? nullptr : std::getenv("XSTAR_QUALIFICATION_ABLATION");
+    const bool qualification_ablation_is_one_v068240236 = preamble_optimized_v068240236
+        ? preamble_env_v068240236->qualification_ablation_is_one
+        : (qualification_ablation && std::string(qualification_ablation) == "1");
+    if (any_helium_ablation && !qualification_ablation_is_one_v068240236) {
         throw std::runtime_error("helium ablation requires XSTAR_QUALIFICATION_ABLATION=1");
     }
     ctx.last_independent_thermal_parity = independent_thermal_parity;
@@ -13592,7 +13820,7 @@ int run_impl(
     ctx.last_helium_solve_response = helium_solve_response;
     ctx.last_all_element_solve_response =
         (all_element_solve_response || all_element_solve_system) &&
-        !environment_flag("XSTAR_NATIVE_PRODUCTION");
+        !(preamble_optimized_v068240236 ? true : environment_flag("XSTAR_NATIVE_PRODUCTION"));
     ctx.last_all_element_solve_system = return_solve_system_diagnostics_v0682363;
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     ctx.last_helium_source_insertion_order = helium_source_insertion_order;

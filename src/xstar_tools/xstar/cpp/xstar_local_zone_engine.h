@@ -122,7 +122,17 @@ typedef enum xstar_fixed_runtime_state_flags_v1 {
      * production DSEC evaluations therefore skip calc_emisab/calc_emis
      * spectral projection entirely; accepted/final xstarcalc boundaries
      * continue to execute the full source publication path. */
-    XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY = 1u << 8
+    XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY = 1u << 8,
+    /* 0.6.82.40.2.36: internal standalone-production preamble contract.
+     * ELIGIBLE marks an ordinary DSEC solve whose diagnostic/reference paths
+     * are inactive. OPTIMIZED selects the cached production preamble; callers
+     * outside the standalone controller leave both bits clear and retain the
+     * historical API behavior. GRID_GENERATION_CHANGED is asserted only for
+     * the first evaluation of a DSEC controller call, where the caller-owned
+     * immutable radiation-grid generation may have changed. */
+    XSTAR_FIXED_RUNTIME_STATE_PREAMBLE_ELIGIBLE_V068240236 = 1u << 9,
+    XSTAR_FIXED_RUNTIME_STATE_PREAMBLE_OPTIMIZED_V068240236 = 1u << 10,
+    XSTAR_FIXED_RUNTIME_STATE_DSEC_GRID_GENERATION_CHANGED_V068240236 = 1u << 11
 } xstar_fixed_runtime_state_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {
