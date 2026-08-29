@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.46.1 - SAVD_FIRST_MATERIALIZATION_PROMOTION_CLOSURE - 2026-08-29
+
+- **Formal maintainer promotion recorded 2026-09-23.** The fresh balanced `.46.1` runner remains historically `PERFORMANCE_GATE=REJECT` / `LOWXI_RESULT=REJECT`; those markers are not rewritten. The maintainer explicitly accepts `.46.1` as the production base because science/work/path are exact, the corrected targeted SAVD materialization contract passes (`ratio=0.621805`, local saving `1.816160 s`, zone SAVD/detail ratio `0.788422`, paired materialization wins `2/2`), and the same production code had already shown larger whole-run savings in the `.46` A/B. The fresh `.46.1` whole-run misses are retained as audit evidence (`internal ratio=0.990213`, `wall ratio=0.990064`, internal saving `1.145391 s`, wall saving `1.194949 s`).
+- Add a qualification-only single-run `multi_element_xi1_ne1e12` host gate using the supplied canonical FORTRAN XSTAR 2.59g archive. It never reruns FORTRAN, requires exact data payloads for all nine FITS products plus exact STEP rows, freezes all accepted production modes including `.46`, and reports C++/FORTRAN wall, internal-time, and RSS ratios. RSS is measured rather than used to redefine the already-completed `.46.1` promotion.
+- Qualification-only promotion closure on top of `0.6.82.40.2.46`; all C/C++ production and science source/header files are byte-identical to `.46` apart from package/build version metadata.
+- Records `.46` as a formal REJECT under its preregistered local first-materialization ratio `<=0.50`, even though same-host science/work/path were exact, materialization improved `4.858754 -> 2.957154 s`, zone SAVD/detail ratio was `0.771420`, internal ratio `0.978195`, wall ratio `0.978269`, RSS was flat, and both optimized materialization pairs were faster.
+- Corrects only the local materialization promotion assumption to `<=0.65`, reflecting the measured cost of backing up/restoring the 13 full-precision vectors required to preserve the accepted boundary owner.
+- Adds an absolute local materialization guard requiring at least `1.5 s` saved. The original `.46` `<=0.50` ratio remains reported as a diagnostic.
+- Keeps all other `.46` performance guards frozen: zone SAVD/detail `<=0.85`, internal `<=0.990`, wall `<=0.990`, RSS `<=1.030`, internal saving `>=1.5 s`, wall saving `>=1.5 s`, and paired materialization wins `2/2`.
+- After low-`xi` promotion closure ACCEPT, repeats exact `xi=+1,+4` science/work/path closure. No multi-element run is included.
+
 ## 0.6.82.40.2.46 - SAVD_FIRST_MATERIALIZATION_HOT_PATH - 2026-08-29
 
 - Branches directly from formally accepted `0.6.82.40.2.42`; `.43` is attribution-only, `.44` is a performance REJECT, and `.45` is attribution-only evidence and is not production ancestry.
