@@ -85,6 +85,9 @@ struct PerformanceFoundationV068231 {
     std::uint64_t canonical_thermal_element_fingerprint_reuses_v068240241 = 0u;
     std::uint64_t canonical_thermal_fixed_fingerprint_recomputes_v068240241 = 0u;
     std::uint64_t canonical_thermal_fixed_fingerprint_reuses_v068240241 = 0u;
+    // 0.6.82.40.2.42: builder fingerprint elision qualification.
+    std::uint64_t canonical_thermal_builder_fingerprint_recomputes_v068240242 = 0u;
+    std::uint64_t canonical_thermal_builder_fingerprint_elisions_v068240242 = 0u;
     // 0.6.82.40.2.37: attribution-only coarse traversal partition.
     // Clocks are enabled only by XSTAR_V068240237_TRAVERSAL_FINE_TIMING and
     // are placed at element/phase boundaries, never inside evaluate_record(),

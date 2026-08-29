@@ -884,7 +884,9 @@ int run_element_impl(
     std::size_t canonical_thermal_term_count = 0,
     std::uint64_t* consumed_thermal_ledger_fingerprint = nullptr,
     bool trusted_thermal_ledger_v068240241 = false,
-    std::uint64_t authoritative_thermal_ledger_fingerprint_v068240241 = 0u
+    std::uint64_t authoritative_thermal_ledger_fingerprint_v068240241 = 0u,
+    bool authoritative_thermal_ledger_fingerprint_valid_v068240242 = true,
+    bool* consumed_thermal_ledger_fingerprint_valid_v068240242 = nullptr
 ) {
     validate_input(input);
     validate_output(input, output);
@@ -1220,7 +1222,8 @@ int run_element_impl(
             ? xstar_canonical_thermal::reduce_trusted_v068240241(
                 canonical_thermal_terms, canonical_thermal_term_count,
                 w.x.data(), static_cast<std::size_t>(n), input.element_z,
-                authoritative_thermal_ledger_fingerprint_v068240241)
+                authoritative_thermal_ledger_fingerprint_v068240241,
+                authoritative_thermal_ledger_fingerprint_valid_v068240242)
             : xstar_canonical_thermal::reduce(
                 canonical_thermal_terms, canonical_thermal_term_count,
                 w.x.data(), static_cast<std::size_t>(n), input.element_z);
@@ -1232,6 +1235,9 @@ int run_element_impl(
         output.status_flags |= XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER;
         if (consumed_thermal_ledger_fingerprint) {
             *consumed_thermal_ledger_fingerprint = canonical.fingerprint;
+        }
+        if (consumed_thermal_ledger_fingerprint_valid_v068240242) {
+            *consumed_thermal_ledger_fingerprint_valid_v068240242 = canonical.fingerprint_valid;
         }
     } else {
         xstar_source_order_thermal::FourChannelAccumulator thermal_reducer;
@@ -1248,6 +1254,9 @@ int run_element_impl(
         output.cooling2 = thermal_values[3];
         if (consumed_thermal_ledger_fingerprint) {
             *consumed_thermal_ledger_fingerprint = 0;
+        }
+        if (consumed_thermal_ledger_fingerprint_valid_v068240242) {
+            *consumed_thermal_ledger_fingerprint_valid_v068240242 = false;
         }
     }
 
@@ -1800,12 +1809,15 @@ int xstar_element_engine_run_construction_with_trusted_thermal_ledger_v068240241
     const xstar_canonical_thermal_term_v1* thermal_terms,
     std::size_t thermal_term_count,
     std::uint64_t authoritative_thermal_ledger_fingerprint,
+    bool authoritative_thermal_ledger_fingerprint_valid,
     std::uint64_t* consumed_thermal_ledger_fingerprint,
+    bool* consumed_thermal_ledger_fingerprint_valid,
     xstar_element_output_v1* output,
     char* message,
     std::size_t message_size
 ) {
-    if (!context || !input || !output || !consumed_thermal_ledger_fingerprint) return 1;
+    if (!context || !input || !output || !consumed_thermal_ledger_fingerprint ||
+        !consumed_thermal_ledger_fingerprint_valid) return 1;
     try {
         const auto construction_t0 = clock_type::now();
         std::vector<xstar_element_term_v1> terms =
@@ -1818,7 +1830,9 @@ int xstar_element_engine_run_construction_with_trusted_thermal_ledger_v068240241
         const int rc = run_element_impl(
             context->impl, expanded, *output, status,
             thermal_terms, thermal_term_count, consumed_thermal_ledger_fingerprint,
-            true, authoritative_thermal_ledger_fingerprint);
+            true, authoritative_thermal_ledger_fingerprint,
+            authoritative_thermal_ledger_fingerprint_valid,
+            consumed_thermal_ledger_fingerprint_valid);
         if (rc == 0) {
             output->status_flags |= XSTAR_ELEMENT_STATUS_NATIVE_CONSTRUCTION;
             output->construction_seconds = construction_seconds;

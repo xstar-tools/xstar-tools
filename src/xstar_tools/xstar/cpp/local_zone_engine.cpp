@@ -595,6 +595,21 @@ Type53StaticKernelModeV068240227 configured_type53_static_kernel_mode_v068240227
 // production while retaining all public/non-production verification surfaces.
 enum class CanonicalThermalFingerprintModeV068240241 { Historical, Optimized };
 
+// 0.6.82.40.2.42: builder fingerprint production-elision control.  Validation
+// remains mandatory.  Optimized elides only the post-build FNV scan when the
+// .41 trusted-consumer path is active; all diagnostic/forensic/public paths
+// retain a genuine fingerprint.
+enum class CanonicalThermalBuilderFingerprintModeV068240242 { Historical, Optimized };
+
+CanonicalThermalBuilderFingerprintModeV068240242 configured_canonical_thermal_builder_fingerprint_mode_v068240242() {
+    const char* value = std::getenv("XSTAR_V068240242_CANONICAL_THERMAL_BUILDER_FINGERPRINT_MODE");
+    if (!value || !*value || std::string(value) == "optimized")
+        return CanonicalThermalBuilderFingerprintModeV068240242::Optimized;
+    if (std::string(value) == "historical")
+        return CanonicalThermalBuilderFingerprintModeV068240242::Historical;
+    throw std::runtime_error("invalid XSTAR_V068240242_CANONICAL_THERMAL_BUILDER_FINGERPRINT_MODE");
+}
+
 CanonicalThermalFingerprintModeV068240241 configured_canonical_thermal_fingerprint_mode_v068240241() {
     const char* value = std::getenv("XSTAR_V068240241_CANONICAL_THERMAL_FINGERPRINT_MODE");
     if (!value || !*value || std::string(value) == "optimized")
@@ -2862,6 +2877,7 @@ double source_post_mapback_population_for_full_row(
 struct CanonicalThermalLedgerBuild {
     std::vector<xstar_canonical_thermal_term_v1> terms;
     std::uint64_t fingerprint = 0;
+    bool fingerprint_valid = false;
 };
 
 class CanonicalThermalLedgerBuilderV048746212 {
@@ -3007,6 +3023,7 @@ public:
         xstar_canonical_thermal::validate(
             out.terms.data(), out.terms.size(), active_.element.n_rows);
         out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
+        out.fingerprint_valid = true;
         return out;
     }
 
@@ -3021,7 +3038,8 @@ public:
         const std::vector<xstar_element_contribution_v1>& thermal_only_contributions,
         CanonicalThermalLedgerBuild& out,
         std::uint64_t& capacity_growths,
-        std::uint64_t& capacity_reuses
+        std::uint64_t& capacity_reuses,
+        bool compute_fingerprint_v068240242 = true
     ) const {
         const std::size_t total_contributions =
             committed_contributions.size() + thermal_only_contributions.size();
@@ -3130,7 +3148,13 @@ public:
         }
         xstar_canonical_thermal::validate(
             out.terms.data(), out.terms.size(), active_.element.n_rows);
-        out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
+        if (compute_fingerprint_v068240242) {
+            out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
+            out.fingerprint_valid = true;
+        } else {
+            out.fingerprint = 0u;
+            out.fingerprint_valid = false;
+        }
     }
 
 private:
@@ -5109,6 +5133,10 @@ struct xstar_fixed_state_context_impl {
     bool canonical_thermal_fingerprint_mode_initialized_v068240241 = false;
     CanonicalThermalFingerprintModeV068240241 canonical_thermal_fingerprint_mode_v068240241 =
         CanonicalThermalFingerprintModeV068240241::Optimized;
+    // 0.6.82.40.2.42: resolve builder-fingerprint elision mode once.
+    bool canonical_thermal_builder_fingerprint_mode_initialized_v068240242 = false;
+    CanonicalThermalBuilderFingerprintModeV068240242 canonical_thermal_builder_fingerprint_mode_v068240242 =
+        CanonicalThermalBuilderFingerprintModeV068240242::Optimized;
     std::vector<Option10EndpointPlanV068240215> option10_endpoint_plan_by_record_v068240215;
     // 0.6.82.40.2.36: private production-preamble cache.  No public ABI state.
     bool production_preamble_environment_initialized_v068240236 = false;
@@ -13983,6 +14011,15 @@ int run_impl(
         !matrix_construction_closure &&
         ctx.canonical_thermal_fingerprint_mode_v068240241 ==
             CanonicalThermalFingerprintModeV068240241::Optimized;
+    if (!ctx.canonical_thermal_builder_fingerprint_mode_initialized_v068240242) {
+        ctx.canonical_thermal_builder_fingerprint_mode_v068240242 =
+            configured_canonical_thermal_builder_fingerprint_mode_v068240242();
+        ctx.canonical_thermal_builder_fingerprint_mode_initialized_v068240242 = true;
+    }
+    const bool canonical_thermal_builder_fingerprint_elision_v068240242 =
+        canonical_thermal_fingerprint_reuse_v068240241 &&
+        ctx.canonical_thermal_builder_fingerprint_mode_v068240242 ==
+            CanonicalThermalBuilderFingerprintModeV068240242::Optimized;
     // Fail closed against a stale accepted-boundary snapshot if this
     // evaluation exits before the exact source workspaces are committed.
     ctx.last_source_workspaces_valid_v064894 = false;
@@ -15750,7 +15787,8 @@ int run_impl(
             canonical_thermal_builder.finish_direct_into_v068240214(
                 contributions, thermal_only_contributions, reusable,
                 perf_foundation_v068231.contribution_thermal_term_capacity_growths_v068240214,
-                perf_foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214);
+                perf_foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214,
+                !canonical_thermal_builder_fingerprint_elision_v068240242);
             canonical_thermal_ledger_v068240214 = &reusable;
             ++perf_foundation_v068231.contribution_direct_thermal_build_calls_v068240214;
         } else {
@@ -15766,6 +15804,15 @@ int run_impl(
                 &historical_canonical_thermal_ledger_v068240214;
         }
         const auto& canonical_thermal_ledger = *canonical_thermal_ledger_v068240214;
+        if (canonical_thermal_ledger.fingerprint_valid) {
+            ++perf_foundation_v068231.canonical_thermal_builder_fingerprint_recomputes_v068240242;
+        } else {
+            ++perf_foundation_v068231.canonical_thermal_builder_fingerprint_elisions_v068240242;
+        }
+        if (canonical_thermal_builder_fingerprint_elision_v068240242 !=
+            !canonical_thermal_ledger.fingerprint_valid) {
+            throw std::runtime_error("canonical Thermal builder fingerprint validity/path mismatch");
+        }
         perf_foundation_v068231.contribution_list_seconds +=
             elapsed(contribution_list_started_v068231);
         stats.contributions_constructed += contributions.size();
@@ -15838,13 +15885,16 @@ int run_impl(
                 elapsed(traversal_fine_region4_started_v068240237);
         const auto element_start = clock_type::now();
         std::uint64_t element_consumed_thermal_ledger_fingerprint = 0;
+        bool element_consumed_thermal_ledger_fingerprint_valid_v068240242 = false;
         int rc = 0;
         if (canonical_thermal_fingerprint_reuse_v068240241) {
             rc = xstar_element_engine_run_construction_with_trusted_thermal_ledger_v068240241(
                 ctx.element_context, &ein, contributions.data(), contributions.size(),
                 canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
                 canonical_thermal_ledger.fingerprint,
+                canonical_thermal_ledger.fingerprint_valid,
                 &element_consumed_thermal_ledger_fingerprint,
+                &element_consumed_thermal_ledger_fingerprint_valid_v068240242,
                 &eout, error.data(), error.size());
             ++perf_foundation_v068231.canonical_thermal_fingerprint_optimized_elements_v068240241;
             ++perf_foundation_v068231.canonical_thermal_element_fingerprint_reuses_v068240241;
@@ -15854,6 +15904,8 @@ int run_impl(
                 canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
                 &element_consumed_thermal_ledger_fingerprint,
                 &eout, error.data(), error.size());
+            element_consumed_thermal_ledger_fingerprint_valid_v068240242 =
+                !canonical_thermal_ledger.terms.empty();
             ++perf_foundation_v068231.canonical_thermal_fingerprint_historical_elements_v068240241;
             ++perf_foundation_v068231.canonical_thermal_element_fingerprint_recomputes_v068240241;
         }
@@ -15886,8 +15938,11 @@ int run_impl(
             static_cast<std::uint64_t>(std::max(active.element.n_superlevels, 0)));
         perf_foundation_v068231.population_outer_iterations += static_cast<std::uint64_t>(std::max(eout.outer_iterations, 0));
         perf_foundation_v068231.population_fixed_iterations += static_cast<std::uint64_t>(std::max(eout.fixed_point_iterations, 0));
-        if (element_consumed_thermal_ledger_fingerprint != canonical_thermal_ledger.fingerprint ||
-            (eout.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER) == 0u) {
+        if ((eout.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER) == 0u ||
+            element_consumed_thermal_ledger_fingerprint_valid_v068240242 !=
+                canonical_thermal_ledger.fingerprint_valid ||
+            (canonical_thermal_ledger.fingerprint_valid &&
+             element_consumed_thermal_ledger_fingerprint != canonical_thermal_ledger.fingerprint)) {
             throw std::runtime_error("element engine did not consume the canonical Thermal ledger");
         }
         std::vector<double> stage_final_outer_start;
@@ -16022,14 +16077,17 @@ int run_impl(
             const auto canonical_reduction = canonical_thermal_fingerprint_reuse_v068240241
                 ? xstar_canonical_thermal::reduce_trusted_v068240241(
                     canonical_thermal_ledger.terms, thermal_populations, element.element_z,
-                    canonical_thermal_ledger.fingerprint)
+                    canonical_thermal_ledger.fingerprint,
+                    canonical_thermal_ledger.fingerprint_valid)
                 : xstar_canonical_thermal::reduce(
                     canonical_thermal_ledger.terms, thermal_populations, element.element_z);
             if (canonical_thermal_fingerprint_reuse_v068240241)
                 ++perf_foundation_v068231.canonical_thermal_fixed_fingerprint_reuses_v068240241;
             else
                 ++perf_foundation_v068231.canonical_thermal_fixed_fingerprint_recomputes_v068240241;
-            if (canonical_reduction.fingerprint != canonical_thermal_ledger.fingerprint) {
+            if (canonical_reduction.fingerprint_valid != canonical_thermal_ledger.fingerprint_valid ||
+                (canonical_thermal_ledger.fingerprint_valid &&
+                 canonical_reduction.fingerprint != canonical_thermal_ledger.fingerprint)) {
                 throw std::runtime_error(
                     "fixed-state consumer canonical Thermal ledger fingerprint mismatch");
             }

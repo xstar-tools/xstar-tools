@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.42 - CANONICAL_THERMAL_BUILDER_FINGERPRINT_ELISION_HOT_PATH - 2026-08-29
+
+- Branches from formally accepted `0.6.82.40.2.41.1`; the `.41` trusted element/fixed consumer fingerprint reuse remains production ancestry.
+- Targets the remaining canonical Thermal builder FNV scan measured by `.40` at `3.655288 s` for C5 `xi=-3`.
+- Keeps canonical Thermal builder validation mandatory and elides only the post-build FNV fingerprint scan on ordinary trusted native production.
+- Adds explicit internal `fingerprint_valid` state to the canonical ledger and trusted reduction result; optimized production never treats a sentinel value as a computed fingerprint.
+- Historical builder fingerprinting remains mandatory for rich diagnostics, retained provenance, matrix-construction closure, forensic/non-production/public paths, and whenever `.41` trusted-consumer reuse is unavailable.
+- Does not incrementally hash while constructing terms; every term, ordering rule, Mg deferred-primary rule, population value, thermal arithmetic operation, and reduction accumulation order is unchanged.
+- Adds same-binary `historical|optimized` builder-only A/B via `XSTAR_V068240242_CANONICAL_THERMAL_BUILDER_FINGERPRINT_MODE`, with `.41` consumer reuse frozen optimized in both arms. No multi-element run.
+
 ## 0.6.82.40.2.41.1 - CANONICAL_THERMAL_FINGERPRINT_REUSE_PROMOTION_CLOSURE - 2026-08-29
 
 - Qualification-only promotion closure on top of `0.6.82.40.2.41`; all C/C++ production and science source files are byte-identical to `.41` apart from package-version metadata in the build configuration.

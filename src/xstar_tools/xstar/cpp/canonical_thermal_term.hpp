@@ -141,6 +141,7 @@ inline void validate(
 struct ReductionResult {
     xstar_source_order_thermal::TaggedFourChannelAccumulator tagged;
     std::uint64_t fingerprint = 0;
+    bool fingerprint_valid = false;
     std::size_t term_count = 0;
 };
 
@@ -161,6 +162,7 @@ inline ReductionResult reduce(
     }
     ReductionResult result;
     result.fingerprint = fingerprint(terms, count);
+    result.fingerprint_valid = true;
     result.term_count = count;
 
     struct PendingPrimary {
@@ -228,7 +230,8 @@ inline ReductionResult reduce_trusted_v068240241(
     const double* populations,
     std::size_t population_count,
     int element_z,
-    std::uint64_t authoritative_fingerprint
+    std::uint64_t authoritative_fingerprint,
+    bool authoritative_fingerprint_valid = true
 ) {
     if (count > 0 && terms == nullptr) {
         throw std::runtime_error("canonical Thermal ledger pointer is null");
@@ -238,6 +241,7 @@ inline ReductionResult reduce_trusted_v068240241(
     }
     ReductionResult result;
     result.fingerprint = authoritative_fingerprint;
+    result.fingerprint_valid = authoritative_fingerprint_valid;
     result.term_count = count;
 
     struct PendingPrimary {
@@ -286,11 +290,12 @@ inline ReductionResult reduce_trusted_v068240241(
     const std::vector<xstar_canonical_thermal_term_v1>& terms,
     const std::vector<double>& populations,
     int element_z,
-    std::uint64_t authoritative_fingerprint
+    std::uint64_t authoritative_fingerprint,
+    bool authoritative_fingerprint_valid = true
 ) {
     return reduce_trusted_v068240241(
         terms.data(), terms.size(), populations.data(), populations.size(),
-        element_z, authoritative_fingerprint);
+        element_z, authoritative_fingerprint, authoritative_fingerprint_valid);
 }
 
 } // namespace xstar_canonical_thermal

@@ -23591,6 +23591,13 @@ void emit_controller_performance_instrumentation(
             << "V068240241_ELEMENT_FINGERPRINT_REUSES=" << perf.foundation_v068231.canonical_thermal_element_fingerprint_reuses_v068240241 << "\n"
             << "V068240241_FIXED_FINGERPRINT_RECOMPUTES=" << perf.foundation_v068231.canonical_thermal_fixed_fingerprint_recomputes_v068240241 << "\n"
             << "V068240241_FIXED_FINGERPRINT_REUSES=" << perf.foundation_v068231.canonical_thermal_fixed_fingerprint_reuses_v068240241 << "\n"
+            << "V068240242_CANONICAL_THERMAL_BUILDER_FINGERPRINT_MODE="
+            << ((perf.foundation_v068231.canonical_thermal_builder_fingerprint_elisions_v068240242 > 0u &&
+                 perf.foundation_v068231.canonical_thermal_builder_fingerprint_recomputes_v068240242 == 0u) ? "OPTIMIZED" :
+                (perf.foundation_v068231.canonical_thermal_builder_fingerprint_recomputes_v068240242 > 0u &&
+                 perf.foundation_v068231.canonical_thermal_builder_fingerprint_elisions_v068240242 == 0u) ? "HISTORICAL" : "MIXED") << "\n"
+            << "V068240242_BUILDER_FINGERPRINT_RECOMPUTES=" << perf.foundation_v068231.canonical_thermal_builder_fingerprint_recomputes_v068240242 << "\n"
+            << "V068240242_BUILDER_FINGERPRINT_ELISIONS=" << perf.foundation_v068231.canonical_thermal_builder_fingerprint_elisions_v068240242 << "\n"
             << "V068231_PERF_ELEMENT_BUFFER_REUSES=" << perf.foundation_v068231.element_buffer_reuses << "\n"
             << "V068231_PERF_LEVELTEMP_BACKUP_REUSES=" << perf.foundation_v068231.leveltemp_backup_reuses << "\n"
             << "V068231_PERF_REDUCED_CONTINUUM_GEOMETRY_BUILDS=" << perf.foundation_v068231.reduced_continuum_geometry_builds << "\n"
