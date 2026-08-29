@@ -76,6 +76,18 @@ struct PerformanceFoundationV068231 {
     std::uint64_t postpass_index_capacity_reuses_v068240215 = 0u;
     double option10_ownership_seconds_v068240215 = 0.0;
     double errc_ownership_seconds_v068240215 = 0.0;
+    // 0.6.82.40.2.37: attribution-only coarse traversal partition.
+    // Clocks are enabled only by XSTAR_V068240237_TRAVERSAL_FINE_TIMING and
+    // are placed at element/phase boundaries, never inside evaluate_record(),
+    // record traversal loops, or continuum/bin loops. Region 7 is derived as
+    // traversal_seconds - sum(regions 1..6), so the partition closes exactly.
+    std::uint64_t traversal_fine_elements_v068240237 = 0u;
+    double traversal_fine_region1_element_setup_seconds_v068240237 = 0.0;
+    double traversal_fine_region2_preliminary_pass_seconds_v068240237 = 0.0;
+    double traversal_fine_region3_balance_window_seconds_v068240237 = 0.0;
+    double traversal_fine_region4_pass2_assembly_seconds_v068240237 = 0.0;
+    double traversal_fine_region5_element_solve_seconds_v068240237 = 0.0;
+    double traversal_fine_region6_postsolve_mapback_seconds_v068240237 = 0.0;
     std::uint64_t element_buffer_reuses = 0u;
     std::uint64_t leveltemp_backup_reuses = 0u;
     std::uint64_t reduced_continuum_geometry_builds = 0u;

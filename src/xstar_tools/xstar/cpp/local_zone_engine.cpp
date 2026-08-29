@@ -14327,11 +14327,17 @@ int run_impl(
     perf_foundation_v068231.bound_free_workspace_seconds +=
         elapsed(bound_free_workspace_started_v068231);
 
+    const bool traversal_fine_timing_v068240237 =
+        environment_flag("XSTAR_V068240237_TRAVERSAL_FINE_TIMING");
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
          element_slot_v064894 < ctx.program.elements.size();
          ++element_slot_v064894) {
         const auto& element = ctx.program.elements[element_slot_v064894];
+        const auto traversal_fine_region1_started_v068240237 =
+            traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
+        if (traversal_fine_timing_v068240237)
+            ++perf_foundation_v068231.traversal_fine_elements_v068240237;
         const auto residual_element_started_v064812339 = clock_type::now();
         ResidualScalingAuditV064812339 residual_audit_v064812339;
         residual_audit_v064812339.call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
@@ -14377,6 +14383,11 @@ int run_impl(
         // pass 1 evaluates only a small source-order subset.  Keep exactly
         // those pass-1 records in source order and reuse them in pass 2 with a
         // monotonic ordinal cursor.  No record eligibility or arithmetic changes.
+        if (traversal_fine_timing_v068240237)
+            perf_foundation_v068231.traversal_fine_region1_element_setup_seconds_v068240237 +=
+                elapsed(traversal_fine_region1_started_v068240237);
+        const auto traversal_fine_region2_started_v068240237 =
+            traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
         const auto sparse_cache_pass12_started_v064812337 = clock_type::now();
         const auto preliminary_cache_started_v068231 = clock_type::now();
         const double sparse_cache_rate_before_v064812337 = stats.rate_seconds;
@@ -14584,6 +14595,11 @@ int run_impl(
             0.0,
             elapsed(preliminary_cache_started_v068231) -
                 (stats.rate_seconds - sparse_cache_rate_before_v064812337));
+        if (traversal_fine_timing_v068240237)
+            perf_foundation_v068231.traversal_fine_region2_preliminary_pass_seconds_v068240237 +=
+                elapsed(traversal_fine_region2_started_v068240237);
+        const auto traversal_fine_region3_started_v068240237 =
+            traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
 
         const auto preliminary_balance_started_v064812339 = clock_type::now();
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
@@ -14719,6 +14735,11 @@ int run_impl(
             preliminary_selections_v068237.size() + active_pass2_count_v064812337 +
             traversal_audit_v064812340.pass2_cache_build_full_scan_records;
 
+        if (traversal_fine_timing_v068240237)
+            perf_foundation_v068231.traversal_fine_region3_balance_window_seconds_v068240237 +=
+                elapsed(traversal_fine_region3_started_v068240237);
+        const auto traversal_fine_region4_started_v068240237 =
+            traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
         const auto evaluated_record_started_v068231 = clock_type::now();
         const double evaluated_rate_before_v068231 = stats.rate_seconds;
         auto& evaluated = ctx.scratch_v068231.evaluated;
@@ -15772,6 +15793,9 @@ int run_impl(
         perf_foundation_v068231.element_input_seconds +=
             elapsed(element_input_started_v068231);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
+        if (traversal_fine_timing_v068240237)
+            perf_foundation_v068231.traversal_fine_region4_pass2_assembly_seconds_v068240237 +=
+                elapsed(traversal_fine_region4_started_v068240237);
         const auto element_start = clock_type::now();
         std::uint64_t element_consumed_thermal_ledger_fingerprint = 0;
         const int rc = xstar_element_engine_run_construction_with_thermal_ledger_v1(
@@ -15782,6 +15806,11 @@ int run_impl(
         const double residual_element_solve_seconds_v064812339 = elapsed(element_start);
         stats.element_seconds += residual_element_solve_seconds_v064812339;
         residual_audit_v064812339.element_solve_seconds = residual_element_solve_seconds_v064812339;
+        if (traversal_fine_timing_v068240237)
+            perf_foundation_v068231.traversal_fine_region5_element_solve_seconds_v068240237 +=
+                residual_element_solve_seconds_v064812339;
+        const auto traversal_fine_region6_started_v068240237 =
+            traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
         if (native_production_v064897 && !defer_product_projection)
             sample_fixed_phase_rss_v068239(perf_foundation_v068231, 4u);
@@ -16130,6 +16159,9 @@ int run_impl(
         residual_audit_v064812339.full_population_shadow_bytes =
             (full_populations_pre_mapback.capacity() + full_populations.capacity()) * sizeof(double);
         residual_audit_v064812339.full_population_mapback_seconds = elapsed(full_population_mapback_started_v064812339);
+        if (traversal_fine_timing_v068240237)
+            perf_foundation_v068231.traversal_fine_region6_postsolve_mapback_seconds_v068240237 +=
+                elapsed(traversal_fine_region6_started_v068240237);
         residual_audit_v064812339.errc_identity_entries = source_errc_rank_energy_by_identity_v82_patch5205.size();
         residual_audit_v064812339.errc_slot_entries = source_errc_rank_energy_by_slot_v82_patch5209.size();
         residual_audit_v064812339.errc_owner_entries = source_errc_owner_by_slot_v82_patch5209.size();

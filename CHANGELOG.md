@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.37 - FIXED_TRAVERSAL_FINE_CROSS_LANGUAGE_ATTRIBUTION - 2026-08-28
+
+- Attribution-only successor to accepted `0.6.82.40.2.36.1`; no traversal optimization is attempted and the accepted `.36` fixed-engine preamble optimization remains active.
+- Adds coarse C++ element-phase timing for: element setup, preliminary pass, balance/window selection, pass-2/matrix assembly, element solve, and post-solve mapback. A seventh post-mapback/deferred-product staging region is derived as the exact residual of the existing controller traversal timer rather than adding another hot-path clock.
+- Adds matched FORTRAN coarse timing around `calc_hmc_all`/`calc_hmc_element`: element input/setup, preliminary `calc_ion_rates` pass, ion-balance/window selection, second-pass/element-matrix assembly, `msolvelucy`, post-solve element mapback, and global population/diagnostic/heating-cooling commit.
+- Adds no timing call inside C++ `evaluate_record()`, FORTRAN `calc_ion_rates`, `calc_hmc_ion`, `ucalc`, record/rate inner loops, or radiation-bin loops.
+- Host qualification runs only the low-`xi` C5 H+He+C model, checks C++ and instrumented FORTRAN science against the frozen Phase-A canonical FORTRAN outputs, checks each backend's work counters against the frozen Phase-A audit, closes the C++ traversal partition, and reports per-region C++-minus-FORTRAN excess plus the largest positive contributor.
+- There is no performance gate and no multi-element run in `.37`; promotion means the attribution measurement is scientifically/work-equivalent and internally closed.
+
 ## 0.6.82.40.2.36.1 - FIXED_ENGINE_PREAMBLE_PROMOTION_CLOSURE - 2026-08-28
 
 - Promotion/qualification closure directly on `0.6.82.40.2.36`; the `.36` production optimization is preserved unchanged apart from package version metadata.
