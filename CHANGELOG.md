@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.36.1 - FIXED_ENGINE_PREAMBLE_PROMOTION_CLOSURE - 2026-08-28
+
+- Promotion/qualification closure directly on `0.6.82.40.2.36`; the `.36` production optimization is preserved unchanged apart from package version metadata.
+- Records why `.36` was formally rejected: the preregistered `reported fixed total_seconds <= 1.010` and `all-fixed <= 1.010` guards failed even though external fixed-call wall, internal total, wall time, RSS, science, work, path, and paired-win gates all passed.
+- Corrects the promotion metric for this pre-`total_start` optimization: end-to-end external fixed-engine call wall is authoritative; internally reported `total_seconds` and all-fixed internal timers remain diagnostic because removal of pre-timer FNV scans can move cache-miss cost into the timed body without adding scientific work.
+- Keeps the `.36` internal-timer ratios visible and reports the cache-warming shift (`reported fixed` increase versus eliminated untimed preamble) instead of silently discarding the failed `.36` guardrail.
+- Repeats balanced same-host C5 `xi=-3` historical/optimized A/B confirmation with frozen thresholds on external fixed-call wall, untimed preamble, internal total, wall, RSS, and paired external-call wins.
+- After low-`xi` ACCEPT, performs `xi=+1,+4` historical/optimized exact-science/work closure. No multi-element run is included.
+
 ## 0.6.82.40.2.36 - FIXED_ENGINE_PRODUCTION_PREAMBLE_HOT_PATH - 2026-08-28
 
 - Branches directly from accepted `0.6.82.40.2.34`; `.2.35` remains attribution-only and is not production ancestry.
