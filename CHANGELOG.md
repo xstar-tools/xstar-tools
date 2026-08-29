@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.41.1 - CANONICAL_THERMAL_FINGERPRINT_REUSE_PROMOTION_CLOSURE - 2026-08-29
+
+- Qualification-only promotion closure on top of `0.6.82.40.2.41`; all C/C++ production and science source files are byte-identical to `.41` apart from package-version metadata in the build configuration.
+- Records `.41` as a formal REJECT under its preregistered whole-run limits even though same-host science/work/path were exact, the intended fingerprint-reuse path was fully active, traversal improved by about 6%, wall/internal improved by about 3%, RSS was flat, and both optimized traversal pairs were faster.
+- Corrects only the three whole-run promotion assumptions that were slightly too aggressive after the measured cache/code-layout compensation: all-fixed ratio <=0.970, internal ratio <=0.975, wall ratio <=0.975. The original element <=0.750, contribution <=1.030, traversal <=0.950, RSS <=1.030, and paired traversal 2/2 gates remain frozen.
+- Adds absolute materiality guards requiring at least 3.0 s internal and 3.0 s wall saving, preventing promotion on a trivial ratio fluctuation.
+- Keeps `.41` builder-authoritative fingerprint reuse unchanged: ordinary production computes the builder fingerprint once and reuses it for element/fixed consumers; historical/diagnostic/forensic/public paths retain full verification.
+- After low-xi promotion, repeats `xi=+1,+4` exact science/work/path closure. No multi-element run is included.
+
 ## 0.6.82.40.2.41 - CANONICAL_THERMAL_FINGERPRINT_REUSE_HOT_PATH - 2026-08-29
 
 - Branches directly from accepted `0.6.82.40.2.38`; rejected `.39/.39.1` direct-commit work is not carried forward.
