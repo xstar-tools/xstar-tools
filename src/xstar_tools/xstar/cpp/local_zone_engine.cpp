@@ -610,22 +610,6 @@ CanonicalThermalBuilderFingerprintModeV068240242 configured_canonical_thermal_bu
     throw std::runtime_error("invalid XSTAR_V068240242_CANONICAL_THERMAL_BUILDER_FINGERPRINT_MODE");
 }
 
-// 0.6.82.40.2.44: Type-76 post-mapback discovery-scan control. Historical
-// preserves the accepted .42 full EvaluatedRecord scan. Optimized uses the
-// immutable compiled execution-plan Type-76 source ordinals during deferred
-// controller evaluations and leaves the full deferred-RRC publication path
-// untouched when product projection is required.
-enum class Type76PostmapbackModeV068240244 { Historical, Optimized };
-
-Type76PostmapbackModeV068240244 configured_type76_postmapback_mode_v068240244() {
-    const char* value = std::getenv("XSTAR_V068240244_TYPE76_POSTMAPBACK_MODE");
-    if (!value || !*value || std::string(value) == "optimized")
-        return Type76PostmapbackModeV068240244::Optimized;
-    if (std::string(value) == "historical")
-        return Type76PostmapbackModeV068240244::Historical;
-    throw std::runtime_error("invalid XSTAR_V068240244_TYPE76_POSTMAPBACK_MODE");
-}
-
 CanonicalThermalFingerprintModeV068240241 configured_canonical_thermal_fingerprint_mode_v068240241() {
     const char* value = std::getenv("XSTAR_V068240241_CANONICAL_THERMAL_FINGERPRINT_MODE");
     if (!value || !*value || std::string(value) == "optimized")
@@ -5107,10 +5091,6 @@ struct xstar_fixed_state_context_impl {
         std::size_t record_count = 0u;
         std::vector<RecordSelectionV068237> preliminary_source;
         std::vector<RecordSelectionV068237> preliminary_legacy;
-        // 0.6.82.40.2.44: immutable Type-76 source-order selections. These are
-        // consumed only by the deferred-product post-mapback fast path; no
-        // bookkeeping is injected into evaluate_record()/pass-2 execution.
-        std::vector<RecordSelectionV068237> type76_source_v068240244;
         std::vector<std::pair<int,std::uint64_t>> data_type_counts;
         std::map<std::pair<int,int>, std::vector<RecordSelectionV068237>>
             pass2_by_window;
@@ -5157,10 +5137,6 @@ struct xstar_fixed_state_context_impl {
     bool canonical_thermal_builder_fingerprint_mode_initialized_v068240242 = false;
     CanonicalThermalBuilderFingerprintModeV068240242 canonical_thermal_builder_fingerprint_mode_v068240242 =
         CanonicalThermalBuilderFingerprintModeV068240242::Optimized;
-    // 0.6.82.40.2.44: resolve Type-76 post-mapback discovery mode once.
-    bool type76_postmapback_mode_initialized_v068240244 = false;
-    Type76PostmapbackModeV068240244 type76_postmapback_mode_v068240244 =
-        Type76PostmapbackModeV068240244::Optimized;
     std::vector<Option10EndpointPlanV068240215> option10_endpoint_plan_by_record_v068240215;
     // 0.6.82.40.2.36: private production-preamble cache.  No public ABI state.
     bool production_preamble_environment_initialized_v068240236 = false;
@@ -14044,13 +14020,6 @@ int run_impl(
         canonical_thermal_fingerprint_reuse_v068240241 &&
         ctx.canonical_thermal_builder_fingerprint_mode_v068240242 ==
             CanonicalThermalBuilderFingerprintModeV068240242::Optimized;
-    if (!ctx.type76_postmapback_mode_initialized_v068240244) {
-        ctx.type76_postmapback_mode_v068240244 = configured_type76_postmapback_mode_v068240244();
-        ctx.type76_postmapback_mode_initialized_v068240244 = true;
-    }
-    const bool type76_postmapback_optimized_v068240244 =
-        native_production_v064897 && defer_product_projection &&
-        ctx.type76_postmapback_mode_v068240244 == Type76PostmapbackModeV068240244::Optimized;
     // Fail closed against a stale accepted-boundary snapshot if this
     // evaluation exits before the exact source workspaces are committed.
     ctx.last_source_workspaces_valid_v064894 = false;
@@ -16563,117 +16532,58 @@ int run_impl(
         // ucalc.f90 writes its two-photon continuum directly into rccemis, so
         // retain that side effect even while the expensive bound-free/line
         // product projection is deferred during the controller trajectory.
-        const auto apply_type76_postmapback_v068240244 =
-            [&](std::size_t k, const ProgramRecord& source_record) {
-                ++perf_foundation_v068231.type76_active_records_v068240244;
-            // Literal ucalc.f90 label 76.  nbmx is the source nbinc value;
-            // the polynomial endpoint is epi(nbmx), while the energy
-            // normalization uses the physical upper-lower level gap emax.
-            // The source initializes ansar2=0 before the first trapezoid
-            // and visits every bin 2..nbmx because enxt(lfastl=0) returns
-            // nskp=1.
-            const double emax = evaluated[k].line_energy_ev;
-            const int nbmx_one_based = type99_nbinc_fortran_value(
-                emax, input.radiation_energy_ev, input.radiation_bin_count);
-            const std::size_t nbmx = static_cast<std::size_t>(
-                std::max(1, std::min(static_cast<int>(input.radiation_bin_count), nbmx_one_based)));
-            double rcemsum = 0.0;
-            double ansar2 = 0.0;
-            if (nbmx >= 2u) {
-                const double grid_endpoint = input.radiation_energy_ev[nbmx - 1u];
-                for (std::size_t ll = 2u; ll <= nbmx; ++ll) {
-                    const double ansar2o = ansar2;
-                    const double energy = input.radiation_energy_ev[ll - 1u];
-                    ansar2 = energy * energy * std::max(0.0, grid_endpoint - energy);
-                    rcemsum += (ansar2 + ansar2o) *
-                        (energy - input.radiation_energy_ev[ll - 2u]) / 2.0;
-                }
-                const double upper_population = source_post_mapback_population_for_full_row(
-                    active, buffers.populations, source_record.upper_row);
-                const double abund2 = upper_population * element.abundance *
-                    input.hydrogen_density_cm3;
-                const double aij = std::max(0.0, evaluated[k].contribution.ans2);
-                const double cfrac = effective_spectral_covering_fraction(input);
-                // Literal calc_emis_ion rate-type 9 prepass sets tau1=tau2=0
-                // before the unconditional UCalc call. Type-76 is not an
-                // nlbin-ranked line in the active inventory, so this is
-                // the source escape state that owns its retained continuum.
-                const double ptmp1 = (1.0 - cfrac) / 2.0;
-                const double ptmp2 = (1.0 + cfrac) / 2.0;
-                const double denominator = 1.0e-24 + rcemsum;
-                if (abund2 > 0.0 && aij > 0.0 && denominator > 0.0) {
-                    for (std::size_t ll = 2u; ll <= nbmx; ++ll) {
-                        const double energy = input.radiation_energy_ev[ll - 1u];
-                        double emitted = energy * energy * std::max(0.0, grid_endpoint - energy);
-                        emitted = emitted * aij * emax / denominator;
-                        native_type76_continuum_emission[ll - 1u] +=
-                            abund2 * emitted * ptmp1 / xstar_constants::kLegacyTwoPhotonGeometryFactor;
-                        native_type76_continuum_emission[input.radiation_bin_count + ll - 1u] +=
-                            abund2 * emitted * ptmp2 / xstar_constants::kLegacyTwoPhotonGeometryFactor;
-                        perf_foundation_v068231.type76_updated_bins_v068240244 += 2u;
-                    }
-                }
-            }
-            };
-
-        if (type76_postmapback_optimized_v068240244) {
-            const auto& type76_candidates_v068240244 = execution_plan_v068237.type76_source_v068240244;
-            perf_foundation_v068231.type76_indexed_candidates_optimized_v068240244 +=
-                static_cast<std::uint64_t>(type76_candidates_v068240244.size());
-            if (type76_candidates_v068240244.empty()) {
-                ++perf_foundation_v068231.type76_empty_fast_skips_v068240244;
-            } else if (force_full_record_traversal_v064812315) {
-                for (const auto& candidate_v068240244 : type76_candidates_v068240244) {
-                    const std::size_t k_v068240244 = candidate_v068240244.ordinal;
-                    if (k_v068240244 >= evaluated.size() || k_v068240244 >= evaluated_records.size())
-                        continue;
-                    const auto* expected_v068240244 =
-                        &ctx.program.records[static_cast<std::size_t>(candidate_v068240244.record_index)];
-                    if (evaluated_records[k_v068240244] != expected_v068240244)
-                        throw std::runtime_error("0.6.82.40.2.44 Type-76 full-traversal ordinal mismatch");
-                    if (expected_v068240244->data_type == 76 && input.radiation_bin_count > 1 &&
-                        evaluated[k_v068240244].line_energy_ev > 0.0) {
-                        apply_type76_postmapback_v068240244(k_v068240244, *expected_v068240244);
-                    }
-                }
-            } else {
-                const auto& active_v068240244 = *active_pass2_selections_v068237;
-                for (const auto& candidate_v068240244 : type76_candidates_v068240244) {
-                    const auto found_v068240244 = std::lower_bound(
-                        active_v068240244.begin(), active_v068240244.end(), candidate_v068240244.ordinal,
-                        [](const RecordSelectionV068237& lhs_v068240244, std::uint32_t ordinal_v068240244) {
-                            return lhs_v068240244.ordinal < ordinal_v068240244;
-                        });
-                    if (found_v068240244 == active_v068240244.end() ||
-                        found_v068240244->ordinal != candidate_v068240244.ordinal)
-                        continue;
-                    if (found_v068240244->record_index != candidate_v068240244.record_index)
-                        throw std::runtime_error("0.6.82.40.2.44 Type-76 active-selection record mismatch");
-                    const std::size_t k_v068240244 = static_cast<std::size_t>(
-                        std::distance(active_v068240244.begin(), found_v068240244));
-                    if (k_v068240244 >= evaluated.size() || k_v068240244 >= evaluated_records.size())
-                        throw std::runtime_error("0.6.82.40.2.44 Type-76 active-selection index mismatch");
-                    const auto* expected_v068240244 =
-                        &ctx.program.records[static_cast<std::size_t>(candidate_v068240244.record_index)];
-                    if (evaluated_records[k_v068240244] != expected_v068240244)
-                        throw std::runtime_error("0.6.82.40.2.44 Type-76 evaluated-record pointer mismatch");
-                    if (input.radiation_bin_count > 1 && evaluated[k_v068240244].line_energy_ev > 0.0)
-                        apply_type76_postmapback_v068240244(k_v068240244, *expected_v068240244);
-                }
-            }
-        } else {
-            if (defer_product_projection) {
-                perf_foundation_v068231.type76_full_scan_records_historical_v068240244 +=
-                    static_cast<std::uint64_t>(std::min(evaluated.size(), evaluated_records.size()));
-            } else {
-                ++perf_foundation_v068231.deferred_rrc_full_path_calls_v068240244;
-            }
         for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
             const auto& source_record = *evaluated_records[k];
             const auto& source_execution_v0682375 = execution_record_v0682375(ctx.program, source_record);
             if (source_record.data_type == 76 && input.radiation_bin_count > 1 &&
                 evaluated[k].line_energy_ev > 0.0) {
-                apply_type76_postmapback_v068240244(k, source_record);
+                // Literal ucalc.f90 label 76.  nbmx is the source nbinc value;
+                // the polynomial endpoint is epi(nbmx), while the energy
+                // normalization uses the physical upper-lower level gap emax.
+                // The source initializes ansar2=0 before the first trapezoid
+                // and visits every bin 2..nbmx because enxt(lfastl=0) returns
+                // nskp=1.
+                const double emax = evaluated[k].line_energy_ev;
+                const int nbmx_one_based = type99_nbinc_fortran_value(
+                    emax, input.radiation_energy_ev, input.radiation_bin_count);
+                const std::size_t nbmx = static_cast<std::size_t>(
+                    std::max(1, std::min(static_cast<int>(input.radiation_bin_count), nbmx_one_based)));
+                double rcemsum = 0.0;
+                double ansar2 = 0.0;
+                if (nbmx >= 2u) {
+                    const double grid_endpoint = input.radiation_energy_ev[nbmx - 1u];
+                    for (std::size_t ll = 2u; ll <= nbmx; ++ll) {
+                        const double ansar2o = ansar2;
+                        const double energy = input.radiation_energy_ev[ll - 1u];
+                        ansar2 = energy * energy * std::max(0.0, grid_endpoint - energy);
+                        rcemsum += (ansar2 + ansar2o) *
+                            (energy - input.radiation_energy_ev[ll - 2u]) / 2.0;
+                    }
+                    const double upper_population = source_post_mapback_population_for_full_row(
+                        active, buffers.populations, source_record.upper_row);
+                    const double abund2 = upper_population * element.abundance *
+                        input.hydrogen_density_cm3;
+                    const double aij = std::max(0.0, evaluated[k].contribution.ans2);
+                    const double cfrac = effective_spectral_covering_fraction(input);
+                    // Literal calc_emis_ion rate-type 9 prepass sets tau1=tau2=0
+                    // before the unconditional UCalc call. Type-76 is not an
+                    // nlbin-ranked line in the active inventory, so this is
+                    // the source escape state that owns its retained continuum.
+                    const double ptmp1 = (1.0 - cfrac) / 2.0;
+                    const double ptmp2 = (1.0 + cfrac) / 2.0;
+                    const double denominator = 1.0e-24 + rcemsum;
+                    if (abund2 > 0.0 && aij > 0.0 && denominator > 0.0) {
+                        for (std::size_t ll = 2u; ll <= nbmx; ++ll) {
+                            const double energy = input.radiation_energy_ev[ll - 1u];
+                            double emitted = energy * energy * std::max(0.0, grid_endpoint - energy);
+                            emitted = emitted * aij * emax / denominator;
+                            native_type76_continuum_emission[ll - 1u] +=
+                                abund2 * emitted * ptmp1 / xstar_constants::kLegacyTwoPhotonGeometryFactor;
+                            native_type76_continuum_emission[input.radiation_bin_count + ll - 1u] +=
+                                abund2 * emitted * ptmp2 / xstar_constants::kLegacyTwoPhotonGeometryFactor;
+                        }
+                    }
+                }
             }
             if (defer_product_projection) continue;
             if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE &&
@@ -16891,7 +16801,6 @@ int run_impl(
                     top.upper_row = source_record.upper_row;
                 }
             }
-        }
         }
 
         // 0.6.82.30.8.6: DEFER_PRODUCT_PROJECTION is set for DSEC/root
@@ -20460,7 +20369,6 @@ void capture_fixed_live_owner_memory_v06824028(
     for (const auto& plan : context->element_execution_plan_v068237) {
         out.execution_plan_capacity_bytes += capacity_bytes(plan.preliminary_source);
         out.execution_plan_capacity_bytes += capacity_bytes(plan.preliminary_legacy);
-        out.execution_plan_capacity_bytes += capacity_bytes(plan.type76_source_v068240244);
         out.execution_plan_capacity_bytes += capacity_bytes(plan.data_type_counts);
         out.execution_plan_capacity_bytes += map_inline_bytes(plan.pass2_by_window);
         for (const auto& selection : plan.pass2_by_window)
@@ -20735,10 +20643,6 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
             const auto compact_index_v068237 = static_cast<std::uint32_t>(record_index_v068237);
             ptr->flat_record_indices_v068237.push_back(compact_index_v068237);
             ++data_type_counts_v068237[record.data_type];
-            if (record.data_type == 76) {
-                plan_v068237.type76_source_v068240244.push_back(RecordSelectionV068237{
-                    static_cast<std::uint32_t>(ordinal_v068237), compact_index_v068237});
-            }
             if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
                 record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
                 if (ptr->bound_free_slot_by_record_v0682371[record_index_v068237] !=

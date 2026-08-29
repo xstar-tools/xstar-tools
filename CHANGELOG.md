@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.45 - SAVD_FIRST_MATERIALIZATION_FINE_ATTRIBUTION - 2026-08-29
+
+- Branches directly from formally accepted `0.6.82.40.2.42`; rejected `.44` Type-76 discovery-scan code and attribution-only `.43` timers are not carried into production ancestry.
+- Attribution-only target: the remaining SAVD/detail residual, currently about `5.3-5.4 s` on the latest C5 low-`xi` host runs, with the first `FixedDsecSnapshot -> NativeSavedShellV068227` materialization as the leading suspect.
+- Splits `make_saved_shell_v068227()` into coarse phases: initial snapshot deep copy, sparse SAVD membership discovery, REAL(4) vector quantization, FITS-E3 scalar quantization, and a derived builder residual.
+- Adds exactly five coarse clock starts in the materialization function and no clock inside vector-element, sparse-membership, record, ion, or radiation-bin loops.
+- Reuses the existing detail population/line/RRC/spectrum leaf timers to report a broader `ZONE_SAVD_DETAIL` non-leaf residual, separating first materialization from stream/handoff/writer overhead.
+- Preserves `out.snapshot = source`, all SAVD sparse-membership rules, all REAL(4) conversions, all FITS-E3 scalar conversions, `.34` single-pass move publication, multipass historical ownership, and all accepted `.41/.42` Thermal optimizations exactly.
+- Qualification is one C5 `xi=-3` C++ attribution run against canonical Phase-A FORTRAN science/work. There is no performance gate and no multi-element run.
+
 ## 0.6.82.40.2.44 - TYPE76_POSTMAPBACK_DISCOVERY_SCAN_ELISION_HOT_PATH - 2026-08-29
 
 - Branch directly from formally accepted `0.6.82.40.2.42`; attribution-only `.43` is evidence only and is not in production ancestry.

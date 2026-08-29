@@ -533,6 +533,16 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t savd_staging_optimized_calls_v068240234 = 0u;
     std::uint64_t savd_staging_move_conversions_v068240234 = 0u;
     std::uint64_t savd_staging_multipass_historical_calls_v068240234 = 0u;
+    // 0.6.82.40.2.45: SAVD first-materialization attribution. These
+    // counters/timers are observation-only and are enabled only by the .45
+    // qualification environment. No clocks are placed inside vector-element
+    // or sparse-membership loops.
+    std::uint64_t savd_first_materialization_calls_v068240245 = 0u;
+    double savd_first_materialization_total_seconds_v068240245 = 0.0;
+    double savd_snapshot_deep_copy_seconds_v068240245 = 0.0;
+    double savd_sparse_membership_seconds_v068240245 = 0.0;
+    double savd_real4_vector_quantization_seconds_v068240245 = 0.0;
+    double savd_e3_scalar_quantization_seconds_v068240245 = 0.0;
     // 0.6.82.33.2: explicit accounting for the full accepted-boundary
     // families exposed by the .33.1 C5 RSS staircase. Diagnostic only.
     std::uint64_t final_snapshots_current_bytes_v0682332 = 0u;
@@ -19452,6 +19462,17 @@ const char* savd_staging_mode_name_v068240234(SavdStagingModeV068240234 mode) {
     return mode == SavdStagingModeV068240234::Historical ? "HISTORICAL" : "OPTIMIZED";
 }
 
+bool savd_first_materialization_timing_v068240245() {
+    static const bool enabled = [] {
+        const char* raw = std::getenv("XSTAR_V068240245_SAVD_FIRST_MATERIALIZATION_TIMING");
+        if (!raw || !*raw || std::string(raw) == "0") return false;
+        if (std::string(raw) == "1") return true;
+        throw std::runtime_error(
+            "XSTAR_V068240245_SAVD_FIRST_MATERIALIZATION_TIMING must be 0 or 1");
+    }();
+    return enabled;
+}
+
 // 0.6.82.40.2.34: the historical single-pass SAVD stream first deep-copies the
 // accepted FixedDsecSnapshot into NativeSavedShellV068227, applies the source
 // REAL(4)/FITS-E3 save boundary, and then deep-copies that quantized snapshot a
@@ -19625,10 +19646,26 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     double zeta,
     bool terminal_record,
     bool retain_sparse_membership_v068240234 = true) {
+    const bool fine_timing_v068240245 =
+        g_performance_v064890 && savd_first_materialization_timing_v068240245();
+    const auto materialization_started_v068240245 = fine_timing_v068240245
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
+
     NativeSavedShellV068227 out;
+    const auto snapshot_copy_started_v068240245 = fine_timing_v068240245
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
     out.snapshot = source;
+    if (fine_timing_v068240245) {
+        g_performance_v064890->savd_snapshot_deep_copy_seconds_v068240245 +=
+            performance_elapsed_seconds(snapshot_copy_started_v068240245);
+    }
 
     if (retain_sparse_membership_v068240234) {
+        const auto sparse_membership_started_v068240245 = fine_timing_v068240245
+            ? std::chrono::steady_clock::now()
+            : std::chrono::steady_clock::time_point{};
         // fstepr.f90 writes only source level roles with xilev > 1.d-34.
         // Determine membership before TFLOAT rounding, exactly as the source does.
         std::vector<std::uint8_t> level_seen_v0682273(source.source_global_xilevg.size(), 0u);
@@ -19681,11 +19718,18 @@ NativeSavedShellV068227 make_saved_shell_v068227(
             }
         }
 
+        if (fine_timing_v068240245) {
+            g_performance_v064890->savd_sparse_membership_seconds_v068240245 +=
+                performance_elapsed_seconds(sparse_membership_started_v068240245);
+        }
     }
 
     // savd.f90 persists xilev/rnist, rcem/oplin/tau0, cemab/cabab/opakab/tauc,
     // zrems/dpthc/opakc/rccemis through TFLOAT columns.  zrems is saved but
     // UNSAVD deliberately does not copy it back into the live radiation field.
+    const auto real4_quantization_started_v068240245 = fine_timing_v068240245
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
     source_real4_vector_v068227(out.snapshot.source_global_xilevg);
     source_real4_vector_v068227(out.snapshot.source_global_rnisg);
     source_real4_vector_v068227(out.snapshot.rcem);
@@ -19699,10 +19743,17 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     source_real4_vector_v068227(out.snapshot.dpthc);
     source_real4_vector_v068227(out.snapshot.opakc);
     source_real4_vector_v068227(out.snapshot.rccemis);
+    if (fine_timing_v068240245) {
+        g_performance_v064890->savd_real4_vector_quantization_seconds_v068240245 +=
+            performance_elapsed_seconds(real4_quantization_started_v068240245);
+    }
     // Scalar SAVD state is carried in FITS header keywords, not table cells.
     // Each of the four source detail writers uses the same ftpkye(...,3)
     // convention, and each rstepr* reader overwrites these values from those
     // keywords.  Quantize every scalar exactly at the in-memory save boundary.
+    const auto e3_quantization_started_v068240245 = fine_timing_v068240245
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
     out.snapshot.temperature_t4 = source_savd_keyword_e3_v0682276(source.temperature_t4);
     out.pressure_dyn_cm2 = source_savd_keyword_e3_v0682276(pressure_dyn_cm2);
     out.radius_cm = source_savd_keyword_e3_v0682276(radius_cm);
@@ -19712,7 +19763,16 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     out.electron_fraction = source_savd_keyword_e3_v0682276(electron_fraction);
     out.hydrogen_density_cm3 = source_savd_keyword_e3_v0682276(hydrogen_density_cm3);
     out.zeta = source_savd_keyword_e3_v0682276(zeta);
+    if (fine_timing_v068240245) {
+        g_performance_v064890->savd_e3_scalar_quantization_seconds_v068240245 +=
+            performance_elapsed_seconds(e3_quantization_started_v068240245);
+    }
     out.terminal_record = terminal_record;
+    if (fine_timing_v068240245) {
+        ++g_performance_v064890->savd_first_materialization_calls_v068240245;
+        g_performance_v064890->savd_first_materialization_total_seconds_v068240245 +=
+            performance_elapsed_seconds(materialization_started_v068240245);
+    }
     return out;
 }
 
@@ -23311,6 +23371,22 @@ void emit_controller_performance_instrumentation(
         perf.foundation_v068231.element_input_seconds;
     const double pass2_fine_residual_v068240238 = std::max(
         0.0, pass2_fine_region4_total_v068240238 - pass2_fine_known_v068240238);
+    // 0.6.82.40.2.45: attribution-only SAVD first-materialization closure.
+    const double savd_materialization_known_v068240245 =
+        perf.savd_snapshot_deep_copy_seconds_v068240245 +
+        perf.savd_sparse_membership_seconds_v068240245 +
+        perf.savd_real4_vector_quantization_seconds_v068240245 +
+        perf.savd_e3_scalar_quantization_seconds_v068240245;
+    const double savd_materialization_residual_v068240245 =
+        perf.savd_first_materialization_total_seconds_v068240245 -
+        savd_materialization_known_v068240245;
+    const double savd_detail_leaf_sum_v068240245 =
+        perf.detail_population_seconds + perf.detail_line_seconds +
+        perf.detail_rrc_seconds + perf.detail_spectrum_seconds;
+    const double savd_zone_nonleaf_residual_v068240245 =
+        perf.zone_savd_detail_seconds_v068240219 -
+        perf.savd_first_materialization_total_seconds_v068240245 -
+        savd_detail_leaf_sum_v068240245;
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
@@ -23598,19 +23674,6 @@ void emit_controller_performance_instrumentation(
                  perf.foundation_v068231.canonical_thermal_builder_fingerprint_elisions_v068240242 == 0u) ? "HISTORICAL" : "MIXED") << "\n"
             << "V068240242_BUILDER_FINGERPRINT_RECOMPUTES=" << perf.foundation_v068231.canonical_thermal_builder_fingerprint_recomputes_v068240242 << "\n"
             << "V068240242_BUILDER_FINGERPRINT_ELISIONS=" << perf.foundation_v068231.canonical_thermal_builder_fingerprint_elisions_v068240242 << "\n"
-            << "V068240244_TYPE76_POSTMAPBACK_MODE="
-            << ((perf.foundation_v068231.type76_indexed_candidates_optimized_v068240244 > 0u ||
-                 perf.foundation_v068231.type76_empty_fast_skips_v068240244 > 0u) &&
-                perf.foundation_v068231.type76_full_scan_records_historical_v068240244 == 0u ? "OPTIMIZED" :
-                (perf.foundation_v068231.type76_full_scan_records_historical_v068240244 > 0u &&
-                 perf.foundation_v068231.type76_indexed_candidates_optimized_v068240244 == 0u &&
-                 perf.foundation_v068231.type76_empty_fast_skips_v068240244 == 0u ? "HISTORICAL" : "MIXED")) << "\n"
-            << "V068240244_TYPE76_FULL_SCAN_RECORDS_HISTORICAL=" << perf.foundation_v068231.type76_full_scan_records_historical_v068240244 << "\n"
-            << "V068240244_TYPE76_INDEXED_CANDIDATES_OPTIMIZED=" << perf.foundation_v068231.type76_indexed_candidates_optimized_v068240244 << "\n"
-            << "V068240244_TYPE76_ACTIVE_RECORDS=" << perf.foundation_v068231.type76_active_records_v068240244 << "\n"
-            << "V068240244_TYPE76_UPDATED_BINS=" << perf.foundation_v068231.type76_updated_bins_v068240244 << "\n"
-            << "V068240244_TYPE76_EMPTY_FAST_SKIPS=" << perf.foundation_v068231.type76_empty_fast_skips_v068240244 << "\n"
-            << "V068240244_DEFERRED_RRC_FULL_PATH_CALLS=" << perf.foundation_v068231.deferred_rrc_full_path_calls_v068240244 << "\n"
             << "V068231_PERF_ELEMENT_BUFFER_REUSES=" << perf.foundation_v068231.element_buffer_reuses << "\n"
             << "V068231_PERF_LEVELTEMP_BACKUP_REUSES=" << perf.foundation_v068231.leveltemp_backup_reuses << "\n"
             << "V068231_PERF_REDUCED_CONTINUUM_GEOMETRY_BUILDS=" << perf.foundation_v068231.reduced_continuum_geometry_builds << "\n"
@@ -24051,6 +24114,28 @@ void emit_controller_performance_instrumentation(
             << perf.savd_staging_move_conversions_v068240234 << "\n"
             << "V068240234_SAVD_STAGING_MULTIPASS_HISTORICAL_CALLS="
             << perf.savd_staging_multipass_historical_calls_v068240234 << "\n"
+            << "V068240245_SAVD_FIRST_MATERIALIZATION_TIMING="
+            << (savd_first_materialization_timing_v068240245() ? "YES" : "NO") << "\n"
+            << "V068240245_SAVD_FIRST_MATERIALIZATION_CALLS="
+            << perf.savd_first_materialization_calls_v068240245 << "\n"
+            << "V068240245_FIRST_MATERIALIZATION_TOTAL_SECONDS="
+            << std::setprecision(17) << perf.savd_first_materialization_total_seconds_v068240245 << "\n"
+            << "V068240245_SUB1_SNAPSHOT_DEEP_COPY_SECONDS="
+            << perf.savd_snapshot_deep_copy_seconds_v068240245 << "\n"
+            << "V068240245_SUB2_SPARSE_MEMBERSHIP_DISCOVERY_SECONDS="
+            << perf.savd_sparse_membership_seconds_v068240245 << "\n"
+            << "V068240245_SUB3_REAL4_VECTOR_QUANTIZATION_SECONDS="
+            << perf.savd_real4_vector_quantization_seconds_v068240245 << "\n"
+            << "V068240245_SUB4_E3_SCALAR_QUANTIZATION_SECONDS="
+            << perf.savd_e3_scalar_quantization_seconds_v068240245 << "\n"
+            << "V068240245_SUB5_BUILDER_RESIDUAL_SECONDS="
+            << savd_materialization_residual_v068240245 << "\n"
+            << "V068240245_FIRST_MATERIALIZATION_ACCOUNTED_SECONDS="
+            << (savd_materialization_known_v068240245 + savd_materialization_residual_v068240245) << "\n"
+            << "V068240245_DETAIL_LEAF_SUM_SECONDS="
+            << savd_detail_leaf_sum_v068240245 << "\n"
+            << "V068240245_ZONE_NONLEAF_RESIDUAL_SECONDS="
+            << savd_zone_nonleaf_residual_v068240245 << "\n"
             << "V068240218_POST_ZONE_TRIM_MODE="
             << post_zone_trim_mode_name_v068240218(post_zone_trim_mode_v068240218()) << "\n"
             << "V068240218_POST_ZONE_TRIM_HISTORICAL_CALLS="
@@ -24305,6 +24390,28 @@ void emit_controller_performance_instrumentation(
             << perf.savd_staging_move_conversions_v068240234 << "\n"
             << "V068240234_SAVD_STAGING_MULTIPASS_HISTORICAL_CALLS="
             << perf.savd_staging_multipass_historical_calls_v068240234 << "\n"
+            << "V068240245_SAVD_FIRST_MATERIALIZATION_TIMING="
+            << (savd_first_materialization_timing_v068240245() ? "YES" : "NO") << "\n"
+            << "V068240245_SAVD_FIRST_MATERIALIZATION_CALLS="
+            << perf.savd_first_materialization_calls_v068240245 << "\n"
+            << "V068240245_FIRST_MATERIALIZATION_TOTAL_SECONDS="
+            << std::setprecision(17) << perf.savd_first_materialization_total_seconds_v068240245 << "\n"
+            << "V068240245_SUB1_SNAPSHOT_DEEP_COPY_SECONDS="
+            << perf.savd_snapshot_deep_copy_seconds_v068240245 << "\n"
+            << "V068240245_SUB2_SPARSE_MEMBERSHIP_DISCOVERY_SECONDS="
+            << perf.savd_sparse_membership_seconds_v068240245 << "\n"
+            << "V068240245_SUB3_REAL4_VECTOR_QUANTIZATION_SECONDS="
+            << perf.savd_real4_vector_quantization_seconds_v068240245 << "\n"
+            << "V068240245_SUB4_E3_SCALAR_QUANTIZATION_SECONDS="
+            << perf.savd_e3_scalar_quantization_seconds_v068240245 << "\n"
+            << "V068240245_SUB5_BUILDER_RESIDUAL_SECONDS="
+            << savd_materialization_residual_v068240245 << "\n"
+            << "V068240245_FIRST_MATERIALIZATION_ACCOUNTED_SECONDS="
+            << (savd_materialization_known_v068240245 + savd_materialization_residual_v068240245) << "\n"
+            << "V068240245_DETAIL_LEAF_SUM_SECONDS="
+            << savd_detail_leaf_sum_v068240245 << "\n"
+            << "V068240245_ZONE_NONLEAF_RESIDUAL_SECONDS="
+            << savd_zone_nonleaf_residual_v068240245 << "\n"
             << "V068233_RSS_AFTER_ATDB_BYTES=" << perf.rss_after_atdb_bytes_v068233 << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"

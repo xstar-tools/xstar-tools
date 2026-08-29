@@ -88,14 +88,6 @@ struct PerformanceFoundationV068231 {
     // 0.6.82.40.2.42: builder fingerprint elision qualification.
     std::uint64_t canonical_thermal_builder_fingerprint_recomputes_v068240242 = 0u;
     std::uint64_t canonical_thermal_builder_fingerprint_elisions_v068240242 = 0u;
-    // 0.6.82.40.2.44: Type-76 deferred-product post-mapback discovery-scan
-    // qualification. All counters are observational and private to C++.
-    std::uint64_t type76_full_scan_records_historical_v068240244 = 0u;
-    std::uint64_t type76_indexed_candidates_optimized_v068240244 = 0u;
-    std::uint64_t type76_active_records_v068240244 = 0u;
-    std::uint64_t type76_updated_bins_v068240244 = 0u;
-    std::uint64_t type76_empty_fast_skips_v068240244 = 0u;
-    std::uint64_t deferred_rrc_full_path_calls_v068240244 = 0u;
     // 0.6.82.40.2.37: attribution-only coarse traversal partition.
     // Clocks are enabled only by XSTAR_V068240237_TRAVERSAL_FINE_TIMING and
     // are placed at element/phase boundaries, never inside evaluate_record(),
