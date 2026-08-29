@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.46 - SAVD_FIRST_MATERIALIZATION_HOT_PATH - 2026-08-29
+
+- Branches directly from formally accepted `0.6.82.40.2.42`; `.43` is attribution-only, `.44` is a performance REJECT, and `.45` is attribution-only evidence and is not production ancestry.
+- Targets the `.45` low-`xi` result that `out.snapshot = source` costs `4.344626100 s`, or `91.42%` of the `4.752406638 s` first SAVD materialization total across 150 calls.
+- Keeps the accepted `.34` second-copy move publication path active in both A/B arms and removes only the remaining first whole-`FixedDsecSnapshot` clone on ordinary single-pass streaming.
+- Optimized mode temporarily transfers exactly the fields already consumed by the accepted `.34` writer conversion out of the full-precision pretransport/terminal owner, backs up only the 13 vectors that SAVD must quantize to REAL(4), performs the exact historical REAL4/FITS-E3 publication conversion, then restores the full-precision source owner after incremental detail publication.
+- Diagnostic-only snapshot owners that `.34` never transfers remain resident in the source object throughout the SAVD stream; no record-evaluator, thermal, transport, matrix, or scientific arithmetic changes are introduced.
+- The terminal SAVD row uses the same ownership shuttle, eliminating its extra whole-snapshot staging copy while restoring the retained terminal post-transport boundary exactly afterward.
+- Multipass, reference, forensic, and non-incremental SAVD/UNSAVD ownership remain historical. The control is `XSTAR_V068240246_SAVD_FIRST_MATERIALIZATION_MODE=historical|optimized`, default optimized.
+- Qualification uses balanced same-host C5 `xi=-3` A/B first, requires exact science/work/path and material end-to-end improvement, then closes `xi=+1,+4`; no multi-element run is included.
+
 ## 0.6.82.40.2.45 - SAVD_FIRST_MATERIALIZATION_FINE_ATTRIBUTION - 2026-08-29
 
 - Branches directly from formally accepted `0.6.82.40.2.42`; rejected `.44` Type-76 discovery-scan code and attribution-only `.43` timers are not carried into production ancestry.

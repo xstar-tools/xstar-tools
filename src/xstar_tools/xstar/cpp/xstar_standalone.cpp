@@ -533,16 +533,22 @@ struct PerformanceInstrumentationV064890 {
     std::uint64_t savd_staging_optimized_calls_v068240234 = 0u;
     std::uint64_t savd_staging_move_conversions_v068240234 = 0u;
     std::uint64_t savd_staging_multipass_historical_calls_v068240234 = 0u;
-    // 0.6.82.40.2.45: SAVD first-materialization attribution. These
-    // counters/timers are observation-only and are enabled only by the .45
-    // qualification environment. No clocks are placed inside vector-element
-    // or sparse-membership loops.
-    std::uint64_t savd_first_materialization_calls_v068240245 = 0u;
-    double savd_first_materialization_total_seconds_v068240245 = 0.0;
-    double savd_snapshot_deep_copy_seconds_v068240245 = 0.0;
-    double savd_sparse_membership_seconds_v068240245 = 0.0;
-    double savd_real4_vector_quantization_seconds_v068240245 = 0.0;
-    double savd_e3_scalar_quantization_seconds_v068240245 = 0.0;
+    // 0.6.82.40.2.46: single-pass SAVD first-materialization ownership shuttle.
+    // Historical mode keeps the .42 whole-snapshot clone. Optimized mode
+    // temporarily transfers only the .34 writer-owned fields out of the
+    // full-precision pretransport owner, backs up only the 13 SAVD-quantized
+    // vectors, then restores the accepted owner after incremental publication.
+    std::uint64_t savd_first_materialization_historical_full_snapshot_copies_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_optimized_shuttles_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_restore_calls_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_terminal_source_copy_elisions_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_full_snapshot_copy_bytes_elided_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_restore_vector_bytes_copied_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_real4_values_quantized_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_e3_scalars_quantized_v068240246 = 0u;
+    std::uint64_t savd_first_materialization_multipass_historical_calls_v068240246 = 0u;
+    double savd_first_materialization_seconds_v068240246 = 0.0;
+    double savd_first_materialization_restore_seconds_v068240246 = 0.0;
     // 0.6.82.33.2: explicit accounting for the full accepted-boundary
     // families exposed by the .33.1 C5 RSS staircase. Diagnostic only.
     std::uint64_t final_snapshots_current_bytes_v0682332 = 0u;
@@ -19462,15 +19468,277 @@ const char* savd_staging_mode_name_v068240234(SavdStagingModeV068240234 mode) {
     return mode == SavdStagingModeV068240234::Historical ? "HISTORICAL" : "OPTIMIZED";
 }
 
-bool savd_first_materialization_timing_v068240245() {
-    static const bool enabled = [] {
-        const char* raw = std::getenv("XSTAR_V068240245_SAVD_FIRST_MATERIALIZATION_TIMING");
-        if (!raw || !*raw || std::string(raw) == "0") return false;
-        if (std::string(raw) == "1") return true;
+// 0.6.82.40.2.46: isolate the remaining first SAVD materialization copy.
+// The accepted .34 second-copy elision remains active in both A/B arms.
+enum class SavdFirstMaterializationModeV068240246 { Historical, Optimized };
+
+SavdFirstMaterializationModeV068240246 savd_first_materialization_mode_v068240246() {
+    static const SavdFirstMaterializationModeV068240246 mode = [] {
+        const char* raw = std::getenv("XSTAR_V068240246_SAVD_FIRST_MATERIALIZATION_MODE");
+        if (!raw || !*raw || std::string(raw) == "optimized") {
+            return SavdFirstMaterializationModeV068240246::Optimized;
+        }
+        if (std::string(raw) == "historical") {
+            return SavdFirstMaterializationModeV068240246::Historical;
+        }
         throw std::runtime_error(
-            "XSTAR_V068240245_SAVD_FIRST_MATERIALIZATION_TIMING must be 0 or 1");
+            "XSTAR_V068240246_SAVD_FIRST_MATERIALIZATION_MODE must be historical or optimized");
     }();
-    return enabled;
+    return mode;
+}
+
+const char* savd_first_materialization_mode_name_v068240246(
+        SavdFirstMaterializationModeV068240246 mode) {
+    return mode == SavdFirstMaterializationModeV068240246::Historical
+        ? "HISTORICAL" : "OPTIMIZED";
+}
+
+struct SavdFullPrecisionRestoreV068240246 {
+    std::vector<double> source_global_xilevg;
+    std::vector<double> source_global_rnisg;
+    std::vector<double> rcem;
+    std::vector<double> oplin;
+    std::vector<double> tau0;
+    std::vector<double> cemab;
+    std::vector<double> cabab;
+    std::vector<double> opakab;
+    std::vector<double> tauc;
+    std::vector<double> zrems;
+    std::vector<double> dpthc;
+    std::vector<double> opakc;
+    std::vector<double> rccemis;
+};
+
+std::uint64_t savd_restore_vector_bytes_v068240246(const SavdFullPrecisionRestoreV068240246& r) {
+    return static_cast<std::uint64_t>(sizeof(double)) * (
+        r.source_global_xilevg.size() + r.source_global_rnisg.size() +
+        r.rcem.size() + r.oplin.size() + r.tau0.size() + r.cemab.size() +
+        r.cabab.size() + r.opakab.size() + r.tauc.size() + r.zrems.size() +
+        r.dpthc.size() + r.opakc.size() + r.rccemis.size());
+}
+
+std::uint64_t savd_real4_value_count_v068240246(const FixedDsecSnapshot& s) {
+    return static_cast<std::uint64_t>(
+        s.source_global_xilevg.size() + s.source_global_rnisg.size() +
+        s.rcem.size() + s.oplin.size() + s.tau0.size() + s.cemab.size() +
+        s.cabab.size() + s.opakab.size() + s.tauc.size() + s.zrems.size() +
+        s.dpthc.size() + s.opakc.size() + s.rccemis.size());
+}
+
+SavdFullPrecisionRestoreV068240246 backup_savd_quantized_vectors_v068240246(
+        const FixedDsecSnapshot& source) {
+    SavdFullPrecisionRestoreV068240246 r;
+    r.source_global_xilevg = source.source_global_xilevg;
+    r.source_global_rnisg = source.source_global_rnisg;
+    r.rcem = source.rcem;
+    r.oplin = source.oplin;
+    r.tau0 = source.tau0;
+    r.cemab = source.cemab;
+    r.cabab = source.cabab;
+    r.opakab = source.opakab;
+    r.tauc = source.tauc;
+    r.zrems = source.zrems;
+    r.dpthc = source.dpthc;
+    r.opakc = source.opakc;
+    r.rccemis = source.rccemis;
+    return r;
+}
+
+// Transfer exactly the fields consumed by the accepted .34 move conversion.
+// Diagnostic-only fields omitted by .34 remain resident in the full-precision
+// source owner throughout the SAVD stream and therefore need no backup/copy.
+void transfer_savd_writer_fields_v068240246(
+        FixedDsecSnapshot& source,
+        FixedDsecSnapshot& target) {
+    target.kind = source.kind;
+    target.sequence = source.sequence;
+    target.call_index = source.call_index;
+    target.evaluation_index = source.evaluation_index;
+    target.temperature_t4 = source.temperature_t4;
+    target.hydrogen_density_cm3 = source.hydrogen_density_cm3;
+    target.electron_fraction_input = source.electron_fraction_input;
+    target.computed_electron_fraction = source.computed_electron_fraction;
+    target.charge_residual = source.charge_residual;
+    target.hmctot = source.hmctot;
+    target.total_heating = source.total_heating;
+    target.total_cooling = source.total_cooling;
+    target.element_heating = source.element_heating;
+    target.element_cooling = source.element_cooling;
+    target.continuum_heating = source.continuum_heating;
+    target.continuum_cooling = source.continuum_cooling;
+    target.hydrogen_heating = source.hydrogen_heating;
+    target.hydrogen_cooling = source.hydrogen_cooling;
+    target.hydrogen_heating2 = source.hydrogen_heating2;
+    target.hydrogen_cooling2 = source.hydrogen_cooling2;
+    target.helium_heating = source.helium_heating;
+    target.helium_cooling = source.helium_cooling;
+    target.helium_heating2 = source.helium_heating2;
+    target.helium_cooling2 = source.helium_cooling2;
+    target.magnesium_heating = source.magnesium_heating;
+    target.magnesium_cooling = source.magnesium_cooling;
+    target.magnesium_heating2 = source.magnesium_heating2;
+    target.magnesium_cooling2 = source.magnesium_cooling2;
+    target.compton_heating = source.compton_heating;
+    target.compton_cooling = source.compton_cooling;
+    target.free_free_heating = source.free_free_heating;
+    target.brems_cooling = source.brems_cooling;
+    target.thermal_families_native = source.thermal_families_native;
+    target.dsec_runtime_state_abi = source.dsec_runtime_state_abi;
+    target.source_global_xilevg = std::move(source.source_global_xilevg);
+    target.source_global_rnisg = std::move(source.source_global_rnisg);
+    target.source_global_bilevg = std::move(source.source_global_bilevg);
+    target.source_global_gammag = std::move(source.source_global_gammag);
+    target.source_global_alphag = std::move(source.source_global_alphag);
+    target.source_global_igammamaxg = std::move(source.source_global_igammamaxg);
+    target.source_global_ialphamaxg = std::move(source.source_global_ialphamaxg);
+    target.source_ion_stage_fractions = std::move(source.source_ion_stage_fractions);
+    target.source_ionization_rates = std::move(source.source_ionization_rates);
+    target.source_recombination_rates = std::move(source.source_recombination_rates);
+    target.source_detail_pre_mapback_populations = std::move(source.source_detail_pre_mapback_populations);
+    target.source_detail_active_windows = std::move(source.source_detail_active_windows);
+    target.source_detail_global_xilevg = std::move(source.source_detail_global_xilevg);
+    target.populations = std::move(source.populations);
+    target.lte_populations = std::move(source.lte_populations);
+    target.radiation_energy_ev = std::move(source.radiation_energy_ev);
+    target.radiation_flux = std::move(source.radiation_flux);
+    target.source_continuum_tau_workspace_count = source.source_continuum_tau_workspace_count;
+    target.continuum_tau_in = std::move(source.continuum_tau_in);
+    target.continuum_tau_out = std::move(source.continuum_tau_out);
+    target.continuum_spectrum = std::move(source.continuum_spectrum);
+    target.spectrum = std::move(source.spectrum);
+    target.opacity = std::move(source.opacity);
+    target.rcem = std::move(source.rcem);
+    target.oplin = std::move(source.oplin);
+    target.tau0 = std::move(source.tau0);
+    target.elum = std::move(source.elum);
+    target.cemab = std::move(source.cemab);
+    target.elumab = std::move(source.elumab);
+    target.cabab = std::move(source.cabab);
+    target.opakab = std::move(source.opakab);
+    target.tauc = std::move(source.tauc);
+    target.rccemis = std::move(source.rccemis);
+    target.opakc = std::move(source.opakc);
+    target.opakcont = std::move(source.opakcont);
+    target.flinel = std::move(source.flinel);
+    target.pprint4_opakc = std::move(source.pprint4_opakc);
+    target.pprint4_rccemis = std::move(source.pprint4_rccemis);
+    target.pprint4_brcems = std::move(source.pprint4_brcems);
+    target.pprint4_flinel = std::move(source.pprint4_flinel);
+    target.zrems = std::move(source.zrems);
+    target.dpthc = std::move(source.dpthc);
+    target.dpthcont = std::move(source.dpthcont);
+    target.zremsz = std::move(source.zremsz);
+    target.line_profile_workspace = std::move(source.line_profile_workspace);
+    target.native_line_count = source.native_line_count;
+    target.native_continuum_count = source.native_continuum_count;
+    target.record_product_diagnostics = std::move(source.record_product_diagnostics);
+    target.element_thermal_products = std::move(source.element_thermal_products);
+}
+
+NativeSavedShellV068227 make_saved_shell_shuttle_v068240246(
+    FixedDsecSnapshot& source,
+    double pressure_dyn_cm2,
+    double radius_cm,
+    double radial_depth_cm,
+    double step_size_cm,
+    double column_cm2,
+    double electron_fraction,
+    double hydrogen_density_cm3,
+    double zeta,
+    bool terminal_record,
+    SavdFullPrecisionRestoreV068240246& restore) {
+    restore = backup_savd_quantized_vectors_v068240246(source);
+    if (g_performance_v064890) {
+        ++g_performance_v064890->savd_first_materialization_optimized_shuttles_v068240246;
+        g_performance_v064890->savd_first_materialization_full_snapshot_copy_bytes_elided_v068240246 +=
+            snapshot_memory_v068233(source).logical;
+        g_performance_v064890->savd_first_materialization_restore_vector_bytes_copied_v068240246 +=
+            savd_restore_vector_bytes_v068240246(restore);
+        g_performance_v064890->savd_first_materialization_real4_values_quantized_v068240246 +=
+            savd_real4_value_count_v068240246(source);
+        g_performance_v064890->savd_first_materialization_e3_scalars_quantized_v068240246 += 9u;
+    }
+    NativeSavedShellV068227 out;
+    transfer_savd_writer_fields_v068240246(source, out.snapshot);
+    source_real4_vector_v068227(out.snapshot.source_global_xilevg);
+    source_real4_vector_v068227(out.snapshot.source_global_rnisg);
+    source_real4_vector_v068227(out.snapshot.rcem);
+    source_real4_vector_v068227(out.snapshot.oplin);
+    source_real4_vector_v068227(out.snapshot.tau0);
+    source_real4_vector_v068227(out.snapshot.cemab);
+    source_real4_vector_v068227(out.snapshot.cabab);
+    source_real4_vector_v068227(out.snapshot.opakab);
+    source_real4_vector_v068227(out.snapshot.tauc);
+    source_real4_vector_v068227(out.snapshot.zrems);
+    source_real4_vector_v068227(out.snapshot.dpthc);
+    source_real4_vector_v068227(out.snapshot.opakc);
+    source_real4_vector_v068227(out.snapshot.rccemis);
+    out.snapshot.temperature_t4 = source_savd_keyword_e3_v0682276(source.temperature_t4);
+    out.pressure_dyn_cm2 = source_savd_keyword_e3_v0682276(pressure_dyn_cm2);
+    out.radius_cm = source_savd_keyword_e3_v0682276(radius_cm);
+    out.radial_depth_cm = source_savd_keyword_e3_v0682276(radial_depth_cm);
+    out.step_size_cm = source_savd_keyword_e3_v0682276(step_size_cm);
+    out.column_cm2 = source_savd_keyword_e3_v0682276(column_cm2);
+    out.electron_fraction = source_savd_keyword_e3_v0682276(electron_fraction);
+    out.hydrogen_density_cm3 = source_savd_keyword_e3_v0682276(hydrogen_density_cm3);
+    out.zeta = source_savd_keyword_e3_v0682276(zeta);
+    out.terminal_record = terminal_record;
+    return out;
+}
+
+void restore_savd_writer_fields_v068240246(
+        FixedDsecSnapshot& target,
+        xstar_run_state::FixedEvaluationState&& source,
+        SavdFullPrecisionRestoreV068240246&& restore) {
+    target.source_global_xilevg = std::move(restore.source_global_xilevg);
+    target.source_global_rnisg = std::move(restore.source_global_rnisg);
+    target.source_global_bilevg = std::move(source.source_global_bilevg);
+    target.source_global_gammag = std::move(source.source_global_gammag);
+    target.source_global_alphag = std::move(source.source_global_alphag);
+    target.source_global_igammamaxg = std::move(source.source_global_igammamaxg);
+    target.source_global_ialphamaxg = std::move(source.source_global_ialphamaxg);
+    target.source_ion_stage_fractions = std::move(source.source_ion_stage_fractions);
+    target.source_ionization_rates = std::move(source.source_ionization_rates);
+    target.source_recombination_rates = std::move(source.source_recombination_rates);
+    target.source_detail_pre_mapback_populations = std::move(source.source_detail_pre_mapback_populations);
+    target.source_detail_active_windows = std::move(source.source_detail_active_windows);
+    target.source_detail_global_xilevg = std::move(source.source_detail_global_xilevg);
+    target.populations = std::move(source.populations);
+    target.lte_populations = std::move(source.source_workspace.lte_populations);
+    target.radiation_energy_ev = std::move(source.radiation_energy_ev);
+    target.radiation_flux = std::move(source.radiation_flux);
+    target.continuum_tau_in = std::move(source.continuum_tau_in);
+    target.continuum_tau_out = std::move(source.continuum_tau_out);
+    target.continuum_spectrum = std::move(source.continuum_spectrum);
+    target.spectrum = std::move(source.spectrum);
+    target.opacity = std::move(source.opacity);
+    target.rcem = std::move(restore.rcem);
+    target.oplin = std::move(restore.oplin);
+    target.tau0 = std::move(restore.tau0);
+    target.elum = std::move(source.source_workspace.elum);
+    target.cemab = std::move(restore.cemab);
+    target.elumab = std::move(source.source_workspace.elumab);
+    target.cabab = std::move(restore.cabab);
+    target.opakab = std::move(restore.opakab);
+    target.tauc = std::move(restore.tauc);
+    target.rccemis = std::move(restore.rccemis);
+    target.opakc = std::move(restore.opakc);
+    target.opakcont = std::move(source.source_workspace.opakcont);
+    target.flinel = std::move(source.source_workspace.flinel);
+    target.pprint4_opakc = std::move(source.source_workspace.pprint4_opakc);
+    target.pprint4_rccemis = std::move(source.source_workspace.pprint4_rccemis);
+    target.pprint4_brcems = std::move(source.source_workspace.pprint4_brcems);
+    target.pprint4_flinel = std::move(source.source_workspace.pprint4_flinel);
+    target.zrems = std::move(restore.zrems);
+    target.dpthc = std::move(restore.dpthc);
+    target.dpthcont = std::move(source.source_workspace.dpthcont);
+    target.zremsz = std::move(source.source_workspace.zremsz);
+    target.line_profile_workspace = std::move(source.source_workspace.line_profile_workspace);
+    target.record_product_diagnostics = std::move(source.record_product_diagnostics);
+    target.element_thermal_products = std::move(source.element_thermal_products);
+    if (g_performance_v064890) {
+        ++g_performance_v064890->savd_first_materialization_restore_calls_v068240246;
+    }
 }
 
 // 0.6.82.40.2.34: the historical single-pass SAVD stream first deep-copies the
@@ -19646,26 +19914,10 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     double zeta,
     bool terminal_record,
     bool retain_sparse_membership_v068240234 = true) {
-    const bool fine_timing_v068240245 =
-        g_performance_v064890 && savd_first_materialization_timing_v068240245();
-    const auto materialization_started_v068240245 = fine_timing_v068240245
-        ? std::chrono::steady_clock::now()
-        : std::chrono::steady_clock::time_point{};
-
     NativeSavedShellV068227 out;
-    const auto snapshot_copy_started_v068240245 = fine_timing_v068240245
-        ? std::chrono::steady_clock::now()
-        : std::chrono::steady_clock::time_point{};
     out.snapshot = source;
-    if (fine_timing_v068240245) {
-        g_performance_v064890->savd_snapshot_deep_copy_seconds_v068240245 +=
-            performance_elapsed_seconds(snapshot_copy_started_v068240245);
-    }
 
     if (retain_sparse_membership_v068240234) {
-        const auto sparse_membership_started_v068240245 = fine_timing_v068240245
-            ? std::chrono::steady_clock::now()
-            : std::chrono::steady_clock::time_point{};
         // fstepr.f90 writes only source level roles with xilev > 1.d-34.
         // Determine membership before TFLOAT rounding, exactly as the source does.
         std::vector<std::uint8_t> level_seen_v0682273(source.source_global_xilevg.size(), 0u);
@@ -19718,18 +19970,11 @@ NativeSavedShellV068227 make_saved_shell_v068227(
             }
         }
 
-        if (fine_timing_v068240245) {
-            g_performance_v064890->savd_sparse_membership_seconds_v068240245 +=
-                performance_elapsed_seconds(sparse_membership_started_v068240245);
-        }
     }
 
     // savd.f90 persists xilev/rnist, rcem/oplin/tau0, cemab/cabab/opakab/tauc,
     // zrems/dpthc/opakc/rccemis through TFLOAT columns.  zrems is saved but
     // UNSAVD deliberately does not copy it back into the live radiation field.
-    const auto real4_quantization_started_v068240245 = fine_timing_v068240245
-        ? std::chrono::steady_clock::now()
-        : std::chrono::steady_clock::time_point{};
     source_real4_vector_v068227(out.snapshot.source_global_xilevg);
     source_real4_vector_v068227(out.snapshot.source_global_rnisg);
     source_real4_vector_v068227(out.snapshot.rcem);
@@ -19743,17 +19988,10 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     source_real4_vector_v068227(out.snapshot.dpthc);
     source_real4_vector_v068227(out.snapshot.opakc);
     source_real4_vector_v068227(out.snapshot.rccemis);
-    if (fine_timing_v068240245) {
-        g_performance_v064890->savd_real4_vector_quantization_seconds_v068240245 +=
-            performance_elapsed_seconds(real4_quantization_started_v068240245);
-    }
     // Scalar SAVD state is carried in FITS header keywords, not table cells.
     // Each of the four source detail writers uses the same ftpkye(...,3)
     // convention, and each rstepr* reader overwrites these values from those
     // keywords.  Quantize every scalar exactly at the in-memory save boundary.
-    const auto e3_quantization_started_v068240245 = fine_timing_v068240245
-        ? std::chrono::steady_clock::now()
-        : std::chrono::steady_clock::time_point{};
     out.snapshot.temperature_t4 = source_savd_keyword_e3_v0682276(source.temperature_t4);
     out.pressure_dyn_cm2 = source_savd_keyword_e3_v0682276(pressure_dyn_cm2);
     out.radius_cm = source_savd_keyword_e3_v0682276(radius_cm);
@@ -19763,16 +20001,7 @@ NativeSavedShellV068227 make_saved_shell_v068227(
     out.electron_fraction = source_savd_keyword_e3_v0682276(electron_fraction);
     out.hydrogen_density_cm3 = source_savd_keyword_e3_v0682276(hydrogen_density_cm3);
     out.zeta = source_savd_keyword_e3_v0682276(zeta);
-    if (fine_timing_v068240245) {
-        g_performance_v064890->savd_e3_scalar_quantization_seconds_v068240245 +=
-            performance_elapsed_seconds(e3_quantization_started_v068240245);
-    }
     out.terminal_record = terminal_record;
-    if (fine_timing_v068240245) {
-        ++g_performance_v064890->savd_first_materialization_calls_v068240245;
-        g_performance_v064890->savd_first_materialization_total_seconds_v068240245 +=
-            performance_elapsed_seconds(materialization_started_v068240245);
-    }
     return out;
 }
 
@@ -19844,7 +20073,9 @@ void stream_saved_shell_detail_v068233(
     std::size_t pass_index,
     std::size_t zone_index,
     const std::filesystem::path& output_dir,
-    bool move_quantized_snapshot_v068240234 = false) {
+    bool move_quantized_snapshot_v068240234 = false,
+    FixedDsecSnapshot* restore_target_v068240246 = nullptr,
+    SavdFullPrecisionRestoreV068240246* restore_state_v068240246 = nullptr) {
     if (zone_index == 1u) {
         const std::string prefix = "xo" + (pass_index < 10u ? std::string("0") : std::string()) +
             std::to_string(pass_index) + "_";
@@ -19965,6 +20196,23 @@ void stream_saved_shell_detail_v068233(
         stream_state.incremental_detal2_terminal_patches_v0682332.end(),
         result.detal2_terminal_patches_v0682332.begin(),
         result.detal2_terminal_patches_v0682332.end());
+    if ((restore_target_v068240246 == nullptr) != (restore_state_v068240246 == nullptr)) {
+        throw std::runtime_error("0.6.82.40.2.46 SAVD restore target/state ownership mismatch");
+    }
+    if (restore_target_v068240246 && restore_state_v068240246) {
+        if (stream_state.radial_zones.size() != 1u) {
+            throw std::runtime_error("0.6.82.40.2.46 SAVD restore requires one streamed radial zone");
+        }
+        const auto restore_started_v068240246 = std::chrono::steady_clock::now();
+        restore_savd_writer_fields_v068240246(
+            *restore_target_v068240246,
+            std::move(stream_state.radial_zones.front().accepted_controller.evaluation),
+            std::move(*restore_state_v068240246));
+        if (g_performance_v064890) {
+            g_performance_v064890->savd_first_materialization_restore_seconds_v068240246 +=
+                performance_elapsed_seconds(restore_started_v068240246);
+        }
+    }
     // Release the per-zone converted writer state immediately.  Capacity is
     // intentionally not retained because canonical FORTRAN reuses the SAVD
     // arrays rather than accumulating historical C++ evaluation objects.
@@ -20745,6 +20993,15 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         const bool savd_staging_optimized_active_v068240234 =
             incremental_detail_stream_v068233 && effective_npass_v068227 == 1u &&
             savd_staging_mode_selected_v068240234 == SavdStagingModeV068240234::Optimized;
+        const auto savd_first_materialization_mode_selected_v068240246 =
+            savd_first_materialization_mode_v068240246();
+        // 0.6.82.40.2.46 is deliberately narrower than .34: it requires the
+        // accepted single-pass move-publication path and never changes
+        // multipass/reference/forensic ownership.
+        const bool savd_first_materialization_optimized_active_v068240246 =
+            savd_staging_optimized_active_v068240234 &&
+            savd_first_materialization_mode_selected_v068240246 ==
+                SavdFirstMaterializationModeV068240246::Optimized;
         // 0.6.82.33.4: keep the historically sensitive multipass and all
         // reference/diagnostic trajectories on the established retained
         // finals path. Only ordinary single-pass production transfers each
@@ -21675,26 +21932,54 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 const double boundary_zeta_v068227 = boundary_xi_v068227 > 0.0
                     ? std::log10(boundary_xi_v068227)
                     : -std::numeric_limits<double>::infinity();
-                auto saved_shell_v068233 = make_saved_shell_v068227(
-                    pretransport_boundary_v82_patch520145, program,
-                    params.pressure_dyn_cm2, boundary_radius_cm,
-                    data.cumulative_depth_cm, segment,
-                    data.cumulative_column_cm2,
-                    boundary.electron_fraction_input,
-                    boundary.hydrogen_density_cm3, boundary_zeta_v068227, false,
-                    !savd_staging_optimized_active_v068240234);
-                if (incremental_detail_stream_v068233) {
+                if (savd_first_materialization_optimized_active_v068240246) {
+                    SavdFullPrecisionRestoreV068240246 restore_v068240246;
+                    const auto materialization_started_v068240246 = std::chrono::steady_clock::now();
+                    auto saved_shell_v068233 = make_saved_shell_shuttle_v068240246(
+                        pretransport_boundary_v82_patch520145,
+                        params.pressure_dyn_cm2, boundary_radius_cm,
+                        data.cumulative_depth_cm, segment,
+                        data.cumulative_column_cm2,
+                        boundary.electron_fraction_input,
+                        boundary.hydrogen_density_cm3, boundary_zeta_v068227, false,
+                        restore_v068240246);
+                    if (g_performance_v064890) {
+                        g_performance_v064890->savd_first_materialization_seconds_v068240246 +=
+                            performance_elapsed_seconds(materialization_started_v068240246);
+                    }
                     stream_saved_shell_detail_v068233(
                         *incremental_detail_state_v068233, saved_shell_v068233,
-                        kk_v068227, call, std::filesystem::path(options.output_dir),
-                        savd_staging_optimized_active_v068240234);
+                        kk_v068227, call, std::filesystem::path(options.output_dir), true,
+                        &pretransport_boundary_v82_patch520145, &restore_v068240246);
                 } else {
-                    if (g_performance_v064890 && effective_npass_v068227 > 1u) {
-                        ++g_performance_v064890->savd_staging_multipass_historical_calls_v068240234;
+                    const auto materialization_started_v068240246 = std::chrono::steady_clock::now();
+                    auto saved_shell_v068233 = make_saved_shell_v068227(
+                        pretransport_boundary_v82_patch520145, program,
+                        params.pressure_dyn_cm2, boundary_radius_cm,
+                        data.cumulative_depth_cm, segment,
+                        data.cumulative_column_cm2,
+                        boundary.electron_fraction_input,
+                        boundary.hydrogen_density_cm3, boundary_zeta_v068227, false,
+                        !savd_staging_optimized_active_v068240234);
+                    if (g_performance_v064890) {
+                        ++g_performance_v064890->savd_first_materialization_historical_full_snapshot_copies_v068240246;
+                        g_performance_v064890->savd_first_materialization_seconds_v068240246 +=
+                            performance_elapsed_seconds(materialization_started_v068240246);
                     }
-                    saved_passes_v068227[kk_v068227].insert_after_hdu(
-                        call + 1u, std::move(saved_shell_v068233));
-                    update_saved_pass_memory_v068233(saved_passes_v068227);
+                    if (incremental_detail_stream_v068233) {
+                        stream_saved_shell_detail_v068233(
+                            *incremental_detail_state_v068233, saved_shell_v068233,
+                            kk_v068227, call, std::filesystem::path(options.output_dir),
+                            savd_staging_optimized_active_v068240234);
+                    } else {
+                        if (g_performance_v064890 && effective_npass_v068227 > 1u) {
+                            ++g_performance_v064890->savd_staging_multipass_historical_calls_v068240234;
+                            ++g_performance_v064890->savd_first_materialization_multipass_historical_calls_v068240246;
+                        }
+                        saved_passes_v068227[kk_v068227].insert_after_hdu(
+                            call + 1u, std::move(saved_shell_v068233));
+                        update_saved_pass_memory_v068233(saved_passes_v068227);
+                    }
                 }
             }
 
@@ -22102,28 +22387,57 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 // Re-running retain_pre_stpcut_cumulative_state here can graft
                 // stale product arrays over the correct terminal boundary and
                 // made xo03/xo05_detal2 repeat the pre-terminal depth.
-                FixedDsecSnapshot terminal_saved_boundary_v0682274 =
-                    *terminal_transport_boundary_v82_patch520144;
-                auto terminal_saved_shell_v068233 = make_saved_shell_v068227(
-                    terminal_saved_boundary_v0682274, program,
-                    params.pressure_dyn_cm2, current_radius_cm_v068227,
-                    data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
-                    data.cumulative_column_cm2, state.electron_fraction_xee,
-                    state.hydrogen_density_cm3, terminal_zeta_v068227, true,
-                    !savd_staging_optimized_active_v068240234);
-                if (incremental_detail_stream_v068233) {
+                if (savd_first_materialization_optimized_active_v068240246) {
+                    SavdFullPrecisionRestoreV068240246 restore_v068240246;
+                    const auto materialization_started_v068240246 = std::chrono::steady_clock::now();
+                    auto terminal_saved_shell_v068233 = make_saved_shell_shuttle_v068240246(
+                        *terminal_transport_boundary_v82_patch520144,
+                        params.pressure_dyn_cm2, current_radius_cm_v068227,
+                        data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
+                        data.cumulative_column_cm2, state.electron_fraction_xee,
+                        state.hydrogen_density_cm3, terminal_zeta_v068227, true,
+                        restore_v068240246);
+                    if (g_performance_v064890) {
+                        ++g_performance_v064890->savd_first_materialization_terminal_source_copy_elisions_v068240246;
+                        g_performance_v064890->savd_first_materialization_seconds_v068240246 +=
+                            performance_elapsed_seconds(materialization_started_v068240246);
+                    }
                     stream_saved_shell_detail_v068233(
                         *incremental_detail_state_v068233, terminal_saved_shell_v068233,
                         kk_v068227, accepted_boundary_count_v0682334 + 1u,
-                        std::filesystem::path(options.output_dir),
-                        savd_staging_optimized_active_v068240234);
+                        std::filesystem::path(options.output_dir), true,
+                        &*terminal_transport_boundary_v82_patch520144, &restore_v068240246);
                 } else {
-                    if (g_performance_v064890 && effective_npass_v068227 > 1u) {
-                        ++g_performance_v064890->savd_staging_multipass_historical_calls_v068240234;
+                    const auto materialization_started_v068240246 = std::chrono::steady_clock::now();
+                    FixedDsecSnapshot terminal_saved_boundary_v0682274 =
+                        *terminal_transport_boundary_v82_patch520144;
+                    auto terminal_saved_shell_v068233 = make_saved_shell_v068227(
+                        terminal_saved_boundary_v0682274, program,
+                        params.pressure_dyn_cm2, current_radius_cm_v068227,
+                        data.cumulative_depth_cm, last_geometry_segment_cm_v068227,
+                        data.cumulative_column_cm2, state.electron_fraction_xee,
+                        state.hydrogen_density_cm3, terminal_zeta_v068227, true,
+                        !savd_staging_optimized_active_v068240234);
+                    if (g_performance_v064890) {
+                        ++g_performance_v064890->savd_first_materialization_historical_full_snapshot_copies_v068240246;
+                        g_performance_v064890->savd_first_materialization_seconds_v068240246 +=
+                            performance_elapsed_seconds(materialization_started_v068240246);
                     }
-                    saved_passes_v068227[kk_v068227].insert_after_hdu(
-                        accepted_boundary_count_v0682334 + 1u, std::move(terminal_saved_shell_v068233));
-                    update_saved_pass_memory_v068233(saved_passes_v068227);
+                    if (incremental_detail_stream_v068233) {
+                        stream_saved_shell_detail_v068233(
+                            *incremental_detail_state_v068233, terminal_saved_shell_v068233,
+                            kk_v068227, accepted_boundary_count_v0682334 + 1u,
+                            std::filesystem::path(options.output_dir),
+                            savd_staging_optimized_active_v068240234);
+                    } else {
+                        if (g_performance_v064890 && effective_npass_v068227 > 1u) {
+                            ++g_performance_v064890->savd_staging_multipass_historical_calls_v068240234;
+                            ++g_performance_v064890->savd_first_materialization_multipass_historical_calls_v068240246;
+                        }
+                        saved_passes_v068227[kk_v068227].insert_after_hdu(
+                            accepted_boundary_count_v0682334 + 1u, std::move(terminal_saved_shell_v068233));
+                        update_saved_pass_memory_v068233(saved_passes_v068227);
+                    }
                 }
             }
             if (effective_npass_v068227 > 1u) {
@@ -23371,22 +23685,6 @@ void emit_controller_performance_instrumentation(
         perf.foundation_v068231.element_input_seconds;
     const double pass2_fine_residual_v068240238 = std::max(
         0.0, pass2_fine_region4_total_v068240238 - pass2_fine_known_v068240238);
-    // 0.6.82.40.2.45: attribution-only SAVD first-materialization closure.
-    const double savd_materialization_known_v068240245 =
-        perf.savd_snapshot_deep_copy_seconds_v068240245 +
-        perf.savd_sparse_membership_seconds_v068240245 +
-        perf.savd_real4_vector_quantization_seconds_v068240245 +
-        perf.savd_e3_scalar_quantization_seconds_v068240245;
-    const double savd_materialization_residual_v068240245 =
-        perf.savd_first_materialization_total_seconds_v068240245 -
-        savd_materialization_known_v068240245;
-    const double savd_detail_leaf_sum_v068240245 =
-        perf.detail_population_seconds + perf.detail_line_seconds +
-        perf.detail_rrc_seconds + perf.detail_spectrum_seconds;
-    const double savd_zone_nonleaf_residual_v068240245 =
-        perf.zone_savd_detail_seconds_v068240219 -
-        perf.savd_first_materialization_total_seconds_v068240245 -
-        savd_detail_leaf_sum_v068240245;
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
@@ -24114,28 +24412,31 @@ void emit_controller_performance_instrumentation(
             << perf.savd_staging_move_conversions_v068240234 << "\n"
             << "V068240234_SAVD_STAGING_MULTIPASS_HISTORICAL_CALLS="
             << perf.savd_staging_multipass_historical_calls_v068240234 << "\n"
-            << "V068240245_SAVD_FIRST_MATERIALIZATION_TIMING="
-            << (savd_first_materialization_timing_v068240245() ? "YES" : "NO") << "\n"
-            << "V068240245_SAVD_FIRST_MATERIALIZATION_CALLS="
-            << perf.savd_first_materialization_calls_v068240245 << "\n"
-            << "V068240245_FIRST_MATERIALIZATION_TOTAL_SECONDS="
-            << std::setprecision(17) << perf.savd_first_materialization_total_seconds_v068240245 << "\n"
-            << "V068240245_SUB1_SNAPSHOT_DEEP_COPY_SECONDS="
-            << perf.savd_snapshot_deep_copy_seconds_v068240245 << "\n"
-            << "V068240245_SUB2_SPARSE_MEMBERSHIP_DISCOVERY_SECONDS="
-            << perf.savd_sparse_membership_seconds_v068240245 << "\n"
-            << "V068240245_SUB3_REAL4_VECTOR_QUANTIZATION_SECONDS="
-            << perf.savd_real4_vector_quantization_seconds_v068240245 << "\n"
-            << "V068240245_SUB4_E3_SCALAR_QUANTIZATION_SECONDS="
-            << perf.savd_e3_scalar_quantization_seconds_v068240245 << "\n"
-            << "V068240245_SUB5_BUILDER_RESIDUAL_SECONDS="
-            << savd_materialization_residual_v068240245 << "\n"
-            << "V068240245_FIRST_MATERIALIZATION_ACCOUNTED_SECONDS="
-            << (savd_materialization_known_v068240245 + savd_materialization_residual_v068240245) << "\n"
-            << "V068240245_DETAIL_LEAF_SUM_SECONDS="
-            << savd_detail_leaf_sum_v068240245 << "\n"
-            << "V068240245_ZONE_NONLEAF_RESIDUAL_SECONDS="
-            << savd_zone_nonleaf_residual_v068240245 << "\n"
+            << "V068240246_SAVD_FIRST_MATERIALIZATION_MODE="
+            << savd_first_materialization_mode_name_v068240246(
+                savd_first_materialization_mode_v068240246()) << "\n"
+            << "V068240246_HISTORICAL_FULL_SNAPSHOT_COPIES="
+            << perf.savd_first_materialization_historical_full_snapshot_copies_v068240246 << "\n"
+            << "V068240246_OPTIMIZED_OWNERSHIP_SHUTTLES="
+            << perf.savd_first_materialization_optimized_shuttles_v068240246 << "\n"
+            << "V068240246_RESTORE_CALLS="
+            << perf.savd_first_materialization_restore_calls_v068240246 << "\n"
+            << "V068240246_TERMINAL_SOURCE_COPY_ELISIONS="
+            << perf.savd_first_materialization_terminal_source_copy_elisions_v068240246 << "\n"
+            << "V068240246_FULL_SNAPSHOT_COPY_BYTES_ELIDED="
+            << perf.savd_first_materialization_full_snapshot_copy_bytes_elided_v068240246 << "\n"
+            << "V068240246_RESTORE_VECTOR_BYTES_COPIED="
+            << perf.savd_first_materialization_restore_vector_bytes_copied_v068240246 << "\n"
+            << "V068240246_REAL4_VECTOR_VALUES_QUANTIZED="
+            << perf.savd_first_materialization_real4_values_quantized_v068240246 << "\n"
+            << "V068240246_E3_SCALARS_QUANTIZED="
+            << perf.savd_first_materialization_e3_scalars_quantized_v068240246 << "\n"
+            << "V068240246_MULTIPASS_HISTORICAL_CALLS="
+            << perf.savd_first_materialization_multipass_historical_calls_v068240246 << "\n"
+            << "V068240246_FIRST_MATERIALIZATION_SECONDS="
+            << std::setprecision(17) << perf.savd_first_materialization_seconds_v068240246 << "\n"
+            << "V068240246_RESTORE_SECONDS="
+            << std::setprecision(17) << perf.savd_first_materialization_restore_seconds_v068240246 << "\n"
             << "V068240218_POST_ZONE_TRIM_MODE="
             << post_zone_trim_mode_name_v068240218(post_zone_trim_mode_v068240218()) << "\n"
             << "V068240218_POST_ZONE_TRIM_HISTORICAL_CALLS="
@@ -24390,28 +24691,31 @@ void emit_controller_performance_instrumentation(
             << perf.savd_staging_move_conversions_v068240234 << "\n"
             << "V068240234_SAVD_STAGING_MULTIPASS_HISTORICAL_CALLS="
             << perf.savd_staging_multipass_historical_calls_v068240234 << "\n"
-            << "V068240245_SAVD_FIRST_MATERIALIZATION_TIMING="
-            << (savd_first_materialization_timing_v068240245() ? "YES" : "NO") << "\n"
-            << "V068240245_SAVD_FIRST_MATERIALIZATION_CALLS="
-            << perf.savd_first_materialization_calls_v068240245 << "\n"
-            << "V068240245_FIRST_MATERIALIZATION_TOTAL_SECONDS="
-            << std::setprecision(17) << perf.savd_first_materialization_total_seconds_v068240245 << "\n"
-            << "V068240245_SUB1_SNAPSHOT_DEEP_COPY_SECONDS="
-            << perf.savd_snapshot_deep_copy_seconds_v068240245 << "\n"
-            << "V068240245_SUB2_SPARSE_MEMBERSHIP_DISCOVERY_SECONDS="
-            << perf.savd_sparse_membership_seconds_v068240245 << "\n"
-            << "V068240245_SUB3_REAL4_VECTOR_QUANTIZATION_SECONDS="
-            << perf.savd_real4_vector_quantization_seconds_v068240245 << "\n"
-            << "V068240245_SUB4_E3_SCALAR_QUANTIZATION_SECONDS="
-            << perf.savd_e3_scalar_quantization_seconds_v068240245 << "\n"
-            << "V068240245_SUB5_BUILDER_RESIDUAL_SECONDS="
-            << savd_materialization_residual_v068240245 << "\n"
-            << "V068240245_FIRST_MATERIALIZATION_ACCOUNTED_SECONDS="
-            << (savd_materialization_known_v068240245 + savd_materialization_residual_v068240245) << "\n"
-            << "V068240245_DETAIL_LEAF_SUM_SECONDS="
-            << savd_detail_leaf_sum_v068240245 << "\n"
-            << "V068240245_ZONE_NONLEAF_RESIDUAL_SECONDS="
-            << savd_zone_nonleaf_residual_v068240245 << "\n"
+            << "V068240246_SAVD_FIRST_MATERIALIZATION_MODE="
+            << savd_first_materialization_mode_name_v068240246(
+                savd_first_materialization_mode_v068240246()) << "\n"
+            << "V068240246_HISTORICAL_FULL_SNAPSHOT_COPIES="
+            << perf.savd_first_materialization_historical_full_snapshot_copies_v068240246 << "\n"
+            << "V068240246_OPTIMIZED_OWNERSHIP_SHUTTLES="
+            << perf.savd_first_materialization_optimized_shuttles_v068240246 << "\n"
+            << "V068240246_RESTORE_CALLS="
+            << perf.savd_first_materialization_restore_calls_v068240246 << "\n"
+            << "V068240246_TERMINAL_SOURCE_COPY_ELISIONS="
+            << perf.savd_first_materialization_terminal_source_copy_elisions_v068240246 << "\n"
+            << "V068240246_FULL_SNAPSHOT_COPY_BYTES_ELIDED="
+            << perf.savd_first_materialization_full_snapshot_copy_bytes_elided_v068240246 << "\n"
+            << "V068240246_RESTORE_VECTOR_BYTES_COPIED="
+            << perf.savd_first_materialization_restore_vector_bytes_copied_v068240246 << "\n"
+            << "V068240246_REAL4_VECTOR_VALUES_QUANTIZED="
+            << perf.savd_first_materialization_real4_values_quantized_v068240246 << "\n"
+            << "V068240246_E3_SCALARS_QUANTIZED="
+            << perf.savd_first_materialization_e3_scalars_quantized_v068240246 << "\n"
+            << "V068240246_MULTIPASS_HISTORICAL_CALLS="
+            << perf.savd_first_materialization_multipass_historical_calls_v068240246 << "\n"
+            << "V068240246_FIRST_MATERIALIZATION_SECONDS="
+            << std::setprecision(17) << perf.savd_first_materialization_seconds_v068240246 << "\n"
+            << "V068240246_RESTORE_SECONDS="
+            << std::setprecision(17) << perf.savd_first_materialization_restore_seconds_v068240246 << "\n"
             << "V068233_RSS_AFTER_ATDB_BYTES=" << perf.rss_after_atdb_bytes_v068233 << "\n"
             << "V068233_RSS_BEFORE_FINAL_PUBLICATION_BYTES=" << perf.rss_before_final_publication_bytes_v068233 << "\n"
             << "V068233_RSS_AFTER_FINALIZATION_BYTES=" << perf.rss_after_finalization_bytes_v068233 << "\n"
