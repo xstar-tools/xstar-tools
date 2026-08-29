@@ -14399,6 +14399,8 @@ int run_impl(
         environment_flag("XSTAR_V068240237_TRAVERSAL_FINE_TIMING");
     const bool pass2_fine_timing_v068240238 =
         environment_flag("XSTAR_V068240238_PASS2_FINE_TIMING");
+    const bool postmapback_fine_timing_v068240243 =
+        environment_flag("XSTAR_V068240243_POSTMAPBACK_FINE_TIMING");
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
          element_slot_v064894 < ctx.program.elements.size();
@@ -16282,6 +16284,10 @@ int run_impl(
         if (traversal_fine_timing_v068240237)
             perf_foundation_v068231.traversal_fine_region6_postsolve_mapback_seconds_v068240237 +=
                 elapsed(traversal_fine_region6_started_v068240237);
+        const auto postmapback_sub1_started_v068240243 =
+            postmapback_fine_timing_v068240243 ? clock_type::now() : clock_type::time_point{};
+        if (postmapback_fine_timing_v068240243)
+            ++perf_foundation_v068231.postmapback_fine_elements_v068240243;
         residual_audit_v064812339.errc_identity_entries = source_errc_rank_energy_by_identity_v82_patch5205.size();
         residual_audit_v064812339.errc_slot_entries = source_errc_rank_energy_by_slot_v82_patch5209.size();
         residual_audit_v064812339.errc_owner_entries = source_errc_owner_by_slot_v82_patch5209.size();
@@ -16348,6 +16354,11 @@ int run_impl(
         residual_audit_v064812339.element_to_mapback_seconds = elapsed(residual_element_started_v064812339);
         write_residual_scaling_audit(residual_audit_v064812339);
         write_traversal_selection_audit(traversal_audit_v064812340);
+        if (postmapback_fine_timing_v068240243)
+            perf_foundation_v068231.postmapback_sub1_revisit_audit_seconds_v068240243 +=
+                elapsed(postmapback_sub1_started_v068240243);
+        const auto postmapback_sub2_started_v068240243 =
+            postmapback_fine_timing_v068240243 ? clock_type::now() : clock_type::time_point{};
 
         // Match local_zone.py exactly: accumulate explicit ion fractions
         // using (stage - 1), then add the fully stripped fraction at charge Z.
@@ -16389,6 +16400,11 @@ int run_impl(
         computed_electron_fraction = next_electron_fraction;
         ctx.last_element_electron_contribution[element.element_z] =
             element_electron_contribution_v0648121;
+        if (postmapback_fine_timing_v068240243)
+            perf_foundation_v068231.postmapback_sub2_electron_fraction_seconds_v068240243 +=
+                elapsed(postmapback_sub2_started_v068240243);
+        const auto postmapback_sub3_started_v068240243 =
+            postmapback_fine_timing_v068240243 ? clock_type::now() : clock_type::time_point{};
 
         if (retain_element_diagnostics_v06823087) {
         NativeElementDiagnostic element_diagnostic;
@@ -16523,6 +16539,11 @@ int run_impl(
         write_c_call1_compact_solve_attribution(ctx.program, element_diagnostic);
         ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));
         }
+        if (postmapback_fine_timing_v068240243)
+            perf_foundation_v068231.postmapback_sub3_element_diagnostic_seconds_v068240243 +=
+                elapsed(postmapback_sub3_started_v068240243);
+        const auto postmapback_sub4_started_v068240243 =
+            postmapback_fine_timing_v068240243 ? clock_type::now() : clock_type::time_point{};
 
         // Reconstruct the complete native bound-free continuum surface from
         // the source cross-section records.  The former product path retained
@@ -16802,6 +16823,12 @@ int run_impl(
                 }
             }
         }
+
+        if (postmapback_fine_timing_v068240243)
+            perf_foundation_v068231.postmapback_sub4_deferred_rrc_type76_seconds_v068240243 +=
+                elapsed(postmapback_sub4_started_v068240243);
+        const auto postmapback_sub5_started_v068240243 =
+            postmapback_fine_timing_v068240243 ? clock_type::now() : clock_type::time_point{};
 
         // 0.6.82.30.8.6: DEFER_PRODUCT_PROJECTION is set for DSEC/root
         // trials. Those calls consume H/C and state only; calc_emisab/calc_emis
@@ -17122,6 +17149,9 @@ int run_impl(
             }
         }
         }
+        if (postmapback_fine_timing_v068240243)
+            perf_foundation_v068231.postmapback_sub5_spectral_publication_seconds_v068240243 +=
+                elapsed(postmapback_sub5_started_v068240243);
     }
     stats.traversal_seconds += elapsed(traversal_start);
 

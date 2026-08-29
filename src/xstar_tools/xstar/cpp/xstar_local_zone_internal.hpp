@@ -100,6 +100,15 @@ struct PerformanceFoundationV068231 {
     double traversal_fine_region4_pass2_assembly_seconds_v068240237 = 0.0;
     double traversal_fine_region5_element_solve_seconds_v068240237 = 0.0;
     double traversal_fine_region6_postsolve_mapback_seconds_v068240237 = 0.0;
+    // 0.6.82.40.2.43: attribution-only POSTMAPBACK_GLOBAL_STAGING split.
+    // Clocks sit only at coarse block boundaries after region-6 mapback; no
+    // clock is inserted inside record, ion, contribution, or radiation-bin loops.
+    std::uint64_t postmapback_fine_elements_v068240243 = 0u;
+    double postmapback_sub1_revisit_audit_seconds_v068240243 = 0.0;
+    double postmapback_sub2_electron_fraction_seconds_v068240243 = 0.0;
+    double postmapback_sub3_element_diagnostic_seconds_v068240243 = 0.0;
+    double postmapback_sub4_deferred_rrc_type76_seconds_v068240243 = 0.0;
+    double postmapback_sub5_spectral_publication_seconds_v068240243 = 0.0;
     // 0.6.82.40.2.38: attribution-only PASS2_ASSEMBLY subpartition.
     // No new clock is placed in evaluate_record() or any record/bin loop.
     // pass2_rate_seconds is accumulated from the already-existing rate timer

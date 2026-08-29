@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.40.2.43 - POSTMAPBACK_GLOBAL_STAGING_FINE_ATTRIBUTION - 2026-08-29
+
+- Attribution-only successor to formally accepted `0.6.82.40.2.42`; no production optimization is attempted and the accepted `.41.1/.42` canonical-Thermal fingerprint work remains active.
+- Targets the remaining C++ Region-7 `POSTMAPBACK_GLOBAL_STAGING` surface from `.37`, currently about 3.9--4.0 s in low-`xi` C5 while the old `POSTSOLVE_MAPBACK` excess is essentially closed by `.41`.
+- Splits Region 7 into five coarse directly timed blocks: revisit/audit bookkeeping, electron-fraction commit, element-diagnostic staging, deferred RRC/Type-76 staging, and spectral/publication staging; a sixth residual bucket is derived from exact Region-7 closure.
+- Adds clocks only at coarse block boundaries after the existing Region-6 mapback boundary; no clock is inserted inside `evaluate_record()`, record/ion/contribution loops, or radiation-bin loops.
+- Qualification runs only C5 `xi=-3`, checks exact frozen science/work and accepted production modes, requires element-phase/sample and partition closure, and reports a frozen FORTRAN Region-7 reference (`0.063755072 s`) for context. There is no performance gate and no multi-element run.
+
 ## 0.6.82.40.2.42 - CANONICAL_THERMAL_BUILDER_FINGERPRINT_ELISION_HOT_PATH - 2026-08-29
 
 - Branches from formally accepted `0.6.82.40.2.41.1`; the `.41` trusted element/fixed consumer fingerprint reuse remains production ancestry.

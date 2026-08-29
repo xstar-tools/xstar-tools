@@ -23311,6 +23311,25 @@ void emit_controller_performance_instrumentation(
         perf.foundation_v068231.element_input_seconds;
     const double pass2_fine_residual_v068240238 = std::max(
         0.0, pass2_fine_region4_total_v068240238 - pass2_fine_known_v068240238);
+    // 0.6.82.40.2.43: region 7 remains the exact residual of the accepted
+    // traversal partition. Five coarse blocks are directly timed; subregion 6
+    // is derived so no extra clock is placed in an inner scientific loop.
+    const double postmapback_parent_v068240243 = std::max(
+        0.0, perf.all_fixed_traversal_seconds -
+            perf.foundation_v068231.traversal_fine_region1_element_setup_seconds_v068240237 -
+            perf.foundation_v068231.traversal_fine_region2_preliminary_pass_seconds_v068240237 -
+            perf.foundation_v068231.traversal_fine_region3_balance_window_seconds_v068240237 -
+            perf.foundation_v068231.traversal_fine_region4_pass2_assembly_seconds_v068240237 -
+            perf.foundation_v068231.traversal_fine_region5_element_solve_seconds_v068240237 -
+            perf.foundation_v068231.traversal_fine_region6_postsolve_mapback_seconds_v068240237);
+    const double postmapback_known_v068240243 =
+        perf.foundation_v068231.postmapback_sub1_revisit_audit_seconds_v068240243 +
+        perf.foundation_v068231.postmapback_sub2_electron_fraction_seconds_v068240243 +
+        perf.foundation_v068231.postmapback_sub3_element_diagnostic_seconds_v068240243 +
+        perf.foundation_v068231.postmapback_sub4_deferred_rrc_type76_seconds_v068240243 +
+        perf.foundation_v068231.postmapback_sub5_spectral_publication_seconds_v068240243;
+    const double postmapback_residual_v068240243 = std::max(
+        0.0, postmapback_parent_v068240243 - postmapback_known_v068240243);
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
@@ -23468,6 +23487,17 @@ void emit_controller_performance_instrumentation(
             << "V068240237_CPP_REGION5_ELEMENT_SOLVE_SECONDS=" << perf.foundation_v068231.traversal_fine_region5_element_solve_seconds_v068240237 << "\n"
             << "V068240237_CPP_REGION6_POSTSOLVE_MAPBACK_SECONDS=" << perf.foundation_v068231.traversal_fine_region6_postsolve_mapback_seconds_v068240237 << "\n"
             << "V068240237_CPP_CONTROLLER_TRAVERSAL_SECONDS=" << perf.all_fixed_traversal_seconds << "\n"
+            << "V068240243_POSTMAPBACK_FINE_TIMING="
+            << (perf.foundation_v068231.postmapback_fine_elements_v068240243 > 0u ? "YES" : "NO") << "\n"
+            << "V068240243_ELEMENT_PHASE_SAMPLES=" << perf.foundation_v068231.postmapback_fine_elements_v068240243 << "\n"
+            << "V068240243_PARENT_POSTMAPBACK_GLOBAL_STAGING_SECONDS=" << postmapback_parent_v068240243 << "\n"
+            << "V068240243_SUB1_REVISIT_AUDIT_BOOKKEEPING_SECONDS=" << perf.foundation_v068231.postmapback_sub1_revisit_audit_seconds_v068240243 << "\n"
+            << "V068240243_SUB2_ELECTRON_FRACTION_COMMIT_SECONDS=" << perf.foundation_v068231.postmapback_sub2_electron_fraction_seconds_v068240243 << "\n"
+            << "V068240243_SUB3_ELEMENT_DIAGNOSTIC_STAGING_SECONDS=" << perf.foundation_v068231.postmapback_sub3_element_diagnostic_seconds_v068240243 << "\n"
+            << "V068240243_SUB4_DEFERRED_RRC_TYPE76_STAGING_SECONDS=" << perf.foundation_v068231.postmapback_sub4_deferred_rrc_type76_seconds_v068240243 << "\n"
+            << "V068240243_SUB5_SPECTRAL_PUBLICATION_STAGING_SECONDS=" << perf.foundation_v068231.postmapback_sub5_spectral_publication_seconds_v068240243 << "\n"
+            << "V068240243_SUB6_PARENT_RESIDUAL_SECONDS=" << postmapback_residual_v068240243 << "\n"
+            << "V068240243_ACCOUNTED_SECONDS=" << (postmapback_known_v068240243 + postmapback_residual_v068240243) << "\n"
             << "V068240238_PASS2_FINE_TIMING="
             << (perf.foundation_v068231.pass2_fine_elements_v068240238 > 0u ? "YES" : "NO") << "\n"
             << "V068240238_CPP_ELEMENT_PHASE_SAMPLES=" << perf.foundation_v068231.pass2_fine_elements_v068240238 << "\n"
