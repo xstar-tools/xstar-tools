@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.40.2.40 — CANONICAL_THERMAL_LEDGER_FINE_ATTRIBUTION - 2026-08-29
+
+- Attribution-only branch from accepted `0.6.82.40.2.38`; rejected `.39/.39.1` PASS2 direct-commit experiments are not carried forward.
+- Partitions the canonical Thermal contribution/ledger parent into contribution discovery/reconciliation, term+identity construction, builder validation, builder fingerprinting, and residual overhead.
+- Separately measures the element-engine canonical Thermal validation, fingerprint, arithmetic reduction, then the fixed-state validation, fingerprint, arithmetic reduction, and full-ledger thermal-diagonal scan.
+- Adds no clocks inside `evaluate_record()`, contribution/term loops, matrix loops, or radiation-bin loops. Public C ABIs and scientific arithmetic/order are unchanged.
+- Low-`xi` C5 only; no performance gate and no multi-element run.
+
 ## 0.6.82.40.2.39.1 - PASS2_OUTER_ASSEMBLY_PATH_ACTIVATION_HOTFIX - 2026-08-29
 
 - Narrow hotfix on rejected `.39`; the direct-commit algorithm itself is unchanged. The `.39` low-`xi` A/B showed `FAST_ELEMENTS=0`, `FALLBACK_ELEMENTS=18810`, `DIRECT_COMMITS=0`, proving the intended optimization never executed.

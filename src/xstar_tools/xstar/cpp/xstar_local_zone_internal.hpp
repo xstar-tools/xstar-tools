@@ -95,22 +95,29 @@ struct PerformanceFoundationV068231 {
     // existing coarse timing owners and the final residual is derived.
     std::uint64_t pass2_fine_elements_v068240238 = 0u;
     double pass2_fine_rate_seconds_v068240238 = 0.0;
-    // 0.6.82.40.2.39: PASS2 direct-contribution hot-path telemetry.
-    std::uint64_t pass2_outer_assembly_fast_elements_v068240239 = 0u;
-    std::uint64_t pass2_outer_assembly_fallback_elements_v068240239 = 0u;
-    std::uint64_t pass2_outer_assembly_direct_commits_v068240239 = 0u;
-    std::uint64_t pass2_outer_assembly_correction_patches_v068240239 = 0u;
-    std::uint64_t pass2_outer_assembly_evaluated_rescan_records_elided_v068240239 = 0u;
-    std::uint64_t pass2_outer_assembly_evaluated_rescan_records_retained_v068240239 = 0u;
-    // 0.6.82.40.2.39.1: mutually exclusive fallback-reason accounting.
-    // These counters are observational only and must sum exactly to the
-    // .39 fallback-element count.
-    std::uint64_t pass2_outer_assembly_block_not_requested_elements_v0682402391 = 0u;
-    std::uint64_t pass2_outer_assembly_block_matrix_closure_elements_v0682402391 = 0u;
-    std::uint64_t pass2_outer_assembly_block_helium_special_elements_v0682402391 = 0u;
-    std::uint64_t pass2_outer_assembly_block_forensic_elements_v0682402391 = 0u;
-    std::uint64_t pass2_outer_assembly_block_provenance_elements_v0682402391 = 0u;
-    std::uint64_t pass2_outer_assembly_block_magnesium_elements_v0682402391 = 0u;
+    // 0.6.82.40.2.40: attribution-only canonical Thermal ledger partition.
+    // Timing is enabled only by XSTAR_V068240240_THERMAL_LEDGER_FINE_TIMING.
+    // Clocks are placed at whole contribution/builder/consumer boundaries,
+    // never inside evaluate_record(), record loops, term loops, or matrix loops.
+    std::uint64_t thermal_ledger_fine_elements_v068240240 = 0u;
+    std::uint64_t thermal_ledger_builder_calls_v068240240 = 0u;
+    std::uint64_t thermal_ledger_builder_contributions_v068240240 = 0u;
+    std::uint64_t thermal_ledger_builder_terms_v068240240 = 0u;
+    double thermal_ledger_contribution_discovery_seconds_v068240240 = 0.0;
+    double thermal_ledger_builder_term_identity_seconds_v068240240 = 0.0;
+    double thermal_ledger_builder_validate_seconds_v068240240 = 0.0;
+    double thermal_ledger_builder_fingerprint_seconds_v068240240 = 0.0;
+    std::uint64_t thermal_ledger_element_consumer_calls_v068240240 = 0u;
+    std::uint64_t thermal_ledger_element_consumer_terms_v068240240 = 0u;
+    double thermal_ledger_element_validate_seconds_v068240240 = 0.0;
+    double thermal_ledger_element_fingerprint_seconds_v068240240 = 0.0;
+    double thermal_ledger_element_reduce_seconds_v068240240 = 0.0;
+    std::uint64_t thermal_ledger_fixed_consumer_calls_v068240240 = 0u;
+    std::uint64_t thermal_ledger_fixed_consumer_terms_v068240240 = 0u;
+    double thermal_ledger_fixed_validate_seconds_v068240240 = 0.0;
+    double thermal_ledger_fixed_fingerprint_seconds_v068240240 = 0.0;
+    double thermal_ledger_fixed_reduce_seconds_v068240240 = 0.0;
+    double thermal_ledger_fixed_diagonal_scan_seconds_v068240240 = 0.0;
     std::uint64_t element_buffer_reuses = 0u;
     std::uint64_t leveltemp_backup_reuses = 0u;
     std::uint64_t reduced_continuum_geometry_builds = 0u;

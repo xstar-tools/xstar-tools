@@ -553,23 +553,6 @@ ContributionHotPathModeV068240214 configured_contribution_hotpath_mode_v06824021
     throw std::runtime_error("invalid XSTAR_V068240214_CONTRIBUTION_MODE");
 }
 
-// 0.6.82.40.2.39: PASS2 outer-assembly hot-path control.  Optimized mode
-// commits matrix-eligible contributions during the already-required pass-2
-// selection loop, eliminating the later full EvaluatedRecord contribution
-// discovery traversal for ordinary production.  Historical preserves the
-// accepted .38 path for same-binary qualification and all correction/forensic
-// surfaces.
-enum class Pass2OuterAssemblyModeV068240239 { Historical, Optimized };
-
-Pass2OuterAssemblyModeV068240239 configured_pass2_outer_assembly_mode_v068240239() {
-    const char* value = std::getenv("XSTAR_V068240239_PASS2_OUTER_ASSEMBLY_MODE");
-    if (!value || !*value || std::string(value) == "optimized")
-        return Pass2OuterAssemblyModeV068240239::Optimized;
-    if (std::string(value) == "historical")
-        return Pass2OuterAssemblyModeV068240239::Historical;
-    throw std::runtime_error("invalid XSTAR_V068240239_PASS2_OUTER_ASSEMBLY_MODE");
-}
-
 // 0.6.82.40.2.15: post-pass traversal-orchestration control.  The optimized
 // production path keeps the exact corrected EvaluatedRecord stream but avoids
 // rescanning records that cannot participate in Option-10 pirt/rrrt ownership
@@ -2334,10 +2317,6 @@ struct EvaluatedRecord {
     bool spectral = false;
     bool bound_free_spectral = false;
     bool matrix_enabled = true;
-    // 0.6.82.40.2.39: internal-only direct-commit marker.  This occupies the
-    // existing alignment byte before continuum_index_one_based; the release
-    // checker requires sizeof(EvaluatedRecord) to remain unchanged.
-    bool matrix_committed_v068240239 = false;
     int continuum_index_one_based = 0;
     double line_energy_ev = 0.0;
     double atomic_mass_amu = 1.0;
@@ -2869,6 +2848,15 @@ struct CanonicalThermalLedgerBuild {
     std::uint64_t fingerprint = 0;
 };
 
+struct CanonicalThermalBuilderFineAttributionV068240240 {
+    std::uint64_t calls = 0u;
+    std::uint64_t contributions = 0u;
+    std::uint64_t terms = 0u;
+    double term_identity_seconds = 0.0;
+    double validate_seconds = 0.0;
+    double fingerprint_seconds = 0.0;
+};
+
 class CanonicalThermalLedgerBuilderV048746212 {
 public:
     CanonicalThermalLedgerBuilderV048746212(
@@ -3026,7 +3014,8 @@ public:
         const std::vector<xstar_element_contribution_v1>& thermal_only_contributions,
         CanonicalThermalLedgerBuild& out,
         std::uint64_t& capacity_growths,
-        std::uint64_t& capacity_reuses
+        std::uint64_t& capacity_reuses,
+        CanonicalThermalBuilderFineAttributionV068240240* fine_timing = nullptr
     ) const {
         const std::size_t total_contributions =
             committed_contributions.size() + thermal_only_contributions.size();
@@ -3042,6 +3031,8 @@ public:
             ++capacity_reuses;
         }
 
+        const auto term_identity_started_v068240240 =
+            fine_timing ? clock_type::now() : clock_type::time_point{};
         std::set<Identity> consumed;
         std::set<std::pair<std::int64_t, std::string>> type99_rows_matched;
         std::set<std::pair<std::int64_t, std::string>> primary_rows_matched;
@@ -3133,9 +3124,31 @@ public:
             throw std::runtime_error(
                 "canonical Thermal ledger did not consume every Mg primary source-order row");
         }
+        if (fine_timing) {
+            fine_timing->term_identity_seconds +=
+                std::chrono::duration<double>(clock_type::now() -
+                    term_identity_started_v068240240).count();
+        }
+        const auto validate_started_v068240240 =
+            fine_timing ? clock_type::now() : clock_type::time_point{};
         xstar_canonical_thermal::validate(
             out.terms.data(), out.terms.size(), active_.element.n_rows);
+        if (fine_timing) {
+            fine_timing->validate_seconds +=
+                std::chrono::duration<double>(clock_type::now() -
+                    validate_started_v068240240).count();
+        }
+        const auto fingerprint_started_v068240240 =
+            fine_timing ? clock_type::now() : clock_type::time_point{};
         out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
+        if (fine_timing) {
+            fine_timing->fingerprint_seconds +=
+                std::chrono::duration<double>(clock_type::now() -
+                    fingerprint_started_v068240240).count();
+            ++fine_timing->calls;
+            fine_timing->contributions += static_cast<std::uint64_t>(total_contributions);
+            fine_timing->terms += static_cast<std::uint64_t>(out.terms.size());
+        }
     }
 
 private:
@@ -4433,10 +4446,6 @@ struct FixedStatePersistentScratchV068231 {
     std::vector<double> detailed_pirt_v068240215;
     std::vector<double> detailed_rrrt_v068240215;
     std::vector<xstar_element_contribution_v1> contributions;
-    // 0.6.82.40.2.39: compact patch pairs for direct-committed Type-49/53/99
-    // records whose final ans channels are corrected after the pass-2 loop.
-    // High 32 bits = evaluated index, low 32 bits = contribution index.
-    std::vector<std::uint64_t> pass2_direct_correction_pairs_v068240239;
     std::vector<xstar_element_contribution_v1> thermal_only_contributions;
     std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
     // 0.6.82.40.2.14: reusable canonical thermal ledger storage paired with
@@ -4499,7 +4508,6 @@ struct FixedStatePersistentScratchV068231 {
         XSTAR_CAP_BYTES_V068231(detailed_pirt_v068240215);
         XSTAR_CAP_BYTES_V068231(detailed_rrrt_v068240215);
         XSTAR_CAP_BYTES_V068231(contributions);
-        XSTAR_CAP_BYTES_V068231(pass2_direct_correction_pairs_v068240239);
         XSTAR_CAP_BYTES_V068231(thermal_only_contributions);
         XSTAR_CAP_BYTES_V068231(type95_self_loop_candidates);
         XSTAR_CAP_BYTES_V068231(canonical_thermal_ledger_v068240214.terms);
@@ -4572,8 +4580,7 @@ struct FixedStatePersistentScratchV068231 {
         add(out[0], detailed_pirt_v068240215);
         add(out[0], detailed_rrrt_v068240215);
         // 1: scientific contribution lists.
-        add(out[1], contributions); add(out[1], pass2_direct_correction_pairs_v068240239);
-        add(out[1], thermal_only_contributions);
+        add(out[1], contributions); add(out[1], thermal_only_contributions);
         add(out[1], type95_self_loop_candidates);
         add(out[1], canonical_thermal_ledger_v068240214.terms);
         add(out[1], spectral_contributions);
@@ -5111,10 +5118,6 @@ struct xstar_fixed_state_context_impl {
     bool contribution_hotpath_mode_initialized_v068240214 = false;
     ContributionHotPathModeV068240214 contribution_hotpath_mode_v068240214 =
         ContributionHotPathModeV068240214::Optimized;
-    // 0.6.82.40.2.39: resolve PASS2 direct-commit mode once per context.
-    bool pass2_outer_assembly_mode_initialized_v068240239 = false;
-    Pass2OuterAssemblyModeV068240239 pass2_outer_assembly_mode_v068240239 =
-        Pass2OuterAssemblyModeV068240239::Optimized;
     // 0.6.82.40.2.15: resolve the remaining traversal hot-path mode once per
     // context and compile immutable Option-10 endpoint ownership by record.
     bool traversal_hotpath_mode_initialized_v068240215 = false;
@@ -13918,15 +13921,6 @@ int run_impl(
         ++perf_foundation_v068231.contribution_hotpath_optimized_calls_v068240214;
     else
         ++perf_foundation_v068231.contribution_hotpath_historical_calls_v068240214;
-    if (!ctx.pass2_outer_assembly_mode_initialized_v068240239) {
-        ctx.pass2_outer_assembly_mode_v068240239 =
-            configured_pass2_outer_assembly_mode_v068240239();
-        ctx.pass2_outer_assembly_mode_initialized_v068240239 = true;
-    }
-    const bool pass2_outer_assembly_requested_v068240239 =
-        native_production_v064897 && contribution_hotpath_optimized_v068240214 &&
-        ctx.pass2_outer_assembly_mode_v068240239 ==
-            Pass2OuterAssemblyModeV068240239::Optimized;
     if (!ctx.traversal_hotpath_mode_initialized_v068240215) {
         ctx.traversal_hotpath_mode_v068240215 =
             configured_traversal_hotpath_mode_v068240215();
@@ -14303,8 +14297,6 @@ int run_impl(
     constexpr std::uint64_t legacy_evaluated_record_bytes_v06823615 = 1184u;
     static_assert(sizeof(EvaluatedRecord) < legacy_evaluated_record_bytes_v06823615,
         "0.6.82.36.15 evaluated diagnostic compaction did not reduce the hot record");
-    static_assert(sizeof(EvaluatedRecord) == 600u,
-        "0.6.82.40.2.39 direct-commit marker changed EvaluatedRecord size");
     perf_foundation_v068231.evaluated_record_bytes_v06823615 = sizeof(EvaluatedRecord);
     perf_foundation_v068231.evaluated_record_legacy_bytes_v06823615 =
         legacy_evaluated_record_bytes_v06823615;
@@ -14373,53 +14365,21 @@ int run_impl(
         environment_flag("XSTAR_V068240237_TRAVERSAL_FINE_TIMING");
     const bool pass2_fine_timing_v068240238 =
         environment_flag("XSTAR_V068240238_PASS2_FINE_TIMING");
+    const bool thermal_ledger_fine_timing_v068240240 =
+        environment_flag("XSTAR_V068240240_THERMAL_LEDGER_FINE_TIMING");
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
          element_slot_v064894 < ctx.program.elements.size();
          ++element_slot_v064894) {
         const auto& element = ctx.program.elements[element_slot_v064894];
-        // 0.6.82.40.2.39.1: activation hotfix.  True production enables the
-        // accepted helium source-insertion-order contract globally, but that
-        // contract can only alter Z=2 contribution ordering.  .39 incorrectly
-        // treated the helium-only controls as all-element blockers, making the
-        // fast path unreachable for H and C.  Scope helium insertion, coupled
-        // replacement and ablation to Z=2 while preserving the global
-        // matrix-closure/forensic/provenance blockers and Mg historical path.
-        const bool pass2_outer_assembly_helium_special_v0682402391 =
-            element.element_z == 2 &&
-            (helium_source_insertion_order ||
-             type53_row46_coupled_replacement || any_helium_ablation);
-        const bool pass2_outer_assembly_fast_v068240239 =
-            pass2_outer_assembly_requested_v068240239 &&
-            !matrix_construction_closure &&
-            !pass2_outer_assembly_helium_special_v0682402391 &&
-            !explicit_rich_element_forensic_request_v0682391 &&
-            !retain_record_provenance_v064897 && element.element_z != 12;
-        if (pass2_outer_assembly_fast_v068240239) {
-            ++perf_foundation_v068231.pass2_outer_assembly_fast_elements_v068240239;
-        } else {
-            ++perf_foundation_v068231.pass2_outer_assembly_fallback_elements_v068240239;
-            // Primary fallback reason, deliberately mutually exclusive so the
-            // reason counters close exactly to FALLBACK_ELEMENTS.
-            if (!pass2_outer_assembly_requested_v068240239)
-                ++perf_foundation_v068231.pass2_outer_assembly_block_not_requested_elements_v0682402391;
-            else if (matrix_construction_closure)
-                ++perf_foundation_v068231.pass2_outer_assembly_block_matrix_closure_elements_v0682402391;
-            else if (pass2_outer_assembly_helium_special_v0682402391)
-                ++perf_foundation_v068231.pass2_outer_assembly_block_helium_special_elements_v0682402391;
-            else if (explicit_rich_element_forensic_request_v0682391)
-                ++perf_foundation_v068231.pass2_outer_assembly_block_forensic_elements_v0682402391;
-            else if (retain_record_provenance_v064897)
-                ++perf_foundation_v068231.pass2_outer_assembly_block_provenance_elements_v0682402391;
-            else if (element.element_z == 12)
-                ++perf_foundation_v068231.pass2_outer_assembly_block_magnesium_elements_v0682402391;
-        }
         const auto traversal_fine_region1_started_v068240237 =
             traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
         if (traversal_fine_timing_v068240237)
             ++perf_foundation_v068231.traversal_fine_elements_v068240237;
         if (pass2_fine_timing_v068240238)
             ++perf_foundation_v068231.pass2_fine_elements_v068240238;
+        if (thermal_ledger_fine_timing_v068240240)
+            ++perf_foundation_v068231.thermal_ledger_fine_elements_v068240240;
         const auto residual_element_started_v064812339 = clock_type::now();
         ResidualScalingAuditV064812339 residual_audit_v064812339;
         residual_audit_v064812339.call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
@@ -14828,31 +14788,6 @@ int run_impl(
         auto& evaluated_records = ctx.scratch_v068231.evaluated_records;
         evaluated.clear();
         evaluated_records.clear();
-        // .39 optimized mode builds the final contribution stream during the
-        // existing pass-2 traversal.  Capacity policy is identical to .2.14.
-        auto& pass2_direct_contributions_v068240239 = ctx.scratch_v068231.contributions;
-        auto& pass2_direct_correction_pairs_v068240239 =
-            ctx.scratch_v068231.pass2_direct_correction_pairs_v068240239;
-        if (pass2_outer_assembly_fast_v068240239) {
-            pass2_direct_contributions_v068240239.clear();
-            pass2_direct_correction_pairs_v068240239.clear();
-            if (pass2_direct_correction_pairs_v068240239.capacity() < active_pass2_count_v064812337)
-                pass2_direct_correction_pairs_v068240239.reserve(active_pass2_count_v064812337);
-            if (pass2_direct_contributions_v068240239.capacity() < active_pass2_count_v064812337) {
-                std::size_t target_v068240239 = active_pass2_count_v064812337;
-                const std::size_t geometric_v068240239 =
-                    pass2_direct_contributions_v068240239.capacity() == 0u
-                        ? std::max<std::size_t>(64u, target_v068240239)
-                        : pass2_direct_contributions_v068240239.capacity() +
-                            pass2_direct_contributions_v068240239.capacity() / 2u;
-                target_v068240239 = std::max(target_v068240239, geometric_v068240239);
-                pass2_direct_contributions_v068240239.reserve(target_v068240239);
-                ++perf_foundation_v068231.contribution_geometric_growths_v068240214;
-                ++perf_foundation_v068231.contribution_capacity_growths;
-            } else if (pass2_direct_contributions_v068240239.capacity() > 0u) {
-                ++perf_foundation_v068231.contribution_capacity_reuses;
-            }
-        }
         {
             const auto allocation_started_v064812337 = clock_type::now();
             const bool evaluated_growth_v068231 =
@@ -14957,56 +14892,6 @@ int run_impl(
                      record.data_type == 99)) {
                     errc_postpass_indices_v068240215.push_back(
                         evaluated_index_v068240215);
-                }
-            }
-            if (pass2_outer_assembly_fast_v068240239) {
-                const auto& original_v068240239 = item.contribution;
-                const bool active_stage_v068240239 =
-                    original_v068240239.ion_stage >= active.min_stage &&
-                    original_v068240239.ion_stage <= active.max_stage;
-                const bool endpoints_active_v068240239 = !item.matrix_enabled ||
-                    (original_v068240239.lower_row >= active.full_row_start &&
-                     original_v068240239.upper_row >= active.full_row_start);
-                const bool source_detailed_matrix_record_v068240239 =
-                    original_v068240239.rate_type != 8 &&
-                    original_v068240239.rate_type != 15 &&
-                    !(original_v068240239.rate_type == 1 &&
-                      original_v068240239.data_type == 53);
-                if (item.matrix_enabled && active_stage_v068240239 &&
-                    endpoints_active_v068240239 &&
-                    source_detailed_matrix_record_v068240239) {
-                    pass2_direct_contributions_v068240239.emplace_back(original_v068240239);
-                    auto& committed_v068240239 = pass2_direct_contributions_v068240239.back();
-                    const int raw_lower_row_v068240239 =
-                        committed_v068240239.lower_row - active.full_row_start + 1;
-                    const int raw_upper_row_v068240239 =
-                        committed_v068240239.upper_row - active.full_row_start + 1;
-                    if (raw_lower_row_v068240239 <= 0 || raw_upper_row_v068240239 <= 0) {
-                        throw std::runtime_error(
-                            "0.6.82.40.2.39 direct source matrix endpoint mapped below compact basis");
-                    }
-                    committed_v068240239.lower_row =
-                        std::min(active.element.n_rows, raw_lower_row_v068240239);
-                    committed_v068240239.upper_row =
-                        std::min(active.element.n_rows, raw_upper_row_v068240239);
-                    if (original_v068240239.data_type == 49 ||
-                        original_v068240239.data_type == 53 ||
-                        original_v068240239.data_type == 99) {
-                        const std::uint64_t evaluated_index_v068240239 =
-                            static_cast<std::uint64_t>(evaluated.size());
-                        const std::uint64_t contribution_index_v068240239 =
-                            static_cast<std::uint64_t>(pass2_direct_contributions_v068240239.size() - 1u);
-                        if (evaluated_index_v068240239 > 0xffffffffu ||
-                            contribution_index_v068240239 > 0xffffffffu) {
-                            throw std::runtime_error(
-                                "0.6.82.40.2.39 direct correction index overflow");
-                        }
-                        pass2_direct_correction_pairs_v068240239.push_back(
-                            (evaluated_index_v068240239 << 32u) | contribution_index_v068240239);
-                    }
-                    item.matrix_committed_v068240239 = true;
-                    ++perf_foundation_v068231.pass2_outer_assembly_direct_commits_v068240239;
-                    ++perf_foundation_v068231.contribution_temporary_copies_elided_v068240214;
                 }
             }
             evaluated.push_back(std::move(item));
@@ -15137,42 +15022,6 @@ int run_impl(
             element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
         apply_type53_persistent_leveltemp_z1_z30(
             element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
-
-        // 0.6.82.40.2.39: Type-49/53/99 final contribution channels are
-        // source-leveltemp dependent and are corrected only after the pass-2
-        // traversal.  Refresh only those already-direct-committed entries;
-        // source order and contribution-vector positions remain unchanged.
-        if (pass2_outer_assembly_fast_v068240239) {
-            for (const std::uint64_t packed_v068240239 :
-                 pass2_direct_correction_pairs_v068240239) {
-                const std::size_t evaluated_index_v068240239 =
-                    static_cast<std::size_t>(packed_v068240239 >> 32u);
-                const std::size_t contribution_index_v068240239 =
-                    static_cast<std::size_t>(packed_v068240239 & 0xffffffffu);
-                if (evaluated_index_v068240239 >= evaluated.size() ||
-                    contribution_index_v068240239 >= pass2_direct_contributions_v068240239.size()) {
-                    throw std::runtime_error(
-                        "0.6.82.40.2.39 direct correction patch index out of range");
-                }
-                auto corrected_v068240239 =
-                    evaluated[evaluated_index_v068240239].contribution;
-                const int raw_lower_row_v068240239 =
-                    corrected_v068240239.lower_row - active.full_row_start + 1;
-                const int raw_upper_row_v068240239 =
-                    corrected_v068240239.upper_row - active.full_row_start + 1;
-                if (raw_lower_row_v068240239 <= 0 || raw_upper_row_v068240239 <= 0) {
-                    throw std::runtime_error(
-                        "0.6.82.40.2.39 corrected matrix endpoint mapped below compact basis");
-                }
-                corrected_v068240239.lower_row =
-                    std::min(active.element.n_rows, raw_lower_row_v068240239);
-                corrected_v068240239.upper_row =
-                    std::min(active.element.n_rows, raw_upper_row_v068240239);
-                pass2_direct_contributions_v068240239[contribution_index_v068240239] =
-                    corrected_v068240239;
-                ++perf_foundation_v068231.pass2_outer_assembly_correction_patches_v068240239;
-            }
-        }
 
         // 0.6.82.29.3.4: pprint(10) consumes the mixed calc_hmc_element
         // pirt/rrrt arrays, not the first-pass calc_ion_rates totals for every
@@ -15516,24 +15365,22 @@ int run_impl(
         auto& contributions = ctx.scratch_v068231.contributions;
         auto& thermal_only_contributions = ctx.scratch_v068231.thermal_only_contributions;
         auto& type95_self_loop_candidates = ctx.scratch_v068231.type95_self_loop_candidates;
+        contributions.clear();
         thermal_only_contributions.clear();
         type95_self_loop_candidates.clear();
-        if (!pass2_outer_assembly_fast_v068240239) {
-            contributions.clear();
-            if (contributions.capacity() < evaluated.size()) {
-                std::size_t target = evaluated.size();
-                if (contribution_hotpath_optimized_v068240214) {
-                    const std::size_t geometric = contributions.capacity() == 0u
-                        ? std::max<std::size_t>(64u, target)
-                        : contributions.capacity() + contributions.capacity() / 2u;
-                    target = std::max(target, geometric);
-                    ++perf_foundation_v068231.contribution_geometric_growths_v068240214;
-                }
-                contributions.reserve(target);
-                ++perf_foundation_v068231.contribution_capacity_growths;
-            } else if (contributions.capacity() > 0u) {
-                ++perf_foundation_v068231.contribution_capacity_reuses;
+        if (contributions.capacity() < evaluated.size()) {
+            std::size_t target = evaluated.size();
+            if (contribution_hotpath_optimized_v068240214) {
+                const std::size_t geometric = contributions.capacity() == 0u
+                    ? std::max<std::size_t>(64u, target)
+                    : contributions.capacity() + contributions.capacity() / 2u;
+                target = std::max(target, geometric);
+                ++perf_foundation_v068231.contribution_geometric_growths_v068240214;
             }
+            contributions.reserve(target);
+            ++perf_foundation_v068231.contribution_capacity_growths;
+        } else if (contributions.capacity() > 0u) {
+            ++perf_foundation_v068231.contribution_capacity_reuses;
         }
         using Type95StreamIdentity = std::tuple<std::int64_t,int,int,int>;
         struct Type95StreamEvent { Type95StreamIdentity identity; bool candidate = false; };
@@ -15560,15 +15407,7 @@ int run_impl(
         const std::size_t evaluated_before_compaction_v068239 = evaluated.size();
         std::size_t evaluated_retained_v068239 = 0u;
         std::uint64_t sidecars_released_v068239 = 0u;
-        const bool pass2_posteval_scan_required_v068240239 =
-            !pass2_outer_assembly_fast_v068240239 ||
-            retain_compact_record_products_v06823611 || retain_record_provenance_v064897 ||
-            compact_postsolve_evaluated_v068239;
-        if (!pass2_posteval_scan_required_v068240239) {
-            perf_foundation_v068231.pass2_outer_assembly_evaluated_rescan_records_elided_v068240239 +=
-                static_cast<std::uint64_t>(evaluated_before_compaction_v068239);
-        }
-        if (pass2_posteval_scan_required_v068240239) for (std::size_t evaluated_index_v068239 = 0u;
+        for (std::size_t evaluated_index_v068239 = 0u;
              evaluated_index_v068239 < evaluated_before_compaction_v068239;
              ++evaluated_index_v068239) {
             auto& item = evaluated[evaluated_index_v068239];
@@ -15612,63 +15451,61 @@ int run_impl(
                 original.lower_row == ground_row_for_stage(element, original.ion_stage);
             const bool qualification_ablated = matrix_family_ablated || matrix_source_ablated || matrix_row_ablated ||
                 unqualified_type53_ablated || unqualified_type71_ablated || unqualified_type99_ablated;
-            bool matrix_committed = item.matrix_committed_v068240239;
+            bool matrix_committed = false;
             const xstar_element_contribution_v1* committed_contribution_v068240214 = nullptr;
-            if (!pass2_outer_assembly_fast_v068240239) {
-                if (item.matrix_enabled && active_stage && endpoints_active && !qualification_ablated &&
-                    source_detailed_matrix_record && !source_absent_type95_self_loop) {
-                    if (contribution_hotpath_optimized_v068240214) {
-                        contributions.emplace_back(original);
-                        auto& contribution = contributions.back();
-                        const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
-                        const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
-                        if (raw_lower_row <= 0 || raw_upper_row <= 0) {
-                            throw std::runtime_error("source matrix endpoint mapped below compact basis");
-                        }
-                        contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
-                        contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
-                        committed_contribution_v068240214 = &contribution;
-                        ++perf_foundation_v068231.contribution_temporary_copies_elided_v068240214;
-                    } else {
-                        auto contribution = original;
-                        const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
-                        const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
-                        if (raw_lower_row <= 0 || raw_upper_row <= 0) {
-                            throw std::runtime_error("source matrix endpoint mapped below compact basis");
-                        }
-                        contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
-                        contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
-                        contributions.push_back(contribution);
-                        committed_contribution_v068240214 = &contributions.back();
+            if (item.matrix_enabled && active_stage && endpoints_active && !qualification_ablated &&
+                source_detailed_matrix_record && !source_absent_type95_self_loop) {
+                if (contribution_hotpath_optimized_v068240214) {
+                    contributions.emplace_back(original);
+                    auto& contribution = contributions.back();
+                    const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
+                    const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
+                    if (raw_lower_row <= 0 || raw_upper_row <= 0) {
+                        throw std::runtime_error("source matrix endpoint mapped below compact basis");
                     }
-                    type95_source_stream_order.push_back(Type95StreamEvent{
-                        Type95StreamIdentity{original.record, original.data_type,
-                            original.rate_type, original.ion_stage}, false});
-                    matrix_committed = true;
-                } else if (item.matrix_enabled && active_stage && endpoints_active &&
-                           !qualification_ablated && source_absent_type95_self_loop &&
-                           element.element_z == 12) {
-                    // XSTAR calc_ion_rates owns rate-type-15 Type-95 total-CI
-                    // records, while calc_hmc_ion excludes them from detailed
-                    // matrix assembly.  Retain eligible idest1=1 records as
-                    // candidates for the historical Thermal-only source stream.
-                    // The lowered Mg Type-95 total-CI records preserve the
-                    // source idest1=1 ownership contract.  The data-type/rate-type
-                    // and self-loop checks above therefore identify the complete
-                    // preliminary-owner candidate domain for this active case.
+                    contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
+                    contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
+                    committed_contribution_v068240214 = &contribution;
+                    ++perf_foundation_v068231.contribution_temporary_copies_elided_v068240214;
+                } else {
                     auto contribution = original;
                     const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
                     const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
                     if (raw_lower_row <= 0 || raw_upper_row <= 0) {
-                        throw std::runtime_error("source Type-95 endpoint mapped below compact basis");
+                        throw std::runtime_error("source matrix endpoint mapped below compact basis");
                     }
                     contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
                     contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
-                    type95_self_loop_candidates.push_back(contribution);
-                    type95_source_stream_order.push_back(Type95StreamEvent{
-                        Type95StreamIdentity{original.record, original.data_type,
-                            original.rate_type, original.ion_stage}, true});
+                    contributions.push_back(contribution);
+                    committed_contribution_v068240214 = &contributions.back();
                 }
+                type95_source_stream_order.push_back(Type95StreamEvent{
+                    Type95StreamIdentity{original.record, original.data_type,
+                        original.rate_type, original.ion_stage}, false});
+                matrix_committed = true;
+            } else if (item.matrix_enabled && active_stage && endpoints_active &&
+                       !qualification_ablated && source_absent_type95_self_loop &&
+                       element.element_z == 12) {
+                // XSTAR calc_ion_rates owns rate-type-15 Type-95 total-CI
+                // records, while calc_hmc_ion excludes them from detailed
+                // matrix assembly.  Retain eligible idest1=1 records as
+                // candidates for the historical Thermal-only source stream.
+                // The lowered Mg Type-95 total-CI records preserve the
+                // source idest1=1 ownership contract.  The data-type/rate-type
+                // and self-loop checks above therefore identify the complete
+                // preliminary-owner candidate domain for this active case.
+                auto contribution = original;
+                const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
+                const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
+                if (raw_lower_row <= 0 || raw_upper_row <= 0) {
+                    throw std::runtime_error("source Type-95 endpoint mapped below compact basis");
+                }
+                contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
+                contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
+                type95_self_loop_candidates.push_back(contribution);
+                type95_source_stream_order.push_back(Type95StreamEvent{
+                    Type95StreamIdentity{original.record, original.data_type,
+                        original.rate_type, original.ion_stage}, true});
             }
             if (retain_compact_record_products_v06823611) {
                 CompactProductionRecordDiagnosticV06823611 diagnostic;
@@ -15720,9 +15557,6 @@ int run_impl(
                 }
             }
         }
-        if (pass2_outer_assembly_fast_v068240239 && pass2_posteval_scan_required_v068240239)
-            perf_foundation_v068231.pass2_outer_assembly_evaluated_rescan_records_retained_v068240239 +=
-                static_cast<std::uint64_t>(evaluated_before_compaction_v068239);
         if (compact_postsolve_evaluated_v068239) {
             evaluated.resize(evaluated_retained_v068239);
             evaluated_records.resize(evaluated_retained_v068239);
@@ -15750,13 +15584,6 @@ int run_impl(
         // 0.6.82.30.8.6: removed an unused full copy of the contribution
         // vector. It had no consumer and only added allocator/memory-bandwidth
         // work on every fixed-state evaluation.
-        if (pass2_outer_assembly_fast_v068240239 &&
-            (matrix_construction_closure ||
-             (element.element_z == 2 && helium_source_insertion_order) ||
-             (type53_row46_coupled_replacement && element.element_z == 2))) {
-            throw std::runtime_error(
-                "0.6.82.40.2.39 direct contribution path reached a correction/reorder surface");
-        }
         if (matrix_construction_closure) {
             apply_matrix_closure_contribution_corrections(
                 contributions, active.element,
@@ -15919,6 +15746,13 @@ int run_impl(
             }
         }
 
+        if (thermal_ledger_fine_timing_v068240240) {
+            perf_foundation_v068231.thermal_ledger_contribution_discovery_seconds_v068240240 +=
+                elapsed(contribution_list_started_v068231);
+        }
+        CanonicalThermalBuilderFineAttributionV068240240
+            thermal_builder_fine_v068240240{};
+
         // v0.6.48.7.46.21.8 canonical Thermal coefficients.  .40.2.14
         // retains the historical candidate-map path as a same-binary control,
         // while ordinary production builds the same source-ordered terms
@@ -15930,7 +15764,9 @@ int run_impl(
             canonical_thermal_builder.finish_direct_into_v068240214(
                 contributions, thermal_only_contributions, reusable,
                 perf_foundation_v068231.contribution_thermal_term_capacity_growths_v068240214,
-                perf_foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214);
+                perf_foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214,
+                thermal_ledger_fine_timing_v068240240
+                    ? &thermal_builder_fine_v068240240 : nullptr);
             canonical_thermal_ledger_v068240214 = &reusable;
             ++perf_foundation_v068231.contribution_direct_thermal_build_calls_v068240214;
         } else {
@@ -15946,6 +15782,20 @@ int run_impl(
                 &historical_canonical_thermal_ledger_v068240214;
         }
         const auto& canonical_thermal_ledger = *canonical_thermal_ledger_v068240214;
+        if (thermal_ledger_fine_timing_v068240240) {
+            perf_foundation_v068231.thermal_ledger_builder_calls_v068240240 +=
+                thermal_builder_fine_v068240240.calls;
+            perf_foundation_v068231.thermal_ledger_builder_contributions_v068240240 +=
+                thermal_builder_fine_v068240240.contributions;
+            perf_foundation_v068231.thermal_ledger_builder_terms_v068240240 +=
+                thermal_builder_fine_v068240240.terms;
+            perf_foundation_v068231.thermal_ledger_builder_term_identity_seconds_v068240240 +=
+                thermal_builder_fine_v068240240.term_identity_seconds;
+            perf_foundation_v068231.thermal_ledger_builder_validate_seconds_v068240240 +=
+                thermal_builder_fine_v068240240.validate_seconds;
+            perf_foundation_v068231.thermal_ledger_builder_fingerprint_seconds_v068240240 +=
+                thermal_builder_fine_v068240240.fingerprint_seconds;
+        }
         perf_foundation_v068231.contribution_list_seconds +=
             elapsed(contribution_list_started_v068231);
         stats.contributions_constructed += contributions.size();
@@ -16018,11 +15868,30 @@ int run_impl(
                 elapsed(traversal_fine_region4_started_v068240237);
         const auto element_start = clock_type::now();
         std::uint64_t element_consumed_thermal_ledger_fingerprint = 0;
+        if (thermal_ledger_fine_timing_v068240240) {
+            xstar_canonical_thermal::reset_element_consumer_fine_timing_v068240240();
+            xstar_canonical_thermal::element_consumer_fine_timing_enabled_v068240240 = true;
+        }
         const int rc = xstar_element_engine_run_construction_with_thermal_ledger_v1(
             ctx.element_context, &ein, contributions.data(), contributions.size(),
             canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
             &element_consumed_thermal_ledger_fingerprint,
             &eout, error.data(), error.size());
+        if (thermal_ledger_fine_timing_v068240240) {
+            xstar_canonical_thermal::element_consumer_fine_timing_enabled_v068240240 = false;
+            const auto& element_thermal_fine_v068240240 =
+                xstar_canonical_thermal::element_consumer_fine_timing_v068240240;
+            perf_foundation_v068231.thermal_ledger_element_consumer_calls_v068240240 +=
+                element_thermal_fine_v068240240.calls;
+            perf_foundation_v068231.thermal_ledger_element_consumer_terms_v068240240 +=
+                element_thermal_fine_v068240240.terms;
+            perf_foundation_v068231.thermal_ledger_element_validate_seconds_v068240240 +=
+                element_thermal_fine_v068240240.validate_seconds;
+            perf_foundation_v068231.thermal_ledger_element_fingerprint_seconds_v068240240 +=
+                element_thermal_fine_v068240240.fingerprint_seconds;
+            perf_foundation_v068231.thermal_ledger_element_reduce_seconds_v068240240 +=
+                element_thermal_fine_v068240240.reduction_seconds;
+        }
         const double residual_element_solve_seconds_v064812339 = elapsed(element_start);
         stats.element_seconds += residual_element_solve_seconds_v064812339;
         residual_audit_v064812339.element_solve_seconds = residual_element_solve_seconds_v064812339;
@@ -16185,8 +16054,26 @@ int run_impl(
         double computed_element_heating2 = 0.0;
         double computed_element_cooling2 = 0.0;
         if (thermal_diagonal_source_domain) {
-            const auto canonical_reduction = xstar_canonical_thermal::reduce(
-                canonical_thermal_ledger.terms, thermal_populations, element.element_z);
+            xstar_canonical_thermal::FineAttributionV068240240
+                fixed_thermal_fine_v068240240{};
+            const auto canonical_reduction = thermal_ledger_fine_timing_v068240240
+                ? xstar_canonical_thermal::reduce_timed_v068240240(
+                    canonical_thermal_ledger.terms, thermal_populations, element.element_z,
+                    fixed_thermal_fine_v068240240)
+                : xstar_canonical_thermal::reduce(
+                    canonical_thermal_ledger.terms, thermal_populations, element.element_z);
+            if (thermal_ledger_fine_timing_v068240240) {
+                perf_foundation_v068231.thermal_ledger_fixed_consumer_calls_v068240240 +=
+                    fixed_thermal_fine_v068240240.calls;
+                perf_foundation_v068231.thermal_ledger_fixed_consumer_terms_v068240240 +=
+                    fixed_thermal_fine_v068240240.terms;
+                perf_foundation_v068231.thermal_ledger_fixed_validate_seconds_v068240240 +=
+                    fixed_thermal_fine_v068240240.validate_seconds;
+                perf_foundation_v068231.thermal_ledger_fixed_fingerprint_seconds_v068240240 +=
+                    fixed_thermal_fine_v068240240.fingerprint_seconds;
+                perf_foundation_v068231.thermal_ledger_fixed_reduce_seconds_v068240240 +=
+                    fixed_thermal_fine_v068240240.reduction_seconds;
+            }
             if (canonical_reduction.fingerprint != canonical_thermal_ledger.fingerprint) {
                 throw std::runtime_error(
                     "fixed-state consumer canonical Thermal ledger fingerprint mismatch");
@@ -16204,6 +16091,9 @@ int run_impl(
                     canonical_reduction.tagged.non_type53.abundance_weighted(element.abundance);
             }
 
+            const auto thermal_diagonal_scan_started_v068240240 =
+                thermal_ledger_fine_timing_v068240240
+                    ? clock_type::now() : clock_type::time_point{};
             for (const auto& term : canonical_thermal_ledger.terms) {
                 const std::size_t row = static_cast<std::size_t>(term.compact_row - 1);
                 const double compact_population = thermal_populations[row];
@@ -16268,6 +16158,10 @@ int run_impl(
                     diagonal.heating2_contribution = (-secondary_unweighted) * element.abundance;
                 }
                 ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
+            }
+            if (thermal_ledger_fine_timing_v068240240) {
+                perf_foundation_v068231.thermal_ledger_fixed_diagonal_scan_seconds_v068240240 +=
+                    elapsed(thermal_diagonal_scan_started_v068240240);
             }
             ctx.last_thermal_diagonal_source_domain = true;
         } else {

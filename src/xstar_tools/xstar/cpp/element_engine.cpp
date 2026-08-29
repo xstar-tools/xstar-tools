@@ -1213,9 +1213,14 @@ int run_element_impl(
     std::fill(w.recombination_components.begin(), w.recombination_components.end(), 0.0);
 
     if (canonical_thermal_term_count > 0) {
-        const auto canonical = xstar_canonical_thermal::reduce(
-            canonical_thermal_terms, canonical_thermal_term_count,
-            w.x.data(), static_cast<std::size_t>(n), input.element_z);
+        const auto canonical = xstar_canonical_thermal::element_consumer_fine_timing_enabled_v068240240
+            ? xstar_canonical_thermal::reduce_timed_v068240240(
+                canonical_thermal_terms, canonical_thermal_term_count,
+                w.x.data(), static_cast<std::size_t>(n), input.element_z,
+                xstar_canonical_thermal::element_consumer_fine_timing_v068240240)
+            : xstar_canonical_thermal::reduce(
+                canonical_thermal_terms, canonical_thermal_term_count,
+                w.x.data(), static_cast<std::size_t>(n), input.element_z);
         const auto thermal_values = canonical.tagged.total.values();
         output.heating = thermal_values[0];
         output.cooling = thermal_values[1];
