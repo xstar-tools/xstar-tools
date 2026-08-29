@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.82.40.2.39 - PASS2_OUTER_ASSEMBLY_HOT_PATH - 2026-08-29
+
+- Performance successor to accepted `0.6.82.40.2.36.1`, using accepted `.37/.38` attribution to target the dominant C++ PASS2 outer-assembly overhead. `.38` measured C++ outer assembly at `9.010386 s` versus FORTRAN `0.354386 s`; `CONTRIBUTION_THERMAL_LEDGER` (`5.791965 s`) plus `POSTEVAL_OTHER_STAGING` (`3.098910 s`) accounted for 98.7% of the C++ outer surface.
+- Adds same-binary `XSTAR_V068240239_PASS2_OUTER_ASSEMBLY_MODE=historical|optimized` with optimized as the production default. Historical mode retains the accepted `.38` contribution-discovery traversal exactly.
+- On ordinary production elements, optimized mode commits matrix-eligible contributions during the already-required pass-2 selection loop, preserving source order, endpoint remapping, contribution values, and accumulation order. This removes the later full `EvaluatedRecord` contribution-discovery traversal on DSEC calls.
+- The direct-commit marker uses the existing padding byte in `EvaluatedRecord`; compile-time qualification fixes the record size at the accepted 600-byte layout. No new persistent vector/sidecar is introduced.
+- Fails closed to the historical `.38` path for matrix-construction closure, helium contribution correction/reordering/ablation, explicit rich forensics/provenance, and Mg (`Z=12`) where the Type-95 thermal-only source overlay requires the full historical stream-selection logic.
+- Accepted-boundary compact publication and postsolve retention still perform their required record scan; ordinary deferred DSEC calls with no diagnostic/postsolve consumer elide it completely. Canonical thermal-ledger construction remains unchanged in this revision.
+- Adds no new C++ clock read and no clock inside `evaluate_record()`, record/rate loops, matrix loops, or continuum/bin loops. `.37/.38` attribution timers are reused for qualification.
+- Low-`xi` qualification is balanced same-host/same-binary `historical_1 -> optimized_1 -> optimized_2 -> historical_2`. Preregistered gates require PASS2 ratio <=0.970, contribution-timer ratio <=0.850, traversal <=0.980, all-fixed <=0.985, internal/wall <=0.990, RSS <=1.030, exact science/work, valid direct-commit path, and 2/2 paired PASS2 wins. `xi=+1,+4` science/work closure follows only after low-`xi` ACCEPT. No multi-element run yet.
+
 ## 0.6.82.40.2.38 - PASS2_ASSEMBLY_FINE_ATTRIBUTION - 2026-08-28
 
 - Attribution-only successor to accepted `0.6.82.40.2.37`; no production speed optimization is attempted. Accepted `.36` fixed-engine preamble optimization and `.37` traversal attribution remain active.

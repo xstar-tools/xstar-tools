@@ -23311,6 +23311,11 @@ void emit_controller_performance_instrumentation(
         perf.foundation_v068231.element_input_seconds;
     const double pass2_fine_residual_v068240238 = std::max(
         0.0, pass2_fine_region4_total_v068240238 - pass2_fine_known_v068240238);
+    const char* pass2_outer_assembly_mode_env_v068240239 =
+        std::getenv("XSTAR_V068240239_PASS2_OUTER_ASSEMBLY_MODE");
+    const bool pass2_outer_assembly_historical_v068240239 =
+        pass2_outer_assembly_mode_env_v068240239 &&
+        std::string(pass2_outer_assembly_mode_env_v068240239) == "historical";
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
@@ -23480,6 +23485,14 @@ void emit_controller_performance_instrumentation(
             << "V068240238_CPP_SUB6_MATRIX_WORKSPACE_SECONDS=" << perf.foundation_v068231.matrix_workspace_seconds << "\n"
             << "V068240238_CPP_SUB7_ELEMENT_INPUT_BINDING_SECONDS=" << perf.foundation_v068231.element_input_seconds << "\n"
             << "V068240238_CPP_SUB8_POSTEVAL_OTHER_STAGING_SECONDS=" << pass2_fine_residual_v068240238 << "\n"
+            << "V068240239_PASS2_OUTER_ASSEMBLY_MODE="
+            << (pass2_outer_assembly_historical_v068240239 ? "HISTORICAL" : "OPTIMIZED") << "\n"
+            << "V068240239_FAST_ELEMENTS=" << perf.foundation_v068231.pass2_outer_assembly_fast_elements_v068240239 << "\n"
+            << "V068240239_FALLBACK_ELEMENTS=" << perf.foundation_v068231.pass2_outer_assembly_fallback_elements_v068240239 << "\n"
+            << "V068240239_DIRECT_COMMITS=" << perf.foundation_v068231.pass2_outer_assembly_direct_commits_v068240239 << "\n"
+            << "V068240239_CORRECTION_PATCHES=" << perf.foundation_v068231.pass2_outer_assembly_correction_patches_v068240239 << "\n"
+            << "V068240239_EVALUATED_RESCAN_RECORDS_ELIDED=" << perf.foundation_v068231.pass2_outer_assembly_evaluated_rescan_records_elided_v068240239 << "\n"
+            << "V068240239_EVALUATED_RESCAN_RECORDS_RETAINED=" << perf.foundation_v068231.pass2_outer_assembly_evaluated_rescan_records_retained_v068240239 << "\n"
             << "V06824028_CONTROLLER_DSEC_SECONDS=" << perf.controller_all_seconds_v0682402 << "\n"
             << "V06824028_CONTROLLER_DSEC_FIXED_SECONDS=" << perf.controller_fixed_seconds_v06824028 << "\n"
             << "V06824028_CONTROLLER_DSEC_NONFIXED_SECONDS=" << perf.controller_nonfixed_seconds_v06824028 << "\n"
