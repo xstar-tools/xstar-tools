@@ -10,6 +10,7 @@
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
 #include "xstar_element_engine.h"
+#include "xstar_element_engine_internal.hpp"
 #include "source_order_thermal_reducer.hpp"
 #include "canonical_thermal_term.hpp"
 
@@ -881,7 +882,9 @@ int run_element_impl(
     std::string& status_message,
     const xstar_canonical_thermal_term_v1* canonical_thermal_terms = nullptr,
     std::size_t canonical_thermal_term_count = 0,
-    std::uint64_t* consumed_thermal_ledger_fingerprint = nullptr
+    std::uint64_t* consumed_thermal_ledger_fingerprint = nullptr,
+    bool trusted_thermal_ledger_v068240241 = false,
+    std::uint64_t authoritative_thermal_ledger_fingerprint_v068240241 = 0u
 ) {
     validate_input(input);
     validate_output(input, output);
@@ -1213,11 +1216,11 @@ int run_element_impl(
     std::fill(w.recombination_components.begin(), w.recombination_components.end(), 0.0);
 
     if (canonical_thermal_term_count > 0) {
-        const auto canonical = xstar_canonical_thermal::element_consumer_fine_timing_enabled_v068240240
-            ? xstar_canonical_thermal::reduce_timed_v068240240(
+        const auto canonical = trusted_thermal_ledger_v068240241
+            ? xstar_canonical_thermal::reduce_trusted_v068240241(
                 canonical_thermal_terms, canonical_thermal_term_count,
                 w.x.data(), static_cast<std::size_t>(n), input.element_z,
-                xstar_canonical_thermal::element_consumer_fine_timing_v068240240)
+                authoritative_thermal_ledger_fingerprint_v068240241)
             : xstar_canonical_thermal::reduce(
                 canonical_thermal_terms, canonical_thermal_term_count,
                 w.x.data(), static_cast<std::size_t>(n), input.element_z);
@@ -1781,6 +1784,66 @@ int xstar_element_engine_run_construction_with_thermal_ledger_v1(
         return 2;
     } catch (...) {
         copy_text(message, message_size, "unknown native canonical Thermal construction exception");
+        return 3;
+    }
+}
+
+// 0.6.82.40.2.41: private production entrypoint for a canonical Thermal
+// ledger already validated/fingerprinted by the local-zone builder.  Public
+// callers retain xstar_element_engine_run_construction_with_thermal_ledger_v1
+// and its full verification behavior.
+int xstar_element_engine_run_construction_with_trusted_thermal_ledger_v068240241(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* input,
+    const xstar_element_contribution_v1* contributions,
+    std::size_t contribution_count,
+    const xstar_canonical_thermal_term_v1* thermal_terms,
+    std::size_t thermal_term_count,
+    std::uint64_t authoritative_thermal_ledger_fingerprint,
+    std::uint64_t* consumed_thermal_ledger_fingerprint,
+    xstar_element_output_v1* output,
+    char* message,
+    std::size_t message_size
+) {
+    if (!context || !input || !output || !consumed_thermal_ledger_fingerprint) return 1;
+    try {
+        const auto construction_t0 = clock_type::now();
+        std::vector<xstar_element_term_v1> terms =
+            construct_terms_from_contributions(*input, contributions, contribution_count);
+        const double construction_seconds = seconds_since(construction_t0);
+        xstar_element_input_v1 expanded = *input;
+        expanded.terms = terms.empty() ? nullptr : terms.data();
+        expanded.term_count = terms.size();
+        std::string status;
+        const int rc = run_element_impl(
+            context->impl, expanded, *output, status,
+            thermal_terms, thermal_term_count, consumed_thermal_ledger_fingerprint,
+            true, authoritative_thermal_ledger_fingerprint);
+        if (rc == 0) {
+            output->status_flags |= XSTAR_ELEMENT_STATUS_NATIVE_CONSTRUCTION;
+            output->construction_seconds = construction_seconds;
+            output->records_constructed = contribution_count;
+            output->terms_constructed = terms.size();
+            context->impl.stats.construction_calls += 1;
+            context->impl.stats.records_constructed += contribution_count;
+            context->impl.stats.terms_constructed += terms.size();
+            context->impl.stats.construction_seconds += construction_seconds;
+            std::ostringstream text;
+            text << status << "; native_records=" << contribution_count
+                 << "; native_terms=" << terms.size()
+                 << "; canonical_thermal_terms=" << thermal_term_count
+                 << "; trusted_canonical_thermal=1";
+            status = text.str();
+            copy_text(output->message, sizeof(output->message), status);
+        }
+        copy_text(message, message_size, status);
+        return rc;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        copy_text(output->message, sizeof(output->message), exc.what());
+        return 2;
+    } catch (...) {
+        copy_text(message, message_size, "unknown trusted canonical Thermal construction exception");
         return 3;
     }
 }

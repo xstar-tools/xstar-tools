@@ -17,6 +17,7 @@
 #include "canonical_thermal_term.hpp"
 #include "coheat_table.h"
 #include "xstar_element_engine.h"
+#include "xstar_element_engine_internal.hpp"
 #include "xstar_spectral_engine.h"
 #include "type50_manifold_oracle.h"
 #include "type50_dsec_runtime_oracle.h"
@@ -588,6 +589,21 @@ Type53StaticKernelModeV068240227 configured_type53_static_kernel_mode_v068240227
 // reuses the already-live reduced continuum workspace, persistent temporary
 // capacity, and one fixed-call qualification-mode read while preserving every
 // source arithmetic operation and accumulation order.
+// 0.6.82.40.2.41: canonical Thermal consumer verification control.
+// Historical preserves both consumer-side validation/fingerprint rescans.
+// Optimized trusts the builder-validated immutable ledger in ordinary native
+// production while retaining all public/non-production verification surfaces.
+enum class CanonicalThermalFingerprintModeV068240241 { Historical, Optimized };
+
+CanonicalThermalFingerprintModeV068240241 configured_canonical_thermal_fingerprint_mode_v068240241() {
+    const char* value = std::getenv("XSTAR_V068240241_CANONICAL_THERMAL_FINGERPRINT_MODE");
+    if (!value || !*value || std::string(value) == "optimized")
+        return CanonicalThermalFingerprintModeV068240241::Optimized;
+    if (std::string(value) == "historical")
+        return CanonicalThermalFingerprintModeV068240241::Historical;
+    throw std::runtime_error("invalid XSTAR_V068240241_CANONICAL_THERMAL_FINGERPRINT_MODE");
+}
+
 enum class ContinuumWorkspaceHotPathModeV068240230 { Historical, Optimized };
 
 ContinuumWorkspaceHotPathModeV068240230 configured_continuum_workspace_hotpath_mode_v068240230() {
@@ -2848,15 +2864,6 @@ struct CanonicalThermalLedgerBuild {
     std::uint64_t fingerprint = 0;
 };
 
-struct CanonicalThermalBuilderFineAttributionV068240240 {
-    std::uint64_t calls = 0u;
-    std::uint64_t contributions = 0u;
-    std::uint64_t terms = 0u;
-    double term_identity_seconds = 0.0;
-    double validate_seconds = 0.0;
-    double fingerprint_seconds = 0.0;
-};
-
 class CanonicalThermalLedgerBuilderV048746212 {
 public:
     CanonicalThermalLedgerBuilderV048746212(
@@ -3014,8 +3021,7 @@ public:
         const std::vector<xstar_element_contribution_v1>& thermal_only_contributions,
         CanonicalThermalLedgerBuild& out,
         std::uint64_t& capacity_growths,
-        std::uint64_t& capacity_reuses,
-        CanonicalThermalBuilderFineAttributionV068240240* fine_timing = nullptr
+        std::uint64_t& capacity_reuses
     ) const {
         const std::size_t total_contributions =
             committed_contributions.size() + thermal_only_contributions.size();
@@ -3031,8 +3037,6 @@ public:
             ++capacity_reuses;
         }
 
-        const auto term_identity_started_v068240240 =
-            fine_timing ? clock_type::now() : clock_type::time_point{};
         std::set<Identity> consumed;
         std::set<std::pair<std::int64_t, std::string>> type99_rows_matched;
         std::set<std::pair<std::int64_t, std::string>> primary_rows_matched;
@@ -3124,31 +3128,9 @@ public:
             throw std::runtime_error(
                 "canonical Thermal ledger did not consume every Mg primary source-order row");
         }
-        if (fine_timing) {
-            fine_timing->term_identity_seconds +=
-                std::chrono::duration<double>(clock_type::now() -
-                    term_identity_started_v068240240).count();
-        }
-        const auto validate_started_v068240240 =
-            fine_timing ? clock_type::now() : clock_type::time_point{};
         xstar_canonical_thermal::validate(
             out.terms.data(), out.terms.size(), active_.element.n_rows);
-        if (fine_timing) {
-            fine_timing->validate_seconds +=
-                std::chrono::duration<double>(clock_type::now() -
-                    validate_started_v068240240).count();
-        }
-        const auto fingerprint_started_v068240240 =
-            fine_timing ? clock_type::now() : clock_type::time_point{};
         out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
-        if (fine_timing) {
-            fine_timing->fingerprint_seconds +=
-                std::chrono::duration<double>(clock_type::now() -
-                    fingerprint_started_v068240240).count();
-            ++fine_timing->calls;
-            fine_timing->contributions += static_cast<std::uint64_t>(total_contributions);
-            fine_timing->terms += static_cast<std::uint64_t>(out.terms.size());
-        }
     }
 
 private:
@@ -5123,6 +5105,10 @@ struct xstar_fixed_state_context_impl {
     bool traversal_hotpath_mode_initialized_v068240215 = false;
     TraversalHotPathModeV068240215 traversal_hotpath_mode_v068240215 =
         TraversalHotPathModeV068240215::Optimized;
+    // 0.6.82.40.2.41: resolve trusted canonical-Thermal consumer mode once.
+    bool canonical_thermal_fingerprint_mode_initialized_v068240241 = false;
+    CanonicalThermalFingerprintModeV068240241 canonical_thermal_fingerprint_mode_v068240241 =
+        CanonicalThermalFingerprintModeV068240241::Optimized;
     std::vector<Option10EndpointPlanV068240215> option10_endpoint_plan_by_record_v068240215;
     // 0.6.82.40.2.36: private production-preamble cache.  No public ABI state.
     bool production_preamble_environment_initialized_v068240236 = false;
@@ -13986,6 +13972,17 @@ int run_impl(
         diagnostic_env_v0682372("XSTAR_V06481238_O7_STATE_DIR") ||
         diagnostic_env_v0682372("XSTAR_V06481221_CA_ATTRIBUTION_DIR") ||
         diagnostic_env_v0682372("XSTAR_V0648118_C_SOLVE_ATTRIBUTION_DIR");
+    if (!ctx.canonical_thermal_fingerprint_mode_initialized_v068240241) {
+        ctx.canonical_thermal_fingerprint_mode_v068240241 =
+            configured_canonical_thermal_fingerprint_mode_v068240241();
+        ctx.canonical_thermal_fingerprint_mode_initialized_v068240241 = true;
+    }
+    const bool canonical_thermal_fingerprint_reuse_v068240241 =
+        native_production_v064897 && !retain_record_provenance_v064897 &&
+        !explicit_rich_element_forensic_request_v0682391 &&
+        !matrix_construction_closure &&
+        ctx.canonical_thermal_fingerprint_mode_v068240241 ==
+            CanonicalThermalFingerprintModeV068240241::Optimized;
     // Fail closed against a stale accepted-boundary snapshot if this
     // evaluation exits before the exact source workspaces are committed.
     ctx.last_source_workspaces_valid_v064894 = false;
@@ -14365,8 +14362,6 @@ int run_impl(
         environment_flag("XSTAR_V068240237_TRAVERSAL_FINE_TIMING");
     const bool pass2_fine_timing_v068240238 =
         environment_flag("XSTAR_V068240238_PASS2_FINE_TIMING");
-    const bool thermal_ledger_fine_timing_v068240240 =
-        environment_flag("XSTAR_V068240240_THERMAL_LEDGER_FINE_TIMING");
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
          element_slot_v064894 < ctx.program.elements.size();
@@ -14378,8 +14373,6 @@ int run_impl(
             ++perf_foundation_v068231.traversal_fine_elements_v068240237;
         if (pass2_fine_timing_v068240238)
             ++perf_foundation_v068231.pass2_fine_elements_v068240238;
-        if (thermal_ledger_fine_timing_v068240240)
-            ++perf_foundation_v068231.thermal_ledger_fine_elements_v068240240;
         const auto residual_element_started_v064812339 = clock_type::now();
         ResidualScalingAuditV064812339 residual_audit_v064812339;
         residual_audit_v064812339.call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
@@ -15746,13 +15739,6 @@ int run_impl(
             }
         }
 
-        if (thermal_ledger_fine_timing_v068240240) {
-            perf_foundation_v068231.thermal_ledger_contribution_discovery_seconds_v068240240 +=
-                elapsed(contribution_list_started_v068231);
-        }
-        CanonicalThermalBuilderFineAttributionV068240240
-            thermal_builder_fine_v068240240{};
-
         // v0.6.48.7.46.21.8 canonical Thermal coefficients.  .40.2.14
         // retains the historical candidate-map path as a same-binary control,
         // while ordinary production builds the same source-ordered terms
@@ -15764,9 +15750,7 @@ int run_impl(
             canonical_thermal_builder.finish_direct_into_v068240214(
                 contributions, thermal_only_contributions, reusable,
                 perf_foundation_v068231.contribution_thermal_term_capacity_growths_v068240214,
-                perf_foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214,
-                thermal_ledger_fine_timing_v068240240
-                    ? &thermal_builder_fine_v068240240 : nullptr);
+                perf_foundation_v068231.contribution_thermal_term_capacity_reuses_v068240214);
             canonical_thermal_ledger_v068240214 = &reusable;
             ++perf_foundation_v068231.contribution_direct_thermal_build_calls_v068240214;
         } else {
@@ -15782,20 +15766,6 @@ int run_impl(
                 &historical_canonical_thermal_ledger_v068240214;
         }
         const auto& canonical_thermal_ledger = *canonical_thermal_ledger_v068240214;
-        if (thermal_ledger_fine_timing_v068240240) {
-            perf_foundation_v068231.thermal_ledger_builder_calls_v068240240 +=
-                thermal_builder_fine_v068240240.calls;
-            perf_foundation_v068231.thermal_ledger_builder_contributions_v068240240 +=
-                thermal_builder_fine_v068240240.contributions;
-            perf_foundation_v068231.thermal_ledger_builder_terms_v068240240 +=
-                thermal_builder_fine_v068240240.terms;
-            perf_foundation_v068231.thermal_ledger_builder_term_identity_seconds_v068240240 +=
-                thermal_builder_fine_v068240240.term_identity_seconds;
-            perf_foundation_v068231.thermal_ledger_builder_validate_seconds_v068240240 +=
-                thermal_builder_fine_v068240240.validate_seconds;
-            perf_foundation_v068231.thermal_ledger_builder_fingerprint_seconds_v068240240 +=
-                thermal_builder_fine_v068240240.fingerprint_seconds;
-        }
         perf_foundation_v068231.contribution_list_seconds +=
             elapsed(contribution_list_started_v068231);
         stats.contributions_constructed += contributions.size();
@@ -15868,29 +15838,24 @@ int run_impl(
                 elapsed(traversal_fine_region4_started_v068240237);
         const auto element_start = clock_type::now();
         std::uint64_t element_consumed_thermal_ledger_fingerprint = 0;
-        if (thermal_ledger_fine_timing_v068240240) {
-            xstar_canonical_thermal::reset_element_consumer_fine_timing_v068240240();
-            xstar_canonical_thermal::element_consumer_fine_timing_enabled_v068240240 = true;
-        }
-        const int rc = xstar_element_engine_run_construction_with_thermal_ledger_v1(
-            ctx.element_context, &ein, contributions.data(), contributions.size(),
-            canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
-            &element_consumed_thermal_ledger_fingerprint,
-            &eout, error.data(), error.size());
-        if (thermal_ledger_fine_timing_v068240240) {
-            xstar_canonical_thermal::element_consumer_fine_timing_enabled_v068240240 = false;
-            const auto& element_thermal_fine_v068240240 =
-                xstar_canonical_thermal::element_consumer_fine_timing_v068240240;
-            perf_foundation_v068231.thermal_ledger_element_consumer_calls_v068240240 +=
-                element_thermal_fine_v068240240.calls;
-            perf_foundation_v068231.thermal_ledger_element_consumer_terms_v068240240 +=
-                element_thermal_fine_v068240240.terms;
-            perf_foundation_v068231.thermal_ledger_element_validate_seconds_v068240240 +=
-                element_thermal_fine_v068240240.validate_seconds;
-            perf_foundation_v068231.thermal_ledger_element_fingerprint_seconds_v068240240 +=
-                element_thermal_fine_v068240240.fingerprint_seconds;
-            perf_foundation_v068231.thermal_ledger_element_reduce_seconds_v068240240 +=
-                element_thermal_fine_v068240240.reduction_seconds;
+        int rc = 0;
+        if (canonical_thermal_fingerprint_reuse_v068240241) {
+            rc = xstar_element_engine_run_construction_with_trusted_thermal_ledger_v068240241(
+                ctx.element_context, &ein, contributions.data(), contributions.size(),
+                canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
+                canonical_thermal_ledger.fingerprint,
+                &element_consumed_thermal_ledger_fingerprint,
+                &eout, error.data(), error.size());
+            ++perf_foundation_v068231.canonical_thermal_fingerprint_optimized_elements_v068240241;
+            ++perf_foundation_v068231.canonical_thermal_element_fingerprint_reuses_v068240241;
+        } else {
+            rc = xstar_element_engine_run_construction_with_thermal_ledger_v1(
+                ctx.element_context, &ein, contributions.data(), contributions.size(),
+                canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
+                &element_consumed_thermal_ledger_fingerprint,
+                &eout, error.data(), error.size());
+            ++perf_foundation_v068231.canonical_thermal_fingerprint_historical_elements_v068240241;
+            ++perf_foundation_v068231.canonical_thermal_element_fingerprint_recomputes_v068240241;
         }
         const double residual_element_solve_seconds_v064812339 = elapsed(element_start);
         stats.element_seconds += residual_element_solve_seconds_v064812339;
@@ -16054,26 +16019,16 @@ int run_impl(
         double computed_element_heating2 = 0.0;
         double computed_element_cooling2 = 0.0;
         if (thermal_diagonal_source_domain) {
-            xstar_canonical_thermal::FineAttributionV068240240
-                fixed_thermal_fine_v068240240{};
-            const auto canonical_reduction = thermal_ledger_fine_timing_v068240240
-                ? xstar_canonical_thermal::reduce_timed_v068240240(
+            const auto canonical_reduction = canonical_thermal_fingerprint_reuse_v068240241
+                ? xstar_canonical_thermal::reduce_trusted_v068240241(
                     canonical_thermal_ledger.terms, thermal_populations, element.element_z,
-                    fixed_thermal_fine_v068240240)
+                    canonical_thermal_ledger.fingerprint)
                 : xstar_canonical_thermal::reduce(
                     canonical_thermal_ledger.terms, thermal_populations, element.element_z);
-            if (thermal_ledger_fine_timing_v068240240) {
-                perf_foundation_v068231.thermal_ledger_fixed_consumer_calls_v068240240 +=
-                    fixed_thermal_fine_v068240240.calls;
-                perf_foundation_v068231.thermal_ledger_fixed_consumer_terms_v068240240 +=
-                    fixed_thermal_fine_v068240240.terms;
-                perf_foundation_v068231.thermal_ledger_fixed_validate_seconds_v068240240 +=
-                    fixed_thermal_fine_v068240240.validate_seconds;
-                perf_foundation_v068231.thermal_ledger_fixed_fingerprint_seconds_v068240240 +=
-                    fixed_thermal_fine_v068240240.fingerprint_seconds;
-                perf_foundation_v068231.thermal_ledger_fixed_reduce_seconds_v068240240 +=
-                    fixed_thermal_fine_v068240240.reduction_seconds;
-            }
+            if (canonical_thermal_fingerprint_reuse_v068240241)
+                ++perf_foundation_v068231.canonical_thermal_fixed_fingerprint_reuses_v068240241;
+            else
+                ++perf_foundation_v068231.canonical_thermal_fixed_fingerprint_recomputes_v068240241;
             if (canonical_reduction.fingerprint != canonical_thermal_ledger.fingerprint) {
                 throw std::runtime_error(
                     "fixed-state consumer canonical Thermal ledger fingerprint mismatch");
@@ -16091,9 +16046,6 @@ int run_impl(
                     canonical_reduction.tagged.non_type53.abundance_weighted(element.abundance);
             }
 
-            const auto thermal_diagonal_scan_started_v068240240 =
-                thermal_ledger_fine_timing_v068240240
-                    ? clock_type::now() : clock_type::time_point{};
             for (const auto& term : canonical_thermal_ledger.terms) {
                 const std::size_t row = static_cast<std::size_t>(term.compact_row - 1);
                 const double compact_population = thermal_populations[row];
@@ -16158,10 +16110,6 @@ int run_impl(
                     diagonal.heating2_contribution = (-secondary_unweighted) * element.abundance;
                 }
                 ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
-            }
-            if (thermal_ledger_fine_timing_v068240240) {
-                perf_foundation_v068231.thermal_ledger_fixed_diagonal_scan_seconds_v068240240 +=
-                    elapsed(thermal_diagonal_scan_started_v068240240);
             }
             ctx.last_thermal_diagonal_source_domain = true;
         } else {

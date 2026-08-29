@@ -23311,34 +23311,6 @@ void emit_controller_performance_instrumentation(
         perf.foundation_v068231.element_input_seconds;
     const double pass2_fine_residual_v068240238 = std::max(
         0.0, pass2_fine_region4_total_v068240238 - pass2_fine_known_v068240238);
-    // 0.6.82.40.2.40: canonical Thermal ledger fine attribution.  These
-    // totals are observation-only sums of coarse builder/consumer phases.
-    const double thermal_builder_accounted_v068240240 =
-        perf.foundation_v068231.thermal_ledger_contribution_discovery_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_builder_term_identity_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_builder_validate_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_builder_fingerprint_seconds_v068240240;
-    const double thermal_contribution_parent_residual_v068240240 = std::max(
-        0.0, perf.foundation_v068231.contribution_list_seconds -
-            thermal_builder_accounted_v068240240);
-    const double thermal_element_consumer_total_v068240240 =
-        perf.foundation_v068231.thermal_ledger_element_validate_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_element_fingerprint_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_element_reduce_seconds_v068240240;
-    const double thermal_fixed_consumer_total_v068240240 =
-        perf.foundation_v068231.thermal_ledger_fixed_validate_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_fixed_fingerprint_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_fixed_reduce_seconds_v068240240;
-    const double thermal_fixed_ledger_total_v068240240 =
-        thermal_fixed_consumer_total_v068240240 +
-        perf.foundation_v068231.thermal_ledger_fixed_diagonal_scan_seconds_v068240240;
-    const double thermal_duplicate_validation_fingerprint_v068240240 =
-        perf.foundation_v068231.thermal_ledger_builder_validate_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_builder_fingerprint_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_element_validate_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_element_fingerprint_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_fixed_validate_seconds_v068240240 +
-        perf.foundation_v068231.thermal_ledger_fixed_fingerprint_seconds_v068240240;
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
@@ -23508,34 +23480,6 @@ void emit_controller_performance_instrumentation(
             << "V068240238_CPP_SUB6_MATRIX_WORKSPACE_SECONDS=" << perf.foundation_v068231.matrix_workspace_seconds << "\n"
             << "V068240238_CPP_SUB7_ELEMENT_INPUT_BINDING_SECONDS=" << perf.foundation_v068231.element_input_seconds << "\n"
             << "V068240238_CPP_SUB8_POSTEVAL_OTHER_STAGING_SECONDS=" << pass2_fine_residual_v068240238 << "\n"
-            << "V068240240_THERMAL_LEDGER_FINE_TIMING="
-            << (perf.foundation_v068231.thermal_ledger_fine_elements_v068240240 > 0u ? "YES" : "NO") << "\n"
-            << "V068240240_ELEMENT_PHASE_SAMPLES=" << perf.foundation_v068231.thermal_ledger_fine_elements_v068240240 << "\n"
-            << "V068240240_BUILDER_CALLS=" << perf.foundation_v068231.thermal_ledger_builder_calls_v068240240 << "\n"
-            << "V068240240_BUILDER_CONTRIBUTIONS=" << perf.foundation_v068231.thermal_ledger_builder_contributions_v068240240 << "\n"
-            << "V068240240_BUILDER_TERMS=" << perf.foundation_v068231.thermal_ledger_builder_terms_v068240240 << "\n"
-            << "V068240240_SUB1_CONTRIBUTION_DISCOVERY_SECONDS=" << perf.foundation_v068231.thermal_ledger_contribution_discovery_seconds_v068240240 << "\n"
-            << "V068240240_SUB2_TERM_IDENTITY_CONSTRUCTION_SECONDS=" << perf.foundation_v068231.thermal_ledger_builder_term_identity_seconds_v068240240 << "\n"
-            << "V068240240_SUB3_BUILDER_VALIDATE_SECONDS=" << perf.foundation_v068231.thermal_ledger_builder_validate_seconds_v068240240 << "\n"
-            << "V068240240_SUB4_BUILDER_FINGERPRINT_SECONDS=" << perf.foundation_v068231.thermal_ledger_builder_fingerprint_seconds_v068240240 << "\n"
-            << "V068240240_SUB5_CONTRIBUTION_PARENT_RESIDUAL_SECONDS=" << thermal_contribution_parent_residual_v068240240 << "\n"
-            << "V068240240_ELEMENT_CONSUMER_CALLS=" << perf.foundation_v068231.thermal_ledger_element_consumer_calls_v068240240 << "\n"
-            << "V068240240_ELEMENT_CONSUMER_TERMS=" << perf.foundation_v068231.thermal_ledger_element_consumer_terms_v068240240 << "\n"
-            << "V068240240_SUB6_ELEMENT_VALIDATE_SECONDS=" << perf.foundation_v068231.thermal_ledger_element_validate_seconds_v068240240 << "\n"
-            << "V068240240_SUB7_ELEMENT_FINGERPRINT_SECONDS=" << perf.foundation_v068231.thermal_ledger_element_fingerprint_seconds_v068240240 << "\n"
-            << "V068240240_SUB8_ELEMENT_REDUCE_SECONDS=" << perf.foundation_v068231.thermal_ledger_element_reduce_seconds_v068240240 << "\n"
-            << "V068240240_ELEMENT_CONSUMER_TOTAL_SECONDS=" << thermal_element_consumer_total_v068240240 << "\n"
-            << "V068240240_FIXED_CONSUMER_CALLS=" << perf.foundation_v068231.thermal_ledger_fixed_consumer_calls_v068240240 << "\n"
-            << "V068240240_FIXED_CONSUMER_TERMS=" << perf.foundation_v068231.thermal_ledger_fixed_consumer_terms_v068240240 << "\n"
-            << "V068240240_SUB9_FIXED_VALIDATE_SECONDS=" << perf.foundation_v068231.thermal_ledger_fixed_validate_seconds_v068240240 << "\n"
-            << "V068240240_SUB10_FIXED_FINGERPRINT_SECONDS=" << perf.foundation_v068231.thermal_ledger_fixed_fingerprint_seconds_v068240240 << "\n"
-            << "V068240240_SUB11_FIXED_REDUCE_SECONDS=" << perf.foundation_v068231.thermal_ledger_fixed_reduce_seconds_v068240240 << "\n"
-            << "V068240240_FIXED_CONSUMER_TOTAL_SECONDS=" << thermal_fixed_consumer_total_v068240240 << "\n"
-            << "V068240240_SUB12_FIXED_DIAGONAL_SCAN_SECONDS=" << perf.foundation_v068231.thermal_ledger_fixed_diagonal_scan_seconds_v068240240 << "\n"
-            << "V068240240_FIXED_LEDGER_TOTAL_SECONDS=" << thermal_fixed_ledger_total_v068240240 << "\n"
-            << "V068240240_DUPLICATE_VALIDATE_FINGERPRINT_SECONDS=" << thermal_duplicate_validation_fingerprint_v068240240 << "\n"
-            << "V068240240_CONTRIBUTION_PARENT_SECONDS=" << perf.foundation_v068231.contribution_list_seconds << "\n"
-            << "V068240240_CONTRIBUTION_ACCOUNTED_SECONDS=" << thermal_builder_accounted_v068240240 + thermal_contribution_parent_residual_v068240240 << "\n"
             << "V06824028_CONTROLLER_DSEC_SECONDS=" << perf.controller_all_seconds_v0682402 << "\n"
             << "V06824028_CONTROLLER_DSEC_FIXED_SECONDS=" << perf.controller_fixed_seconds_v06824028 << "\n"
             << "V06824028_CONTROLLER_DSEC_NONFIXED_SECONDS=" << perf.controller_nonfixed_seconds_v06824028 << "\n"
@@ -23636,6 +23580,17 @@ void emit_controller_performance_instrumentation(
             << "V068240215_POSTPASS_OWNERSHIP_SECONDS="
             << (perf.foundation_v068231.option10_ownership_seconds_v068240215 +
                 perf.foundation_v068231.errc_ownership_seconds_v068240215) << "\n"
+            << "V068240241_CANONICAL_THERMAL_FINGERPRINT_MODE="
+            << ((perf.foundation_v068231.canonical_thermal_fingerprint_optimized_elements_v068240241 > 0u &&
+                 perf.foundation_v068231.canonical_thermal_fingerprint_historical_elements_v068240241 == 0u) ? "OPTIMIZED" :
+                (perf.foundation_v068231.canonical_thermal_fingerprint_historical_elements_v068240241 > 0u &&
+                 perf.foundation_v068231.canonical_thermal_fingerprint_optimized_elements_v068240241 == 0u) ? "HISTORICAL" : "MIXED") << "\n"
+            << "V068240241_CANONICAL_THERMAL_HISTORICAL_ELEMENTS=" << perf.foundation_v068231.canonical_thermal_fingerprint_historical_elements_v068240241 << "\n"
+            << "V068240241_CANONICAL_THERMAL_OPTIMIZED_ELEMENTS=" << perf.foundation_v068231.canonical_thermal_fingerprint_optimized_elements_v068240241 << "\n"
+            << "V068240241_ELEMENT_FINGERPRINT_RECOMPUTES=" << perf.foundation_v068231.canonical_thermal_element_fingerprint_recomputes_v068240241 << "\n"
+            << "V068240241_ELEMENT_FINGERPRINT_REUSES=" << perf.foundation_v068231.canonical_thermal_element_fingerprint_reuses_v068240241 << "\n"
+            << "V068240241_FIXED_FINGERPRINT_RECOMPUTES=" << perf.foundation_v068231.canonical_thermal_fixed_fingerprint_recomputes_v068240241 << "\n"
+            << "V068240241_FIXED_FINGERPRINT_REUSES=" << perf.foundation_v068231.canonical_thermal_fixed_fingerprint_reuses_v068240241 << "\n"
             << "V068231_PERF_ELEMENT_BUFFER_REUSES=" << perf.foundation_v068231.element_buffer_reuses << "\n"
             << "V068231_PERF_LEVELTEMP_BACKUP_REUSES=" << perf.foundation_v068231.leveltemp_backup_reuses << "\n"
             << "V068231_PERF_REDUCED_CONTINUUM_GEOMETRY_BUILDS=" << perf.foundation_v068231.reduced_continuum_geometry_builds << "\n"

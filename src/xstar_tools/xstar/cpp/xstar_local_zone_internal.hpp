@@ -76,6 +76,15 @@ struct PerformanceFoundationV068231 {
     std::uint64_t postpass_index_capacity_reuses_v068240215 = 0u;
     double option10_ownership_seconds_v068240215 = 0.0;
     double errc_ownership_seconds_v068240215 = 0.0;
+    // 0.6.82.40.2.41: production-only canonical Thermal fingerprint reuse.
+    // Builder verification remains authoritative; these counters distinguish
+    // public/historical consumer rescans from trusted production reuse.
+    std::uint64_t canonical_thermal_fingerprint_historical_elements_v068240241 = 0u;
+    std::uint64_t canonical_thermal_fingerprint_optimized_elements_v068240241 = 0u;
+    std::uint64_t canonical_thermal_element_fingerprint_recomputes_v068240241 = 0u;
+    std::uint64_t canonical_thermal_element_fingerprint_reuses_v068240241 = 0u;
+    std::uint64_t canonical_thermal_fixed_fingerprint_recomputes_v068240241 = 0u;
+    std::uint64_t canonical_thermal_fixed_fingerprint_reuses_v068240241 = 0u;
     // 0.6.82.40.2.37: attribution-only coarse traversal partition.
     // Clocks are enabled only by XSTAR_V068240237_TRAVERSAL_FINE_TIMING and
     // are placed at element/phase boundaries, never inside evaluate_record(),
@@ -95,29 +104,6 @@ struct PerformanceFoundationV068231 {
     // existing coarse timing owners and the final residual is derived.
     std::uint64_t pass2_fine_elements_v068240238 = 0u;
     double pass2_fine_rate_seconds_v068240238 = 0.0;
-    // 0.6.82.40.2.40: attribution-only canonical Thermal ledger partition.
-    // Timing is enabled only by XSTAR_V068240240_THERMAL_LEDGER_FINE_TIMING.
-    // Clocks are placed at whole contribution/builder/consumer boundaries,
-    // never inside evaluate_record(), record loops, term loops, or matrix loops.
-    std::uint64_t thermal_ledger_fine_elements_v068240240 = 0u;
-    std::uint64_t thermal_ledger_builder_calls_v068240240 = 0u;
-    std::uint64_t thermal_ledger_builder_contributions_v068240240 = 0u;
-    std::uint64_t thermal_ledger_builder_terms_v068240240 = 0u;
-    double thermal_ledger_contribution_discovery_seconds_v068240240 = 0.0;
-    double thermal_ledger_builder_term_identity_seconds_v068240240 = 0.0;
-    double thermal_ledger_builder_validate_seconds_v068240240 = 0.0;
-    double thermal_ledger_builder_fingerprint_seconds_v068240240 = 0.0;
-    std::uint64_t thermal_ledger_element_consumer_calls_v068240240 = 0u;
-    std::uint64_t thermal_ledger_element_consumer_terms_v068240240 = 0u;
-    double thermal_ledger_element_validate_seconds_v068240240 = 0.0;
-    double thermal_ledger_element_fingerprint_seconds_v068240240 = 0.0;
-    double thermal_ledger_element_reduce_seconds_v068240240 = 0.0;
-    std::uint64_t thermal_ledger_fixed_consumer_calls_v068240240 = 0u;
-    std::uint64_t thermal_ledger_fixed_consumer_terms_v068240240 = 0u;
-    double thermal_ledger_fixed_validate_seconds_v068240240 = 0.0;
-    double thermal_ledger_fixed_fingerprint_seconds_v068240240 = 0.0;
-    double thermal_ledger_fixed_reduce_seconds_v068240240 = 0.0;
-    double thermal_ledger_fixed_diagonal_scan_seconds_v068240240 = 0.0;
     std::uint64_t element_buffer_reuses = 0u;
     std::uint64_t leveltemp_backup_reuses = 0u;
     std::uint64_t reduced_continuum_geometry_builds = 0u;

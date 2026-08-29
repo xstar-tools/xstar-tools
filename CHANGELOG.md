@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.82.40.2.41 - CANONICAL_THERMAL_FINGERPRINT_REUSE_HOT_PATH - 2026-08-29
+
+- Branches directly from accepted `0.6.82.40.2.38`; rejected `.39/.39.1` direct-commit work is not carried forward.
+- Reuses the builder-authoritative canonical Thermal ledger fingerprint in ordinary native production, eliminating redundant element-consumer and fixed-consumer validation/fingerprint scans.
+- Preserves the public element-engine API and full historical validation/fingerprinting for external, diagnostic, forensic, provenance, and matrix-closure paths.
+- Preserves canonical term construction, term order, population checks, Mg source-order handling, thermal arithmetic, and accumulation order exactly.
+- Adds same-binary `historical|optimized` qualification via `XSTAR_V068240241_CANONICAL_THERMAL_FINGERPRINT_MODE`.
+
 ## 0.6.82.40.2.40 — CANONICAL_THERMAL_LEDGER_FINE_ATTRIBUTION - 2026-08-29
 
 - Attribution-only branch from accepted `0.6.82.40.2.38`; rejected `.39/.39.1` PASS2 direct-commit experiments are not carried forward.

@@ -16,7 +16,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -26,25 +25,6 @@
 #include <vector>
 
 namespace xstar_canonical_thermal {
-
-// 0.6.82.40.2.40: observation-only coarse attribution for canonical Thermal
-// ledger validation, fingerprinting, and arithmetic reduction.  The timing
-// owner is optional; no clock is read on ordinary production calls.
-struct FineAttributionV068240240 {
-    std::uint64_t calls = 0u;
-    std::uint64_t terms = 0u;
-    double validate_seconds = 0.0;
-    double fingerprint_seconds = 0.0;
-    double reduction_seconds = 0.0;
-};
-
-inline thread_local bool element_consumer_fine_timing_enabled_v068240240 = false;
-inline thread_local FineAttributionV068240240 element_consumer_fine_timing_v068240240{};
-
-inline void reset_element_consumer_fine_timing_v068240240() {
-    element_consumer_fine_timing_v068240240 = {};
-}
-
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement fnv1a byte for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
@@ -168,33 +148,20 @@ struct ReductionResult {
 // Purpose: Implement reduce for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
 // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
 // XSTAR-FUNCTION-COMMENT-END
-inline ReductionResult reduce_impl_v068240240(
+inline ReductionResult reduce(
     const xstar_canonical_thermal_term_v1* terms,
     std::size_t count,
     const double* populations,
     std::size_t population_count,
-    int element_z,
-    FineAttributionV068240240* fine_timing
+    int element_z
 ) {
-    using fine_clock = std::chrono::steady_clock;
-    const auto validate_started = fine_timing ? fine_clock::now() : fine_clock::time_point{};
     validate(terms, count, static_cast<int>(population_count));
-    if (fine_timing) {
-        fine_timing->validate_seconds +=
-            std::chrono::duration<double>(fine_clock::now() - validate_started).count();
-    }
     if (population_count > 0 && populations == nullptr) {
         throw std::runtime_error("canonical Thermal population pointer is null");
     }
     ReductionResult result;
-    const auto fingerprint_started = fine_timing ? fine_clock::now() : fine_clock::time_point{};
     result.fingerprint = fingerprint(terms, count);
-    if (fine_timing) {
-        fine_timing->fingerprint_seconds +=
-            std::chrono::duration<double>(fine_clock::now() - fingerprint_started).count();
-    }
     result.term_count = count;
-    const auto reduction_started = fine_timing ? fine_clock::now() : fine_clock::time_point{};
 
     struct PendingPrimary {
         std::int64_t order = 0;
@@ -235,36 +202,7 @@ inline ReductionResult reduce_impl_v068240240(
         const bool is_type53 = (term.flags & XSTAR_CANONICAL_THERMAL_TYPE53) != 0u;
         result.tagged.accumulate_primary(population, term.cj, is_type53);
     }
-    if (fine_timing) {
-        fine_timing->reduction_seconds +=
-            std::chrono::duration<double>(fine_clock::now() - reduction_started).count();
-        ++fine_timing->calls;
-        fine_timing->terms += static_cast<std::uint64_t>(count);
-    }
     return result;
-}
-
-inline ReductionResult reduce(
-    const xstar_canonical_thermal_term_v1* terms,
-    std::size_t count,
-    const double* populations,
-    std::size_t population_count,
-    int element_z
-) {
-    return reduce_impl_v068240240(
-        terms, count, populations, population_count, element_z, nullptr);
-}
-
-inline ReductionResult reduce_timed_v068240240(
-    const xstar_canonical_thermal_term_v1* terms,
-    std::size_t count,
-    const double* populations,
-    std::size_t population_count,
-    int element_z,
-    FineAttributionV068240240& fine_timing
-) {
-    return reduce_impl_v068240240(
-        terms, count, populations, population_count, element_z, &fine_timing);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -279,14 +217,80 @@ inline ReductionResult reduce(
     return reduce(terms.data(), terms.size(), populations.data(), populations.size(), element_z);
 }
 
-inline ReductionResult reduce_timed_v068240240(
+// 0.6.82.40.2.41: internal production-only reduction for a ledger already
+// validated and fingerprinted by its authoritative builder.  Scientific
+// accumulation, Mg primary-source ordering, and population finiteness checks
+// are identical to reduce(); only the duplicate ledger validation/fingerprint
+// scans are omitted.  Public C API callers continue to use reduce().
+inline ReductionResult reduce_trusted_v068240241(
+    const xstar_canonical_thermal_term_v1* terms,
+    std::size_t count,
+    const double* populations,
+    std::size_t population_count,
+    int element_z,
+    std::uint64_t authoritative_fingerprint
+) {
+    if (count > 0 && terms == nullptr) {
+        throw std::runtime_error("canonical Thermal ledger pointer is null");
+    }
+    if (population_count > 0 && populations == nullptr) {
+        throw std::runtime_error("canonical Thermal population pointer is null");
+    }
+    ReductionResult result;
+    result.fingerprint = authoritative_fingerprint;
+    result.term_count = count;
+
+    struct PendingPrimary {
+        std::int64_t order = 0;
+        std::size_t ledger_index = 0;
+    };
+    std::vector<PendingPrimary> pending_primary;
+    pending_primary.reserve(count);
+
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto& term = terms[index];
+        const double population = populations[static_cast<std::size_t>(term.compact_row - 1)];
+        if (!std::isfinite(population)) {
+            throw std::runtime_error("canonical Thermal ledger population is non-finite");
+        }
+        const bool is_type53 = (term.flags & XSTAR_CANONICAL_THERMAL_TYPE53) != 0u;
+        const bool defer_primary = element_z == 12 && term.cj > 0.0 &&
+            term.primary_source_order_index > 0;
+        if (defer_primary) {
+            pending_primary.push_back({term.primary_source_order_index, index});
+        } else {
+            result.tagged.accumulate_primary(population, term.cj, is_type53);
+        }
+        result.tagged.accumulate_secondary(population, term.cj2, is_type53);
+    }
+
+    std::sort(pending_primary.begin(), pending_primary.end(), [](const auto& left, const auto& right) {
+        if (left.order != right.order) return left.order < right.order;
+        return left.ledger_index < right.ledger_index;
+    });
+    std::int64_t previous_order = 0;
+    for (const auto& pending : pending_primary) {
+        if (pending.order <= previous_order) {
+            throw std::runtime_error("canonical Thermal primary source order is not strictly increasing");
+        }
+        previous_order = pending.order;
+        const auto& term = terms[pending.ledger_index];
+        const double population = populations[static_cast<std::size_t>(term.compact_row - 1)];
+        const bool is_type53 = (term.flags & XSTAR_CANONICAL_THERMAL_TYPE53) != 0u;
+        result.tagged.accumulate_primary(population, term.cj, is_type53);
+    }
+    return result;
+}
+
+inline ReductionResult reduce_trusted_v068240241(
     const std::vector<xstar_canonical_thermal_term_v1>& terms,
     const std::vector<double>& populations,
     int element_z,
-    FineAttributionV068240240& fine_timing
+    std::uint64_t authoritative_fingerprint
 ) {
-    return reduce_timed_v068240240(
-        terms.data(), terms.size(), populations.data(), populations.size(), element_z, fine_timing);
+    return reduce_trusted_v068240241(
+        terms.data(), terms.size(), populations.data(), populations.size(),
+        element_z, authoritative_fingerprint);
 }
 
 } // namespace xstar_canonical_thermal
