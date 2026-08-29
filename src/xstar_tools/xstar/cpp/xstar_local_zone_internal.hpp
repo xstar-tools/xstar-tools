@@ -88,6 +88,13 @@ struct PerformanceFoundationV068231 {
     double traversal_fine_region4_pass2_assembly_seconds_v068240237 = 0.0;
     double traversal_fine_region5_element_solve_seconds_v068240237 = 0.0;
     double traversal_fine_region6_postsolve_mapback_seconds_v068240237 = 0.0;
+    // 0.6.82.40.2.38: attribution-only PASS2_ASSEMBLY subpartition.
+    // No new clock is placed in evaluate_record() or any record/bin loop.
+    // pass2_rate_seconds is accumulated from the already-existing rate timer
+    // delta across the pass-2 selection loop; the other subregions reuse
+    // existing coarse timing owners and the final residual is derived.
+    std::uint64_t pass2_fine_elements_v068240238 = 0u;
+    double pass2_fine_rate_seconds_v068240238 = 0.0;
     std::uint64_t element_buffer_reuses = 0u;
     std::uint64_t leveltemp_backup_reuses = 0u;
     std::uint64_t reduced_continuum_geometry_builds = 0u;

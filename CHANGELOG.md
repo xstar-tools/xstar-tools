@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.82.40.2.38 - PASS2_ASSEMBLY_FINE_ATTRIBUTION - 2026-08-28
+
+- Attribution-only successor to accepted `0.6.82.40.2.37`; no production speed optimization is attempted. Accepted `.36` fixed-engine preamble optimization and `.37` traversal attribution remain active.
+- Targets the dominant `.37` low-`xi` matched traversal excess: C++ PASS2_ASSEMBLY `70.327133 s` versus FORTRAN `51.183413 s`, excess `19.143720 s`.
+- Splits C++ PASS2_ASSEMBLY into eight non-overlapping buckets: pass-2 rate evaluator, evaluated-record non-rate materialization, Option-10 ownership, ERRC ownership, contribution/canonical-thermal-ledger construction, matrix workspace preparation, element-input binding, and a derived post-evaluation/other-staging residual.
+- Adds no new C++ clock read versus `.37`; pass-2 evaluator time is accumulated from the already-existing `stats.rate_seconds` delta and the final staging bucket is derived from exact region-4 closure.
+- Splits FORTRAN PASS2_ASSEMBLY only at coarse `calc_hmc_ion` caller boundaries: total `calc_hmc_ion` wall, post-call matrix/map work, and a derived outer-loop residual. No clock is added inside `calc_hmc_ion`, `ucalc`, `calc_ion_rates`, or atomic-record loops.
+- Reports evaluator-surface and outer-assembly cross-language comparisons explicitly as diagnostic proxies because FORTRAN `calc_hmc_ion` intertwines `ucalc` evaluation and matrix insertion.
+- Qualification is one C5 `xi=-3` C++/FORTRAN attribution run with exact frozen science/work, accepted-mode, timing-path, sample-count, and partition-closure gates. There is no performance gate and no multi-element run.
+
 ## 0.6.82.40.2.37 - FIXED_TRAVERSAL_FINE_CROSS_LANGUAGE_ATTRIBUTION - 2026-08-28
 
 - Attribution-only successor to accepted `0.6.82.40.2.36.1`; no traversal optimization is attempted and the accepted `.36` fixed-engine preamble optimization remains active.

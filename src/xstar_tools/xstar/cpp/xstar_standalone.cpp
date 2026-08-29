@@ -23295,6 +23295,22 @@ void emit_controller_performance_instrumentation(
         perf.foundation_v068231.matrix_workspace_seconds +
         perf.foundation_v068231.retained_array_seconds +
         perf.foundation_v068231.level_population_scratch_seconds;
+    // 0.6.82.40.2.38: PASS2_ASSEMBLY fine attribution reuses existing coarse
+    // timing owners.  Only pass2 rate time needs an additional aggregate,
+    // derived from the already-existing per-record rate timer delta.  The
+    // final staging bucket is a closure residual, not a newly clocked region.
+    const double pass2_fine_region4_total_v068240238 =
+        perf.foundation_v068231.traversal_fine_region4_pass2_assembly_seconds_v068240237;
+    const double pass2_fine_known_v068240238 =
+        perf.foundation_v068231.pass2_fine_rate_seconds_v068240238 +
+        perf.foundation_v068231.evaluated_record_seconds +
+        perf.foundation_v068231.option10_ownership_seconds_v068240215 +
+        perf.foundation_v068231.errc_ownership_seconds_v068240215 +
+        perf.foundation_v068231.contribution_list_seconds +
+        perf.foundation_v068231.matrix_workspace_seconds +
+        perf.foundation_v068231.element_input_seconds;
+    const double pass2_fine_residual_v068240238 = std::max(
+        0.0, pass2_fine_region4_total_v068240238 - pass2_fine_known_v068240238);
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
@@ -23452,6 +23468,18 @@ void emit_controller_performance_instrumentation(
             << "V068240237_CPP_REGION5_ELEMENT_SOLVE_SECONDS=" << perf.foundation_v068231.traversal_fine_region5_element_solve_seconds_v068240237 << "\n"
             << "V068240237_CPP_REGION6_POSTSOLVE_MAPBACK_SECONDS=" << perf.foundation_v068231.traversal_fine_region6_postsolve_mapback_seconds_v068240237 << "\n"
             << "V068240237_CPP_CONTROLLER_TRAVERSAL_SECONDS=" << perf.all_fixed_traversal_seconds << "\n"
+            << "V068240238_PASS2_FINE_TIMING="
+            << (perf.foundation_v068231.pass2_fine_elements_v068240238 > 0u ? "YES" : "NO") << "\n"
+            << "V068240238_CPP_ELEMENT_PHASE_SAMPLES=" << perf.foundation_v068231.pass2_fine_elements_v068240238 << "\n"
+            << "V068240238_CPP_PASS2_TOTAL_SECONDS=" << pass2_fine_region4_total_v068240238 << "\n"
+            << "V068240238_CPP_SUB1_PASS2_RATE_EVALUATOR_SECONDS=" << perf.foundation_v068231.pass2_fine_rate_seconds_v068240238 << "\n"
+            << "V068240238_CPP_SUB2_EVALUATED_RECORD_NONRATE_SECONDS=" << perf.foundation_v068231.evaluated_record_seconds << "\n"
+            << "V068240238_CPP_SUB3_OPTION10_OWNERSHIP_SECONDS=" << perf.foundation_v068231.option10_ownership_seconds_v068240215 << "\n"
+            << "V068240238_CPP_SUB4_ERRC_OWNERSHIP_SECONDS=" << perf.foundation_v068231.errc_ownership_seconds_v068240215 << "\n"
+            << "V068240238_CPP_SUB5_CONTRIBUTION_THERMAL_LEDGER_SECONDS=" << perf.foundation_v068231.contribution_list_seconds << "\n"
+            << "V068240238_CPP_SUB6_MATRIX_WORKSPACE_SECONDS=" << perf.foundation_v068231.matrix_workspace_seconds << "\n"
+            << "V068240238_CPP_SUB7_ELEMENT_INPUT_BINDING_SECONDS=" << perf.foundation_v068231.element_input_seconds << "\n"
+            << "V068240238_CPP_SUB8_POSTEVAL_OTHER_STAGING_SECONDS=" << pass2_fine_residual_v068240238 << "\n"
             << "V06824028_CONTROLLER_DSEC_SECONDS=" << perf.controller_all_seconds_v0682402 << "\n"
             << "V06824028_CONTROLLER_DSEC_FIXED_SECONDS=" << perf.controller_fixed_seconds_v06824028 << "\n"
             << "V06824028_CONTROLLER_DSEC_NONFIXED_SECONDS=" << perf.controller_nonfixed_seconds_v06824028 << "\n"

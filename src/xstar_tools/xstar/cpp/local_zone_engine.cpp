@@ -14329,6 +14329,8 @@ int run_impl(
 
     const bool traversal_fine_timing_v068240237 =
         environment_flag("XSTAR_V068240237_TRAVERSAL_FINE_TIMING");
+    const bool pass2_fine_timing_v068240238 =
+        environment_flag("XSTAR_V068240238_PASS2_FINE_TIMING");
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
          element_slot_v064894 < ctx.program.elements.size();
@@ -14338,6 +14340,8 @@ int run_impl(
             traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
         if (traversal_fine_timing_v068240237)
             ++perf_foundation_v068231.traversal_fine_elements_v068240237;
+        if (pass2_fine_timing_v068240238)
+            ++perf_foundation_v068231.pass2_fine_elements_v068240238;
         const auto residual_element_started_v064812339 = clock_type::now();
         ResidualScalingAuditV064812339 residual_audit_v064812339;
         residual_audit_v064812339.call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
@@ -14865,10 +14869,15 @@ int run_impl(
                 evaluate_pass2_selection_v068237(selection_v068237);
             }
         }
+        const double pass2_rate_seconds_v068240238 =
+            std::max(0.0, stats.rate_seconds - evaluated_rate_before_v068231);
         perf_foundation_v068231.evaluated_record_seconds += std::max(
             0.0,
             elapsed(evaluated_record_started_v068231) -
-                (stats.rate_seconds - evaluated_rate_before_v068231));
+                pass2_rate_seconds_v068240238);
+        if (pass2_fine_timing_v068240238)
+            perf_foundation_v068231.pass2_fine_rate_seconds_v068240238 +=
+                pass2_rate_seconds_v068240238;
         // 0.6.82.36.11: account separately for the transient pass-2
         // EvaluatedRecord surface.  In compact production the retained rich
         // diagnostic vector is intentionally empty, so without these counters
