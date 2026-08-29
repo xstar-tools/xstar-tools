@@ -88,6 +88,14 @@ struct PerformanceFoundationV068231 {
     // 0.6.82.40.2.42: builder fingerprint elision qualification.
     std::uint64_t canonical_thermal_builder_fingerprint_recomputes_v068240242 = 0u;
     std::uint64_t canonical_thermal_builder_fingerprint_elisions_v068240242 = 0u;
+    // 0.6.82.40.2.44: Type-76 deferred-product post-mapback discovery-scan
+    // qualification. All counters are observational and private to C++.
+    std::uint64_t type76_full_scan_records_historical_v068240244 = 0u;
+    std::uint64_t type76_indexed_candidates_optimized_v068240244 = 0u;
+    std::uint64_t type76_active_records_v068240244 = 0u;
+    std::uint64_t type76_updated_bins_v068240244 = 0u;
+    std::uint64_t type76_empty_fast_skips_v068240244 = 0u;
+    std::uint64_t deferred_rrc_full_path_calls_v068240244 = 0u;
     // 0.6.82.40.2.37: attribution-only coarse traversal partition.
     // Clocks are enabled only by XSTAR_V068240237_TRAVERSAL_FINE_TIMING and
     // are placed at element/phase boundaries, never inside evaluate_record(),
@@ -100,15 +108,6 @@ struct PerformanceFoundationV068231 {
     double traversal_fine_region4_pass2_assembly_seconds_v068240237 = 0.0;
     double traversal_fine_region5_element_solve_seconds_v068240237 = 0.0;
     double traversal_fine_region6_postsolve_mapback_seconds_v068240237 = 0.0;
-    // 0.6.82.40.2.43: attribution-only POSTMAPBACK_GLOBAL_STAGING split.
-    // Clocks sit only at coarse block boundaries after region-6 mapback; no
-    // clock is inserted inside record, ion, contribution, or radiation-bin loops.
-    std::uint64_t postmapback_fine_elements_v068240243 = 0u;
-    double postmapback_sub1_revisit_audit_seconds_v068240243 = 0.0;
-    double postmapback_sub2_electron_fraction_seconds_v068240243 = 0.0;
-    double postmapback_sub3_element_diagnostic_seconds_v068240243 = 0.0;
-    double postmapback_sub4_deferred_rrc_type76_seconds_v068240243 = 0.0;
-    double postmapback_sub5_spectral_publication_seconds_v068240243 = 0.0;
     // 0.6.82.40.2.38: attribution-only PASS2_ASSEMBLY subpartition.
     // No new clock is placed in evaluate_record() or any record/bin loop.
     // pass2_rate_seconds is accumulated from the already-existing rate timer

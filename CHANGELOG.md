@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.44 - TYPE76_POSTMAPBACK_DISCOVERY_SCAN_ELISION_HOT_PATH - 2026-08-29
+
+- Branch directly from formally accepted `0.6.82.40.2.42`; attribution-only `.43` is evidence only and is not in production ancestry.
+- Compile immutable per-element Type-76 source-order selections into the existing execution plan.
+- During native deferred-product controller evaluations, avoid the full `EvaluatedRecord` post-mapback discovery scan: iterate only compiled Type-76 selections and intersect them with the active pass-2 selection list. Empty Type-76 inventories skip immediately.
+- Preserve the historical complete post-mapback loop byte-for-byte whenever product projection/deferred-RRC publication is required. No Type-76 bookkeeping is injected into `evaluate_record()` or pass-2 evaluation.
+- Add private C++ telemetry for historical scan records, optimized indexed candidates, active Type-76 records, updated bins, empty fast skips, and deferred-RRC full-path calls.
+- Qualification requires exact same-host and canonical science, fixed-work equality, identical Type-76 scientific counters, accepted `.41/.42` modes frozen, paired Region-7 wins, material wall/internal savings, flat RSS, and no multi-element run.
+
 ## 0.6.82.40.2.43 - POSTMAPBACK_GLOBAL_STAGING_FINE_ATTRIBUTION - 2026-08-29
 
 - Attribution-only successor to formally accepted `0.6.82.40.2.42`; no production optimization is attempted and the accepted `.41.1/.42` canonical-Thermal fingerprint work remains active.
