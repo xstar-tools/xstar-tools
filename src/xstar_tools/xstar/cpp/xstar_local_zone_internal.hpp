@@ -102,6 +102,15 @@ struct PerformanceFoundationV068231 {
     std::uint64_t pass2_outer_assembly_correction_patches_v068240239 = 0u;
     std::uint64_t pass2_outer_assembly_evaluated_rescan_records_elided_v068240239 = 0u;
     std::uint64_t pass2_outer_assembly_evaluated_rescan_records_retained_v068240239 = 0u;
+    // 0.6.82.40.2.39.1: mutually exclusive fallback-reason accounting.
+    // These counters are observational only and must sum exactly to the
+    // .39 fallback-element count.
+    std::uint64_t pass2_outer_assembly_block_not_requested_elements_v0682402391 = 0u;
+    std::uint64_t pass2_outer_assembly_block_matrix_closure_elements_v0682402391 = 0u;
+    std::uint64_t pass2_outer_assembly_block_helium_special_elements_v0682402391 = 0u;
+    std::uint64_t pass2_outer_assembly_block_forensic_elements_v0682402391 = 0u;
+    std::uint64_t pass2_outer_assembly_block_provenance_elements_v0682402391 = 0u;
+    std::uint64_t pass2_outer_assembly_block_magnesium_elements_v0682402391 = 0u;
     std::uint64_t element_buffer_reuses = 0u;
     std::uint64_t leveltemp_backup_reuses = 0u;
     std::uint64_t reduced_continuum_geometry_builds = 0u;

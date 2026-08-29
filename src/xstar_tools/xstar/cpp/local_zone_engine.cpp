@@ -14378,21 +14378,42 @@ int run_impl(
          element_slot_v064894 < ctx.program.elements.size();
          ++element_slot_v064894) {
         const auto& element = ctx.program.elements[element_slot_v064894];
-        // 0.6.82.40.2.39: direct commit is intentionally narrower than the
-        // general contribution hot path.  Preserve .38 for every surface that
-        // can correct/reorder contributions or requires rich record ownership.
-        // Mg stays historical because its Type-95 thermal-only overlay performs
-        // a separate source-stream selection after pass 2.
+        // 0.6.82.40.2.39.1: activation hotfix.  True production enables the
+        // accepted helium source-insertion-order contract globally, but that
+        // contract can only alter Z=2 contribution ordering.  .39 incorrectly
+        // treated the helium-only controls as all-element blockers, making the
+        // fast path unreachable for H and C.  Scope helium insertion, coupled
+        // replacement and ablation to Z=2 while preserving the global
+        // matrix-closure/forensic/provenance blockers and Mg historical path.
+        const bool pass2_outer_assembly_helium_special_v0682402391 =
+            element.element_z == 2 &&
+            (helium_source_insertion_order ||
+             type53_row46_coupled_replacement || any_helium_ablation);
         const bool pass2_outer_assembly_fast_v068240239 =
             pass2_outer_assembly_requested_v068240239 &&
-            !matrix_construction_closure && !helium_source_insertion_order &&
-            !type53_row46_coupled_replacement && !any_helium_ablation &&
+            !matrix_construction_closure &&
+            !pass2_outer_assembly_helium_special_v0682402391 &&
             !explicit_rich_element_forensic_request_v0682391 &&
             !retain_record_provenance_v064897 && element.element_z != 12;
-        if (pass2_outer_assembly_fast_v068240239)
+        if (pass2_outer_assembly_fast_v068240239) {
             ++perf_foundation_v068231.pass2_outer_assembly_fast_elements_v068240239;
-        else
+        } else {
             ++perf_foundation_v068231.pass2_outer_assembly_fallback_elements_v068240239;
+            // Primary fallback reason, deliberately mutually exclusive so the
+            // reason counters close exactly to FALLBACK_ELEMENTS.
+            if (!pass2_outer_assembly_requested_v068240239)
+                ++perf_foundation_v068231.pass2_outer_assembly_block_not_requested_elements_v0682402391;
+            else if (matrix_construction_closure)
+                ++perf_foundation_v068231.pass2_outer_assembly_block_matrix_closure_elements_v0682402391;
+            else if (pass2_outer_assembly_helium_special_v0682402391)
+                ++perf_foundation_v068231.pass2_outer_assembly_block_helium_special_elements_v0682402391;
+            else if (explicit_rich_element_forensic_request_v0682391)
+                ++perf_foundation_v068231.pass2_outer_assembly_block_forensic_elements_v0682402391;
+            else if (retain_record_provenance_v064897)
+                ++perf_foundation_v068231.pass2_outer_assembly_block_provenance_elements_v0682402391;
+            else if (element.element_z == 12)
+                ++perf_foundation_v068231.pass2_outer_assembly_block_magnesium_elements_v0682402391;
+        }
         const auto traversal_fine_region1_started_v068240237 =
             traversal_fine_timing_v068240237 ? clock_type::now() : clock_type::time_point{};
         if (traversal_fine_timing_v068240237)

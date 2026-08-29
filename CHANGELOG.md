@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.82.40.2.39.1 - PASS2_OUTER_ASSEMBLY_PATH_ACTIVATION_HOTFIX - 2026-08-29
+
+- Narrow hotfix on rejected `.39`; the direct-commit algorithm itself is unchanged. The `.39` low-`xi` A/B showed `FAST_ELEMENTS=0`, `FALLBACK_ELEMENTS=18810`, `DIRECT_COMMITS=0`, proving the intended optimization never executed.
+- Root cause: true production enables `XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER=1` as part of the accepted physics profile, while `.39` incorrectly applied that helium-only correction/reordering control to every element.
+- Scopes helium source-insertion order, Type-53 coupled replacement/two-state promotion, and helium ablation fallback to `Z=2`. H and C may now use the `.39` fast path; He remains historical whenever the accepted helium ordering/correction contract is active. Mg (`Z=12`), matrix-construction closure, explicit rich forensics, and retained record provenance remain historical exactly as in `.39`.
+- Adds mutually exclusive fallback-reason telemetry for not-requested, matrix-closure, helium-special, forensic, provenance, and Mg blockers. Their sum must equal `V068240239_FALLBACK_ELEMENTS`.
+- Low-`xi` C5 path validation now requires the expected accepted-production split: H+C fast and He historical (`FAST_ELEMENTS=2/3` of samples, `BLOCK_HELIUM_SPECIAL_ELEMENTS=1/3`), direct commits/rescan elision present, and zero matrix/forensic/provenance/Mg/not-requested blockers in optimized runs.
+- Host A/B sanitizes stale shell-only qualification/forensic variables that are not part of the accepted production profile; the executable still installs its canonical production physics flags internally. Performance/science/RSS thresholds remain the preregistered `.39` thresholds. No multi-element run.
+
 ## 0.6.82.40.2.39 - PASS2_OUTER_ASSEMBLY_HOT_PATH - 2026-08-29
 
 - Performance successor to accepted `0.6.82.40.2.36.1`, using accepted `.37/.38` attribution to target the dominant C++ PASS2 outer-assembly overhead. `.38` measured C++ outer assembly at `9.010386 s` versus FORTRAN `0.354386 s`; `CONTRIBUTION_THERMAL_LEDGER` (`5.791965 s`) plus `POSTEVAL_OTHER_STAGING` (`3.098910 s`) accounted for 98.7% of the C++ outer surface.
