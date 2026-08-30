@@ -1056,3 +1056,12 @@ include xstar_tools-0.6.83_local_validation.md
 include xstar_tools-0.6.83_host_validation.md
 include xstar_tools-0.6.83_release_closure.md
 include xstar_tools_conversation_summary_through_0.6.83_candidate.md
+
+# 0.6.83.1 native xstinitable xstar-cpp/Fortran command contract.
+include tools/qualification/check_native_xstinitable_cpp_contract_0_6_83_1.py
+include tests/test_native_xstinitable_0_6_83_1.py
+recursive-include references/xstinitable_0_6_83_1 *
+include xstar_tools-0.6.83.1_host_validation.md
+include xstar_tools-0.6.83.1_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.83.1_candidate.md
+include docs/developer/native_xstinitable_cpp_contract_0_6_83_1.md

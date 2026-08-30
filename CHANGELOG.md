@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.83.1 - NATIVE_XSTINITABLE_CPP_COMMAND_CONTRACT - 2026-08-30
+
+- Patch release on top of formally accepted `0.6.83`; no XSTAR scientific arithmetic, solver ABI, or `xstar-cpp` frontend source is changed.
+- Changes the native `xstar-xspec-initable` production default from historical Fortran command emission to native `xstar-cpp` command emission.
+- Adds `--xstar cpp|fortran` (alias `-xstar`), defaulting to `cpp`. `--xstar fortran` preserves the accepted 0.6.83 canonical `xstar key=value` `.lis` contract byte-for-byte.
+- Adds `--input xstinitable.par` support using the HEASoft/IRAF seven-column parameter-file format, with trailing `key=value` arguments overriding file values.
+- Adds `--data-dir DIR` and compatibility alias `-data-dir`; for the `cpp` target this is emitted into every `xstar-cpp` `.lis` command as `--data-dir DIR`. The Fortran target intentionally ignores this orchestration-only option so legacy `.lis` bytes remain canonical.
+- Keeps grid construction, float32 interpolation, additive expansion, FITS parameter metadata, job ordering, and `loopcontrol` unchanged.
+- The existing `xstar-cpp` frontend remains byte-identical to 0.6.83 because it already supports both `--input xstar.par` and trailing `name=value` forms.
+- Keeps per-job `--output` assignment out of xstinitable; serial output-directory orchestration remains scoped to 0.6.84.
+
 ## 0.6.83 - NATIVE_XSTINITABLE - 2026-08-29
 
 - Branches from formally accepted `0.6.82.40.2.46.1`; no accepted XSTAR scientific arithmetic or ABI is changed.

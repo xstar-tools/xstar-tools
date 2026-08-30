@@ -1,7 +1,7 @@
-"""Native ``xstinitable`` grid-planning entry points for xstar_tools 0.6.83.
+"""Native ``xstinitable`` grid-planning entry points for xstar_tools 0.6.83.1.
 
-The scientific/grid semantics live in the C++17 ``xstar-xspec-initable``
-executable.  This Python layer only locates and launches that native planner.
+The grid semantics live in the C++17 ``xstar-xspec-initable`` executable.
+This Python layer only locates and launches that native planner.
 """
 
 from __future__ import annotations
@@ -42,24 +42,37 @@ def _native_xstinitable_executable(explicit: str | os.PathLike[str] | None = Non
 
 
 def build_xstinitable(
-    parameters: Iterable[str],
+    parameters: Iterable[str] = (),
     output_dir: str | os.PathLike[str] = ".",
     *,
+    input_file: str | os.PathLike[str] | None = None,
+    xstar: str = "cpp",
+    data_dir: str | os.PathLike[str] | None = None,
     native_executable: str | os.PathLike[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Create canonical-compatible ``xstinitable.lis`` and ``xstinitable.fits``.
+    """Create ``xstinitable.lis`` and ``xstinitable.fits``.
 
-    ``parameters`` are the historical XPI-style ``key=value`` arguments used by
-    XSTAR ``xstinitable`` and MPI_XSTAR.  The native planner preserves the
-    canonical 39-parameter ordering, interpolation sampling, additive expansion,
-    command formatting, and FITS parameter-table schema.
+    ``xstar='cpp'`` is the default production contract and emits ``xstar-cpp``
+    commands. ``xstar='fortran'`` preserves the canonical historical
+    ``xstar key=value`` command contract.  A HEASoft/IRAF-style
+    ``xstinitable.par`` may be supplied via ``input_file`` and trailing
+    ``parameters`` override values loaded from that file.
     """
+
+    if xstar not in {"cpp", "fortran"}:
+        raise ValueError("xstar must be 'cpp' or 'fortran'")
 
     exe = _native_xstinitable_executable(native_executable)
     out = Path(output_dir).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
     args = [str(value) for value in parameters]
-    if not args:
-        raise ValueError("at least one xstinitable key=value parameter is required")
-    command = [str(exe), "--output-dir", str(out), *args]
+    if input_file is None and not args:
+        raise ValueError("provide input_file or at least one xstinitable key=value parameter")
+
+    command = [str(exe), "--xstar", xstar, "--output-dir", str(out)]
+    if input_file is not None:
+        command += ["--input", str(Path(input_file).expanduser())]
+    if data_dir is not None:
+        command += ["--data-dir", str(Path(data_dir).expanduser())]
+    command += args
     return subprocess.run(command, text=True, capture_output=True, check=True)

@@ -13,7 +13,8 @@
 //   * float32 parameter/grid arithmetic;
 //   * highest interpolated parameter index varying fastest;
 //   * additive expansion: all-zero base, then one active additive parameter;
-//   * canonical xstar command formatting and loopcontrol sequencing;
+//   * canonical command formatting and loopcontrol sequencing;
+//   * native xstar-cpp command emission by default, with explicit Fortran compatibility;
 //   * canonical OGIP PARAMETERS skeleton written with CFITSIO.
 //
 // Two legacy undefined cases are made fail-closed rather than copied:
@@ -28,6 +29,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -296,6 +298,32 @@ std::string generate_interpolated(const PlannerConfig &c, const std::vector<std:
     return out;
 }
 
+std::string shell_quote(const std::string &text) {
+    if (text.empty()) return "''";
+    bool safe = true;
+    for (const unsigned char c : text) {
+        if (!(std::isalnum(c) || c == '_' || c == '-' || c == '.' || c == '/' || c == ':')) {
+            safe = false;
+            break;
+        }
+    }
+    if (safe) return text;
+    std::string out = "'";
+    for (const char c : text) {
+        if (c == '\'') out += "'\"'\"'";
+        else out.push_back(c);
+    }
+    out += "'";
+    return out;
+}
+
+std::string command_prefix(const PlannerConfig &c) {
+    if (c.xstar_target == XStarCommandTarget::fortran) return "xstar ";
+    std::string out = "xstar-cpp ";
+    if (!c.data_dir.empty()) out += "--data-dir " + shell_quote(c.data_dir.string()) + " ";
+    return out;
+}
+
 std::string generate_additive(const PlannerConfig &c, const std::vector<std::size_t> &indices, int current) {
     std::string out;
     for (std::size_t j = 0; j < indices.size(); ++j) {
@@ -333,7 +361,7 @@ void write_lis(const PlannerConfig &c, const fs::path &path) {
     if (!out) throw std::runtime_error("cannot create " + path.string());
     std::size_t loopcontrol = 0;
     while (advance_combination(current, maximum)) {
-        const std::string base = std::string("xstar ") + generate_control(c) + generate_constants(c) + generate_interpolated(c, interp, current);
+        const std::string base = command_prefix(c) + generate_control(c) + generate_constants(c) + generate_interpolated(c, interp, current);
         if (!additive.empty()) {
             for (int active = -1; active < static_cast<int>(additive.size()); ++active) {
                 std::string line = base + generate_additive(c, additive, active) + " loopcontrol=" + std::to_string(++loopcontrol);

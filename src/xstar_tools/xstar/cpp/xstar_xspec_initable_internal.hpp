@@ -10,6 +10,7 @@ namespace xstar_xspec_initable {
 
 enum class VariationType : int { constant = 0, additive = 1, interpolated = 2 };
 enum class InterpolationMethod : int { linear = 0, logarithmic = 1 };
+enum class XStarCommandTarget : int { cpp = 0, fortran = 1 };
 
 struct PhysicalParameter {
     std::string name;
@@ -49,6 +50,8 @@ struct PlannerConfig {
     float energy_low = 100.0f;
     float energy_high = 20000.0f;
     std::vector<PhysicalParameter> physical;
+    XStarCommandTarget xstar_target = XStarCommandTarget::cpp;
+    std::filesystem::path data_dir;
 };
 
 struct PlannerResult {
