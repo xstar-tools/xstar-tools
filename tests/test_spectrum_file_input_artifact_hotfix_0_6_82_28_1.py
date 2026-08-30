@@ -13,15 +13,17 @@ def test_0682281_scope_and_frozen_identifiers():
     assert d['production_numerical_changed']==['src/xstar_tools/xstar/cpp/xstar_standalone.cpp']
     assert d['scope_accept'] is True
 
-def test_0682281_cpp_preserves_declared_file_spectrum_input_but_keeps_strict_artifact_guard():
+def test_0682281_cpp_retains_historical_file_spectrum_helper_after_06851_guard_retirement():
     cpp=(ROOT/'src/xstar_tools/xstar/cpp/xstar_standalone.cpp').read_text()
-    assert 'void add_public_source_input_allowances_v0682281(' in cpp
+    assert 'add_public_source_input_allowances_v0682281(' in cpp
     assert 'if (spectrum_mode != "file") return;' in cpp
     assert 'json_string_value(publication_json, "spectrum_file", "spct.dat")' in cpp
     assert 'std::filesystem::is_regular_file(candidate_abs)' in cpp
     assert 'candidate_abs.parent_path() == output_abs' in cpp
-    assert cpp.count('add_public_source_input_allowances_v0682281(allowed, output, options.parameters_path);')==2
-    assert cpp.count('non-product artifact:')>=2
+    # 0.6.85.1 supersedes the old directory-exclusivity policy: unrelated
+    # files no longer require special allowance and are never rejection causes.
+    assert 'file-silent production created a non-product artifact:' not in cpp
+    assert 'true production created a non-product artifact:' not in cpp
 
 def test_0682281_host_runner_targets_all_file_units():
     text=(ROOT/'tools/qualification/run_spectrum_contract_host_smoke_0_6_82_28_1.py').read_text()

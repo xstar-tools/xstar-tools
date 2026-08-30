@@ -443,11 +443,11 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
     std::filesystem::create_directories(input.output_dir,ec);
     if(ec) throw std::runtime_error("could not create output directory: "+input.output_dir.string());
 
-    // The native production operator deliberately validates artifact_profile=none
-    // before returning: only XSTAR science products may exist in the requested
-    // output directory at that boundary.  A frontend-generated parameter
-    // envelope is orchestration state, not an XSTAR product, so keep the default
-    // envelope in the system temporary directory and remove it after the run.
+    // Keep the default frontend-generated parameter envelope in the system
+    // temporary directory because it is orchestration state rather than an
+    // XSTAR science product.  Starting with 0.6.85.1 the standalone output
+    // directory may also contain unrelated files; this temporary-envelope
+    // choice is retained for cleanliness, not as a directory-exclusivity rule.
     // --parameters-out remains the explicit opt-in for retaining the envelope.
     std::filesystem::path path;
     if(input.parameters_out.empty()) {

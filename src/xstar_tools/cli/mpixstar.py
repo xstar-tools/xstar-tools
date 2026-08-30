@@ -1,6 +1,6 @@
 """MPI_XSTAR-style local parallel wrapper for the native xstar-xspec engine.
 
-0.6.85 intentionally has no MPI runtime dependency.  ``--np``/``--workers``
+0.6.85.1 intentionally has no MPI runtime dependency.  ``--np``/``--workers``
 select the bounded local process pool used by the same deterministic native
 XSTAR2XSPEC engine.
 """

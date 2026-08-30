@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.85.1 — STANDALONE_OUTPUT_DIRECTORY_COEXISTENCE - 2026-08-30
+
+- Corrects the real-host `0.6.85` parallel XSTAR2XSPEC failure caused by `xstar-cpp` treating scheduler-created `xstar-cpp.stdout.log` as a forbidden non-product artifact. The historical `.85` host REJECT remains preserved.
+- Removes directory-wide exclusivity from standalone production: unrelated/pre-existing files, scheduler logs, user notes, provenance files, and other non-XSTAR files may coexist with XSTAR products.
+- Retains validation of the XSTAR-owned required product set and continues to return failure for missing/incomplete publication or genuine runtime/publication errors.
+- Makes production failure non-destructive: partial, corrupt, incomplete, or otherwise invalid XSTAR FITS/STEP products are retained for forensic inspection and are never automatically deleted because the run failed.
+- Changes native XSTAR2XSPEC orchestration to preserve `xstar2xspec-work/` and per-job XSTAR products by default. `--save` remains accepted as a compatibility flag; destructive work-tree cleanup is now explicit-only via `--cleanup-work` after full success.
+- Stops deleting pre-existing root XSTAR2XSPEC table products at run start. Failed reruns report failure in terminal/logs while leaving prior/current artifacts available for inspection.
+- Adds per-job `xstar-cpp.success` markers. `--restart` reuses a job only when its spectrum, STEP log, and success marker are all present, so retained partial products from a failed attempt cannot be mistaken for completed work.
+- Adds dedicated frozen/mock qualification for coexistence, product-retention-on-failure, non-reuse of failed partial jobs, explicit-only cleanup, deterministic placement, and bit-exact four-table output.
+- No XSTAR scientific arithmetic, accepted xstinitable grid semantics, or xstar2table spectral transform changes are introduced.
+- Real-host four-job closure is ACCEPT with two effective workers, all required products present, canonical STEP ordering, and restart reusing 4/4 completed jobs; `0.6.85.1` is formally accepted.
+- After acceptance, remove the three artificial `scheduler-note.log`, `unrelated.txt`, and `user_note.txt` files from the normal host runner; explicit unrelated-file coexistence remains covered by the dedicated frozen qualification.
+
 ## 0.6.85 — parallel/MPI-style native XSTAR2XSPEC - 2026-08-30
 
 - Branches directly from formally accepted `0.6.84`; XSTAR scientific arithmetic, native xstinitable planning, native xstar2table transforms, and the retained `.84` serial reference source remain byte-identical.

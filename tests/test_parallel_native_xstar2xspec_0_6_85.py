@@ -6,11 +6,11 @@ CPP = ROOT / "src/xstar_tools/xstar/cpp"
 
 def test_parallel_native_sources_present_and_versioned():
     text = (ROOT / "pyproject.toml").read_text()
-    assert 'version = "0.6.85"' in text
+    assert 'version = "0.6.85.1"' in text
     assert (CPP / "xstar_xspec_parallel.cpp").is_file()
     make = (CPP / "Makefile").read_text()
     assert "XSPEC_GRID_EXECUTABLE := $(XSPEC_SERIAL_EXECUTABLE)" in make
-    assert "PACKAGE_VERSION ?= 0.6.85" in make
+    assert "PACKAGE_VERSION ?= 0.6.85.1" in make
     assert "xstar_xspec_parallel.cpp" in make
 
 

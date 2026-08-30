@@ -6652,7 +6652,7 @@ std::string json_string_value(const std::string& text, const std::string& key, c
 // Purpose: Preserve declared public source-input files when file-silent production verifies that it created no non-product artifacts.
 // Reference context: XSTAR rread1.f90 opens density.dat and spectrum_file from the working directory; those are inputs, not generated products.
 // XSTAR-FUNCTION-COMMENT-END
-void add_public_source_input_allowances_v0682281(
+[[maybe_unused]] void add_public_source_input_allowances_v0682281(
     std::set<std::string>& allowed,
     const std::filesystem::path& output,
     const std::filesystem::path& parameters_path) {
@@ -12362,7 +12362,7 @@ ProductPublicationResultV172524 publish_full61_products(
     const auto root = output / "_native_product_state_retention";
     const auto publication_manifest = root / "product_publication_manifest.json";
     try {
-        remove_native_products(output);
+        // 0.6.85.1: publication never pre-cleans XSTAR products.
         xstar_run_state::WholeRunAccumulatedState whole;
         whole.release = XSTAR_API_VERSION_STRING;
         whole.backend = "cpp-native-retained-product-surface";
@@ -12488,16 +12488,17 @@ ProductPublicationResultV172524 publish_full61_products(
                  << "  \"publication_parity\": \"NOT_CLAIMED_NATIVE_PRODUCTS\",\n"
                  << "  \"result\": \"" << (result.ok ? "ACCEPT_PARTIAL_NATIVE_PRODUCT_PUBLICATION" : "REJECT_NATIVE_PRODUCT_WRITE_FAILURE") << "\"\n"
                  << "}\n";
-        if (!result.ok) {
-            remove_native_products(output);
-            result.fits_count = 0;
-            result.step_log_written = false;
-        }
+        // 0.6.85.1: leave incomplete products in place when result.ok is false.
+        // The caller receives the failed status and retained-product counts.
     } catch (const std::exception& exc) {
         result.error = exc.what();
-        remove_native_products(output);
-        result.fits_count = 0;
-        result.step_log_written = false;
+        std::error_code retained_ec;
+        if (std::filesystem::is_directory(output, retained_ec)) {
+            result.fits_count = count_native_fits_products(output);
+            result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
+                regular_file_size_or_zero(output / "xout_step.log") > 0;
+        }
+        result.ok = false;
         std::ofstream manifest(publication_manifest);
         manifest << "{\n"
                  << "  \"schema\": \"xstar-tools-v048746255172537-native-retained-product-surface-publication-v1\",\n"
@@ -12506,8 +12507,8 @@ ProductPublicationResultV172524 publish_full61_products(
                  << "  \"oracle_payload_import\": false,\n"
                  << "  \"oracle_bytes_copied\": false,\n"
                  << "  \"product_publication_enabled\": false,\n"
-                 << "  \"fits_products_written\": 0,\n"
-                 << "  \"xout_step_written\": false,\n"
+                 << "  \"fits_products_written\": " << result.fits_count << ",\n"
+                 << "  \"xout_step_written\": " << (result.step_log_written ? "true" : "false") << ",\n"
                  << "  \"error\": \"" << exc.what() << "\",\n"
                  << "  \"result\": \"REJECT_INCOMPLETE_NATIVE_PRODUCT_SURFACE\"\n"
                  << "}\n";
@@ -12704,7 +12705,7 @@ ProductPublicationResultV172524 publish_true_production_products(
     result.attempted = true;
     const auto publication_started = std::chrono::steady_clock::now();
     try {
-        remove_native_products(output);
+        // 0.6.85.1: publication never pre-cleans XSTAR products.
         xstar_run_state::WholeRunAccumulatedState whole;
         whole.release = XSTAR_API_VERSION_STRING;
         whole.backend = "cpp-true-production";
@@ -12785,38 +12786,19 @@ ProductPublicationResultV172524 publish_true_production_products(
             regular_file_size_or_zero(output / "xout_step.log") > 0;
         result.ok = result.fits_count == required_native_fits_products(product) && result.step_log_written;
         if (!result.ok) throw std::runtime_error("true production did not write the control-required public products");
-        std::set<std::string> allowed = {
-            "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits",
-            "xout_spect1.fits", "xout_step.log"};
-        const int publication_npass_v0682273 = static_cast<int>(std::llround(
-            retained_public_parameter_number(product,"npass",1.0)));
-        const int publication_lwrite_v0682273 = static_cast<int>(std::llround(
-            retained_public_parameter_number(product,"lwrite",0.0)));
-        if (publication_lwrite_v0682273 > 0 || publication_npass_v0682273 > 1) {
-            for (int pass_v0682273=1; pass_v0682273<=std::max(publication_npass_v0682273,1); ++pass_v0682273) {
-                const std::string prefix_v0682273 = "xo" +
-                    (pass_v0682273 < 10 ? std::string("0") : std::string()) +
-                    std::to_string(pass_v0682273) + "_";
-                allowed.insert(prefix_v0682273 + "detail.fits");
-                allowed.insert(prefix_v0682273 + "detal2.fits");
-                allowed.insert(prefix_v0682273 + "detal3.fits");
-                allowed.insert(prefix_v0682273 + "detal4.fits");
-            }
-        }
-        add_public_source_input_allowances_v0682281(allowed, output, options.parameters_path);
-        for (const auto& entry : std::filesystem::directory_iterator(output)) {
-            if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
-                throw std::runtime_error("true production created a non-product artifact: " + entry.path().filename().string());
-            }
-        }
+        // 0.6.85.1: required products are validated above; unrelated files in
+        // the output directory are allowed and preserved.
     } catch (const std::exception& exc) {
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         result.error = exc.what();
-        remove_native_products(output);
-        result.fits_count = 0;
-        result.step_log_written = false;
+        std::error_code retained_ec;
+        if (std::filesystem::is_directory(output, retained_ec)) {
+            result.fits_count = count_native_fits_products(output);
+            result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
+                regular_file_size_or_zero(output / "xout_step.log") > 0;
+        }
         result.ok = false;
     }
     return result;
@@ -25447,34 +25429,10 @@ int command_run_standalone_production(const Options& options, const std::filesys
         if (fits_count != required_fits_count || !step_ok || step.lines_written == 0) {
             throw std::runtime_error("publication did not create the XSTAR control-required public products");
         }
-        if (!artifacts.any()) {
-            std::set<std::string> allowed = {
-                "xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits",
-                "xout_spect1.fits","xout_step.log"};
-            const int publication_npass_v0682273 = static_cast<int>(std::llround(
-                retained_public_parameter_number(product,"npass",1.0)));
-            const int publication_lwrite_v0682273 = static_cast<int>(std::llround(
-                retained_public_parameter_number(product,"lwrite",0.0)));
-            if (publication_lwrite_v0682273 > 0 || publication_npass_v0682273 > 1) {
-                for (int pass_v0682273=1; pass_v0682273<=std::max(publication_npass_v0682273,1); ++pass_v0682273) {
-                    const std::string prefix_v0682273 = "xo" +
-                        (pass_v0682273 < 10 ? std::string("0") : std::string()) +
-                        std::to_string(pass_v0682273) + "_";
-                    allowed.insert(prefix_v0682273 + "detail.fits");
-                    allowed.insert(prefix_v0682273 + "detal2.fits");
-                    allowed.insert(prefix_v0682273 + "detal3.fits");
-                    allowed.insert(prefix_v0682273 + "detal4.fits");
-                }
-            }
-            // 0.6.82.28.1: density.dat and a declared working-directory
-            // spectrum_file are canonical source inputs, not generated products.
-            add_public_source_input_allowances_v0682281(allowed, output, options.parameters_path);
-            for (const auto& entry : std::filesystem::directory_iterator(output)) {
-                if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
-                    throw std::runtime_error("file-silent production created a non-product artifact: " + entry.path().filename().string());
-                }
-            }
-        }
+        // 0.6.85.1 STANDALONE_OUTPUT_DIRECTORY_COEXISTENCE:
+        // validate XSTAR-owned products above, but do not claim ownership of the
+        // surrounding directory. Unrelated/pre-existing files are permitted and
+        // are neither inspected as products nor removed.
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         const std::size_t total_dsec = std::accumulate(
@@ -25544,15 +25502,10 @@ int command_run_standalone_production(const Options& options, const std::filesys
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
-        // 0.6.82.33.1 host-qualification forensics: retain partial STEP/FITS
-        // products on an explicitly requested failed run so the exact live
-        // incremental state can be inspected.  Normal public production keeps
-        // the established fail-clean behavior.
-        const char* preserve_failure_v0682331 =
-            std::getenv("XSTAR_V0682331_PRESERVE_FAILURE_PRODUCTS");
-        const bool preserve_failure_products_v0682331 = preserve_failure_v0682331 &&
-            std::string(preserve_failure_v0682331) == "1";
-        if (!preserve_failure_products_v0682331) remove_native_products(output);
+        // 0.6.85.1: failure is intentionally non-destructive. Partial, corrupt,
+        // or otherwise invalid XSTAR products are retained exactly as written so
+        // they can be inspected after the nonzero return. No environment opt-in
+        // is required and no production failure path deletes XSTAR products.
         if (artifact_profile == "failure") {
             std::filesystem::create_directories(output / "standalone_diagnostics");
             std::ofstream failure(output / "standalone_diagnostics" / "failure.txt");
@@ -25563,8 +25516,21 @@ int command_run_standalone_production(const Options& options, const std::filesys
                 std::filesystem::remove(output, ec);
             }
         }
-        std::cerr << "standalone production failed: " << exc.what() << "\n";
-        std::cout << prefix << "PRODUCTS_WRITTEN=0\n"
+        std::size_t retained_fits = 0;
+        bool retained_step = false;
+        std::error_code retained_ec;
+        if (std::filesystem::is_directory(output, retained_ec)) {
+            retained_fits = count_native_fits_products(output);
+            retained_step = std::filesystem::is_regular_file(output / "xout_step.log") &&
+                regular_file_size_or_zero(output / "xout_step.log") > 0;
+        }
+        std::cerr << "standalone production failed: " << exc.what()
+                  << "; XSTAR products retained for inspection\n";
+        std::cout << prefix << "PRODUCTS_WRITTEN=" << retained_fits << "\n"
+                  << prefix << "FITS_PRODUCTS_PRESENT_AFTER_FAILURE=" << retained_fits << "\n"
+                  << prefix << "XOUT_STEP_LOG_PRESENT_AFTER_FAILURE=" << (retained_step ? 1 : 0) << "\n"
+                  << prefix << "FAILURE_PRODUCTS_PRESERVED=YES\n"
+                  << prefix << "PRODUCTS_AUTODELETED=0\n"
                   << prefix << "RESULT=REJECT_STANDALONE_PRODUCTION_FAILURE\n";
         return 20;
     }

@@ -1091,3 +1091,15 @@ include xstar_tools-0.6.85_local_validation.md
 include xstar_tools-0.6.85_host_validation.md
 include xstar_tools-0.6.85_release_closure.md
 include xstar_tools_conversation_summary_through_0.6.85_candidate.md
+
+# 0.6.85.1 standalone output-directory coexistence correction.
+include tools/qualification/check_standalone_output_directory_coexistence_0_6_85_1.py
+include tools/qualification/run_parallel_native_xstar2xspec_host_0_6_85_1.py
+include qualification/standalone_output_directory_coexistence_0_6_85_1.json
+include docs/developer/standalone_output_directory_coexistence_0_6_85_1.md
+include xstar_tools-0.6.85.1_local_validation.md
+include xstar_tools-0.6.85.1_host_validation.md
+include xstar_tools-0.6.85.1_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.85.1_candidate.md
+include xstar_tools_conversation_summary_through_0.6.85.1_acceptance.md
+include xstar_tools-0.6.85.1_formal_host_acceptance.md

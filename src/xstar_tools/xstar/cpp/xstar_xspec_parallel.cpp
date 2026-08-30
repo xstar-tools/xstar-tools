@@ -1,4 +1,4 @@
-// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.85.
+// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.85.1.
 //
 // This executable composes the already-qualified native components:
 //   xstar-xspec-initable -> bounded parallel xstar-cpp jobs -> xstar-xspec-table.
@@ -33,7 +33,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.85";
+constexpr const char *kPackageVersion = "0.6.85.1";
 
 struct Options {
     fs::path input_file;
@@ -44,6 +44,7 @@ struct Options {
     fs::path table_bin;
     std::size_t workers = 1;
     bool save = false;
+    bool cleanup_work = false;
     bool restart = false;
     bool verbose = false;
     std::vector<std::string> overrides;
@@ -67,7 +68,8 @@ void usage(const char *argv0) {
         "  --data-dir DIR       explicit XSTAR atomic-data directory (optional)\n"
         "  --output-dir DIR     final XSTAR2XSPEC output directory\n"
         "  --workers N, -j N    maximum simultaneous xstar-cpp jobs (default: 1)\n"
-        "  --save               retain xstar2xspec-work/ per-job directories after success\n"
+        "  --save               compatibility flag; work/products are preserved by default\n"
+        "  --cleanup-work       explicitly remove xstar2xspec-work/ only after full success\n"
         "  --restart            reuse completed per-job spectra/STEP logs in work directory\n"
         "  --verbose            replay child output while assembling deterministic root log\n"
         "  --initable-bin PATH  override xstar-xspec-initable executable\n"
@@ -224,6 +226,7 @@ Options parse_options(int argc, char **argv) {
         else if (arg == "--xstar-cpp") opt.xstar_cpp_bin = need("--xstar-cpp");
         else if (arg == "--table-bin") opt.table_bin = need("--table-bin");
         else if (arg == "--save") opt.save = true;
+        else if (arg == "--cleanup-work") opt.cleanup_work = true;
         else if (arg == "--restart") opt.restart = true;
         else if (arg == "--verbose") opt.verbose = true;
         else if (arg == "--version") { std::cout << "xstar-xspec package version " << kPackageVersion << "\n"; std::exit(0); }
@@ -321,17 +324,20 @@ int main(int argc, char **argv) {
         const fs::path jobs_dir = work_dir / "jobs";
         fs::create_directories(jobs_dir);
 
-        for (const char *name : {"xout_ain.fits", "xout_aout.fits", "xout_mtable.fits", "xout_etable.fits", "xout_step.log"}) {
-            std::error_code ec;
-            fs::remove(opt.output_dir / name, ec);
-            if (ec) throw std::runtime_error(std::string("cannot remove stale output ") + name + ": " + ec.message());
-        }
+        // 0.6.85.1: never delete pre-existing XSTAR/XSPEC products automatically.
+        // A failed rerun must leave prior and partially-written products available
+        // for forensic inspection. Current-run success/failure is communicated by
+        // return status and logs, not by destructive cleanup.
 
         std::ofstream log(opt.output_dir / "xstar2xspec.log", std::ios::out | std::ios::trunc);
         if (!log) throw std::runtime_error("cannot create xstar2xspec.log");
         std::ofstream scheduler(opt.output_dir / "xstar2xspec_scheduler.log", std::ios::out | std::ios::trunc);
         if (!scheduler) throw std::runtime_error("cannot create xstar2xspec_scheduler.log");
         log << "xstar_tools " << kPackageVersion << " parallel native XSTAR2XSPEC\n";
+        for (const char *name : {"xout_ain.fits", "xout_aout.fits", "xout_mtable.fits", "xout_etable.fits", "xout_step.log"}) {
+            if (fs::is_regular_file(opt.output_dir / name))
+                log << "[preserve] pre_existing_root_product=" << name << "\n";
+        }
 
         std::vector<std::string> planner{opt.initable_bin.string(), "--xstar", "cpp", "--output-dir", opt.output_dir.string()};
         if (!opt.input_file.empty()) { planner.push_back("--input"); planner.push_back(fs::absolute(opt.input_file).string()); }
@@ -349,6 +355,7 @@ int main(int argc, char **argv) {
         std::vector<fs::path> spectra(lines.size());
         std::vector<fs::path> steps(lines.size());
         std::vector<fs::path> stdout_logs(lines.size());
+        std::vector<fs::path> success_markers(lines.size());
         std::vector<std::vector<std::string>> commands(lines.size());
         std::vector<std::size_t> pending;
         std::size_t reused = 0;
@@ -360,6 +367,7 @@ int main(int argc, char **argv) {
             spectra[i] = job_dir / "xout_spect1.fits";
             steps[i] = job_dir / "xout_step.log";
             stdout_logs[i] = job_dir / "xstar-cpp.stdout.log";
+            success_markers[i] = job_dir / "xstar-cpp.success";
 
             std::vector<std::string> job = shell_split(lines[i]);
             if (job.empty() || job[0] != "xstar-cpp") throw std::runtime_error("native parallel pipeline requires cpp xstinitable plan");
@@ -370,7 +378,8 @@ int main(int argc, char **argv) {
             job.insert(job.begin() + 1, {"--output", job_dir.string()});
             commands[i] = std::move(job);
 
-            const bool complete = fs::is_regular_file(spectra[i]) && fs::is_regular_file(steps[i]);
+            const bool complete = fs::is_regular_file(spectra[i]) && fs::is_regular_file(steps[i]) &&
+                fs::is_regular_file(success_markers[i]);
             if (opt.restart && complete) {
                 ++reused;
                 scheduler << "reuse loopcontrol=" << job_index << "\n";
@@ -395,6 +404,11 @@ int main(int argc, char **argv) {
                 while (next < pending.size() && active.size() < effective_workers) {
                     const std::size_t i = pending[next++];
                     const std::size_t job_index = i + 1;
+                    // Invalidate only the non-product success marker. Any XSTAR
+                    // products from an earlier/failed attempt are intentionally
+                    // retained until the new solver overwrites them.
+                    std::error_code marker_ec;
+                    fs::remove(success_markers[i], marker_ec);
                     const pid_t pid = spawn_job(commands[i], invocation_dir, stdout_logs[i]);
                     active.emplace(pid, ActiveJob{job_index, pid, stdout_logs[i]});
                     max_active = std::max(max_active, active.size());
@@ -419,6 +433,13 @@ int main(int argc, char **argv) {
                 }
                 require_regular(spectra[job_index - 1], "job xout_spect1.fits");
                 require_regular(steps[job_index - 1], "job xout_step.log");
+                {
+                    std::ofstream success(success_markers[job_index - 1], std::ios::out | std::ios::trunc);
+                    if (!success) throw std::runtime_error("cannot write xstar-cpp success marker");
+                    success << "package=" << kPackageVersion << "\n"
+                            << "loopcontrol=" << job_index << "\n"
+                            << "return_code=0\n";
+                }
                 completion_order.push_back(job_index);
             }
         } catch (...) {
@@ -450,24 +471,27 @@ int main(int argc, char **argv) {
         for (const char *name : {"xout_ain.fits", "xout_aout.fits", "xout_mtable.fits", "xout_etable.fits", "xout_step.log"})
             require_regular(opt.output_dir / name, name);
 
-        if (!opt.save) {
+        if (opt.cleanup_work) {
             std::error_code ec;
             fs::remove_all(work_dir, ec);
             if (ec) log << "[cleanup] warning=" << ec.message() << "\n";
+            else log << "[cleanup] explicit --cleanup-work removed xstar2xspec-work after success\n";
+        } else {
+            log << "[preserve] xstar2xspec-work retained; XSTAR products are never auto-deleted\n";
         }
 
-        std::cout << "XSTAR_XSPEC_0685_JOBS=" << lines.size() << "\n";
-        std::cout << "XSTAR_XSPEC_0685_WORKERS_REQUESTED=" << opt.workers << "\n";
-        std::cout << "XSTAR_XSPEC_0685_WORKERS_EFFECTIVE=" << effective_workers << "\n";
-        std::cout << "XSTAR_XSPEC_0685_MAX_ACTIVE=" << max_active << "\n";
-        std::cout << "XSTAR_XSPEC_0685_EXECUTED=" << pending.size() << "\n";
-        std::cout << "XSTAR_XSPEC_0685_REUSED=" << reused << "\n";
-        std::cout << "XSTAR_XSPEC_0685_COMPLETION_ORDER=" << join_indices(completion_order) << "\n";
-        std::cout << "XSTAR_XSPEC_0685_LOOPCONTROL_FIRST=1\n";
-        std::cout << "XSTAR_XSPEC_0685_LOOPCONTROL_LAST=" << lines.size() << "\n";
-        std::cout << "XSTAR_XSPEC_0685_TABLES=4\n";
-        std::cout << "XSTAR_XSPEC_0685_WORKDIR=xstar2xspec-work\n";
-        std::cout << "XSTAR_XSPEC_0685_RESULT=ACCEPT\n";
+        std::cout << "XSTAR_XSPEC_06851_JOBS=" << lines.size() << "\n";
+        std::cout << "XSTAR_XSPEC_06851_WORKERS_REQUESTED=" << opt.workers << "\n";
+        std::cout << "XSTAR_XSPEC_06851_WORKERS_EFFECTIVE=" << effective_workers << "\n";
+        std::cout << "XSTAR_XSPEC_06851_MAX_ACTIVE=" << max_active << "\n";
+        std::cout << "XSTAR_XSPEC_06851_EXECUTED=" << pending.size() << "\n";
+        std::cout << "XSTAR_XSPEC_06851_REUSED=" << reused << "\n";
+        std::cout << "XSTAR_XSPEC_06851_COMPLETION_ORDER=" << join_indices(completion_order) << "\n";
+        std::cout << "XSTAR_XSPEC_06851_LOOPCONTROL_FIRST=1\n";
+        std::cout << "XSTAR_XSPEC_06851_LOOPCONTROL_LAST=" << lines.size() << "\n";
+        std::cout << "XSTAR_XSPEC_06851_TABLES=4\n";
+        std::cout << "XSTAR_XSPEC_06851_WORKDIR=xstar2xspec-work\n";
+        std::cout << "XSTAR_XSPEC_06851_RESULT=ACCEPT\n";
         return 0;
     } catch (const std::exception &exc) {
         std::fprintf(stderr, "xstar-xspec: %s\n", exc.what());

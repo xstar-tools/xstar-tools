@@ -1,4 +1,4 @@
-"""Native serial/parallel XSTAR2XSPEC orchestration for xstar_tools 0.6.85."""
+"""Native serial/parallel XSTAR2XSPEC orchestration for xstar_tools 0.6.85.1."""
 
 from __future__ import annotations
 
