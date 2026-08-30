@@ -4,7 +4,10 @@ MPI_CXXFLAGS ?=
 MPI_LDFLAGS ?=
 PYTHON_CONFIG ?= python3-config
 
-# v0.6.88.2 portable dynamic-library layer.  The 0.6.88.1 platform build
+# v0.6.88.2.1 portable dynamic-library qualification closure.  Production
+# C/C++ source/header bytes are identical to 0.6.88.2; this Makefile revision
+# changes package/build version metadata and the regression-test fixture only.
+# The 0.6.88.2 portable dynamic-library layer and 0.6.88.1 platform build
 # nomenclature remains frozen; this release centralizes shared-library naming,
 # loading, symbol lookup, close/error handling, module-directory discovery, and
 # platform path-list separators without changing Linux science behavior.
@@ -147,7 +150,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.2
+PACKAGE_VERSION ?= 0.6.88.2.1
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.84
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
@@ -344,14 +348,14 @@ test: all
 	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) secant-ieee-self-test --backend cpp --plugin-dir .
-	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../../../tests/fixtures/historical/v06485_active_family_phase2_fixture
-	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../../../tests/fixtures/historical/v06485_active_family_phase2_fixture --batch 4
-	rm -rf .v06485_native_output
-	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../../../tests/fixtures/historical/v06485_active_family_phase2_fixture --output-dir .v06485_native_output
-	test -s .v06485_native_output/xout_step.log
-	test -s .v06485_native_output/xout_native_state.fits
-	test -s .v06485_native_output/visited_records.csv
-	rm -rf .v06485_native_output
+	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../../../tests/fixtures/historical/v06486_active_family_phase2_fixture
+	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../../../tests/fixtures/historical/v06486_active_family_phase2_fixture --batch 4
+	rm -rf .v06486_native_output
+	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../../../tests/fixtures/historical/v06486_active_family_phase2_fixture --output-dir .v06486_native_output
+	test -s .v06486_native_output/xout_step.log
+	test -s .v06486_native_output/xout_native_state.fits
+	test -s .v06486_native_output/visited_records.csv
+	rm -rf .v06486_native_output
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 

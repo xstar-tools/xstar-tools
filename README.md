@@ -6,7 +6,7 @@
 
 - **`0.6.85.1` — formally accepted:** serial/local-process native XSTAR2XSPEC, output-directory coexistence, non-destructive failure products, restart success markers, and real-host local parallel closure.
 - **`0.6.86` — formally accepted:** `TRUE_MPI_XSTAR2XSPEC`, adding the opt-in `xstar-xspec-mpi` executable. Real two-rank host qualification completed successfully with four XSTAR jobs and restart reuse.
-- **`0.6.88.2` — current candidate:** `PORTABLE_DYNAMIC_LIBRARY_LAYER`. Dynamic-library naming/loading, sibling-module discovery, and `XSTAR_PLUGIN_PATH` list separators are centralized behind portable C++ infrastructure; Linux science behavior remains frozen. `0.6.88.1 PLATFORM_BUILD_ABSTRACTION` is formally accepted.
+- **`0.6.88.2.1` — current candidate:** `PORTABLE_DYNAMIC_LIBRARY_LAYER_QUALIFICATION_CLOSURE`. Production C/C++ source/header bytes are identical to `.88.2`; this successor fixes only Linux qualification linkage, generated-predecessor filtering, and the stale fixed-state regression fixture. `0.6.88.1 PLATFORM_BUILD_ABSTRACTION` remains formally accepted; `.88.2` remains a historical host REJECT.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
 

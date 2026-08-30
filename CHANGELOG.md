@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.88.2.1 — PORTABLE_DYNAMIC_LIBRARY_LAYER_QUALIFICATION_CLOSURE - 2026-08-30
+
+- Qualification-only closure on top of `0.6.88.2`; all C/C++ production/science `.cpp`, `.hpp`, and `.h` source/header files are byte-identical to `.88.2`.
+- Corrects the focused Linux dynamic-loader smoke so its direct GCC link uses the Makefile platform `FILESYSTEM_LIBS` contract (`-lstdc++fs` on the accepted GCC/Linux host) in addition to `-ldl`.
+- Corrects predecessor preservation to compare source/input files while excluding generated object files, shared/import/static libraries, and executable build products.
+- Adds an ABI-current `v06486_active_family_phase2_fixture` for the fixed-state regression target. Its raw coefficient payload is byte-identical to the historical 60485 fixture; only fixture ABI/program-id metadata is advanced.
+- Rewires only the Makefile regression-test fixture/output-directory names to the 60486 fixture and bumps Makefile/package version metadata to `.88.2.1`.
+- Preserves the `0.6.88.2` portable dynamic-library implementation, runtime loader behavior, science, public ABI values, and Windows-MPI-out-of-scope policy unchanged.
+
 ## 0.6.88.2 — PORTABLE_DYNAMIC_LIBRARY_LAYER (candidate) - 2026-08-30
 
 - Branches from formally accepted `0.6.88.1`; accepted XSTAR scientific arithmetic, controller ordering, row/record ordering, accumulation order, cutoffs, publication semantics, and public science ABIs remain frozen.

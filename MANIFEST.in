@@ -1148,3 +1148,14 @@ include tools/qualification/check_portable_dynamic_library_layer_0_6_88_2.py
 include tools/qualification/run_portable_dynamic_library_layer_host_0_6_88_2.py
 include qualification/portable_dynamic_library_layer_0_6_88_2.json
 include xstar_tools-0.6.88.2_local_validation.md
+
+# 0.6.88.2.1 portable dynamic-library qualification closure.
+include portable_dynamic_library_layer_qualification_closure_0_6_88_2_1.md
+include tests/test_portable_dynamic_library_layer_qualification_closure_0_6_88_2_1.py
+include tools/qualification/check_portable_dynamic_library_layer_qualification_closure_0_6_88_2_1.py
+include tools/qualification/run_portable_dynamic_library_layer_qualification_closure_host_0_6_88_2_1.py
+include qualification/portable_dynamic_library_layer_qualification_closure_0_6_88_2_1.json
+recursive-include tests/fixtures/historical/v06486_active_family_phase2_fixture *
+include xstar_tools-0.6.88.2_host_rejection.md
+include xstar_tools-0.6.88.2.1_local_validation.md
+include xstar_tools-0.6.88.2.1_release_closure.md
