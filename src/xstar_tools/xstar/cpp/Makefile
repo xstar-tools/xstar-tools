@@ -94,7 +94,8 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.84
+PACKAGE_VERSION ?= 0.6.85
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.84
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16.5
@@ -114,6 +115,7 @@ XSPEC_TABLE_TARGET := libxstar_xspec_table.so
 XSPEC_TABLE_EXECUTABLE := xstar-xspec-table
 XSPEC_INITABLE_EXECUTABLE := xstar-xspec-initable
 XSPEC_SERIAL_EXECUTABLE := xstar-xspec
+XSPEC_GRID_EXECUTABLE := $(XSPEC_SERIAL_EXECUTABLE)
 ENGINE_TARGET := libxstar_engine.so
 API_TARGET := libxstar_api.so
 CPP_BACKEND_TARGET := libxstar_backend_cpp.so
@@ -125,7 +127,7 @@ EXECUTABLE_OBJECTS := xstar_standalone.o xstar_science_fits.o xstar_run_state.o 
 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
 	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(LOCAL_ZONE_TARGET) $(FINAL_RECOMPUTE_TARGET) $(PRODUCTION_ZONE_TARGET) $(XSPEC_TABLE_TARGET)
-STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_TARGET) $(XSPEC_TABLE_EXECUTABLE) $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_SERIAL_EXECUTABLE)
+STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_TARGET) $(XSPEC_TABLE_EXECUTABLE) $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_GRID_EXECUTABLE)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
@@ -176,8 +178,8 @@ $(XSPEC_TABLE_EXECUTABLE): xstar_xspec_table_cli.cpp xstar_xspec_table_writer.cp
 $(XSPEC_INITABLE_EXECUTABLE): xstar_xspec_initable_cli.cpp xstar_xspec_initable.cpp xstar_xspec_initable_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_initable_cli.cpp xstar_xspec_initable.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS)
 
-$(XSPEC_SERIAL_EXECUTABLE): xstar_xspec_serial.cpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_serial.cpp $(FILESYSTEM_LIBS)
+$(XSPEC_GRID_EXECUTABLE): xstar_xspec_parallel.cpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_parallel.cpp $(FILESYSTEM_LIBS)
 
 $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SO_LDFLAGS) \

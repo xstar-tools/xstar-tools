@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.85 — parallel/MPI-style native XSTAR2XSPEC - 2026-08-30
+
+- Branches directly from formally accepted `0.6.84`; XSTAR scientific arithmetic, native xstinitable planning, native xstar2table transforms, and the retained `.84` serial reference source remain byte-identical.
+- Adds bounded local-process parallel execution to `xstar-xspec` via `--workers N` / `-j N`; the default remains one worker because XSTAR worker memory is model dependent.
+- Enforces `plan row i -> loopcontrol=i` before execution and gathers spectra/STEP logs strictly by loopcontrol, so arbitrary worker completion order cannot alter final table placement.
+- Renames the saved work tree from hidden `.xstar2xspec-work/` to visible `xstar2xspec-work/` as requested.
+- Captures each worker stdout/stderr in its own job directory and writes a deterministic canonical-order `xstar2xspec.log` plus a separate completion-order `xstar2xspec_scheduler.log`.
+- Implements `xstar-tools-mpixstar` as a native MPI_XSTAR-style compatibility wrapper using `--np/--workers`; no MPI runtime/library dependency is introduced in this release.
+- Preserves `--restart`, `--save`, canonical STEP concatenation, and four-table output semantics under parallel execution.
+- Frozen six-spectrum qualification forces out-of-order completion and still reproduces all four accepted XSPEC table payloads bit-exactly; fail-fast testing confirms a worker failure prevents final-table publication.
+
 ## 0.6.84 — complete serial native XSTAR2XSPEC - 2026-08-30
 
 - Added `xstar-xspec`, a native C++ serial orchestrator composing `xstar-xspec-initable`, isolated `xstar-cpp` grid jobs, and `xstar-xspec-table`.

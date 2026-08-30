@@ -1,4 +1,4 @@
-"""Serial native XSTAR2XSPEC orchestration for xstar_tools 0.6.84."""
+"""Native serial/parallel XSTAR2XSPEC orchestration for xstar_tools 0.6.85."""
 
 from __future__ import annotations
 
@@ -38,19 +38,22 @@ def run_xstar2xspec(
     *,
     input_file: str | os.PathLike[str] | None = None,
     data_dir: str | os.PathLike[str] | None = None,
+    workers: int = 1,
     save: bool = False,
     restart: bool = False,
     verbose: bool = False,
     native_executable: str | os.PathLike[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the complete serial native XSTAR2XSPEC pipeline."""
+    """Run the complete native XSTAR2XSPEC pipeline with bounded process parallelism."""
     args = [str(value) for value in parameters]
     if input_file is None and not args:
         raise ValueError("provide input_file or at least one xstinitable key=value parameter")
     exe = _native_xstar2xspec_executable(native_executable)
     out = Path(output_dir).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
-    command = [str(exe), "--output-dir", str(out)]
+    if workers < 1:
+        raise ValueError("workers must be >= 1")
+    command = [str(exe), "--output-dir", str(out), "--workers", str(workers)]
     if input_file is not None:
         command += ["--input", str(Path(input_file).expanduser())]
     if data_dir is not None:

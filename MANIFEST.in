@@ -1078,3 +1078,16 @@ include xstar_tools-0.6.84_local_validation.md
 include xstar_tools-0.6.84_host_validation.md
 include xstar_tools-0.6.84_release_closure.md
 include xstar_tools_conversation_summary_through_0.6.84_candidate.md
+
+# 0.6.85 parallel/MPI-style native XSTAR2XSPEC.
+include src/xstar_tools/xstar/cpp/xstar_xspec_parallel.cpp
+include tools/qualification/check_parallel_native_xstar2xspec_0_6_85.py
+include tools/qualification/run_parallel_native_xstar2xspec_host_0_6_85.py
+include qualification/parallel_native_xstar2xspec_0_6_85.json
+include docs/developer/parallel_native_xstar2xspec_0_6_85.md
+include tests/test_parallel_native_xstar2xspec_0_6_85.py
+include xstar_tools-0.6.84_final_acceptance.md
+include xstar_tools-0.6.85_local_validation.md
+include xstar_tools-0.6.85_host_validation.md
+include xstar_tools-0.6.85_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.85_candidate.md
