@@ -17,6 +17,19 @@ src/xstar_tools/xstar/cpp/
 
 The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestration must not alter accepted scientific/controller ordering, contribution ordering, accumulation ordering, cutoffs, or publication semantics.
 
+## Cross-platform build foundation (`0.6.88.1`)
+
+The Makefile now centralizes platform build nomenclature through `PLATFORM`, `SHLIB_EXT`, `EXEEXT`, `SHLIB_LDFLAGS`, `PIC_FLAGS`, `DL_LIBS`, `THREAD_LIBS`, `RPATH_ORIGIN`, and `FILESYSTEM_LIBS`. Linux defaults intentionally reproduce the accepted `0.6.87` command stream. `PLATFORM=macos` and `PLATFORM=windows` currently provide preparatory naming/link conventions only; source-level dynamic loading/process portability is a later milestone. Windows MPI is not supported.
+
+Inspect the active contract with:
+
+```bash
+make print-config
+make PLATFORM=macos print-config
+make PLATFORM=windows print-config
+```
+
+
 ## Build
 
 Normal build, with no MPI compiler/runtime requirement:

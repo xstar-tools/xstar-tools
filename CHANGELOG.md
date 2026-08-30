@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.88.1 — PLATFORM_BUILD_ABSTRACTION (candidate) - 2026-08-30
+
+- Branches from formally accepted `0.6.87`; no XSTAR scientific arithmetic, controller/traversal behavior, XSTAR2XSPEC scheduling semantics, public ABI, or publication semantics are changed.
+- Centralizes native C++ Makefile platform nomenclature behind `PLATFORM=linux|macos|windows` with automatic host detection unless the caller explicitly selects a platform on the make command line.
+- Adds canonical `SHLIB_EXT`, `EXEEXT`, `SHLIB_LDFLAGS`, `PIC_FLAGS`, `DL_LIBS`, `THREAD_LIBS`, `RPATH_ORIGIN`, and `FILESYSTEM_LIBS` variables and parameterizes native shared-library/executable target names through those variables.
+- Preserves the accepted Linux build contract: `.so`, no executable suffix, `-shared`, `-fPIC`, `-ldl`, `-pthread`, `$ORIGIN` rpath, and `-lstdc++fs`. A same-host forced dry-run comparison against `0.6.87` is required to be identical apart from the package-version literal.
+- Defines preparatory macOS nomenclature as `.dylib`, `-dynamiclib`, `-fPIC`, no `-ldl`, `-pthread`, `@loader_path`, and no `-lstdc++fs`; this release does not yet claim a complete macOS runtime port.
+- Defines preparatory Windows/MinGW nomenclature as `.dll`, `.exe`, `-shared`, no PIC flag, no `-ldl`, `-pthread`, no rpath, and no `-lstdc++fs`; source portability and DLL import-library work remain later milestones.
+- Windows MPI is explicitly out of scope: `make mpi PLATFORM=windows` and the Windows MPI target fail with a clear unsupported message. Linux/macOS MPI remains opt-in and unchanged.
+- Retains compatibility for callers that explicitly set historical `SO_LDFLAGS`; the canonical spelling for new build logic is `SHLIB_LDFLAGS`.
+
 ## 0.6.87 — PROCESS_COUNT_CLI_AND_DOCUMENTATION (candidate) - 2026-08-30
 
 - Branches from formally accepted `0.6.86`; no XSTAR science, xstinitable grid semantics, xstar2table transforms, or MPI scheduling semantics are reopened.

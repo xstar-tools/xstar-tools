@@ -1129,3 +1129,11 @@ include xstar_tools-0.6.87_release_closure.md
 include xstar_tools_conversation_summary_through_0.6.87_candidate.md
 include xstar_tools_conversation_summary_through_0.6.86_acceptance.md
 include xstar_tools-0.6.87_host_validation.md
+
+# 0.6.88.1 cross-platform native build nomenclature foundation.
+include platform_build_abstraction_0_6_88_1.md
+include tests/test_platform_build_abstraction_0_6_88_1.py
+include tools/qualification/check_platform_build_abstraction_0_6_88_1.py
+include tools/qualification/run_platform_build_abstraction_host_0_6_88_1.py
+include qualification/platform_build_abstraction_0_6_88_1.json
+include xstar_tools-0.6.88.1_local_validation.md
