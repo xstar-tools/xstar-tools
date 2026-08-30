@@ -1,178 +1,303 @@
-## v0.6.46.3 exact-profile native spectral architecture
+# Native C++ XSTAR tree
 
-`xstar_spectral_engine.h` defines the persistent source-ordered emissivity and
-opacity ABI. `libxstar_emissivity.so` owns scalar spectral contributions and
-links `libxstar_opacity.so` for native line-profile accumulation. The stable
-`libxstar_api.so` wrapper and `xstar_cpp spectral-self-test` expose the same
-boundary.
-
-# XSTAR standalone C++ and shared-library tree
-
-This directory is the retained flat native tree for `xstar_tools`.
-
-All native artifacts stay here:
+This directory contains the native XSTAR libraries and executables used by `xstar-tools`.
 
 ```text
 src/xstar_tools/xstar/cpp/
   *.h, *.hpp, *.cpp
   Makefile
-  build_lib.sh
   libxstar_*.so
   xstar_cpp
+  xstar-cpp
+  xstar-xspec-initable
+  xstar-xspec-table
+  xstar-xspec
+  xstar-xspec-mpi       # opt-in MPI build only
 ```
 
-Python XSTAR code remains one directory above, under:
-
-```text
-src/xstar_tools/xstar/*.py
-```
-
-Do not copy shared libraries into `src/xstar_tools/xstar/`.
-
-## v0.6.45.1 native element construction architecture
-
-v0.6.45.1 adds `xstar_element_contribution_v1` and construction entry points.
-The production adapter sends one compact source-ordered record contribution;
-C++ expands it to canonical terms and completes matrix assembly, normalization,
-Lucy solving, and state commit. Use `construction-self-test` and
-`construction-evaluation-self-test` for ABI validation. The packed-term calls
-remain supported for qualification and debugging. Atomic-data traversal and
-scalar rate evaluation are still Python-owned.
-
-## v0.6.45 native element architecture
-
-v0.6.45 retains the v0.6.44.3 standalone/backend structure and adds:
-
-- `xstar_element_engine.h`: stable C ABI for persistent element/evaluation calls;
-- `element_engine.cpp`: H/He/Mg source-ordered matrix assembly, normalization,
-  Lucy/fixed-point solve, derived ion state, and state commit;
-- `xstar_context_run_element_v1` and `xstar_context_run_evaluation_v1`;
-- standalone `element-self-test` and `evaluation-self-test` commands.
-
-The production Python adapter calls the native engine once per H, He, or Mg
-element. The public evaluation ABI accepts several element inputs in one call.
-Atomic-data traversal and scalar `MatrixTerm` generation remain in Python in
-this release; the native engine starts at the ordered term stream.
-
-The original typed zone/batch boundary remains scaffold-only. The new element
-boundary is real numerical code and does not require the scaffold-model flag.
+The canonical scientific oracle remains FORTRAN XSTAR 2.59g.  Native orchestration must not alter the accepted scientific/controller ordering, contribution ordering, accumulation ordering, cutoffs, or publication semantics.
 
 ## Build
 
+Normal build (no MPI compiler/runtime required):
+
 ```bash
 cd src/xstar_tools/xstar/cpp
-make clean
-make -j
-make test
+make -j2
+```
+
+or build selected production commands:
+
+```bash
+make -j2 xstar-cpp xstar-xspec-initable xstar-xspec-table xstar-xspec
+```
+
+True MPI XSTAR2XSPEC is deliberately **not** in the default target.  Build it only when requested:
+
+```bash
+make mpi
 ```
 
 or:
 
 ```bash
-./build_lib.sh
+make xstar-xspec-mpi
 ```
 
-The build uses `python3-config` for the optional Python plugin. Override it when
-needed:
+The MPI compiler wrapper defaults to `mpic++` and can be overridden:
 
 ```bash
-make PYTHON_CONFIG=/path/to/python3-config
+make mpi MPICXX=/path/to/mpic++
 ```
 
-## Standalone commands
+`make clean` removes both normal and optional MPI artifacts.
+
+## `xstar-cpp`: one XSTAR calculation
+
+### Using `xstar.par`
 
 ```bash
-./xstar_cpp list-backends
-./xstar_cpp backend-info --backend cpp --plugin-dir .
-./xstar_cpp backend-info --backend python --plugin-dir . --python-path ../../..
-./xstar_cpp self-test --backend cpp --plugin-dir . --batch 8
-PYTHONPATH=../../.. ./xstar_cpp self-test \
-  --backend python --plugin-dir . --python-path ../../.. --batch 8
+./xstar-cpp \
+  --input xstar.par \
+  --data-dir /path/to/xstar/data \
+  --output run1
 ```
 
-Component requests can be selected independently:
+Positional input is equivalent:
 
 ```bash
-./xstar_cpp backend-info \
-  --backend cpp \
-  --solver-backend cpp \
-  --rates-backend cpp \
-  --matrix-backend cpp \
-  --emissivity-backend python \
-  --opacity-backend python \
-  --thermal-backend python \
-  --plugin-dir .
+./xstar-cpp xstar.par --data-dir /path/to/xstar/data --output run1
 ```
 
-In v0.6.44.3 these overrides are recorded and exposed by the ABI. Mixed physics
-dispatch will be activated as each complete component becomes product-ready.
+### Without a parameter file
 
-## Public ABI
+Pass ordinary XSTAR parameters directly as `key=value` arguments:
 
-Use `xstar_api.h` from C, Fortran `ISO_C_BINDING`, Julia, or other languages.
-Use `xstar_api.hpp` for a small C++ RAII wrapper.
-
-Key calls:
-
-```c
-xstar_context_create_v1(...);
-xstar_context_run_zone_v1(...);
-xstar_context_run_batch_v1(...);
-xstar_context_get_component_info_v1(...);
-xstar_context_get_stats_v1(...);
-xstar_context_run_element_v1(...);
-xstar_context_run_evaluation_v1(...);
-xstar_context_get_element_stats_v1(...);
-xstar_context_destroy(...);
+```bash
+./xstar-cpp \
+  --data-dir /path/to/xstar/data \
+  --output run_direct \
+  spectrum=pow \
+  temperature=100 \
+  density=1e8 \
+  column=1e20 \
+  rlogxi=1 \
+  cfrac=1 \
+  niter=0 \
+  ncn2=9999 \
+  modelname=direct_cpp_example
 ```
 
-The API uses caller-owned arrays, explicit capacities, opaque persistent
-contexts, and no STL types in the public ABI.
+A file and overrides can be combined:
 
-## Python shared-library bridge
-
-`libxstar_backend_python.so` exports:
-
-```c
-xstar_python_call_json_v1(module, callable, request_json, ...);
+```bash
+./xstar-cpp \
+  --input xstar.par \
+  --output run_override \
+  density=1e10 rlogxi=2 modelname=override_example
 ```
 
-This lets external native programs invoke Python adapters through a shared
-library while keeping Python out of the main executable. The target callable
-receives one JSON-decoded object and returns a JSON-serializable object. Typed,
-high-throughput physics should use the zone/batch ABI instead of JSON.
+Useful frontend options:
 
-## Existing physics libraries
+```text
+--input PATH
+--data-dir DIR
+--input-dir DIR
+--output DIR / --output-dir DIR
+--atomic-db PATH
+--coheat PATH
+--json-summary FILE
+--provenance FILE
+--progress none|text|json
+--threads N
+--profile FILE
+--deterministic
+--print-option N
+--parameters-out FILE
+--abi
+--version
+```
 
-The retained libraries are:
+`--threads N` sets `OMP_NUM_THREADS` for the native run.  It is separate from XSTAR2XSPEC `--workers N`.  The current XSTAR2XSPEC worker pool is process-based.
 
-- `libxstar_solver.so`
-- `libxstar_rates.so`
-- `libxstar_matrix.so`
-- `libxstar_emissivity.so`
-- `libxstar_opacity.so`
-- `libxstar_thermal.so`
-- `libxstar_engine.so`
+## Atomic data
 
-The C++ backend plugin loads these dynamically and reports their ABI,
-implementation name, feature flags, and product/scaffold status.
+The most explicit setup is:
 
-`libxstar_opacity.so` and `libxstar_thermal.so` remain scaffolds in v0.6.44.3;
-loading them does not mean those physics paths are active.
+```bash
+./xstar-cpp \
+  --input xstar.par \
+  --data-dir /path/to/xstar/data \
+  --output run1
+```
 
-## Development rules
+`--data-dir DIR` selects `DIR/atdb.fits` and `DIR/coheat.dat`.  The files can instead be selected independently:
 
-- Keep every native source/header/library/executable in this directory.
-- Keep Python implementations under `src/xstar_tools/xstar/`.
-- Preserve a stable, versioned C ABI.
-- Use persistent contexts and coarse zone/evaluation calls.
-- Do not add per-record Python/C++ transitions to the production path.
-- Keep Python backends and whole-evaluation fallback available during porting.
-- Do not report scaffold output as a science result.
+```bash
+./xstar-cpp \
+  --input xstar.par \
+  --atomic-db /path/to/atdb.fits \
+  --coheat /path/to/coheat.dat \
+  --output run1
+```
 
-### Qualification profile oracle
+If explicit paths are omitted, the runtime uses the first existing candidate.
 
-`xstar_spectral_apply_contributions_v1` accepts any odd seed stride of at least 21.
-Product mode uses stride 21. Qualification uses stride 20001 for each line,
-so C++ performs integration/rebinning with the exact Python source profile and
-all final arrays can be compared bit-for-bit. The ABI remains 60460.
+### `atdb.fits` search order
+
+1. parameter-envelope `atomic_database`, `atomic_db`, or `atdb`;
+2. `atdb.fits` beside the parameter envelope;
+3. `$XSTAR_ATOMIC_DB`;
+4. `$XSTAR_ATDB_FITS`;
+5. `$XSTAR_DATA/atdb.fits`;
+6. `$HEADAS/refdata/atdb.fits`;
+7. `$XSTAR_HOME/data/atdb.fits`;
+8. executable-relative `../data/atdb.fits`, then `../../data/atdb.fits`;
+9. `src/xstar_tools/xstar/data/atdb.fits`;
+10. `./atdb.fits`.
+
+### `coheat.dat` search order
+
+1. parameter-envelope `coheat_file` or `coheat`;
+2. `coheat.dat` beside the parameter envelope;
+3. `$XSTAR_COHEAT`;
+4. `$XSTAR_DATA/coheat.dat`;
+5. `$HEADAS/refdata/coheat.dat`;
+6. `$XSTAR_HOME/data/coheat.dat`;
+7. executable-relative `../data/coheat.dat`, then `../../data/coheat.dat`;
+8. `src/xstar_tools/xstar/data/coheat.dat`;
+9. `./coheat.dat`.
+
+With HEASoft initialized, `$HEADAS/refdata` is therefore a supported fallback:
+
+```bash
+heainit
+./xstar-cpp --input xstar.par --output run_headas
+```
+
+The runtime prints/search-records the resolved atomic-data paths and provenance so the selected files can be audited.
+
+## `xstar-xspec`: serial and local process parallelism
+
+### Using `xstinitable.par`
+
+Serial:
+
+```bash
+./xstar-xspec \
+  --input xstinitable.par \
+  --data-dir /path/to/xstar/data \
+  --output-dir run_serial \
+  --workers 1
+```
+
+Two simultaneous local XSTAR processes:
+
+```bash
+./xstar-xspec \
+  --input xstinitable.par \
+  --data-dir /path/to/xstar/data \
+  --output-dir run_parallel \
+  --workers 2
+```
+
+`--workers 2` means **two child processes**, not two threads.  Each worker launches a separate `xstar-cpp`.  The operating system can schedule them on two logical CPUs concurrently if resources are available.  There is no automatic physical-core pinning.
+
+### Without `xstinitable.par`
+
+A four-job 2 x 2 example:
+
+```bash
+./xstar-xspec \
+  --data-dir /path/to/xstar/data \
+  --output-dir run_direct_grid \
+  --workers 2 \
+  column=1e21 columntyp=2 columnsof=1e20 columnnst=2 columnint=1 \
+  rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0 \
+  spectrum=pow density=1e12 modelname=direct_grid
+```
+
+When `--data-dir` is present it is emitted into every planned `xstar-cpp` job.  When it is absent, each child performs the normal atomic-data discovery described above.
+
+### Restart and preservation
+
+```bash
+./xstar-xspec \
+  --input xstinitable.par \
+  --output-dir run_parallel \
+  --workers 2 \
+  --restart
+```
+
+The work tree is visible and preserved by default:
+
+```text
+run_parallel/xstar2xspec-work/jobs/000001/
+run_parallel/xstar2xspec-work/jobs/000002/
+...
+```
+
+Failed or partial XSTAR products are never automatically deleted.  Restart requires:
+
+```text
+xout_spect1.fits
+xout_step.log
+xstar-cpp.success
+```
+
+Explicit successful-run cleanup is available with `--cleanup-work`.
+
+## `xstar-xspec-mpi`: true MPI (`0.6.86` candidate)
+
+Build:
+
+```bash
+make mpi
+```
+
+Run one grid across four MPI ranks:
+
+```bash
+mpirun -np 4 ./xstar-xspec-mpi \
+  --input xstinitable.par \
+  --data-dir /shared/xstar/data \
+  --output-dir /shared/run_mpi
+```
+
+Direct grid parameters are also accepted:
+
+```bash
+mpirun -np 4 ./xstar-xspec-mpi \
+  --data-dir /shared/xstar/data \
+  --output-dir /shared/run_mpi \
+  column=1e21 columntyp=2 columnsof=1e20 columnnst=2 columnint=1 \
+  rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
+```
+
+The MPI rank count replaces local `--workers`:
+
+```text
+mpirun -np 2  -> up to 2 simultaneous xstar-cpp processes
+mpirun -np 4  -> up to 4 simultaneous xstar-cpp processes
+```
+
+Every rank, including rank 0, can claim a grid job.  Rank 0 creates the plan and, after all jobs succeed, gathers spectra and STEP logs strictly by `loopcontrol` and runs `xstar-xspec-table`.  The first MPI implementation requires a shared filesystem for the executable/data/output paths.
+
+## Native ABI and libraries
+
+Public C/C++ interfaces remain in `xstar_api.h`, `xstar_api.hpp`, and the other versioned public headers.  The retained libraries include:
+
+```text
+libxstar_solver.so
+libxstar_rates.so
+libxstar_matrix.so
+libxstar_emissivity.so
+libxstar_opacity.so
+libxstar_thermal.so
+libxstar_engine.so
+libxstar_local_zone.so
+libxstar_production_zone.so
+libxstar_xspec_table.so
+```
+
+Keep Python implementations under `src/xstar_tools/xstar/`; do not copy shared libraries out of this native directory.

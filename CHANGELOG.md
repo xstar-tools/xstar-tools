@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.86 — TRUE_MPI_XSTAR2XSPEC (candidate) - 2026-08-30
+
+- Branches from formally accepted `0.6.85.1`; the accepted local-process `xstar-xspec` path remains the reference/oracle.
+- Adds opt-in `xstar-xspec-mpi`, a true MPI grid orchestrator in which every MPI rank, including rank 0, can execute one `xstar-cpp` child at a time.
+- Uses an MPI-3 RMA atomic work counter for dynamic pending-job claiming; job identity and final placement remain determined exclusively by canonical `loopcontrol`.
+- Rank 0 alone creates the xstinitable plan and, after global success, performs canonical STEP concatenation and final `xstar-xspec-table` publication.
+- Carries forward `.85.1` restart success markers, visible/preserved work directories, and non-destructive failure products. Peer failure sets a distributed failure flag so ranks stop claiming new work and active children are terminated.
+- Requires a shared filesystem for the first MPI implementation because per-job FITS/STEP files remain the qualified inter-stage boundary.
+- Keeps MPI out of the default build: normal `make` does not require MPI; `make mpi` or `make xstar-xspec-mpi` uses `MPICXX ?= mpic++`.
+- Rewrites the root/native READMEs and user/C++ documentation with direct `xstar-cpp` and `xstar-xspec` examples using both parameter files and `key=value` input, exact atomic-data discovery precedence, process-vs-thread semantics, and true-MPI usage.
+- MPI runtime/host acceptance is pending an environment with a real MPI compiler/runtime.
+
 ## 0.6.85.1 — STANDALONE_OUTPUT_DIRECTORY_COEXISTENCE - 2026-08-30
 
 - Corrects the real-host `0.6.85` parallel XSTAR2XSPEC failure caused by `xstar-cpp` treating scheduler-created `xstar-cpp.stdout.log` as a forbidden non-product artifact. The historical `.85` host REJECT remains preserved.

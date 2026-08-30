@@ -34,3 +34,26 @@ The qualification framework intentionally separates material numerical science f
 ## Need development diagnostics
 
 Use `xstar-tools dev ...` or `xstar-tools qualify ...`. Normal user workflows should not depend on qualification marker strings.
+
+## `xstar-xspec --workers 2` does not create MPI ranks
+
+That option creates two independent local `xstar-cpp` child **processes**. It is not a thread count and it does not call `mpirun`. Use `xstar-xspec-mpi` for true MPI.
+
+## `make mpi` says `mpic++` is missing
+
+MPI is optional and is intentionally excluded from the default build. Install/load an MPI implementation that provides a C++ wrapper, or point the build at the correct wrapper:
+
+```bash
+make -C src/xstar_tools/xstar/cpp mpi MPICXX=/path/to/mpic++
+```
+
+## MPI ranks cannot see the plan, data, or job directories
+
+The first `xstar-xspec-mpi` implementation requires a shared filesystem. Use paths visible from every node and prefer an explicit shared atomic-data directory:
+
+```bash
+mpirun -np 4 xstar-xspec-mpi \
+  --input /shared/model/xstinitable.par \
+  --data-dir /shared/xstar/data \
+  --output-dir /shared/results/run1
+```

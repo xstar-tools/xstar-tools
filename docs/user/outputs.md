@@ -25,3 +25,21 @@ print(result.step_log)
 ```
 
 `XStarResult` also reports status, return code, runtime, timings, diagnostics, warnings, and provenance.
+
+## XSTAR2XSPEC products
+
+A successful native `xstar-xspec` or `xstar-xspec-mpi` run publishes:
+
+```text
+xout_ain.fits
+xout_aout.fits
+xout_mtable.fits
+xout_etable.fits
+xout_step.log
+xstinitable.lis
+xstinitable.fits
+```
+
+Per-job products remain under `xstar2xspec-work/jobs/NNNNNN/` by default. Each successfully completed job includes `xstar-cpp.success`; failed/partial products are deliberately retained without that success marker.
+
+Local-process orchestration writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`. True MPI writes `xstar2xspec-mpi.log`, `xstar2xspec-mpi-scheduler.log`, and one `xstar2xspec-mpi-rank-NNNNNN.log` per rank.

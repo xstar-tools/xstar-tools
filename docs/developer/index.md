@@ -10,6 +10,7 @@ fortran_source_map
 python_cpp_fortran_concordance
 function_commenting
 execution_modes
+true_mpi_xstar2xspec_0_6_86
 public_python_api
 unified_cli
 xstar_cpp

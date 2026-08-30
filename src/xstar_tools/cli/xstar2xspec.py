@@ -16,7 +16,7 @@ def main() -> int:
     parser.add_argument("--input")
     parser.add_argument("--data-dir", "-data-dir", dest="data_dir")
     parser.add_argument("--output-dir", "--output", default=".")
-    parser.add_argument("--workers", "-j", type=int, default=1, help="maximum simultaneous xstar-cpp jobs (default: 1)")
+    parser.add_argument("--workers", "-j", type=int, default=1, help="maximum simultaneous xstar-cpp OS processes, not threads (default: 1)")
     parser.add_argument("--save", action="store_true")
     parser.add_argument("--restart", action="store_true")
     parser.add_argument("--verbose", action="store_true")

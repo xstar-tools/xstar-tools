@@ -106,3 +106,12 @@ Exact legacy combinations are identified with their stable public mode in proven
 ## Refactor gate
 
 `qualification/public_execution_modes_0_6_60.json` is the mode-mapping contract. `tools/qualification/check_public_execution_modes.py` and `tests/test_public_execution_modes.py` prove that public names select the same internal paths as the frozen aliases. A future backend refactor must update characterization first and must not change a public mapping silently.
+
+
+## Native XSTAR2XSPEC process and MPI modes
+
+The standalone table pipeline is separate from the five single-model backend modes above.
+
+`xstar-xspec --workers N` uses a bounded pool of **OS child processes**. It does not create threads or MPI ranks. Each worker launches one independent `xstar-cpp`, so `--workers 2` permits two concurrent XSTAR processes. The operating system may schedule them on two logical CPUs when available; CPU affinity/pinning is external.
+
+`0.6.86` adds the opt-in true-MPI candidate `xstar-xspec-mpi`. Its concurrency is selected by `mpirun/mpiexec -np N`; it deliberately rejects `--workers`. Every rank may run one `xstar-cpp` at a time, and rank 0 performs the final loopcontrol-ordered table gather. See `true_mpi_xstar2xspec_0_6_86.md`.

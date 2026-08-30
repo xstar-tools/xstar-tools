@@ -1,5 +1,7 @@
 # 0.6.85 — Parallel/MPI-style native XSTAR2XSPEC
 
+> **Historical note:** this page describes `0.6.85`. `0.6.85.1` is the formally accepted corrective successor: work products are preserved by default, failure is non-destructive, and restart additionally requires `xstar-cpp.success`. `0.6.86` adds a separate true-MPI candidate; local `xstar-xspec --workers N` remains process-based and non-MPI.
+
 ## Scope
 
 `0.6.85` extends the formally accepted `0.6.84` native XSTAR2XSPEC pipeline with bounded process parallelism. It does **not** modify XSTAR scientific arithmetic, the native xstinitable grid semantics, or the native xstar2table spectral transform.

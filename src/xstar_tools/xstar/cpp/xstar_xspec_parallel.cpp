@@ -1,4 +1,4 @@
-// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.85.1.
+// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.86.
 //
 // This executable composes the already-qualified native components:
 //   xstar-xspec-initable -> bounded parallel xstar-cpp jobs -> xstar-xspec-table.
@@ -33,7 +33,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.85.1";
+constexpr const char *kPackageVersion = "0.6.86";
 
 struct Options {
     fs::path input_file;
@@ -67,7 +67,7 @@ void usage(const char *argv0) {
         "  --input PATH          HEASoft/IRAF-style xstinitable.par\n"
         "  --data-dir DIR       explicit XSTAR atomic-data directory (optional)\n"
         "  --output-dir DIR     final XSTAR2XSPEC output directory\n"
-        "  --workers N, -j N    maximum simultaneous xstar-cpp jobs (default: 1)\n"
+        "  --workers N, -j N    maximum simultaneous xstar-cpp PROCESS jobs (not threads; default: 1)\n"
         "  --save               compatibility flag; work/products are preserved by default\n"
         "  --cleanup-work       explicitly remove xstar2xspec-work/ only after full success\n"
         "  --restart            reuse completed per-job spectra/STEP logs in work directory\n"
@@ -80,6 +80,7 @@ void usage(const char *argv0) {
         "Trailing key=value arguments override values loaded from --input.\n"
         "If --data-dir is omitted, each xstar-cpp job performs its normal data discovery\n"
         "(XSTAR_DATA, then $HEADAS/refdata, then legacy fallbacks).\n"
+        "Each worker is a separate OS process; the OS schedules workers on available logical CPUs.\n"
         "Parallel completion order never controls scientific/table placement; loopcontrol does.\n",
         argv0, argv0);
 }

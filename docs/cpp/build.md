@@ -61,3 +61,31 @@ make -C src/xstar_tools/xstar/cpp FILESYSTEM_LIBS= -j2
 
 The packaging layer does not alter the frozen default scientific compiler flags
 or introduce CMake/scikit-build translation in this milestone.
+
+## Optional MPI build
+
+`0.6.86` adds `xstar-xspec-mpi` as an explicitly optional target. The default native build and wheel build do not require MPI and do not compile the MPI source.
+
+```bash
+make -C src/xstar_tools/xstar/cpp mpi
+```
+
+or:
+
+```bash
+make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
+```
+
+The compiler wrapper is configurable:
+
+```bash
+make -C src/xstar_tools/xstar/cpp mpi MPICXX=/path/to/mpic++
+```
+
+A normal:
+
+```bash
+make -C src/xstar_tools/xstar/cpp
+```
+
+must remain MPI-free. This separation prevents an MPI development package/runtime from becoming a dependency of ordinary `xstar-cpp` or local-process `xstar-xspec` users.

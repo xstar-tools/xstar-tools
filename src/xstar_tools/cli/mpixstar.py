@@ -1,8 +1,8 @@
-"""MPI_XSTAR-style local parallel wrapper for the native xstar-xspec engine.
+"""Legacy MPI_XSTAR-style local-process compatibility wrapper.
 
-0.6.85.1 intentionally has no MPI runtime dependency.  ``--np``/``--workers``
-select the bounded local process pool used by the same deterministic native
-XSTAR2XSPEC engine.
+This Python command does not launch MPI ranks: ``--np`` remains a compatibility
+alias for local ``xstar-xspec --workers``.  For true MPI in 0.6.86, build
+``xstar-xspec-mpi`` with ``make mpi`` and launch it with ``mpirun``/``mpiexec``.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from xstar_tools.tables.pipeline import run_xstar2xspec
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="xstar-tools-mpixstar",
-        description="MPI_XSTAR-style bounded parallel native XSTAR2XSPEC runner.",
+        description="Legacy MPI_XSTAR-style local-process wrapper (not true MPI; use xstar-xspec-mpi for MPI).",
     )
     parser.add_argument("--input")
     parser.add_argument("--data-dir", "-data-dir", dest="data_dir")

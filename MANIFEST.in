@@ -1103,3 +1103,17 @@ include xstar_tools-0.6.85.1_release_closure.md
 include xstar_tools_conversation_summary_through_0.6.85.1_candidate.md
 include xstar_tools_conversation_summary_through_0.6.85.1_acceptance.md
 include xstar_tools-0.6.85.1_formal_host_acceptance.md
+
+# 0.6.86 true MPI native XSTAR2XSPEC candidate.
+include src/xstar_tools/xstar/cpp/xstar_xspec_mpi.cpp
+include tools/qualification/check_true_mpi_xstar2xspec_0_6_86.py
+include tools/qualification/run_true_mpi_xstar2xspec_host_0_6_86.py
+include qualification/true_mpi_xstar2xspec_0_6_86.json
+include docs/developer/true_mpi_xstar2xspec_0_6_86.md
+include docs/cpp/xstar_xspec.md
+include docs/cpp/xstar_xspec_mpi.md
+include tests/test_true_mpi_xstar2xspec_0_6_86.py
+include xstar_tools-0.6.86_local_validation.md
+include xstar_tools-0.6.86_host_validation.md
+include xstar_tools-0.6.86_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.86_candidate.md

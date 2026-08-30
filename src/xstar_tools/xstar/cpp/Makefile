@@ -1,4 +1,7 @@
 CXX ?= g++
+MPICXX ?= mpic++
+MPI_CXXFLAGS ?=
+MPI_LDFLAGS ?=
 PYTHON_CONFIG ?= python3-config
 CXXFLAGS ?= -O3 -std=c++17 -fPIC -Wall -Wextra -Wpedantic
 CPPFLAGS ?=
@@ -94,7 +97,7 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.85.1
+PACKAGE_VERSION ?= 0.6.86
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.84
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28
@@ -116,6 +119,7 @@ XSPEC_TABLE_EXECUTABLE := xstar-xspec-table
 XSPEC_INITABLE_EXECUTABLE := xstar-xspec-initable
 XSPEC_SERIAL_EXECUTABLE := xstar-xspec
 XSPEC_GRID_EXECUTABLE := $(XSPEC_SERIAL_EXECUTABLE)
+XSPEC_MPI_EXECUTABLE := xstar-xspec-mpi
 ENGINE_TARGET := libxstar_engine.so
 API_TARGET := libxstar_api.so
 CPP_BACKEND_TARGET := libxstar_backend_cpp.so
@@ -129,15 +133,21 @@ PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
 	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(LOCAL_ZONE_TARGET) $(FINAL_RECOMPUTE_TARGET) $(PRODUCTION_ZONE_TARGET) $(XSPEC_TABLE_TARGET)
 STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_TARGET) $(XSPEC_TABLE_EXECUTABLE) $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_GRID_EXECUTABLE)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
+MPI_TARGETS := $(XSPEC_MPI_EXECUTABLE)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
 INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
 
-.PHONY: all physics standalone test clean install print-config
+.PHONY: all physics standalone mpi test clean install print-config
 
 all: $(TARGETS)
 physics: $(PHYSICS_TARGETS)
 standalone: $(STANDALONE_TARGETS)
+
+# MPI is deliberately opt-in.  Plain `make` / `make all` never requires an
+# MPI compiler or runtime.  Build the true-MPI XSTAR2XSPEC executable with
+# `make mpi` (or `make xstar-xspec-mpi`) when MPICXX is available.
+mpi: $(XSPEC_MPI_EXECUTABLE)
 
 $(SOLVER_TARGET): level_population.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ $<
@@ -181,6 +191,9 @@ $(XSPEC_INITABLE_EXECUTABLE): xstar_xspec_initable_cli.cpp xstar_xspec_initable.
 $(XSPEC_GRID_EXECUTABLE): xstar_xspec_parallel.cpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_parallel.cpp $(FILESYSTEM_LIBS)
 
+$(XSPEC_MPI_EXECUTABLE): xstar_xspec_mpi.cpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
+	$(MPICXX) $(CPPFLAGS) $(CXXFLAGS) $(MPI_CXXFLAGS) -o $@ xstar_xspec_mpi.cpp $(FILESYSTEM_LIBS) $(MPI_LDFLAGS)
+
 $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SO_LDFLAGS) \
 		-o $@ xstar_api.cpp compiled_case.cpp $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
@@ -218,6 +231,9 @@ $(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(API_TARGET) $(PRODUCTION_ZON
 
 print-config:
 	@echo CXX=$(CXX)
+	@echo MPICXX=$(MPICXX)
+	@echo MPI_CXXFLAGS=$(MPI_CXXFLAGS)
+	@echo MPI_LDFLAGS=$(MPI_LDFLAGS)
 	@echo PYTHON_CONFIG=$(PYTHON_CONFIG)
 	@echo PYTHON_INCLUDES=$(PYTHON_INCLUDES)
 	@echo PYTHON_LIBS=$(PYTHON_LIBS)
@@ -269,4 +285,4 @@ install: all
 	@pwd
 
 clean:
-	rm -f $(TARGETS) *.o
+	rm -f $(TARGETS) $(MPI_TARGETS) *.o
