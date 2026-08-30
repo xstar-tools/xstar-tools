@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.83 - NATIVE_XSTINITABLE - 2026-08-29
+
+- Branches from formally accepted `0.6.82.40.2.46.1`; no accepted XSTAR scientific arithmetic or ABI is changed.
+- Implements the missing native serial `xstinitable` grid planner as `xstar-xspec-initable`, with the existing `xstar-tools-xstinitable` Python command acting as a thin launcher.
+- Reproduces canonical XSTAR 2.59g `xstinitable.c` physical-parameter ordering, constant/additive/interpolated classes, linear/logarithmic float32 sampling, highest-index-fastest Cartesian ordering, additive expansion, XSTAR command formatting, and 1-based `loopcontrol`.
+- Writes canonical-compatible `xstinitable.lis` and the initial `xstinitable.fits` PRIMARY/PARAMETERS skeleton through CFITSIO.
+- Freezes the supplied MPI_XSTAR 2x3 grid as the first regression oracle: `NINTPARM=2`, `NADDPARM=0`, six jobs, `loopcontrol=1..6`; `.lis` is byte-exact and FITS stable metadata/data payload are exact aside from volatile DATE.
+- Keeps MPI scheduling, complete serial XSTAR2XSPEC orchestration, and in-memory elimination of intermediate FITS out of `.83`.
+- Makes two undefined legacy inputs fail closed: no interpolated parameters and interpolated `nst<2`.
+
 ## 0.6.82.40.2.46.1 - SAVD_FIRST_MATERIALIZATION_PROMOTION_CLOSURE - 2026-08-29
 
 - **Formal maintainer promotion recorded 2026-09-23.** The fresh balanced `.46.1` runner remains historically `PERFORMANCE_GATE=REJECT` / `LOWXI_RESULT=REJECT`; those markers are not rewritten. The maintainer explicitly accepts `.46.1` as the production base because science/work/path are exact, the corrected targeted SAVD materialization contract passes (`ratio=0.621805`, local saving `1.816160 s`, zone SAVD/detail ratio `0.788422`, paired materialization wins `2/2`), and the same production code had already shown larger whole-run savings in the `.46` A/B. The fresh `.46.1` whole-run misses are retained as audit evidence (`internal ratio=0.990213`, `wall ratio=0.990064`, internal saving `1.145391 s`, wall saving `1.194949 s`).

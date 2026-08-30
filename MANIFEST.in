@@ -1042,3 +1042,17 @@ include xstar_tools-0.6.82.30.8.12_host_validation.md
 include multi_element_spectrum_type70_source_context_0_6_82_30_8_14.md
 include xstar_tools-0.6.82.30.8.14_host_validation.md
 include tests/test_type70_source_context_0_6_82_30_8_14.py
+
+# 0.6.83 native xstinitable / deterministic grid planner.
+include src/xstar_tools/xstar/cpp/xstar_xspec_initable_internal.hpp
+include src/xstar_tools/xstar/cpp/xstar_xspec_initable.cpp
+include src/xstar_tools/xstar/cpp/xstar_xspec_initable_cli.cpp
+include tools/qualification/check_native_xstinitable_0_6_83.py
+include qualification/native_xstinitable_0_6_83.json
+include tests/test_native_xstinitable_0_6_83.py
+include docs/developer/native_xstinitable_0_6_83.md
+recursive-include references/xstinitable_0_6_83 *
+include xstar_tools-0.6.83_local_validation.md
+include xstar_tools-0.6.83_host_validation.md
+include xstar_tools-0.6.83_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.83_candidate.md
