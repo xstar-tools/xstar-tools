@@ -1,4 +1,4 @@
-"""Compatibility CLI for the native xstar_tools 0.6.83.1 xstinitable planner."""
+"""Compatibility CLI for the native xstar_tools 0.6.83.2 xstinitable planner."""
 
 from __future__ import annotations
 

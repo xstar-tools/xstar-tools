@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.83.2 - HEADAS_REFDATA_DISCOVERY - 2026-08-30
+
+- Patch release on top of `0.6.83.1`; no XSTAR scientific arithmetic, grid-planning semantics, table-writing semantics, or ABI changes.
+- Extends native `xstar-cpp` atomic-data discovery so a HEASoft installation can supply `atdb.fits` and `coheat.dat` from `$HEADAS/refdata/` when no higher-priority path resolves them.
+- Preserves precedence: explicit parameter/`--data-dir` paths and explicit atomic-data variables first, then `XSTAR_DATA`, then `$HEADAS/refdata`, then `XSTAR_HOME`, followed by executable/package/current-directory fallbacks.
+- Leaves `xstar-xspec-initable` data discovery unchanged: it emits `--data-dir` only when explicitly requested; otherwise the generated `xstar-cpp` process owns runtime data discovery.
+- Updates `xstar-cpp --help` and production search-order diagnostics to document the HEASoft fallback.
+
 ## 0.6.83.1 - NATIVE_XSTINITABLE_CPP_COMMAND_CONTRACT - 2026-08-30
 
 - Patch release on top of formally accepted `0.6.83`; no XSTAR scientific arithmetic, solver ABI, or `xstar-cpp` frontend source is changed.

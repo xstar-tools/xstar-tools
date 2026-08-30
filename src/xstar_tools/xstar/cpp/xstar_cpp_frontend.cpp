@@ -235,6 +235,7 @@ void usage(std::ostream& out) {
         "Standard input options:\n"
         "  --input PATH           HEASoft/IRAF-style .par parameter file\n"
         "  --data-dir DIR         directory containing atdb.fits and coheat.dat\n"
+        "                         if omitted: XSTAR_DATA, then $HEADAS/refdata, then legacy fallbacks\n"
         "  --input-dir DIR        source-side directory for fixed-name files such as density.dat\n"
         "  --output DIR           output directory (alias: --output-dir)\n"
         "  --atomic-db PATH       explicit atdb.fits path\n"

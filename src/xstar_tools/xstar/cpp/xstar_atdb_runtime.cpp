@@ -1671,12 +1671,14 @@ ResolvedAtomicData resolve_atomic_data(const std::filesystem::path& parameters_p
     if (const char* v = std::getenv("XSTAR_ATOMIC_DB")) append_candidate(r.atdb_candidates, v);
     if (const char* v = std::getenv("XSTAR_ATDB_FITS")) append_candidate(r.atdb_candidates, v);
     if (const char* v = std::getenv("XSTAR_DATA")) append_candidate(r.atdb_candidates, std::filesystem::path(v) / "atdb.fits");
+    if (const char* v = std::getenv("HEADAS")) append_candidate(r.atdb_candidates, std::filesystem::path(v) / "refdata" / "atdb.fits");
     if (const char* v = std::getenv("XSTAR_HOME")) append_candidate(r.atdb_candidates, std::filesystem::path(v) / "data" / "atdb.fits");
     if(!executable_path.empty()){auto d=executable_path.parent_path();append_candidate(r.atdb_candidates,d/"../data/atdb.fits");append_candidate(r.atdb_candidates,d/"../../data/atdb.fits");}
     append_candidate(r.atdb_candidates,"src/xstar_tools/xstar/data/atdb.fits"); append_candidate(r.atdb_candidates,"atdb.fits"); r.atdb=first_file(r.atdb_candidates);
     add_json(r.coheat_candidates,"coheat_file"); add_json(r.coheat_candidates,"coheat"); append_candidate(r.coheat_candidates,base/"coheat.dat");
     if (const char* v = std::getenv("XSTAR_COHEAT")) append_candidate(r.coheat_candidates, v);
     if (const char* v = std::getenv("XSTAR_DATA")) append_candidate(r.coheat_candidates, std::filesystem::path(v) / "coheat.dat");
+    if (const char* v = std::getenv("HEADAS")) append_candidate(r.coheat_candidates, std::filesystem::path(v) / "refdata" / "coheat.dat");
     if (const char* v = std::getenv("XSTAR_HOME")) append_candidate(r.coheat_candidates, std::filesystem::path(v) / "data" / "coheat.dat");
     if(!executable_path.empty()){auto d=executable_path.parent_path();append_candidate(r.coheat_candidates,d/"../data/coheat.dat");append_candidate(r.coheat_candidates,d/"../../data/coheat.dat");}
     append_candidate(r.coheat_candidates,"src/xstar_tools/xstar/data/coheat.dat"); append_candidate(r.coheat_candidates,"coheat.dat"); r.coheat=first_file(r.coheat_candidates); return r;

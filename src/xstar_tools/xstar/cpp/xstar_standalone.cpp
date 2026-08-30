@@ -23332,8 +23332,8 @@ int command_standalone_capabilities() {
               << "V048746255172582_SEQUENCE2_HE_COMPACT_SEED_MAPPING=ACTIVE_ROW_IDENTITY_WITH_TERMINAL_ZERO\n"
               << "V048746255172582_SEQUENCE2_HELIUM_DIAGNOSTICS=FULL_MATRIX_RHS_78_POPULATIONS_SOURCE_NATIVE_THERMAL_TERMS\n"
               << "V048746255172582_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
-              << "V048746255172582_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172582_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172582_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,HEADAS_refdata,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172582_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,HEADAS_refdata,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
               << "V048746255172582_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
               << "V048746255172582_ARTIFACT_PROFILES=none,summary,failure,full\n"
               << "V048746255172582_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
@@ -25592,6 +25592,7 @@ int command_run_standalone_production(const Options& options, const std::filesys
     }
     if (const char* value = std::getenv("XSTAR_ATOMIC_DB")) candidates.emplace_back(value);
     if (const char* value = std::getenv("XSTAR_DATA")) candidates.emplace_back(std::filesystem::path(value) / "atdb.fits");
+    if (const char* value = std::getenv("HEADAS")) candidates.emplace_back(std::filesystem::path(value) / "refdata" / "atdb.fits");
     if (const char* value = std::getenv("XSTAR_HOME")) candidates.emplace_back(std::filesystem::path(value) / "data" / "atdb.fits");
     for (const auto& candidate : candidates) {
         std::error_code ec;
