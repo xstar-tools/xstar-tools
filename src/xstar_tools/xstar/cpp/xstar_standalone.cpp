@@ -22,6 +22,8 @@
 #include "xstar_atdb_runtime.hpp"
 #include "xstar_standalone_internal.hpp"
 #include "xstar_production_zone_bridge.h"
+#include "xstar_platform.hpp"
+#include "xstar_dynamic_library.hpp"
 
 #include "xstar_constants.h"
 
@@ -43,7 +45,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -26246,17 +26247,17 @@ int command_python_bridge_test(const Options& options) {
         ? xstar_standalone::executable_or_library_directory(
             reinterpret_cast<const void*>(&xstar_api_abi_version))
         : std::filesystem::path(options.plugin_dir);
-    const auto library = directory / "libxstar_backend_python.so";
-    void* handle = dlopen(library.c_str(), RTLD_NOW | RTLD_GLOBAL);
+    const auto library = directory / xstar_platform::shared_library_filename("xstar_backend_python");
+    auto handle = xstar_platform::dynamic_library_open(library, xstar_platform::DynamicLibraryVisibility::global);
     if (!handle) {
-        std::cerr << "could not load " << library << ": " << dlerror() << "\n";
+        std::cerr << "could not load " << library << ": " << xstar_platform::dynamic_library_error() << "\n";
         return XSTAR_STATUS_BACKEND_LOAD_FAILED;
     }
     using bridge_fn = int (*)(const char*, const char*, const char*, char*, std::size_t*, char*, std::size_t);
-    auto bridge = reinterpret_cast<bridge_fn>(dlsym(handle, "xstar_python_call_json_v1"));
+    auto bridge = reinterpret_cast<bridge_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_python_call_json_v1"));
     if (!bridge) {
         std::cerr << "python bridge symbol missing\n";
-        dlclose(handle);
+        xstar_platform::dynamic_library_close(handle);
         return XSTAR_STATUS_BACKEND_LOAD_FAILED;
     }
     std::array<char, 512> response{};
@@ -26267,11 +26268,11 @@ int command_python_bridge_test(const Options& options) {
         response.data(), &response_size, error.data(), error.size());
     if (status != XSTAR_STATUS_OK) {
         std::cerr << "bridge failed: " << error.data() << "\n";
-        dlclose(handle);
+        xstar_platform::dynamic_library_close(handle);
         return status;
     }
     std::cout << "python_bridge_response=" << response.data() << "\nRESULT=ACCEPT\n";
-    dlclose(handle);
+    xstar_platform::dynamic_library_close(handle);
     return 0;
 }
 

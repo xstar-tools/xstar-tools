@@ -7,13 +7,14 @@
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
 #include "xstar_backend_plugin.h"
+#include "xstar_platform.hpp"
+#include "xstar_dynamic_library.hpp"
 #include "xstar_standalone_internal.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
-#include <dlfcn.h>
 #include <filesystem>
 #include <memory>
 #include <sstream>
@@ -32,7 +33,7 @@ struct ComponentLibrary {
     std::string path;
     std::string implementation;
     std::string error;
-    void* handle = nullptr;
+    xstar_platform::DynamicLibraryHandle handle = nullptr;
     int abi_version = 0;
     int feature_flags = 0;
     bool loaded = false;
@@ -50,7 +51,7 @@ struct ComponentLibrary {
     }
     ComponentLibrary& operator=(ComponentLibrary&& other) noexcept {
         if (this != &other) {
-            if (handle) dlclose(handle);
+            if (handle) xstar_platform::dynamic_library_close(handle);
             id = other.id;
             logical_name = std::move(other.logical_name);
             filename = std::move(other.filename);
@@ -70,7 +71,7 @@ struct ComponentLibrary {
     // Purpose: Implement ~ComponentLibrary as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
     // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
     // XSTAR-FUNCTION-COMMENT-END
-    ~ComponentLibrary() { if (handle) dlclose(handle); }
+    ~ComponentLibrary() { if (handle) xstar_platform::dynamic_library_close(handle); }
 };
 
 struct CppBackendContext {
@@ -98,7 +99,7 @@ std::filesystem::path component_directory(const xstar_config_v1& config) {
 ComponentLibrary load_component(
     std::uint32_t id,
     const char* logical_name,
-    const char* filename,
+    const std::string& filename,
     const char* prefix,
     const std::filesystem::path& directory
 ) {
@@ -109,20 +110,21 @@ ComponentLibrary load_component(
     result.prefix = prefix;
     const auto candidate = directory / filename;
     result.path = candidate.string();
-    result.handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_LOCAL);
+    result.handle = xstar_platform::dynamic_library_open(candidate, xstar_platform::DynamicLibraryVisibility::local);
     if (!result.handle) {
-        result.error = dlerror() ? dlerror() : "dlopen failed";
+        const auto& error = xstar_platform::dynamic_library_error();
+        result.error = error.empty() ? "dynamic library load failed" : error;
         return result;
     }
     using abi_fn = int (*)();
     using name_fn = const char* (*)();
     using flags_fn = int (*)();
-    auto abi = reinterpret_cast<abi_fn>(dlsym(result.handle, (result.prefix + "_abi_version").c_str()));
-    auto name = reinterpret_cast<name_fn>(dlsym(result.handle, (result.prefix + "_backend_name").c_str()));
-    auto flags = reinterpret_cast<flags_fn>(dlsym(result.handle, (result.prefix + "_feature_flags").c_str()));
+    auto abi = reinterpret_cast<abi_fn>(xstar_platform::dynamic_library_symbol(result.handle, (result.prefix + "_abi_version").c_str()));
+    auto name = reinterpret_cast<name_fn>(xstar_platform::dynamic_library_symbol(result.handle, (result.prefix + "_backend_name").c_str()));
+    auto flags = reinterpret_cast<flags_fn>(xstar_platform::dynamic_library_symbol(result.handle, (result.prefix + "_feature_flags").c_str()));
     if (!abi || !name) {
         result.error = "required ABI/name symbols missing";
-        dlclose(result.handle);
+        xstar_platform::dynamic_library_close(result.handle);
         result.handle = nullptr;
         return result;
     }
@@ -141,13 +143,13 @@ ComponentLibrary load_component(
 void initialize_components(CppBackendContext& context) {
     const auto directory = component_directory(context.config);
     context.components = {{
-        load_component(XSTAR_COMPONENT_ENGINE, "engine", "libxstar_engine.so", "xstar_engine", directory),
-        load_component(XSTAR_COMPONENT_RATES, "rates", "libxstar_rates.so", "xstar_rates", directory),
-        load_component(XSTAR_COMPONENT_MATRIX, "matrix", "libxstar_matrix.so", "xstar_matrix", directory),
-        load_component(XSTAR_COMPONENT_SOLVER, "solver", "libxstar_solver.so", "xstar_solver", directory),
-        load_component(XSTAR_COMPONENT_EMISSIVITY, "emissivity", "libxstar_emissivity.so", "xstar_emissivity", directory),
-        load_component(XSTAR_COMPONENT_OPACITY, "opacity", "libxstar_opacity.so", "xstar_opacity", directory),
-        load_component(XSTAR_COMPONENT_THERMAL, "thermal", "libxstar_thermal.so", "xstar_thermal", directory),
+        load_component(XSTAR_COMPONENT_ENGINE, "engine", xstar_platform::shared_library_filename("xstar_engine"), "xstar_engine", directory),
+        load_component(XSTAR_COMPONENT_RATES, "rates", xstar_platform::shared_library_filename("xstar_rates"), "xstar_rates", directory),
+        load_component(XSTAR_COMPONENT_MATRIX, "matrix", xstar_platform::shared_library_filename("xstar_matrix"), "xstar_matrix", directory),
+        load_component(XSTAR_COMPONENT_SOLVER, "solver", xstar_platform::shared_library_filename("xstar_solver"), "xstar_solver", directory),
+        load_component(XSTAR_COMPONENT_EMISSIVITY, "emissivity", xstar_platform::shared_library_filename("xstar_emissivity"), "xstar_emissivity", directory),
+        load_component(XSTAR_COMPONENT_OPACITY, "opacity", xstar_platform::shared_library_filename("xstar_opacity"), "xstar_opacity", directory),
+        load_component(XSTAR_COMPONENT_THERMAL, "thermal", xstar_platform::shared_library_filename("xstar_thermal"), "xstar_thermal", directory),
     }};
 }
 

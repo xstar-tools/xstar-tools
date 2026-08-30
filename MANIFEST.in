@@ -1137,3 +1137,14 @@ include tools/qualification/check_platform_build_abstraction_0_6_88_1.py
 include tools/qualification/run_platform_build_abstraction_host_0_6_88_1.py
 include qualification/platform_build_abstraction_0_6_88_1.json
 include xstar_tools-0.6.88.1_local_validation.md
+
+# 0.6.88.2 portable dynamic-library runtime abstraction.
+include src/xstar_tools/xstar/cpp/xstar_platform.hpp
+include src/xstar_tools/xstar/cpp/xstar_dynamic_library.hpp
+include src/xstar_tools/xstar/cpp/xstar_dynamic_library.cpp
+include portable_dynamic_library_layer_0_6_88_2.md
+include tests/test_portable_dynamic_library_layer_0_6_88_2.py
+include tools/qualification/check_portable_dynamic_library_layer_0_6_88_2.py
+include tools/qualification/run_portable_dynamic_library_layer_host_0_6_88_2.py
+include qualification/portable_dynamic_library_layer_0_6_88_2.json
+include xstar_tools-0.6.88.2_local_validation.md

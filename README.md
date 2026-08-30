@@ -6,8 +6,7 @@
 
 - **`0.6.85.1` — formally accepted:** serial/local-process native XSTAR2XSPEC, output-directory coexistence, non-destructive failure products, restart success markers, and real-host local parallel closure.
 - **`0.6.86` — formally accepted:** `TRUE_MPI_XSTAR2XSPEC`, adding the opt-in `xstar-xspec-mpi` executable. Real two-rank host qualification completed successfully with four XSTAR jobs and restart reuse.
-- **`0.6.87` — formally accepted:** `PROCESS_COUNT_CLI_AND_DOCUMENTATION`. Local `xstar-xspec` documents `--processes N` as the canonical concurrency option; historical `--workers N` / `-j N` remain compatibility aliases.
-- **`0.6.88.1` — current candidate:** `PLATFORM_BUILD_ABSTRACTION`. The native Makefile now centralizes platform build nomenclature (`PLATFORM`, shared-library/executable suffixes, shared-library linker flags, PIC, dynamic-loader/thread libraries, origin rpath, and filesystem compatibility libraries) while preserving the Linux build command stream. Windows MPI is intentionally unsupported.
+- **`0.6.88.2` — current candidate:** `PORTABLE_DYNAMIC_LIBRARY_LAYER`. Dynamic-library naming/loading, sibling-module discovery, and `XSTAR_PLUGIN_PATH` list separators are centralized behind portable C++ infrastructure; Linux science behavior remains frozen. `0.6.88.1 PLATFORM_BUILD_ABSTRACTION` is formally accepted.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
 
@@ -29,13 +28,11 @@ xstar-xspec           serial/local-process XSTAR2XSPEC
 xstar-xspec-mpi       true MPI XSTAR2XSPEC; opt-in build only
 ```
 
-Build MPI only when requested on Linux/macOS:
+Build MPI only when requested:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi
 ```
-
-`0.6.88.1` introduces the Makefile platform abstraction used by the portability work. `make -C src/xstar_tools/xstar/cpp print-config` reports the detected build contract; callers may explicitly select `PLATFORM=linux`, `PLATFORM=macos`, or `PLATFORM=windows`. Linux remains the accepted build target in this release. macOS/Windows values are preparatory nomenclature only, and Windows MPI is intentionally unsupported.
 
 or:
 

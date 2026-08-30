@@ -10,14 +10,12 @@
 #define XSTAR_STANDALONE_INTERNAL_HPP
 
 #include "xstar_api.h"
+#include "xstar_dynamic_library.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <string>
-#ifdef __linux__
-#include <dlfcn.h>
-#endif
 
 namespace xstar_standalone {
 
@@ -96,16 +94,7 @@ inline const char* component_name(std::uint32_t id) {
 // Reference context: Implementation helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
 inline std::filesystem::path executable_or_library_directory(const void* symbol_address) {
-#ifdef __linux__
-    Dl_info info{};
-    if (dladdr(symbol_address, &info) != 0 && info.dli_fname != nullptr) {
-        std::error_code error;
-        auto path = std::filesystem::weakly_canonical(info.dli_fname, error);
-        if (!error) return path.parent_path();
-        return std::filesystem::path(info.dli_fname).parent_path();
-    }
-#endif
-    return std::filesystem::current_path();
+    return xstar_platform::module_directory(symbol_address);
 }
 
 } // namespace xstar_standalone

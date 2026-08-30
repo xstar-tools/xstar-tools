@@ -6,7 +6,7 @@ This directory contains the native XSTAR libraries and executables used by `xsta
 src/xstar_tools/xstar/cpp/
   *.h, *.hpp, *.cpp
   Makefile
-  libxstar_*.so
+  libxstar_*.(so|dylib|dll)
   xstar_cpp
   xstar-cpp
   xstar-xspec-initable
@@ -17,9 +17,15 @@ src/xstar_tools/xstar/cpp/
 
 The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestration must not alter accepted scientific/controller ordering, contribution ordering, accumulation ordering, cutoffs, or publication semantics.
 
-## Cross-platform build foundation (`0.6.88.1`)
+## Portable dynamic-library layer (`0.6.88.2`)
 
-The Makefile now centralizes platform build nomenclature through `PLATFORM`, `SHLIB_EXT`, `EXEEXT`, `SHLIB_LDFLAGS`, `PIC_FLAGS`, `DL_LIBS`, `THREAD_LIBS`, `RPATH_ORIGIN`, and `FILESYSTEM_LIBS`. Linux defaults intentionally reproduce the accepted `0.6.87` command stream. `PLATFORM=macos` and `PLATFORM=windows` currently provide preparatory naming/link conventions only; source-level dynamic loading/process portability is a later milestone. Windows MPI is not supported.
+`0.6.88.2` keeps the accepted `0.6.88.1` Makefile platform contract and adds source-level portability for runtime shared-library discovery/loading. `xstar_platform.hpp` owns `.so` / `.dylib` / `.dll` naming and the platform path-list separator. `xstar_dynamic_library.hpp/.cpp` is the only layer that calls the native loader: `dlopen`/`dlsym`/`dlclose`/`dladdr` on Linux and macOS, and `LoadLibraryW`/`GetProcAddress`/`FreeLibrary`/`GetModuleFileNameW` on Windows. Callers no longer hard-code `.so` filenames or call the native loader directly.
+
+`XSTAR_PLUGIN_PATH` uses `:` on Linux/macOS and `;` on Windows. Sibling-library discovery is based on the module containing the supplied symbol rather than the process working directory when the platform API can resolve it. Windows MPI remains intentionally unsupported. Windows process creation is still a later portability milestone, so `.88.2` does not claim a complete Windows `xstar-cpp`/`xstar-xspec` runtime port.
+
+## Cross-platform build foundation (`0.6.88.1`, formally accepted)
+
+The Makefile centralizes platform build nomenclature through `PLATFORM`, `SHLIB_EXT`, `EXEEXT`, `SHLIB_LDFLAGS`, `PIC_FLAGS`, `DL_LIBS`, `THREAD_LIBS`, `RPATH_ORIGIN`, and `FILESYSTEM_LIBS`. Linux defaults reproduce the accepted `0.6.87` command stream. Windows MPI is not supported.
 
 Inspect the active contract with:
 

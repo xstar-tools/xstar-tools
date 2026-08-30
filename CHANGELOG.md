@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.88.2 — PORTABLE_DYNAMIC_LIBRARY_LAYER (candidate) - 2026-08-30
+
+- Branches from formally accepted `0.6.88.1`; accepted XSTAR scientific arithmetic, controller ordering, row/record ordering, accumulation order, cutoffs, publication semantics, and public science ABIs remain frozen.
+- Adds `xstar_platform.hpp` for native shared-library filename construction and platform path-list separators: `.so`/`:` on Linux, `.dylib`/`:` on macOS, and `.dll`/`;` on Windows.
+- Adds `xstar_dynamic_library.hpp/.cpp` as the sole runtime loader abstraction. Linux/macOS use `dlopen`, `dlsym`, `dlclose`, `dlerror`, and `dladdr`; Windows uses `LoadLibraryW`, `GetProcAddress`, `FreeLibrary`, Win32 error formatting, and module-path discovery with `GetModuleHandleExW`/`GetModuleFileNameW`.
+- Removes hard-coded `.so` names and direct native loader calls from `xstar_api.cpp`, `xstar_backend_cpp.cpp`, `xstar_standalone.cpp`, and `xstar_standalone_internal.hpp`.
+- Routes backend, engine, emissivity, thermal, component, and Python-bridge library names through the common platform naming helper.
+- Makes `XSTAR_PLUGIN_PATH` parsing use the platform path-list separator so Windows drive-letter paths are not split on `:`.
+- Keeps the `0.6.88.1` Makefile platform contract unchanged apart from compiling/linking the new internal loader object and bumping package metadata.
+- Windows MPI remains explicitly out of scope. Windows process creation is also not part of this release; complete native Windows runtime support remains a later milestone.
+- Linux is the first qualification platform. Non-infrastructure C++ sources are required to remain byte-identical to `0.6.88.1`, and Linux loader/self-test behavior must pass before macOS/Windows host qualification is attempted.
+
 ## 0.6.88.1 — PLATFORM_BUILD_ABSTRACTION (candidate) - 2026-08-30
 
 - Branches from formally accepted `0.6.87`; no XSTAR scientific arithmetic, controller/traversal behavior, XSTAR2XSPEC scheduling semantics, public ABI, or publication semantics are changed.

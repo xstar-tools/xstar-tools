@@ -10,11 +10,12 @@
 
 #include "xstar_api.h"
 #include "xstar_backend_plugin.h"
+#include "xstar_platform.hpp"
+#include "xstar_dynamic_library.hpp"
 #include "xstar_standalone_internal.hpp"
 
 #include <array>
 #include <cstdlib>
-#include <dlfcn.h>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -49,12 +50,12 @@ using thermal_heatt_fn = int (*)(xstar_thermal_context*, xstar_heatt_workspace_v
 using thermal_loop_fn = int (*)(xstar_thermal_context*, const xstar_dsec_config_v1*, xstar_thermal_state_v1*, xstar_thermal_evaluator_fn_v1, void*, xstar_thermal_trace_event_v1*, size_t, size_t*, xstar_dsec_stats_v1*, char*, size_t);
 
 struct LoadedPlugin {
-    void* handle = nullptr;
+    xstar_platform::DynamicLibraryHandle handle = nullptr;
     const xstar_backend_descriptor_v1* descriptor = nullptr;
     std::string path;
 
     ~LoadedPlugin() {
-        if (handle != nullptr) dlclose(handle);
+        if (handle != nullptr) xstar_platform::dynamic_library_close(handle);
     }
 };
 
@@ -62,7 +63,7 @@ struct xstar_context_impl {
     xstar_config_v1 config{};
     std::unique_ptr<LoadedPlugin> plugin;
     void* backend_context = nullptr;
-    void* element_handle = nullptr;
+    xstar_platform::DynamicLibraryHandle element_handle = nullptr;
     xstar_element_engine_context* element_context = nullptr;
     element_create_fn element_create = nullptr;
     element_destroy_fn element_destroy = nullptr;
@@ -72,13 +73,13 @@ struct xstar_context_impl {
     element_construct_fn element_construct = nullptr;
     element_construct_eval_fn element_construct_eval = nullptr;
     element_stats_fn element_stats = nullptr;
-    void* spectral_handle = nullptr;
+    xstar_platform::DynamicLibraryHandle spectral_handle = nullptr;
     xstar_spectral_context* spectral_context = nullptr;
     spectral_create_fn spectral_create = nullptr;
     spectral_destroy_fn spectral_destroy = nullptr;
     spectral_reset_fn spectral_reset = nullptr;
     spectral_apply_fn spectral_apply = nullptr;
-    void* thermal_handle = nullptr;
+    xstar_platform::DynamicLibraryHandle thermal_handle = nullptr;
     xstar_thermal_context* thermal_context = nullptr;
     thermal_create_fn thermal_create = nullptr;
     thermal_destroy_fn thermal_destroy = nullptr;
@@ -100,7 +101,7 @@ std::vector<std::filesystem::path> plugin_directories(const xstar_config_v1& con
     if (const char* env = std::getenv("XSTAR_PLUGIN_PATH")) {
         std::stringstream stream(env);
         std::string item;
-        while (std::getline(stream, item, ':')) {
+        while (std::getline(stream, item, xstar_platform::path_list_separator())) {
             if (!item.empty()) result.emplace_back(item);
         }
     }
@@ -129,23 +130,21 @@ std::unique_ptr<LoadedPlugin> load_plugin(
     const std::string& backend,
     std::string& error_message
 ) {
-    const std::string filename = "libxstar_backend_" + backend + ".so";
+    const std::string filename = xstar_platform::shared_library_filename("xstar_backend_" + backend);
     std::vector<std::string> failures;
     for (const auto& directory : plugin_directories(config)) {
         const auto candidate = directory / filename;
-        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_GLOBAL);
+        auto handle = xstar_platform::dynamic_library_open(candidate, xstar_platform::DynamicLibraryVisibility::global);
         if (handle == nullptr) {
-            const char* error = dlerror();
-            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            const auto& error = xstar_platform::dynamic_library_error();
+            failures.push_back(candidate.string() + ": " + (error.empty() ? "dynamic library load failed" : error));
             continue;
         }
-        dlerror();
         auto getter = reinterpret_cast<xstar_backend_get_descriptor_v1_fn>(
-            dlsym(handle, "xstar_backend_get_descriptor_v1"));
-        const char* symbol_error = dlerror();
-        if (getter == nullptr || symbol_error != nullptr) {
+            xstar_platform::dynamic_library_symbol(handle, "xstar_backend_get_descriptor_v1"));
+        if (getter == nullptr) {
             failures.push_back(candidate.string() + ": missing xstar_backend_get_descriptor_v1");
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         const xstar_backend_descriptor_v1* descriptor = getter();
@@ -155,7 +154,7 @@ std::unique_ptr<LoadedPlugin> load_plugin(
             descriptor->backend_name == nullptr ||
             backend != descriptor->backend_name) {
             failures.push_back(candidate.string() + ": incompatible backend descriptor");
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         auto plugin = std::make_unique<LoadedPlugin>();
@@ -185,25 +184,25 @@ int ensure_element_engine(xstar_context_impl& context) {
     }
     std::vector<std::string> failures;
     for (const auto& directory : plugin_directories(context.config)) {
-        const auto candidate = directory / "libxstar_engine.so";
-        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_LOCAL);
+        const auto candidate = directory / xstar_platform::shared_library_filename("xstar_engine");
+        auto handle = xstar_platform::dynamic_library_open(candidate, xstar_platform::DynamicLibraryVisibility::local);
         if (!handle) {
-            const char* error = dlerror();
-            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            const auto& error = xstar_platform::dynamic_library_error();
+            failures.push_back(candidate.string() + ": " + (error.empty() ? "dynamic library load failed" : error));
             continue;
         }
-        auto abi = reinterpret_cast<uint32_t (*)()>(dlsym(handle, "xstar_element_engine_abi_version"));
-        auto create = reinterpret_cast<element_create_fn>(dlsym(handle, "xstar_element_engine_context_create_v1"));
-        auto destroy = reinterpret_cast<element_destroy_fn>(dlsym(handle, "xstar_element_engine_context_destroy"));
-        auto reset = reinterpret_cast<element_reset_fn>(dlsym(handle, "xstar_element_engine_context_reset_v1"));
-        auto run = reinterpret_cast<element_run_fn>(dlsym(handle, "xstar_element_engine_run_element_v1"));
-        auto eval = reinterpret_cast<element_eval_fn>(dlsym(handle, "xstar_element_engine_run_evaluation_v1"));
-        auto construct = reinterpret_cast<element_construct_fn>(dlsym(handle, "xstar_element_engine_run_construction_v1"));
-        auto construct_eval = reinterpret_cast<element_construct_eval_fn>(dlsym(handle, "xstar_element_engine_run_construction_evaluation_v1"));
-        auto stats = reinterpret_cast<element_stats_fn>(dlsym(handle, "xstar_element_engine_get_stats_v1"));
+        auto abi = reinterpret_cast<uint32_t (*)()>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_abi_version"));
+        auto create = reinterpret_cast<element_create_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_context_create_v1"));
+        auto destroy = reinterpret_cast<element_destroy_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_context_destroy"));
+        auto reset = reinterpret_cast<element_reset_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_context_reset_v1"));
+        auto run = reinterpret_cast<element_run_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_run_element_v1"));
+        auto eval = reinterpret_cast<element_eval_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_run_evaluation_v1"));
+        auto construct = reinterpret_cast<element_construct_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_run_construction_v1"));
+        auto construct_eval = reinterpret_cast<element_construct_eval_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_run_construction_evaluation_v1"));
+        auto stats = reinterpret_cast<element_stats_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_element_engine_get_stats_v1"));
         if (!abi || abi() != XSTAR_ELEMENT_ENGINE_ABI_VERSION || !create || !destroy || !reset || !run || !eval || !construct || !construct_eval || !stats) {
             failures.push_back(candidate.string() + ": incompatible element-engine ABI");
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         std::array<char, XSTAR_MESSAGE_SIZE> message{};
@@ -211,7 +210,7 @@ int ensure_element_engine(xstar_context_impl& context) {
         const int rc = create(&element_context, message.data(), message.size());
         if (rc != 0 || !element_context) {
             failures.push_back(candidate.string() + ": " + std::string(message.data()));
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         context.element_handle = handle;
@@ -252,21 +251,21 @@ int ensure_spectral_engine(xstar_context_impl& context) {
     }
     std::vector<std::string> failures;
     for (const auto& directory : plugin_directories(context.config)) {
-        const auto candidate = directory / "libxstar_emissivity.so";
-        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_LOCAL);
+        const auto candidate = directory / xstar_platform::shared_library_filename("xstar_emissivity");
+        auto handle = xstar_platform::dynamic_library_open(candidate, xstar_platform::DynamicLibraryVisibility::local);
         if (!handle) {
-            const char* error = dlerror();
-            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            const auto& error = xstar_platform::dynamic_library_error();
+            failures.push_back(candidate.string() + ": " + (error.empty() ? "dynamic library load failed" : error));
             continue;
         }
-        auto abi = reinterpret_cast<uint32_t (*)()>(dlsym(handle, "xstar_spectral_engine_abi_version"));
-        auto create = reinterpret_cast<spectral_create_fn>(dlsym(handle, "xstar_spectral_context_create_v1"));
-        auto destroy = reinterpret_cast<spectral_destroy_fn>(dlsym(handle, "xstar_spectral_context_destroy"));
-        auto reset = reinterpret_cast<spectral_reset_fn>(dlsym(handle, "xstar_spectral_context_reset_v1"));
-        auto apply = reinterpret_cast<spectral_apply_fn>(dlsym(handle, "xstar_spectral_apply_contributions_v1"));
+        auto abi = reinterpret_cast<uint32_t (*)()>(xstar_platform::dynamic_library_symbol(handle, "xstar_spectral_engine_abi_version"));
+        auto create = reinterpret_cast<spectral_create_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_spectral_context_create_v1"));
+        auto destroy = reinterpret_cast<spectral_destroy_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_spectral_context_destroy"));
+        auto reset = reinterpret_cast<spectral_reset_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_spectral_context_reset_v1"));
+        auto apply = reinterpret_cast<spectral_apply_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_spectral_apply_contributions_v1"));
         if (!abi || abi() != XSTAR_SPECTRAL_ENGINE_ABI_VERSION || !create || !destroy || !reset || !apply) {
             failures.push_back(candidate.string() + ": incompatible spectral-engine ABI");
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         std::array<char, XSTAR_MESSAGE_SIZE> message{};
@@ -274,7 +273,7 @@ int ensure_spectral_engine(xstar_context_impl& context) {
         const int rc = create(&spectral_context, message.data(), message.size());
         if (rc != 0 || !spectral_context) {
             failures.push_back(candidate.string() + ": " + std::string(message.data()));
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         context.spectral_handle = handle;
@@ -307,22 +306,22 @@ int ensure_thermal_engine(xstar_context_impl& context) {
     }
     std::vector<std::string> failures;
     for (const auto& directory : plugin_directories(context.config)) {
-        const auto candidate = directory / "libxstar_thermal.so";
-        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_LOCAL);
+        const auto candidate = directory / xstar_platform::shared_library_filename("xstar_thermal");
+        auto handle = xstar_platform::dynamic_library_open(candidate, xstar_platform::DynamicLibraryVisibility::local);
         if (!handle) {
-            const char* error = dlerror();
-            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            const auto& error = xstar_platform::dynamic_library_error();
+            failures.push_back(candidate.string() + ": " + (error.empty() ? "dynamic library load failed" : error));
             continue;
         }
-        auto abi = reinterpret_cast<uint32_t (*)()>(dlsym(handle, "xstar_thermal_engine_abi_version"));
-        auto create = reinterpret_cast<thermal_create_fn>(dlsym(handle, "xstar_thermal_context_create_v1"));
-        auto destroy = reinterpret_cast<thermal_destroy_fn>(dlsym(handle, "xstar_thermal_context_destroy"));
-        auto reset = reinterpret_cast<thermal_reset_fn>(dlsym(handle, "xstar_thermal_context_reset_v1"));
-        auto heatt = reinterpret_cast<thermal_heatt_fn>(dlsym(handle, "xstar_thermal_apply_heatt_v1"));
-        auto loop = reinterpret_cast<thermal_loop_fn>(dlsym(handle, "xstar_thermal_run_evaluation_loop_v1"));
+        auto abi = reinterpret_cast<uint32_t (*)()>(xstar_platform::dynamic_library_symbol(handle, "xstar_thermal_engine_abi_version"));
+        auto create = reinterpret_cast<thermal_create_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_thermal_context_create_v1"));
+        auto destroy = reinterpret_cast<thermal_destroy_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_thermal_context_destroy"));
+        auto reset = reinterpret_cast<thermal_reset_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_thermal_context_reset_v1"));
+        auto heatt = reinterpret_cast<thermal_heatt_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_thermal_apply_heatt_v1"));
+        auto loop = reinterpret_cast<thermal_loop_fn>(xstar_platform::dynamic_library_symbol(handle, "xstar_thermal_run_evaluation_loop_v1"));
         if (!abi || abi() != XSTAR_THERMAL_ENGINE_ABI_VERSION || !create || !destroy || !reset || !heatt || !loop) {
             failures.push_back(candidate.string() + ": incompatible thermal-engine ABI");
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         std::array<char, XSTAR_MESSAGE_SIZE> message{};
@@ -330,7 +329,7 @@ int ensure_thermal_engine(xstar_context_impl& context) {
         const int rc = create(&thermal_context, message.data(), message.size());
         if (rc != 0 || !thermal_context) {
             failures.push_back(candidate.string() + ": " + std::string(message.data()));
-            dlclose(handle);
+            xstar_platform::dynamic_library_close(handle);
             continue;
         }
         context.thermal_handle = handle;
@@ -587,7 +586,7 @@ void xstar_context_destroy(xstar_context* context) {
         value->thermal_context = nullptr;
     }
     if (value->thermal_handle) {
-        dlclose(value->thermal_handle);
+        xstar_platform::dynamic_library_close(value->thermal_handle);
         value->thermal_handle = nullptr;
     }
     if (value->spectral_context && value->spectral_destroy) {
@@ -595,7 +594,7 @@ void xstar_context_destroy(xstar_context* context) {
         value->spectral_context = nullptr;
     }
     if (value->spectral_handle) {
-        dlclose(value->spectral_handle);
+        xstar_platform::dynamic_library_close(value->spectral_handle);
         value->spectral_handle = nullptr;
     }
     if (value->element_context && value->element_destroy) {
@@ -603,7 +602,7 @@ void xstar_context_destroy(xstar_context* context) {
         value->element_context = nullptr;
     }
     if (value->element_handle) {
-        dlclose(value->element_handle);
+        xstar_platform::dynamic_library_close(value->element_handle);
         value->element_handle = nullptr;
     }
     if (value->plugin && value->plugin->descriptor && value->plugin->descriptor->destroy) {
