@@ -112,6 +112,6 @@ Exact legacy combinations are identified with their stable public mode in proven
 
 The standalone table pipeline is separate from the five single-model backend modes above.
 
-`xstar-xspec --workers N` uses a bounded pool of **OS child processes**. It does not create threads or MPI ranks. Each worker launches one independent `xstar-cpp`, so `--workers 2` permits two concurrent XSTAR processes. The operating system may schedule them on two logical CPUs when available; CPU affinity/pinning is external.
+`xstar-xspec --processes N` uses a bounded pool of **OS child processes**. It does not create threads or MPI ranks. Each process slot launches one independent `xstar-cpp`, so `--processes 2` permits two concurrent XSTAR processes. The operating system may schedule them on two logical CPUs when available; CPU affinity/pinning is external.
 
-`0.6.86` adds the opt-in true-MPI candidate `xstar-xspec-mpi`. Its concurrency is selected by `mpirun/mpiexec -np N`; it deliberately rejects `--workers`. Every rank may run one `xstar-cpp` at a time, and rank 0 performs the final loopcontrol-ordered table gather. See `true_mpi_xstar2xspec_0_6_86.md`.
+`0.6.86` established the formally accepted opt-in true-MPI `xstar-xspec-mpi`. Its concurrency is selected by `mpirun/mpiexec -np N`; it deliberately rejects local process-count options such as `--processes`. Every rank may run one `xstar-cpp` at a time, and rank 0 performs the final loopcontrol-ordered table gather. See `true_mpi_xstar2xspec_0_6_86.md`.

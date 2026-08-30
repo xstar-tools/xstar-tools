@@ -64,7 +64,7 @@ or introduce CMake/scikit-build translation in this milestone.
 
 ## Optional MPI build
 
-`0.6.86` adds `xstar-xspec-mpi` as an explicitly optional target. The default native build and wheel build do not require MPI and do not compile the MPI source.
+`0.6.86` established `xstar-xspec-mpi` as an explicitly optional, formally accepted target. The default native build and wheel build do not require MPI and do not compile the MPI source.
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi

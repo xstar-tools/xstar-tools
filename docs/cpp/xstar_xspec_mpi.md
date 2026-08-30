@@ -1,6 +1,6 @@
 # `xstar-xspec-mpi`
 
-`xstar-xspec-mpi` is the `0.6.86` true-MPI XSTAR2XSPEC candidate. It is separate from accepted local-process `xstar-xspec`.
+`xstar-xspec-mpi` is the formally accepted `0.6.86` true-MPI XSTAR2XSPEC executable. It is separate from the local-process `xstar-xspec` path.
 
 ## Build
 
@@ -51,7 +51,7 @@ mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
 
 ## Rank model
 
-There is no `--workers` option. The MPI launcher defines concurrency:
+There is no local `--processes` option. The MPI launcher defines concurrency:
 
 ```text
 mpirun -np 2 -> up to two concurrent xstar-cpp processes

@@ -1,4 +1,4 @@
-"""Native serial/parallel XSTAR2XSPEC orchestration for xstar_tools 0.6.86."""
+"""Native serial/parallel XSTAR2XSPEC orchestration for xstar_tools 0.6.87."""
 
 from __future__ import annotations
 
@@ -38,7 +38,8 @@ def run_xstar2xspec(
     *,
     input_file: str | os.PathLike[str] | None = None,
     data_dir: str | os.PathLike[str] | None = None,
-    workers: int = 1,
+    processes: int = 1,
+    workers: int | None = None,
     save: bool = False,
     restart: bool = False,
     verbose: bool = False,
@@ -51,9 +52,13 @@ def run_xstar2xspec(
     exe = _native_xstar2xspec_executable(native_executable)
     out = Path(output_dir).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
-    if workers < 1:
-        raise ValueError("workers must be >= 1")
-    command = [str(exe), "--output-dir", str(out), "--workers", str(workers)]
+    if workers is not None:
+        if processes != 1 and processes != workers:
+            raise ValueError("processes and legacy workers aliases disagree")
+        processes = workers
+    if processes < 1:
+        raise ValueError("processes must be >= 1")
+    command = [str(exe), "--output-dir", str(out), "--processes", str(processes)]
     if input_file is not None:
         command += ["--input", str(Path(input_file).expanduser())]
     if data_dir is not None:

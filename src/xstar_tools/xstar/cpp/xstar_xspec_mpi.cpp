@@ -1,4 +1,4 @@
-// True MPI native XSTAR2XSPEC orchestration for xstar_tools 0.6.86.
+// True MPI native XSTAR2XSPEC orchestration for xstar_tools 0.6.87.
 //
 // Rank 0 creates the canonical xstinitable plan.  All ranks then claim grid
 // jobs from an MPI-3 RMA counter and execute exactly one xstar-cpp child at a
@@ -35,7 +35,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.86";
+constexpr const char *kPackageVersion = "0.6.87";
 constexpr int kQueueNextSlot = 0;
 constexpr int kQueueFailed = 1;
 constexpr int kQueueInts = 2;
@@ -66,7 +66,7 @@ void usage(const char *argv0) {
         "MPI model:\n"
         "  - MPI rank count is selected by mpirun/mpiexec -np N.\n"
         "  - Each rank executes at most one xstar-cpp process at a time.\n"
-        "  - There is no --workers option; MPI ranks are the worker processes.\n"
+        "  - There is no --processes option; MPI concurrency is selected by mpirun/mpiexec -np N.\n"
         "  - Rank 0 also executes XSTAR jobs, then owns final canonical gather/table publication.\n"
         "  - The executable/output/data paths must be visible on every participating node.\n\n"
         "Options:\n"
@@ -272,8 +272,8 @@ Options parse_options(int argc, char **argv) {
         if (arg == "--input") opt.input_file = need("--input");
         else if (arg == "--data-dir" || arg == "-data-dir") opt.data_dir = need(arg.c_str());
         else if (arg == "--output-dir" || arg == "--output") opt.output_dir = need(arg.c_str());
-        else if (arg == "--workers" || arg == "-j")
-            throw std::runtime_error("xstar-xspec-mpi does not use --workers; select MPI workers with mpirun/mpiexec -np N");
+        else if (arg == "--processes" || arg == "--workers" || arg == "-j")
+            throw std::runtime_error("xstar-xspec-mpi does not use local process-count options; select MPI ranks with mpirun/mpiexec -np N");
         else if (arg == "--initable-bin") opt.initable_bin = need("--initable-bin");
         else if (arg == "--xstar-cpp") opt.xstar_cpp_bin = need("--xstar-cpp");
         else if (arg == "--table-bin") opt.table_bin = need("--table-bin");

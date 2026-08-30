@@ -1117,3 +1117,15 @@ include xstar_tools-0.6.86_local_validation.md
 include xstar_tools-0.6.86_host_validation.md
 include xstar_tools-0.6.86_release_closure.md
 include xstar_tools_conversation_summary_through_0.6.86_candidate.md
+
+# 0.6.87 local process-count CLI/documentation successor.
+include docs/developer/process_count_cli_0_6_87.md
+include tests/test_process_count_cli_0_6_87.py
+include tools/qualification/check_process_count_cli_0_6_87.py
+include qualification/process_count_cli_0_6_87.json
+include xstar_tools-0.6.86_formal_host_acceptance.md
+include xstar_tools-0.6.87_local_validation.md
+include xstar_tools-0.6.87_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.87_candidate.md
+include xstar_tools_conversation_summary_through_0.6.86_acceptance.md
+include xstar_tools-0.6.87_host_validation.md

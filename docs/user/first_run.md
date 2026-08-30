@@ -27,6 +27,8 @@ Values after `--input` override the file:
 xstar-cpp --input xstar.par --output run_override density=1e10 rlogxi=2
 ```
 
+For a realistic direct single-model parameter set including abundances, pressure, convergence, and output controls, see {doc}`../cpp/xstar_cpp`.
+
 If `--data-dir` is omitted, native atomic-data discovery is used; see {doc}`atomic_data`.
 
 ## Native XSTAR2XSPEC
@@ -38,7 +40,7 @@ xstar-xspec \
   --input xstinitable.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_serial \
-  --workers 1
+  --processes 1
 ```
 
 Two simultaneous local processes:
@@ -48,10 +50,10 @@ xstar-xspec \
   --input xstinitable.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_local2 \
-  --workers 2
+  --processes 2
 ```
 
-`--workers` counts **OS processes**, not threads. Each worker launches a distinct `xstar-cpp`. The operating system schedules those processes on available logical CPUs; physical-core pinning is external to `xstar-xspec`.
+`--processes` counts **OS processes**, not threads. Each process slot launches a distinct `xstar-cpp`. The operating system schedules those processes on available logical CPUs; physical-core pinning is external to `xstar-xspec`.
 
 A direct four-job 2 x 2 grid can be created without `xstinitable.par`:
 
@@ -59,20 +61,22 @@ A direct four-job 2 x 2 grid can be created without `xstinitable.par`:
 xstar-xspec \
   --data-dir /path/to/xstar/data \
   --output-dir run_grid \
-  --workers 2 \
+  --processes 2 \
   column=1e21 columntyp=2 columnsof=1e20 columnnst=2 columnint=1 \
   rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
 ```
 
+For a realistic direct XSTAR2XSPEC grid with many physical and grid-control parameters, see {doc}`../cpp/xstar_xspec`.
+
 Restart:
 
 ```bash
-xstar-xspec --input xstinitable.par --output-dir run_local2 --workers 2 --restart
+xstar-xspec --input xstinitable.par --output-dir run_local2 --processes 2 --restart
 ```
 
 The visible `xstar2xspec-work/` tree is preserved by default. Failed XSTAR products are retained for inspection and are never automatically deleted.
 
-## True MPI XSTAR2XSPEC (`0.6.86` candidate)
+## True MPI XSTAR2XSPEC (`0.6.86` accepted)
 
 MPI is opt-in at build time:
 
@@ -89,7 +93,7 @@ mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
   --output-dir /shared/run_mpi
 ```
 
-There is no `--workers` in `xstar-xspec-mpi`; `-np N` supplies the worker count. The initial implementation requires a shared filesystem for executable, atomic-data, work, and output paths.
+There is no local `--processes` option in `xstar-xspec-mpi`; `mpirun/mpiexec -np N` supplies the MPI rank count. The initial implementation requires a shared filesystem for executable, atomic-data, work, and output paths.
 
 ## Python API
 

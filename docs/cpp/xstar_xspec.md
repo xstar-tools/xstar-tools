@@ -1,13 +1,9 @@
 # `xstar-xspec`
 
-`xstar-xspec` is the accepted native XSTAR2XSPEC orchestrator. It composes:
+`xstar-xspec` is the complete native serial/local-process XSTAR2XSPEC driver:
 
 ```text
-xstar-xspec-initable
-    -> one or more xstar-cpp processes
-    -> canonical loopcontrol gather
-    -> xstar-xspec-table
-    -> xout_ain.fits / xout_aout.fits / xout_mtable.fits / xout_etable.fits
+xstar-xspec-initable -> xstar-cpp grid -> loopcontrol-ordered gather -> xstar-xspec-table
 ```
 
 ## With `xstinitable.par`
@@ -15,55 +11,59 @@ xstar-xspec-initable
 Serial:
 
 ```bash
-xstar-xspec --input xstinitable.par --output-dir run_serial --workers 1
+src/xstar_tools/xstar/cpp/xstar-xspec \
+  --input xstinitable.par \
+  --output-dir run_serial \
+  --processes 1
 ```
 
-Local parallel:
+Two simultaneous XSTAR processes:
 
 ```bash
-xstar-xspec --input xstinitable.par --output-dir run_local --workers 2
+src/xstar_tools/xstar/cpp/xstar-xspec \
+  --input xstinitable.par \
+  --output-dir run_local2 \
+  --processes 2
 ```
 
-`--workers N` counts simultaneous child **processes**, not C++ threads. Each worker is a separate `xstar-cpp`. The OS may schedule N runnable workers on N logical CPUs when capacity is available, but `xstar-xspec` does not pin workers to physical cores.
+`--processes N` counts independent **OS processes**, not C++ threads. The operating system or batch scheduler maps runnable processes to logical CPUs. The program does not pin processes to physical cores.
+
+`--workers N` and `-j N` remain compatibility aliases. New commands should use `--processes N`. The spelling `-np` is reserved for MPI launchers.
 
 ## Without `xstinitable.par`
 
 ```bash
-xstar-xspec \
-  --output-dir run_grid \
-  --workers 2 \
-  column=1e21 columntyp=2 columnsof=1e20 columnnst=2 columnint=1 \
-  rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
+src/xstar_tools/xstar/cpp/xstar-xspec \
+  --output-dir run_xspec_direct \
+  --processes 2 cfrac=0.4 \
+  temperature=100. lcpres=0 pressure=0.03 spectrum='pow' \
+  spectun=0 trad=-1. density=1.0e+12 densitytyp=0 \
+  columnsof=1.0e+20 columntyp=2 column=1.e+24 columnnst=9 columnint=1 \
+  rlrad38=1.e+6 rlogxityp=2 rlogxisof=0 rlogxi=5 rlogxinst=6 rlogxiint=0 \
+  habund=1 heabund=1 liabund=0 beabund=0 babund=0 cabund=1 \
+  nabund=1 oabund=1 fabund=0 neabund=1 naabund=0 mgabund=1 \
+  alabund=1 siabund=1 pabund=0 sabund=1 clabund=0 arabund=1 \
+  kabund=0 caabund=1 scabund=0 tiabund=0 vabund=0 crabund=1 \
+  mnabund=0 feabund=1 coabund=0 niabund=1 cuabund=0 znabund=0 \
+  modelname='xstar_pg1211' abundtbl='xdef' nsteps=10 niter=99 \
+  lwrite=0 lprint=1 lstep=0 emult=0.5 taumax=5. radexp=0. \
+  xeemin=0.1 critf=1.e-6 vturbi=100. npass=1 ncn2=9999
 ```
 
-The example creates four jobs. Planner defaults supply parameters not explicitly overridden.
+If `--data-dir` is omitted, each `xstar-cpp` child independently applies the native atomic-data search contract (`XSTAR_DATA`, then `$HEADAS/refdata`, then legacy/package fallbacks after direct overrides).
 
-## Data discovery
-
-With:
+## Restart
 
 ```bash
---data-dir /path/to/xstar/data
+src/xstar_tools/xstar/cpp/xstar-xspec \
+  --input xstinitable.par \
+  --output-dir run_local2 \
+  --processes 2 \
+  --restart
 ```
 
-that directory is emitted into every `xstar-cpp` plan row. Without it, each child uses normal `xstar-cpp` discovery, including `XSTAR_DATA` and `HEADAS/refdata` fallbacks.
+A job is reusable only when `xout_spect1.fits`, `xout_step.log`, and `xstar-cpp.success` are present. Failed/partial products are retained for forensic inspection.
 
-## Restart and failure products
+## Outputs
 
-```bash
-xstar-xspec --input xstinitable.par --output-dir run_local --workers 2 --restart
-```
-
-Restart reuses a job only if these all exist:
-
-```text
-xout_spect1.fits
-xout_step.log
-xstar-cpp.success
-```
-
-The work tree is preserved by default. A failed calculation reports failure but does not automatically delete XSTAR products. `--cleanup-work` is explicit and applies only after complete success.
-
-## Deterministic placement
-
-Workers may complete in arbitrary order. Scientific placement never follows completion order; final STEP concatenation and spectrum/table placement always follow ascending `loopcontrol`.
+The visible work tree is `xstar2xspec-work/jobs/NNNNNN/`. Final root products are `xout_ain.fits`, `xout_aout.fits`, `xout_mtable.fits`, `xout_etable.fits`, and the canonical concatenated `xout_step.log`.

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.87 — PROCESS_COUNT_CLI_AND_DOCUMENTATION (candidate) - 2026-08-30
+
+- Branches from formally accepted `0.6.86`; no XSTAR science, xstinitable grid semantics, xstar2table transforms, or MPI scheduling semantics are reopened.
+- Renames the canonical local XSTAR2XSPEC concurrency option to `--processes N`, matching the implementation: N independent `xstar-cpp` OS processes may run simultaneously.
+- Retains `--workers N` and `-j N` as compatibility aliases for existing scripts.
+- Reserves `-np N` for true MPI launcher semantics (`mpirun/mpiexec -np N xstar-xspec-mpi ...`) rather than overloading it for the local process pool.
+- Updates the Python `run_xstar2xspec` API and CLI wrapper to use `processes=` / `--processes` canonically while retaining the older `workers=` keyword/CLI aliases.
+- Expands the root and native C++ READMEs plus user/C++ docs with realistic direct `xstar-cpp` and `xstar-xspec` `key=value` examples, atomic-data discovery precedence, and process-vs-thread-vs-MPI terminology.
+- Records formal real-host acceptance of `0.6.86 TRUE_MPI_XSTAR2XSPEC`: two effective ranks executed the four-job grid, final products/STEP ordering accepted, and immediate restart reused 4/4 jobs.
+
 ## 0.6.86 — TRUE_MPI_XSTAR2XSPEC (candidate) - 2026-08-30
 
 - Branches from formally accepted `0.6.85.1`; the accepted local-process `xstar-xspec` path remains the reference/oracle.

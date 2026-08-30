@@ -35,7 +35,7 @@ The qualification framework intentionally separates material numerical science f
 
 Use `xstar-tools dev ...` or `xstar-tools qualify ...`. Normal user workflows should not depend on qualification marker strings.
 
-## `xstar-xspec --workers 2` does not create MPI ranks
+## `xstar-xspec --processes 2` does not create MPI ranks
 
 That option creates two independent local `xstar-cpp` child **processes**. It is not a thread count and it does not call `mpirun`. Use `xstar-xspec-mpi` for true MPI.
 

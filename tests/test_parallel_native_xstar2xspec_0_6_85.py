@@ -6,17 +6,18 @@ CPP = ROOT / "src/xstar_tools/xstar/cpp"
 
 def test_parallel_native_sources_present_and_versioned():
     text = (ROOT / "pyproject.toml").read_text()
-    assert 'version = "0.6.86"' in text
+    assert 'version = "0.6.87"' in text
     assert (CPP / "xstar_xspec_parallel.cpp").is_file()
     make = (CPP / "Makefile").read_text()
     assert "XSPEC_GRID_EXECUTABLE := $(XSPEC_SERIAL_EXECUTABLE)" in make
-    assert "PACKAGE_VERSION ?= 0.6.86" in make
+    assert "PACKAGE_VERSION ?= 0.6.87" in make
     assert "xstar_xspec_parallel.cpp" in make
 
 
 def test_parallel_driver_preserves_deterministic_loopcontrol_placement():
     text = (CPP / "xstar_xspec_parallel.cpp").read_text()
-    assert '"--workers"' in text
+    assert '"--processes"' in text
+    assert '"--workers"' in text  # compatibility alias
     assert 'const fs::path work_dir = opt.output_dir / "xstar2xspec-work";' in text
     assert 'loopcontrol != job_index' in text
     assert 'completion_order' in text
@@ -28,18 +29,19 @@ def test_parallel_driver_is_bounded_local_process_pool_not_mpi_linkage():
     text = (CPP / "xstar_xspec_parallel.cpp").read_text()
     assert '#include <mpi.h>' not in text
     assert 'spawn_job' in text
-    assert 'active.size() < effective_workers' in text
+    assert 'active.size() < effective_processes' in text
     assert 'waitpid(-1' in text
 
 
-def test_python_xstar2xspec_and_mpixstar_wrappers_expose_workers():
+def test_python_xstar2xspec_and_mpixstar_wrappers_expose_processes_with_legacy_aliases():
     pipeline = (ROOT / "src/xstar_tools/tables/pipeline.py").read_text()
     cli = (ROOT / "src/xstar_tools/cli/xstar2xspec.py").read_text()
     mpi = (ROOT / "src/xstar_tools/cli/mpixstar.py").read_text()
-    assert "workers: int = 1" in pipeline
-    assert '"--workers", str(workers)' in pipeline
-    assert 'parser.add_argument("--workers", "-j"' in cli
-    assert '"--workers", "--np", "-j"' in mpi
+    assert "processes: int = 1" in pipeline
+    assert "workers: int | None = None" in pipeline
+    assert '"--processes", str(processes)' in pipeline
+    assert 'parser.add_argument("--processes", "--workers", "-j"' in cli
+    assert '"--processes", "--workers", "--np", "-j"' in mpi
     assert "NotImplementedError" not in mpi
 
 

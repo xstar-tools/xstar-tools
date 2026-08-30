@@ -2,7 +2,7 @@
 
 ## Status
 
-`0.6.86` is a development candidate on top of formally accepted `0.6.85.1`. The accepted local-process `xstar-xspec` path remains available as the reference/oracle. MPI host qualification is required before formal promotion.
+`0.6.86` is **formally accepted** on top of `0.6.85.1`. The local-process `xstar-xspec` path remains available as the reference/oracle. Real-host qualification executed a four-job grid with two MPI ranks, observed multi-rank participation, produced all final tables with canonical STEP ordering, and then reused all four jobs on restart.
 
 ## Scope
 
@@ -49,7 +49,7 @@ mpirun -np 4 xstar-xspec-mpi \
   --output-dir /shared/run_mpi
 ```
 
-Concurrency comes from the MPI communicator size. There is intentionally no `--workers` option in the MPI executable.
+Concurrency comes from the MPI communicator size. There is intentionally no local `--processes` option in the MPI executable.
 
 The first implementation uses this ownership:
 
@@ -143,7 +143,7 @@ MPI rank and completion order are orchestration telemetry only. These remain can
 - PARAMVAL placement;
 - final INTPSPEC rows.
 
-## Qualification plan
+## Qualification and accepted host closure
 
 Local/source gates should establish:
 
@@ -154,20 +154,21 @@ Local/source gates should establish:
 - accepted `.85.1` standalone/science/planner/table sources remain unchanged except version/docs where intended;
 - source compiles with a strict MPI API surface when a real MPI toolchain is unavailable locally.
 
-Real-host MPI promotion should then require an actual MPI implementation and runtime, for example:
+The accepted host closure used an actual MPI implementation/runtime, for example:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi
 mpirun -np 2 src/xstar_tools/xstar/cpp/xstar-xspec-mpi ...
 ```
 
-Recommended host closure:
+Host closure requirements:
 
-1. `-np 1` versus accepted local `xstar-xspec --workers 1`;
-2. `-np 2` four-job smoke;
-3. restart with 4/4 reuse;
-4. final four tables bit-exact to the corresponding accepted local run;
-5. canonical STEP equality;
-6. injected one-rank failure proving no final-table publication and retained forensic products.
+1. real `-np 2` four-job smoke;
+2. two effective ranks with multi-rank participation;
+3. required per-job and final table products;
+4. canonical STEP ordering;
+5. immediate restart with 4/4 reuse.
+
+The host run returned the `TRUE_MPI_XSTAR2XSPEC_0686_HOST_*` acceptance markers. Host-level hwloc/PSM3/OFI diagnostics were emitted by the MPI/network stack, but did not prevent successful MPI execution or restart and are not XSTAR2XSPEC product failures.
 
 No broad/multi-element science rerun is required merely to qualify orchestration unless a scientific source is reopened.

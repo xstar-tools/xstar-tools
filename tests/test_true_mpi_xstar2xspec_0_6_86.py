@@ -19,7 +19,7 @@ def test_0686_true_mpi_uses_ranks_not_local_workers():
     assert "MPI_Comm_rank" in text
     assert "MPI_Comm_size" in text
     assert "MPI_Fetch_and_op" in text
-    assert "select MPI workers with mpirun/mpiexec -np N" in text
+    assert "select MPI ranks with mpirun/mpiexec -np N" in text
     assert "xstar-xspec-table" in text
 
 
@@ -36,7 +36,7 @@ def test_0686_true_mpi_preserves_loopcontrol_and_failure_products():
 def test_0686_docs_explain_process_vs_mpi_concurrency():
     root_readme = (ROOT / "README.md").read_text()
     cpp_readme = (CPP / "README.md").read_text()
-    assert "two simultaneous OS child processes" in root_readme
+    assert "two simultaneous `xstar-cpp` OS processes" in root_readme
     assert "make -C src/xstar_tools/xstar/cpp mpi" in root_readme
     assert "mpirun -np 4" in root_readme
-    assert "two child processes" in cpp_readme and "not two threads" in cpp_readme
+    assert "Two simultaneous XSTAR processes" in cpp_readme and "process parallelism" in cpp_readme

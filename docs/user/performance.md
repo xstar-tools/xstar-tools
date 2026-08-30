@@ -16,6 +16,6 @@ Historical optimization measurements are preserved under `historical/documentati
 
 ## XSTAR2XSPEC concurrency
 
-`xstar-xspec --workers N` is process parallelism, not thread parallelism. N independent `xstar-cpp` processes may be runnable at the same time, which can consume approximately N times the per-model memory in the worst case. The OS chooses logical CPUs unless the user or batch system applies affinity.
+`xstar-xspec --processes N` is process parallelism, not thread parallelism. N independent `xstar-cpp` processes may be runnable at the same time, which can consume approximately N times the per-model memory in the worst case. The OS chooses logical CPUs unless the user or batch system applies affinity.
 
 `xstar-xspec-mpi` uses one XSTAR child per MPI rank. `mpirun -np N` therefore permits up to N concurrent XSTAR calculations. On clusters, choose rank count from both CPU and memory limits; do not infer a safe rank count from CPU count alone.

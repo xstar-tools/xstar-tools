@@ -20,7 +20,7 @@ xstar-xspec \
   --input xstinitable.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_table \
-  --workers 2
+  --processes 2
 ```
 
 `--data-dir DIR` means that native execution should use:

@@ -1,13 +1,14 @@
 # xstar-tools
 
-`xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations.  The canonical scientific oracle remains **FORTRAN XSTAR 2.59g**; package, orchestration, performance, and interface work are qualified without silently changing that scientific boundary.
+`xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. The canonical scientific oracle remains **FORTRAN XSTAR 2.59g**. Package, orchestration, performance, and interface work are qualified without silently changing that scientific boundary.
 
 ## Release status
 
-- **`0.6.85.1` — formally accepted:** native serial/local-process XSTAR2XSPEC, standalone output-directory coexistence, non-destructive failure products, restart success markers, and real-host parallel closure.
-- **`0.6.86` — development candidate:** `TRUE_MPI_XSTAR2XSPEC`, adding the opt-in `xstar-xspec-mpi` executable.  Normal non-MPI builds remain unchanged and do not require MPI.
+- **`0.6.85.1` — formally accepted:** serial/local-process native XSTAR2XSPEC, output-directory coexistence, non-destructive failure products, restart success markers, and real-host local parallel closure.
+- **`0.6.86` — formally accepted:** `TRUE_MPI_XSTAR2XSPEC`, adding the opt-in `xstar-xspec-mpi` executable. Real two-rank host qualification completed successfully with four XSTAR jobs and restart reuse.
+- **`0.6.87` — current candidate:** `PROCESS_COUNT_CLI_AND_DOCUMENTATION`. Local `xstar-xspec` now documents `--processes N` as the canonical concurrency option. Historical `--workers N` / `-j N` remain compatibility aliases. MPI continues to use launcher `-np N`.
 
-The accepted optimized C++ science/performance lineage is retained from `0.6.82.40.2.46.1`.  Historical acceptance/rejection records are preserved in `CHANGELOG.md` and `docs/developer/`.
+The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
 
 ## Native build
 
@@ -17,16 +18,17 @@ The normal build does **not** compile or link MPI:
 make -C src/xstar_tools/xstar/cpp -j2
 ```
 
-Important native executables include:
+Important native executables are:
 
 ```text
 xstar-cpp             one XSTAR model
 xstar-xspec-initable  XSPEC-table grid planner
 xstar-xspec-table     final XSPEC table assembler
 xstar-xspec           serial/local-process XSTAR2XSPEC
+xstar-xspec-mpi       true MPI XSTAR2XSPEC; opt-in build only
 ```
 
-MPI is explicitly opt-in:
+Build MPI only when requested:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi
@@ -38,9 +40,11 @@ or:
 make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
 ```
 
-This requires an MPI C++ compiler wrapper such as `mpic++`.  `xstar-xspec-mpi` is not part of the default `all` target.
+The MPI target uses `MPICXX ?= mpic++`. It is not part of the normal `all` target.
 
 ## Running `xstar-cpp`
+
+`xstar-cpp` performs one XSTAR calculation.
 
 ### With `xstar.par`
 
@@ -48,7 +52,7 @@ This requires an MPI C++ compiler wrapper such as `mpic++`.  `xstar-xspec-mpi` i
 src/xstar_tools/xstar/cpp/xstar-cpp \
   --input xstar.par \
   --data-dir /path/to/xstar/data \
-  --output run_xstar
+  --output-dir run_xstar
 ```
 
 The positional parameter-file form is also accepted:
@@ -57,31 +61,39 @@ The positional parameter-file form is also accepted:
 src/xstar_tools/xstar/cpp/xstar-cpp \
   xstar.par \
   --data-dir /path/to/xstar/data \
-  --output run_xstar
+  --output-dir run_xstar
 ```
 
-### Without `xstar.par`: direct `key=value`
+Values supplied after the file override values from the file:
 
 ```bash
 src/xstar_tools/xstar/cpp/xstar-cpp \
-  --data-dir /path/to/xstar/data \
-  --output run_xstar_direct \
-  spectrum=pow \
-  temperature=100 \
-  density=1e8 \
-  column=1e20 \
-  rlogxi=1 \
-  cfrac=1 \
-  niter=0 \
-  ncn2=9999 \
-  modelname=direct_cpp_example
+  --input xstar.par \
+  --output-dir run_xstar_override \
+  density=1.0e+12 rlogxi=3 modelname='override_model'
 ```
 
-`key=value` arguments may also override values read from `--input`.
+### Without `xstar.par`: realistic direct `key=value` example
+
+```bash
+src/xstar_tools/xstar/cpp/xstar-cpp --output-dir run_xstar_direct \
+  cfrac=0.4 temperature=100. lcpres=0 pressure=0.03 spectrum='pow' \
+  spectun=0 trad=-1. density=1.0e+12 column=1.e+20 rlrad38=1.e+6 rlogxi=3 \
+  habund=1 heabund=1 liabund=0 beabund=0 babund=0 cabund=1 \
+  nabund=1 oabund=1 fabund=0 neabund=1 naabund=0 mgabund=1 \
+  alabund=1 siabund=1 pabund=0 sabund=1 clabund=0 arabund=1 \
+  kabund=0 caabund=1 scabund=0 tiabund=0 vabund=0 crabund=1 \
+  mnabund=0 feabund=1 coabund=0 niabund=1 cuabund=0 znabund=0 \
+  modelname='xstar_pg1211' abundtbl='xdef' nsteps=10 niter=99 \
+  lwrite=1 lprint=1 lstep=0 emult=0.5 taumax=5. radexp=0. \
+  xeemin=0.1 critf=1.e-6 vturbi=100. npass=1 ncn2=9999
+```
+
+If `--data-dir` is omitted, `xstar-cpp` performs native atomic-data discovery as described below.
 
 ## Running `xstar-xspec`
 
-`xstar-xspec` creates the grid with `xstar-xspec-initable`, runs independent `xstar-cpp` jobs, gathers them strictly by `loopcontrol`, and creates the four XSPEC tables.
+`xstar-xspec` creates an XSTAR2XSPEC grid with `xstar-xspec-initable`, executes independent `xstar-cpp` jobs, gathers the spectra and STEP logs strictly by `loopcontrol`, and creates the four final XSPEC tables.
 
 ### With `xstinitable.par`
 
@@ -92,48 +104,63 @@ src/xstar_tools/xstar/cpp/xstar-xspec \
   --input xstinitable.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_xspec_serial \
-  --workers 1
+  --processes 1
 ```
 
-Two-way local parallelism:
+Two simultaneous local XSTAR processes:
 
 ```bash
 src/xstar_tools/xstar/cpp/xstar-xspec \
   --input xstinitable.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_xspec_local2 \
-  --workers 2
+  --processes 2
 ```
 
-`--workers 2` means **two simultaneous OS child processes**, not two threads.  Each child is a separate `xstar-cpp` process.  On a host with available CPU capacity the operating system can schedule those processes on two logical CPUs concurrently; it does not pin them to particular physical cores unless CPU affinity is configured separately.
+`--processes 2` means **two simultaneous `xstar-cpp` OS processes**, not two C++ threads. Linux/the batch scheduler may run those processes on two logical CPUs when resources are available. `xstar-xspec` does not pin them to specific physical cores.
 
-### Without `xstinitable.par`: direct `key=value`
+Compatibility aliases remain available:
 
-This example creates a small 2 x 2 grid (four XSTAR jobs):
+```text
+--workers N
+-j N
+```
+
+New scripts should use `--processes N`. The spelling `-np` is intentionally reserved for MPI launchers such as `mpirun -np N`.
+
+### Without `xstinitable.par`: realistic direct `key=value` grid example
 
 ```bash
 src/xstar_tools/xstar/cpp/xstar-xspec \
-  --data-dir /path/to/xstar/data \
   --output-dir run_xspec_direct \
-  --workers 2 \
-  column=1e21 columntyp=2 columnsof=1e20 columnnst=2 columnint=1 \
-  rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0 \
-  spectrum=pow density=1e12 modelname=direct_xspec_example
+  --processes 2 cfrac=0.4 \
+  temperature=100. lcpres=0 pressure=0.03 spectrum='pow' \
+  spectun=0 trad=-1. density=1.0e+12 densitytyp=0 \
+  columnsof=1.0e+20 columntyp=2 column=1.e+24 columnnst=9 columnint=1 \
+  rlrad38=1.e+6 rlogxityp=2 rlogxisof=0 rlogxi=5 rlogxinst=6 rlogxiint=0 \
+  habund=1 heabund=1 liabund=0 beabund=0 babund=0 cabund=1 \
+  nabund=1 oabund=1 fabund=0 neabund=1 naabund=0 mgabund=1 \
+  alabund=1 siabund=1 pabund=0 sabund=1 clabund=0 arabund=1 \
+  kabund=0 caabund=1 scabund=0 tiabund=0 vabund=0 crabund=1 \
+  mnabund=0 feabund=1 coabund=0 niabund=1 cuabund=0 znabund=0 \
+  modelname='xstar_pg1211' abundtbl='xdef' nsteps=10 niter=99 \
+  lwrite=0 lprint=1 lstep=0 emult=0.5 taumax=5. radexp=0. \
+  xeemin=0.1 critf=1.e-6 vturbi=100. npass=1 ncn2=9999
 ```
 
-The same `key=value` arguments may be used after `--input` to override values from `xstinitable.par`.
+The same `key=value` arguments may follow `--input xstinitable.par` to override file values.
 
-### Restart and products
+### Restart and retained products
 
 ```bash
 src/xstar_tools/xstar/cpp/xstar-xspec \
   --input xstinitable.par \
   --output-dir run_xspec_local2 \
-  --workers 2 \
+  --processes 2 \
   --restart
 ```
 
-Per-job products remain in:
+Per-job products are kept under:
 
 ```text
 run_xspec_local2/xstar2xspec-work/jobs/000001/
@@ -141,11 +168,19 @@ run_xspec_local2/xstar2xspec-work/jobs/000002/
 ...
 ```
 
-A job is restart-reusable only when `xout_spect1.fits`, `xout_step.log`, and `xstar-cpp.success` all exist.  Failed/partial XSTAR products are retained for inspection and are not automatically deleted.  Destructive work-tree removal is explicit-only with `--cleanup-work` after a fully successful run.
+A job is restart-reusable only when all of these exist:
 
-## True MPI XSTAR2XSPEC (`0.6.86` candidate)
+```text
+xout_spect1.fits
+xout_step.log
+xstar-cpp.success
+```
 
-Build explicitly:
+Failed or partial XSTAR products are preserved for inspection and are not automatically deleted. Work-tree removal is explicit-only with `--cleanup-work` after a fully successful run.
+
+## True MPI XSTAR2XSPEC
+
+`0.6.86` established the accepted true-MPI executable. Build it explicitly:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi
@@ -160,7 +195,7 @@ mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
   --output-dir /shared/run_xspec_mpi
 ```
 
-Or use direct grid parameters:
+Or supply grid parameters directly:
 
 ```bash
 mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
@@ -170,34 +205,39 @@ mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
   rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
 ```
 
-`xstar-xspec-mpi` has no `--workers` option: **`mpirun -np N` is the worker count**.  Every MPI rank may execute one `xstar-cpp` process at a time, including rank 0.  Rank 0 alone performs the final canonical STEP/spectrum gather and table publication.  The executable, output directory, and data paths must be visible from every MPI node; a shared filesystem is therefore required by the first implementation.
+`xstar-xspec-mpi` has no local `--processes` setting. **`mpirun/mpiexec -np N` selects N MPI ranks.** Every rank may execute one `xstar-cpp` child at a time, including rank 0; rank 0 alone performs the final canonical `loopcontrol`-ordered gather/table publication.
+
+For the current file-backed MPI implementation, the executable, output directory, atomic data, and any external model files must be visible from every MPI rank. A shared filesystem is therefore required for multi-node execution.
 
 ## Atomic-data discovery
 
-The simplest and most reproducible choice is explicit:
+The most explicit and reproducible choice is:
 
 ```bash
 --data-dir /path/to/xstar/data
 ```
 
-That directory must contain:
+The directory should contain:
 
 ```text
 atdb.fits
 coheat.dat
 ```
 
-You may instead provide the files separately to `xstar-cpp`:
+You can instead supply the files separately to `xstar-cpp`:
 
 ```bash
-xstar-cpp --atomic-db /path/to/atdb.fits --coheat /path/to/coheat.dat ...
+xstar-cpp \
+  --atomic-db /path/to/atdb.fits \
+  --coheat /path/to/coheat.dat \
+  ...
 ```
 
-When explicit paths are omitted, the native runtime selects the **first existing file** in its search list.
+When explicit paths are omitted, the runtime selects the **first existing file** in the search sequence.
 
-`atdb.fits` discovery order is:
+### `atdb.fits` discovery order
 
-1. explicit parameter-envelope path (`atomic_database`, `atomic_db`, or `atdb`; this includes the path generated by `--atomic-db` / `--data-dir`);
+1. explicit parameter-envelope path (`atomic_database`, `atomic_db`, or `atdb`; this includes `--atomic-db` and `--data-dir`);
 2. `atdb.fits` beside the native parameter envelope;
 3. `$XSTAR_ATOMIC_DB`;
 4. `$XSTAR_ATDB_FITS`;
@@ -208,10 +248,10 @@ When explicit paths are omitted, the native runtime selects the **first existing
 9. `src/xstar_tools/xstar/data/atdb.fits`;
 10. `./atdb.fits`.
 
-`coheat.dat` discovery order is analogous:
+### `coheat.dat` discovery order
 
-1. explicit parameter-envelope path (`coheat_file` or `coheat`; including `--coheat` / `--data-dir`);
-2. `coheat.dat` beside the parameter envelope;
+1. explicit parameter-envelope path (`coheat_file` or `coheat`; including `--coheat` and `--data-dir`);
+2. `coheat.dat` beside the native parameter envelope;
 3. `$XSTAR_COHEAT`;
 4. `$XSTAR_DATA/coheat.dat`;
 5. `$HEADAS/refdata/coheat.dat`;
@@ -224,10 +264,12 @@ With HEASoft initialized, this commonly works without `--data-dir`:
 
 ```bash
 heainit
-xstar-cpp --input xstar.par --output run_xstar
+src/xstar_tools/xstar/cpp/xstar-cpp --input xstar.par --output-dir run_xstar
 ```
 
-because `$HEADAS/refdata/atdb.fits` and `$HEADAS/refdata/coheat.dat` are valid fallbacks.  For multi-node MPI, an explicit shared `--data-dir` is recommended so every rank resolves the same files independent of MPI environment-export policy.
+because `$HEADAS/refdata/atdb.fits` and `$HEADAS/refdata/coheat.dat` are accepted fallbacks. If `$XSTAR_DATA` is also defined and contains both files, it has precedence over `$HEADAS/refdata`.
+
+For multi-node MPI, an explicit shared `--data-dir` is recommended so every rank resolves the same files independently of launcher environment-export policy.
 
 ## Documentation
 
@@ -235,9 +277,12 @@ Start with:
 
 - `docs/user/first_run.md`
 - `docs/user/atomic_data.md`
+- `docs/user/performance.md`
 - `docs/cpp/xstar_cpp.md`
 - `docs/cpp/xstar_xspec.md`
 - `docs/cpp/xstar_xspec_mpi.md`
+- `docs/developer/execution_modes.md`
 - `docs/developer/true_mpi_xstar2xspec_0_6_86.md`
+- `docs/developer/process_count_cli_0_6_87.md`
 
-The project deliberately separates scientific acceptance, publication correctness, performance qualification, and orchestration changes.  Do not reinterpret a historical formal ACCEPT/REJECT when a later patch corrects a different contract.
+The project deliberately separates scientific acceptance, publication correctness, performance qualification, and orchestration/interface changes. Historical formal ACCEPT/REJECT records are never rewritten when a later release changes a different contract.

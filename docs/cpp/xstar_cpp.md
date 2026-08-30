@@ -1,107 +1,69 @@
 # `xstar-cpp`
 
-`xstar-cpp` is the first-class Python-free native frontend for one XSTAR model.
+`xstar-cpp` runs one native XSTAR calculation. It accepts either an XSTAR parameter file or direct `key=value` parameters.
 
-## Parameter file
+## With `xstar.par`
 
 ```bash
-xstar-cpp \
+src/xstar_tools/xstar/cpp/xstar-cpp \
   --input xstar.par \
   --data-dir /path/to/xstar/data \
-  --output run1
+  --output-dir run_xstar
 ```
 
-The positional form is equivalent:
+Positional input is also accepted:
 
 ```bash
-xstar-cpp xstar.par --data-dir /path/to/xstar/data --output run1
-```
-
-## Direct parameters
-
-A parameter file is optional. Supply XSTAR values directly:
-
-```bash
-xstar-cpp \
+src/xstar_tools/xstar/cpp/xstar-cpp xstar.par \
   --data-dir /path/to/xstar/data \
-  --output run_direct \
-  spectrum=pow temperature=100 density=1e8 column=1e20 rlogxi=1 \
-  cfrac=1 niter=0 ncn2=9999 modelname=direct_cpp_example
+  --output-dir run_xstar
 ```
 
-Direct values can override a file:
+Direct values after the file override file values:
 
 ```bash
-xstar-cpp --input xstar.par --output run_override density=1e10 rlogxi=2
+src/xstar_tools/xstar/cpp/xstar-cpp \
+  --input xstar.par \
+  --output-dir run_override \
+  density=1.0e+12 rlogxi=3 modelname='override_model'
 ```
 
-## Core options
+## Without `xstar.par`
 
-```text
---input PATH
---data-dir DIR
---input-dir DIR
---output DIR / --output-dir DIR
---atomic-db PATH
---coheat PATH
-```
-
-## Native frontend extensions
-
-```text
---json-summary FILE
---provenance FILE
---progress none|text|json
---threads N
---profile FILE
---deterministic
---print-option N
---parameters-out FILE
---abi
---version
-```
-
-`--threads N` sets `OMP_NUM_THREADS` in the native run environment. It is unrelated to `xstar-xspec --workers N`, which creates independent OS processes.
-
-## Atomic-data selection
-
-Explicit `--data-dir` is the simplest reproducible contract. If it is absent, the runtime discovers `atdb.fits` and `coheat.dat` independently.
-
-`atdb.fits` precedence:
-
-1. explicit parameter-envelope path (`atomic_database`, `atomic_db`, `atdb`);
-2. parameter-envelope sibling `atdb.fits`;
-3. `XSTAR_ATOMIC_DB`;
-4. `XSTAR_ATDB_FITS`;
-5. `XSTAR_DATA/atdb.fits`;
-6. `HEADAS/refdata/atdb.fits`;
-7. `XSTAR_HOME/data/atdb.fits`;
-8. executable-relative data directories;
-9. package/source fallback;
-10. current-directory `atdb.fits`.
-
-`coheat.dat` precedence:
-
-1. explicit parameter-envelope path (`coheat_file`, `coheat`);
-2. parameter-envelope sibling `coheat.dat`;
-3. `XSTAR_COHEAT`;
-4. `XSTAR_DATA/coheat.dat`;
-5. `HEADAS/refdata/coheat.dat`;
-6. `XSTAR_HOME/data/coheat.dat`;
-7. executable-relative data directories;
-8. package/source fallback;
-9. current-directory `coheat.dat`.
-
-The first existing regular file wins. See {doc}`../user/atomic_data` for the exact path list and MPI guidance.
-
-## Compatibility interfaces
-
-The machine-oriented production interface remains available:
+A realistic direct command is:
 
 ```bash
-xstar-cpp run-production \
-  --parameters parameters.json \
-  --output-dir native-run
+src/xstar_tools/xstar/cpp/xstar-cpp --output-dir run_xstar_direct \
+  cfrac=0.4 temperature=100. lcpres=0 pressure=0.03 spectrum='pow' \
+  spectun=0 trad=-1. density=1.0e+12 column=1.e+20 rlrad38=1.e+6 rlogxi=3 \
+  habund=1 heabund=1 liabund=0 beabund=0 babund=0 cabund=1 \
+  nabund=1 oabund=1 fabund=0 neabund=1 naabund=0 mgabund=1 \
+  alabund=1 siabund=1 pabund=0 sabund=1 clabund=0 arabund=1 \
+  kabund=0 caabund=1 scabund=0 tiabund=0 vabund=0 crabund=1 \
+  mnabund=0 feabund=1 coabund=0 niabund=1 cuabund=0 znabund=0 \
+  modelname='xstar_pg1211' abundtbl='xdef' nsteps=10 niter=99 \
+  lwrite=1 lprint=1 lstep=0 emult=0.5 taumax=5. radexp=0. \
+  xeemin=0.1 critf=1.e-6 vturbi=100. npass=1 ncn2=9999
 ```
 
-The public frontend delegates scientific execution to the qualified native production implementation; frontend conveniences do not create a separate science path.
+## Atomic data
+
+Explicit directory:
+
+```bash
+--data-dir /path/to/xstar/data
+```
+
+Explicit files:
+
+```bash
+--atomic-db /path/to/atdb.fits --coheat /path/to/coheat.dat
+```
+
+If omitted, the first existing `atdb.fits` is selected from: explicit parameter path, parameter-envelope directory, `$XSTAR_ATOMIC_DB`, `$XSTAR_ATDB_FITS`, `$XSTAR_DATA`, `$HEADAS/refdata`, `$XSTAR_HOME/data`, executable/package-local fallbacks, then the current directory. `coheat.dat` follows the analogous order using `$XSTAR_COHEAT` as its direct environment override.
+
+After `heainit`, `$HEADAS/refdata/atdb.fits` and `$HEADAS/refdata/coheat.dat` are valid fallbacks. `$XSTAR_DATA` has precedence when set and valid.
+
+## Process/thread distinction
+
+`xstar-cpp --threads N` sets `OMP_NUM_THREADS` for one model. This is different from `xstar-xspec --processes N`, which launches up to N independent `xstar-cpp` OS processes.

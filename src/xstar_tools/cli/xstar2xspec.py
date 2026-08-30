@@ -11,12 +11,12 @@ from xstar_tools.tables.pipeline import run_xstar2xspec
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="xstar-tools-xstar2xspec",
-        description="Run complete native XSTAR2XSPEC using bounded parallel xstar-cpp workers.",
+        description="Run complete native XSTAR2XSPEC using bounded parallel xstar-cpp processes.",
     )
     parser.add_argument("--input")
     parser.add_argument("--data-dir", "-data-dir", dest="data_dir")
     parser.add_argument("--output-dir", "--output", default=".")
-    parser.add_argument("--workers", "-j", type=int, default=1, help="maximum simultaneous xstar-cpp OS processes, not threads (default: 1)")
+    parser.add_argument("--processes", "--workers", "-j", dest="processes", type=int, default=1, help="maximum simultaneous xstar-cpp OS processes, not threads (default: 1); --workers/-j are compatibility aliases")
     parser.add_argument("--save", action="store_true")
     parser.add_argument("--restart", action="store_true")
     parser.add_argument("--verbose", action="store_true")
@@ -29,7 +29,7 @@ def main() -> int:
         ns.output_dir,
         input_file=ns.input,
         data_dir=ns.data_dir,
-        workers=ns.workers,
+        processes=ns.processes,
         save=ns.save,
         restart=ns.restart,
         verbose=ns.verbose,

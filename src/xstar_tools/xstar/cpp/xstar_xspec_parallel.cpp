@@ -1,4 +1,4 @@
-// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.86.
+// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.87.
 //
 // This executable composes the already-qualified native components:
 //   xstar-xspec-initable -> bounded parallel xstar-cpp jobs -> xstar-xspec-table.
@@ -33,7 +33,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.86";
+constexpr const char *kPackageVersion = "0.6.87";
 
 struct Options {
     fs::path input_file;
@@ -42,7 +42,7 @@ struct Options {
     fs::path initable_bin;
     fs::path xstar_cpp_bin;
     fs::path table_bin;
-    std::size_t workers = 1;
+    std::size_t processes = 1;
     bool save = false;
     bool cleanup_work = false;
     bool restart = false;
@@ -67,7 +67,8 @@ void usage(const char *argv0) {
         "  --input PATH          HEASoft/IRAF-style xstinitable.par\n"
         "  --data-dir DIR       explicit XSTAR atomic-data directory (optional)\n"
         "  --output-dir DIR     final XSTAR2XSPEC output directory\n"
-        "  --workers N, -j N    maximum simultaneous xstar-cpp PROCESS jobs (not threads; default: 1)\n"
+        "  --processes N        maximum simultaneous xstar-cpp OS processes (not threads; default: 1)\n"
+        "  --workers N, -j N    compatibility aliases for --processes\n"
         "  --save               compatibility flag; work/products are preserved by default\n"
         "  --cleanup-work       explicitly remove xstar2xspec-work/ only after full success\n"
         "  --restart            reuse completed per-job spectra/STEP logs in work directory\n"
@@ -80,7 +81,7 @@ void usage(const char *argv0) {
         "Trailing key=value arguments override values loaded from --input.\n"
         "If --data-dir is omitted, each xstar-cpp job performs its normal data discovery\n"
         "(XSTAR_DATA, then $HEADAS/refdata, then legacy fallbacks).\n"
-        "Each worker is a separate OS process; the OS schedules workers on available logical CPUs.\n"
+        "Each process is a separate xstar-cpp OS process; the OS schedules processes on available logical CPUs.\n"
         "Parallel completion order never controls scientific/table placement; loopcontrol does.\n",
         argv0, argv0);
 }
@@ -222,7 +223,7 @@ Options parse_options(int argc, char **argv) {
         if (arg == "--input") opt.input_file = need("--input");
         else if (arg == "--data-dir" || arg == "-data-dir") opt.data_dir = need(arg.c_str());
         else if (arg == "--output-dir" || arg == "--output") opt.output_dir = need(arg.c_str());
-        else if (arg == "--workers" || arg == "-j") opt.workers = parse_positive_size(need(arg.c_str()), arg.c_str());
+        else if (arg == "--processes" || arg == "--workers" || arg == "-j") opt.processes = parse_positive_size(need(arg.c_str()), arg.c_str());
         else if (arg == "--initable-bin") opt.initable_bin = need("--initable-bin");
         else if (arg == "--xstar-cpp") opt.xstar_cpp_bin = need("--xstar-cpp");
         else if (arg == "--table-bin") opt.table_bin = need("--table-bin");
@@ -389,9 +390,11 @@ int main(int argc, char **argv) {
             }
         }
 
-        const std::size_t effective_workers = pending.empty() ? 0 : std::min(opt.workers, pending.size());
-        scheduler << "workers_requested=" << opt.workers << "\n";
-        scheduler << "workers_effective=" << effective_workers << "\n";
+        const std::size_t effective_processes = pending.empty() ? 0 : std::min(opt.processes, pending.size());
+        scheduler << "processes_requested=" << opt.processes << "\n";
+        scheduler << "processes_effective=" << effective_processes << "\n";
+        scheduler << "workers_requested=" << opt.processes << "\n";  // legacy telemetry alias
+        scheduler << "workers_effective=" << effective_processes << "\n";  // legacy telemetry alias
         scheduler << "jobs_total=" << lines.size() << "\n";
         scheduler << "jobs_pending=" << pending.size() << "\n";
         scheduler << "jobs_reused=" << reused << "\n";
@@ -402,7 +405,7 @@ int main(int argc, char **argv) {
         std::size_t max_active = 0;
         try {
             while (next < pending.size() || !active.empty()) {
-                while (next < pending.size() && active.size() < effective_workers) {
+                while (next < pending.size() && active.size() < effective_processes) {
                     const std::size_t i = pending[next++];
                     const std::size_t job_index = i + 1;
                     // Invalidate only the non-product success marker. Any XSTAR
@@ -448,8 +451,8 @@ int main(int argc, char **argv) {
             throw;
         }
 
-        log << "[scheduler] workers_requested=" << opt.workers
-            << " workers_effective=" << effective_workers
+        log << "[scheduler] processes_requested=" << opt.processes
+            << " processes_effective=" << effective_processes
             << " max_active=" << max_active
             << " executed=" << pending.size()
             << " reused=" << reused << "\n";
@@ -482,8 +485,10 @@ int main(int argc, char **argv) {
         }
 
         std::cout << "XSTAR_XSPEC_06851_JOBS=" << lines.size() << "\n";
-        std::cout << "XSTAR_XSPEC_06851_WORKERS_REQUESTED=" << opt.workers << "\n";
-        std::cout << "XSTAR_XSPEC_06851_WORKERS_EFFECTIVE=" << effective_workers << "\n";
+        std::cout << "XSTAR_XSPEC_0687_PROCESSES_REQUESTED=" << opt.processes << "\n";
+        std::cout << "XSTAR_XSPEC_0687_PROCESSES_EFFECTIVE=" << effective_processes << "\n";
+        std::cout << "XSTAR_XSPEC_06851_WORKERS_REQUESTED=" << opt.processes << "\n";  // legacy marker
+        std::cout << "XSTAR_XSPEC_06851_WORKERS_EFFECTIVE=" << effective_processes << "\n";  // legacy marker
         std::cout << "XSTAR_XSPEC_06851_MAX_ACTIVE=" << max_active << "\n";
         std::cout << "XSTAR_XSPEC_06851_EXECUTED=" << pending.size() << "\n";
         std::cout << "XSTAR_XSPEC_06851_REUSED=" << reused << "\n";
@@ -492,7 +497,8 @@ int main(int argc, char **argv) {
         std::cout << "XSTAR_XSPEC_06851_LOOPCONTROL_LAST=" << lines.size() << "\n";
         std::cout << "XSTAR_XSPEC_06851_TABLES=4\n";
         std::cout << "XSTAR_XSPEC_06851_WORKDIR=xstar2xspec-work\n";
-        std::cout << "XSTAR_XSPEC_06851_RESULT=ACCEPT\n";
+        std::cout << "XSTAR_XSPEC_0687_RESULT=ACCEPT\n";
+        std::cout << "XSTAR_XSPEC_06851_RESULT=ACCEPT\n";  // legacy marker
         return 0;
     } catch (const std::exception &exc) {
         std::fprintf(stderr, "xstar-xspec: %s\n", exc.what());
