@@ -1,8 +1,4 @@
-"""Native XSTAR2XSPEC table-conversion entry points.
-
-0.6.81 intentionally keeps the scientific conversion in C++/CFITSIO.  This
-module is a thin orchestration layer for source checkouts or native installs.
-"""
+"""Native XSTAR2XSPEC table-conversion entry points."""
 
 from __future__ import annotations
 
@@ -19,53 +15,49 @@ def _native_xstar2table_executable(explicit: str | os.PathLike[str] | None = Non
         if path.is_file() and os.access(path, os.X_OK):
             return path
         raise FileNotFoundError(f"native xstar2table executable is not runnable: {path}")
-
     env = os.environ.get("XSTAR_XSPEC_TABLE_BIN")
     if env:
         path = Path(env).expanduser().resolve()
         if path.is_file() and os.access(path, os.X_OK):
             return path
-
     found = shutil.which("xstar-xspec-table")
     if found:
         return Path(found).resolve()
-
     source_candidate = Path(__file__).resolve().parents[1] / "xstar" / "cpp" / "xstar-xspec-table"
     if source_candidate.is_file() and os.access(source_candidate, os.X_OK):
         return source_candidate
-
     raise FileNotFoundError(
-        "xstar-xspec-table is not available; build the native C++ target with "
+        "xstar-xspec-table is not available; build it with "
         "`make -C src/xstar_tools/xstar/cpp xstar-xspec-table` or set XSTAR_XSPEC_TABLE_BIN"
     )
 
 
 def build_xspec_tables(
-    metadata: str | os.PathLike[str],
+    config: str | os.PathLike[str],
     spectra: Iterable[str | os.PathLike[str]],
     output_dir: str | os.PathLike[str],
     *,
+    initable: bool = False,
     native_executable: str | os.PathLike[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Build the four 0.6.81 canonical-compatible XSPEC table products.
+    """Build the four canonical-compatible XSPEC table products.
 
-    ``spectra`` must be ordinary XSTAR ``xout_spect1.fits`` files ordered by
-    their historical ``loopcontrol`` value.  The metadata file describes the
-    XSTINITABLE parameter surface; 0.6.83 will replace this characterization
-    metadata format with the full native grid planner.
+    By default ``config`` is the historical 0.6.81 metadata text format.
+    With ``initable=True``, ``config`` is the native/canonical
+    ``xstinitable.fits`` contract used by the 0.6.84 production pipeline.
     """
-
     exe = _native_xstar2table_executable(native_executable)
-    metadata_path = Path(metadata).expanduser().resolve()
+    config_path = Path(config).expanduser().resolve()
     out = Path(output_dir).expanduser().resolve()
     source_paths = [Path(path).expanduser().resolve() for path in spectra]
-    if not metadata_path.is_file():
-        raise FileNotFoundError(metadata_path)
+    if not config_path.is_file():
+        raise FileNotFoundError(config_path)
     if not source_paths:
         raise ValueError("at least one xout_spect1.fits path is required")
     missing = [str(path) for path in source_paths if not path.is_file()]
     if missing:
         raise FileNotFoundError("missing spectrum inputs: " + ", ".join(missing))
     out.mkdir(parents=True, exist_ok=True)
-    command = [str(exe), "--metadata", str(metadata_path), "--output-dir", str(out), *(str(path) for path in source_paths)]
+    flag = "--initable" if initable else "--metadata"
+    command = [str(exe), flag, str(config_path), "--output-dir", str(out), *(str(path) for path in source_paths)]
     return subprocess.run(command, text=True, capture_output=True, check=True)

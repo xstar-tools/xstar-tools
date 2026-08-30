@@ -1,4 +1,4 @@
-"""Native ``xstinitable`` grid-planning entry points for xstar_tools 0.6.83.2.
+"""Native ``xstinitable`` grid-planning entry points for xstar_tools 0.6.84.
 
 The grid semantics live in the C++17 ``xstar-xspec-initable`` executable.
 This Python layer only locates and launches that native planner.

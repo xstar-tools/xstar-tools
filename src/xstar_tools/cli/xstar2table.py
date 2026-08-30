@@ -11,7 +11,9 @@ def _parser() -> argparse.ArgumentParser:
         prog="xstar-tools-xstar2table",
         description="Build canonical-compatible XSPEC table spectra from ordinary XSTAR xout_spect1.fits files.",
     )
-    parser.add_argument("--metadata", required=True, help="0.6.81 characterization metadata file")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--initable", help="native/canonical xstinitable.fits metadata contract")
+    source.add_argument("--metadata", help="legacy 0.6.81 characterization metadata file")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--native-bin", default=None, help="optional explicit xstar-xspec-table executable")
     parser.add_argument("spectra", nargs="+", help="xout_spect1.fits files in loopcontrol order")
@@ -21,10 +23,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        config = args.initable or args.metadata
         proc = build_xspec_tables(
-            args.metadata,
+            config,
             args.spectra,
             args.output_dir,
+            initable=bool(args.initable),
             native_executable=args.native_bin,
         )
     except FileNotFoundError as exc:

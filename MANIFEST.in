@@ -1065,3 +1065,16 @@ include xstar_tools-0.6.83.1_host_validation.md
 include xstar_tools-0.6.83.1_release_closure.md
 include xstar_tools_conversation_summary_through_0.6.83.1_candidate.md
 include docs/developer/native_xstinitable_cpp_contract_0_6_83_1.md
+
+# 0.6.84 complete serial native XSTAR2XSPEC.
+include src/xstar_tools/xstar/cpp/xstar_xspec_serial.cpp
+include tools/qualification/check_serial_native_xstar2xspec_0_6_84.py
+include qualification/serial_native_xstar2xspec_0_6_84.json
+include docs/developer/serial_native_xstar2xspec_0_6_84.md
+include tests/test_serial_native_xstar2xspec_0_6_84.py
+include xstar_tools-0.6.83.2_formal_host_acceptance.md
+include tools/qualification/run_serial_native_xstar2xspec_host_0_6_84.py
+include xstar_tools-0.6.84_local_validation.md
+include xstar_tools-0.6.84_host_validation.md
+include xstar_tools-0.6.84_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.84_candidate.md

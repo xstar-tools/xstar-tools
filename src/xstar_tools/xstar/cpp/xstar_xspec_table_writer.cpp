@@ -21,6 +21,7 @@
 #include <fitsio.h>
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -349,6 +350,151 @@ float read_param(const std::string &path, const std::string &name) {
 }
 
 }  // namespace
+
+
+// Read the native xstinitable.fits contract emitted by xstar-xspec-initable.
+// This is the production metadata path for 0.6.84 and later.  The older
+// parse_config(metadata.txt) entry point remains for 0.6.81 regression replay.
+Config parse_initable_fits(const std::string &path) {
+    OpenFits file;
+    int status = 0;
+    if (fits_open_file(&file.ptr, path.c_str(), READONLY, &status)) {
+        throw std::runtime_error("cannot open xstinitable FITS: " + fits_error(status));
+    }
+
+    Config config;
+    auto read_string_key = [&](const char *key) -> std::string {
+        char value[FLEN_VALUE] = {0};
+        int st = 0;
+        if (fits_read_key(file.ptr, TSTRING, const_cast<char *>(key), value, nullptr, &st)) {
+            throw std::runtime_error(std::string("missing xstinitable keyword ") + key + ": " + fits_error(st));
+        }
+        return std::string(value);
+    };
+    auto read_int_key = [&](const char *key) -> int {
+        int value = 0;
+        int st = 0;
+        if (fits_read_key(file.ptr, TINT, const_cast<char *>(key), &value, nullptr, &st)) {
+            throw std::runtime_error(std::string("missing xstinitable keyword ") + key + ": " + fits_error(st));
+        }
+        return value;
+    };
+    auto read_float_key = [&](const char *key) -> float {
+        float value = 0.0f;
+        int st = 0;
+        if (fits_read_key(file.ptr, TFLOAT, const_cast<char *>(key), &value, nullptr, &st)) {
+            throw std::runtime_error(std::string("missing xstinitable keyword ") + key + ": " + fits_error(st));
+        }
+        return value;
+    };
+
+    // REDSHIFT lives in the primary HDU.
+    int redshift = 0;
+    status = 0;
+    if (fits_read_key(file.ptr, TLOGICAL, const_cast<char *>("REDSHIFT"), &redshift, nullptr, &status)) {
+        throw std::runtime_error("missing xstinitable primary REDSHIFT: " + fits_error(status));
+    }
+    config.redshift = redshift ? 1 : 0;
+
+    status = 0;
+    if (fits_movnam_hdu(file.ptr, BINARY_TBL, const_cast<char *>("PARAMETERS"), 0, &status)) {
+        throw std::runtime_error("missing xstinitable PARAMETERS extension: " + fits_error(status));
+    }
+
+    const int nint_value = read_int_key("NINTPARM");
+    const int nadd_value = read_int_key("NADDPARM");
+    if (nint_value <= 0 || nadd_value < 0) {
+        throw std::runtime_error("invalid NINTPARM/NADDPARM in xstinitable.fits");
+    }
+    long nrows = 0;
+    status = 0;
+    fits_get_num_rows(file.ptr, &nrows, &status);
+    fits_check(status, "read xstinitable PARAMETERS row count");
+    if (nrows != static_cast<long>(nint_value + nadd_value)) {
+        throw std::runtime_error("xstinitable PARAMETERS row count disagrees with NINTPARM+NADDPARM");
+    }
+
+    config.model_name = read_string_key("MODELNAM");
+    config.spectrum_name = read_string_key("SPECTRUM");
+    config.spectrum_file = read_string_key("SPECFILE");
+    config.abundance_table = read_string_key("ABUNDTBL");
+    config.spectrum_units = read_int_key("SPECUNIT");
+    config.elow_ev = read_float_key("ELOW");
+    config.ehigh_ev = read_float_key("EHIGH");
+    config.nsteps = read_int_key("NSTEPS");
+    config.niter = read_int_key("NITER");
+    config.write_switch = read_int_key("WRITESW");
+    config.print_switch = read_int_key("PRINTSW");
+    config.step_size = read_int_key("STEPSIZE");
+    config.npass = read_int_key("NPASS");
+    config.pressure_switch = read_int_key("PRESSSW");
+    config.emult = read_float_key("EMULT");
+    config.taumax = read_float_key("TAUMAX");
+    config.xeemin = read_float_key("XEEMIN");
+    config.critf = read_float_key("CRITF");
+    config.radexp = read_float_key("RADEXP");
+    config.ncn2 = read_int_key("NCN2");
+
+    std::vector<std::string> varied_names;
+    for (long row = 1; row <= nrows; ++row) {
+        Parameter p;
+        p.kind = row <= nint_value ? ParameterKind::interpolated : ParameterKind::additive;
+        char storage[FLEN_VALUE] = {0};
+        char *name_ptr = storage;
+        char null_string[] = "";
+        int anynull = 0;
+        status = 0;
+        if (fits_read_col(file.ptr, TSTRING, 1, row, 1, 1, null_string, &name_ptr, &anynull, &status)) {
+            throw std::runtime_error("cannot read xstinitable parameter NAME");
+        }
+        p.name = storage;
+        while (!p.name.empty() && p.name.back() == ' ') p.name.pop_back();
+        varied_names.push_back(p.name);
+
+        long method = 0;
+        long numbvals = 0;
+        float null_float = 0.0f;
+        status = 0;
+        fits_read_col(file.ptr, TLONG, 2, row, 1, 1, nullptr, &method, &anynull, &status);
+        fits_read_col(file.ptr, TFLOAT, 3, row, 1, 1, &null_float, &p.initial, &anynull, &status);
+        fits_read_col(file.ptr, TFLOAT, 4, row, 1, 1, &null_float, &p.delta, &anynull, &status);
+        fits_read_col(file.ptr, TFLOAT, 5, row, 1, 1, &null_float, &p.hard_min, &anynull, &status);
+        fits_read_col(file.ptr, TFLOAT, 6, row, 1, 1, &null_float, &p.soft_min, &anynull, &status);
+        fits_read_col(file.ptr, TFLOAT, 7, row, 1, 1, &null_float, &p.soft_max, &anynull, &status);
+        fits_read_col(file.ptr, TFLOAT, 8, row, 1, 1, &null_float, &p.hard_max, &anynull, &status);
+        fits_read_col(file.ptr, TLONG, 9, row, 1, 1, nullptr, &numbvals, &anynull, &status);
+        fits_check(status, "read xstinitable PARAMETERS scalar columns");
+        p.method = static_cast<int>(method);
+        if (p.kind == ParameterKind::interpolated) {
+            if (numbvals < 2) throw std::runtime_error("interpolated xstinitable parameter has NUMBVALS < 2: " + p.name);
+            p.values.assign(static_cast<std::size_t>(numbvals), 0.0f);
+            status = 0;
+            fits_read_col(file.ptr, TFLOAT, 10, row, 1, numbvals, &null_float, p.values.data(), &anynull, &status);
+            fits_check(status, "read xstinitable parameter VALUE");
+        }
+        config.parameters.push_back(std::move(p));
+    }
+
+    // Canonical xstinitable stores constants as 8-character FITS keywords.
+    // Reconstruct their full physical names in the same source order so the
+    // final XSPEC table headers remain byte-compatible with the native writer.
+    static const std::array<const char *, 39> physical_names{{
+        "trad","cfrac","temperature","pressure","density","rlrad38","column","rlogxi",
+        "habund","heabund","liabund","beabund","babund","cabund","nabund","oabund","fabund",
+        "neabund","naabund","mgabund","alabund","siabund","pabund","sabund","clabund","arabund",
+        "kabund","caabund","scabund","tiabund","vabund","crabund","mnabund","feabund","coabund",
+        "niabund","cuabund","znabund","vturbi"
+    }};
+    for (const char *name : physical_names) {
+        if (std::find(varied_names.begin(), varied_names.end(), name) != varied_names.end()) continue;
+        std::string key(name);
+        if (key.size() > 8) key.resize(8);
+        config.constants.emplace_back(name, read_float_key(key.c_str()));
+    }
+
+    if (config.ehigh_ev < config.elow_ev) throw std::runtime_error("EHIGH must be >= ELOW");
+    return config;
+}
 
 // Parse the 0.6.81 characterization metadata representation of the table grid.
 // This temporary compatibility format is replaced later by native xstinitable.

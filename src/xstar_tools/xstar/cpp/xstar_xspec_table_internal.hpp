@@ -50,6 +50,7 @@ struct Config {
 };
 
 Config parse_config(const std::string &path);
+Config parse_initable_fits(const std::string &path);
 void build_tables(const Config &config, const std::vector<std::string> &spectra, const std::string &output_dir);
 
 }  // namespace xstar_xspec
