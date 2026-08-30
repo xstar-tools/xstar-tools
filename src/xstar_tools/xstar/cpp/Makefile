@@ -4,9 +4,10 @@ MPI_CXXFLAGS ?=
 MPI_LDFLAGS ?=
 PYTHON_CONFIG ?= python3-config
 
-# v0.6.88.2.1 portable dynamic-library qualification closure.  Production
-# C/C++ source/header bytes are identical to 0.6.88.2; this Makefile revision
-# changes package/build version metadata and the regression-test fixture only.
+# v0.6.88.2.2 fixed-state regression scaffold closure.  Production C/C++
+# source/header bytes are identical to 0.6.88.2.  This Makefile revision changes
+# package/build version metadata and points ABI/scaffold regression commands at
+# a purpose-built current 60486 fixture rather than relabeling historical data.
 # The 0.6.88.2 portable dynamic-library layer and 0.6.88.1 platform build
 # nomenclature remains frozen; this release centralizes shared-library naming,
 # loading, symbol lookup, close/error handling, module-directory discovery, and
@@ -150,7 +151,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.2.1
+PACKAGE_VERSION ?= 0.6.88.2.2
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.84
@@ -348,14 +350,14 @@ test: all
 	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) secant-ieee-self-test --backend cpp --plugin-dir .
-	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../../../tests/fixtures/historical/v06486_active_family_phase2_fixture
-	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../../../tests/fixtures/historical/v06486_active_family_phase2_fixture --batch 4
-	rm -rf .v06486_native_output
-	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../../../tests/fixtures/historical/v06486_active_family_phase2_fixture --output-dir .v06486_native_output
-	test -s .v06486_native_output/xout_step.log
-	test -s .v06486_native_output/xout_native_state.fits
-	test -s .v06486_native_output/visited_records.csv
-	rm -rf .v06486_native_output
+	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../../../tests/fixtures/scaffold/v06486_fixed_state_regression_scaffold
+	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../../../tests/fixtures/scaffold/v06486_fixed_state_regression_scaffold --batch 4
+	rm -rf .v06486_scaffold_output
+	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../../../tests/fixtures/scaffold/v06486_fixed_state_regression_scaffold --output-dir .v06486_scaffold_output
+	test -s .v06486_scaffold_output/xout_step.log
+	test -s .v06486_scaffold_output/xout_native_state.fits
+	test -s .v06486_scaffold_output/visited_records.csv
+	rm -rf .v06486_scaffold_output
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 

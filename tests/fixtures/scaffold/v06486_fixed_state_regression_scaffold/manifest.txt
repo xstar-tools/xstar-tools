@@ -1,0 +1,9 @@
+program_abi=60486
+program_id=v06486_fixed_state_regression_scaffold
+program_kind=qualification_scaffold
+contains_evaluated_results=false
+active_atdb_lowered=false
+element_count=1
+record_count=23
+native_line_count=23
+native_continuum_count=63

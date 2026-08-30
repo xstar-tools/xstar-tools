@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6.88.2.2 — FIXED_STATE_REGRESSION_SCAFFOLD_CLOSURE - 2026-08-30
+
+Qualification/scaffold-only closure after the 0.6.88.2.1 host rejection. Production C/C++ source/header bytes remain identical to 0.6.88.2. Replaces the invalid relabeled historical 60486 fixture with a purpose-built ABI-60486 fixed-state regression scaffold, excludes legacy records whose current execution contracts require unavailable transport/source-order state (Types 49, 53, 57, 88, and 99), and wires `make test` to the new scaffold. The scaffold is explicitly not a science/parity oracle. Host qualification now runs the single-state, batch, and `run-fixed-state` scaffold commands as dedicated gates before the full Linux regression suite. Retains the 0.6.88.2.1 qualification fixes for GCC 8 `-lstdc++fs` and generated predecessor build artifacts.
+
 ## 0.6.88.2.1 — PORTABLE_DYNAMIC_LIBRARY_LAYER_QUALIFICATION_CLOSURE - 2026-08-30
 
 - Qualification-only closure on top of `0.6.88.2`; all C/C++ production/science `.cpp`, `.hpp`, and `.h` source/header files are byte-identical to `.88.2`.

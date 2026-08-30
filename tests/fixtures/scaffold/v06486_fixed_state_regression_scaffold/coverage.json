@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.6.88.2.2",
+  "program_id": "v06486_fixed_state_regression_scaffold",
+  "purpose": "ABI/scaffold regression only; not a science/parity oracle",
+  "source_fixture": "v06485_active_family_phase2_fixture",
+  "record_count": 23,
+  "included_data_types": [1, 2, 3, 9, 30, 38, 39, 50, 54, 56, 60, 62, 63, 68, 69, 71, 72, 73, 74, 76, 77, 86, 95],
+  "excluded_contract_dependent_data_types": [49, 53, 57, 88, 99],
+  "synthetic_single_ion_topology": true,
+  "native_line_count": 23,
+  "native_continuum_count": 63
+}
