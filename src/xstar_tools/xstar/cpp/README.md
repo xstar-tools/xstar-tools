@@ -17,6 +17,20 @@ src/xstar_tools/xstar/cpp/
 
 The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestration must not alter accepted scientific/controller ordering, contribution ordering, accumulation ordering, cutoffs, or publication semantics.
 
+## macOS native build (`0.6.88.3`)
+
+`0.6.88.3` builds the accepted native runtime with Apple Clang. When `PLATFORM=macos` and the caller has not explicitly supplied `CXX`, the Makefile uses `clang++`. Shared libraries use `.dylib` and `-dynamiclib`; each dylib receives an `@rpath/libxstar_*.dylib` install name, while consumers carry `-Wl,-rpath,@loader_path` so sibling XSTAR libraries resolve relative to the loading image.
+
+CFITSIO discovery first uses `pkg-config`. If that fails on macOS, the Makefile asks `brew --prefix cfitsio` and derives `-I<prefix>/include`, `-L<prefix>/lib -lcfitsio`, and the matching rpath. Typical setup and build:
+
+```bash
+brew install cfitsio pkg-config
+make PLATFORM=macos print-config
+make -j4 PLATFORM=macos
+```
+
+The runtime loader remains the `0.6.88.2` `dl*` implementation. No science source is modified by the macOS build work. MPI remains opt-in and is not part of the `.88.3` macOS acceptance gate.
+
 ## Portable dynamic-library layer (`0.6.88.2`)
 
 `0.6.88.2` keeps the accepted `0.6.88.1` Makefile platform contract and adds source-level portability for runtime shared-library discovery/loading. `xstar_platform.hpp` owns `.so` / `.dylib` / `.dll` naming and the platform path-list separator. `xstar_dynamic_library.hpp/.cpp` is the only layer that calls the native loader: `dlopen`/`dlsym`/`dlclose`/`dladdr` on Linux and macOS, and `LoadLibraryW`/`GetProcAddress`/`FreeLibrary`/`GetModuleFileNameW` on Windows. Callers no longer hard-code `.so` filenames or call the native loader directly.

@@ -1159,3 +1159,26 @@ recursive-include tests/fixtures/historical/v06486_active_family_phase2_fixture 
 include xstar_tools-0.6.88.2_host_rejection.md
 include xstar_tools-0.6.88.2.1_local_validation.md
 include xstar_tools-0.6.88.2.1_release_closure.md
+
+# 0.6.88.2.2 fixed-state regression scaffold closure and formal acceptance.
+include fixed_state_regression_scaffold_closure_0_6_88_2_2.md
+include tests/test_fixed_state_regression_scaffold_closure_0_6_88_2_2.py
+include tools/qualification/check_fixed_state_regression_scaffold_closure_0_6_88_2_2.py
+include tools/qualification/run_fixed_state_regression_scaffold_closure_host_0_6_88_2_2.py
+recursive-include tests/fixtures/scaffold/v06486_fixed_state_regression_scaffold *
+include portable_dynamic_library_layer_qualification_closure_0_6_88_2_1_host_rejection.md
+include xstar_tools-0.6.88.2.2_local_validation.md
+include xstar_tools-0.6.88.2.2_release_closure.md
+include xstar_tools-0.6.88.2.2_formal_host_acceptance.md
+
+# 0.6.88.3 native macOS Apple-Clang build support.
+include macos_native_build_0_6_88_3.md
+include docs/developer/macos_native_build_0_6_88_3.md
+include tests/test_macos_native_build_0_6_88_3.py
+include tools/qualification/check_macos_native_build_0_6_88_3.py
+include tools/qualification/run_macos_native_build_host_0_6_88_3.py
+include qualification/macos_native_build_0_6_88_3.json
+include xstar_tools-0.6.88.3_local_validation.md
+include xstar_tools_conversation_summary_through_0.6.88.3_candidate.md
+
+include xstar_tools-0.6.88.3_release_closure.md

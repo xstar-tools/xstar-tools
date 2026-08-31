@@ -3,15 +3,14 @@ MPICXX ?= mpic++
 MPI_CXXFLAGS ?=
 MPI_LDFLAGS ?=
 PYTHON_CONFIG ?= python3-config
+PKG_CONFIG ?= pkg-config
+BREW ?= brew
 
-# v0.6.88.2.2 fixed-state regression scaffold closure.  Production C/C++
-# source/header bytes are identical to 0.6.88.2.  This Makefile revision changes
-# package/build version metadata and points ABI/scaffold regression commands at
-# a purpose-built current 60486 fixture rather than relabeling historical data.
-# The 0.6.88.2 portable dynamic-library layer and 0.6.88.1 platform build
-# nomenclature remains frozen; this release centralizes shared-library naming,
-# loading, symbol lookup, close/error handling, module-directory discovery, and
-# platform path-list separators without changing Linux science behavior.
+# v0.6.88.3 macOS native-build closure. No C/C++ science source/header is
+# modified in this release. The accepted 0.6.88.2 portable dynamic-library
+# layer and the 0.6.88.2.2 fixed-state regression scaffold remain frozen.
+# This Makefile revision adds Apple-Clang defaults, Mach-O install-name support,
+# and a macOS Homebrew CFITSIO fallback while preserving Linux build behavior.
 HOST_UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ifeq ($(origin PLATFORM),command line)
   XSTAR_DETECTED_PLATFORM := $(PLATFORM)
@@ -25,6 +24,16 @@ endif
 # Deliberately override an unrelated environment variable named PLATFORM;
 # callers select a platform explicitly with make PLATFORM=linux|macos|windows.
 PLATFORM := $(XSTAR_DETECTED_PLATFORM)
+
+# GNU make has a built-in CXX=g++ default. On macOS prefer the native Apple
+# Clang driver unless the caller explicitly configured CXX via environment,
+# makefile include, or command line. /usr/bin/g++ is normally an Apple-Clang
+# alias, but spelling clang++ makes the supported compiler contract explicit.
+ifeq ($(PLATFORM),macos)
+  ifeq ($(origin CXX),default)
+    CXX := clang++
+  endif
+endif
 
 ifeq ($(PLATFORM),linux)
   SHLIB_EXT ?= .so
@@ -55,6 +64,17 @@ else ifeq ($(PLATFORM),windows)
   FILESYSTEM_LIBS ?=
 else
   $(error unsupported PLATFORM=$(PLATFORM); expected linux, macos, or windows)
+endif
+
+# Shared-library target flags. Mach-O dylibs need an @rpath install name so
+# the accepted @loader_path runtime rpath resolves sibling XSTAR libraries.
+# Linux and Windows expand this to the historical SHLIB_LDFLAGS byte-for-byte.
+ifeq ($(PLATFORM),macos)
+  SHLIB_TARGET_LDFLAGS = $(SHLIB_LDFLAGS) -Wl,-install_name,@rpath/$@
+  SHLIB_INSTALL_NAME_MODE ?= @rpath
+else
+  SHLIB_TARGET_LDFLAGS = $(SHLIB_LDFLAGS)
+  SHLIB_INSTALL_NAME_MODE ?= none
 endif
 
 # Historical caller compatibility: an explicitly supplied SO_LDFLAGS still
@@ -89,7 +109,11 @@ V068240_LTO ?= 0
 V068240_PGO_MODE ?= off
 V068240_PROFILE_DIR ?= $(if $(filter-out $(CURDIR)/.v064897_pgo,$(V064897_PROFILE_DIR)),$(V064897_PROFILE_DIR),$(CURDIR)/.v068240_pgo)
 V068240_NATIVE ?= 0
-V0682401_PRODUCTION_COMPILER ?= GCC
+ifeq ($(PLATFORM),macos)
+  V0682401_PRODUCTION_COMPILER ?= APPLECLANG
+else
+  V0682401_PRODUCTION_COMPILER ?= GCC
+endif
 
 ifeq ($(filter $(V068240_OPT_LEVEL),2 3),)
   $(error v0.6.82.40.1 supports V068240_OPT_LEVEL=2 or 3)
@@ -127,11 +151,30 @@ ifneq ($(findstring -Ofast,$(CXXFLAGS)),)
 endif
 
 COMMON_LIBS ?= $(DL_LIBS) $(THREAD_LIBS)
-CFITSIO_CFLAGS ?= $(shell pkg-config --cflags cfitsio 2>/dev/null)
-CFITSIO_LIBDIR ?= $(shell pkg-config --variable=libdir cfitsio 2>/dev/null)
-CFITSIO_LIBS ?= $(shell pkg-config --libs cfitsio 2>/dev/null)
+
+# CFITSIO discovery order:
+#   1. caller-provided CFITSIO_* values;
+#   2. pkg-config (all platforms);
+#   3. `brew --prefix cfitsio` on macOS;
+#   4. the historical linker-default -lcfitsio fallback.
+CFITSIO_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags cfitsio 2>/dev/null)
+CFITSIO_LIBDIR ?= $(shell $(PKG_CONFIG) --variable=libdir cfitsio 2>/dev/null)
+CFITSIO_LIBS ?= $(shell $(PKG_CONFIG) --libs cfitsio 2>/dev/null)
+CFITSIO_DISCOVERY := pkg-config
+CFITSIO_BREW_PREFIX :=
 ifeq ($(strip $(CFITSIO_LIBS)),)
-CFITSIO_LIBS := -lcfitsio
+  ifeq ($(PLATFORM),macos)
+    CFITSIO_BREW_PREFIX := $(shell $(BREW) --prefix cfitsio 2>/dev/null)
+  endif
+  ifneq ($(strip $(CFITSIO_BREW_PREFIX)),)
+    CFITSIO_CFLAGS := -I$(CFITSIO_BREW_PREFIX)/include
+    CFITSIO_LIBDIR := $(CFITSIO_BREW_PREFIX)/lib
+    CFITSIO_LIBS := -L$(CFITSIO_LIBDIR) -lcfitsio
+    CFITSIO_DISCOVERY := homebrew
+  else
+    CFITSIO_LIBS := -lcfitsio
+    CFITSIO_DISCOVERY := linker-default
+  endif
 endif
 CFITSIO_RPATH :=
 ifneq ($(strip $(CFITSIO_LIBDIR)),)
@@ -151,7 +194,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.2.2
+PACKAGE_VERSION ?= 0.6.88.3
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.1
@@ -213,37 +257,37 @@ mpi: $(XSPEC_MPI_EXECUTABLE)
 endif
 
 $(SOLVER_TARGET): level_population.cpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_LDFLAGS) -o $@ $<
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ $<
 
 $(RATES_TARGET): rate_kernels.cpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_LDFLAGS) -o $@ $<
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ $<
 
 $(MATRIX_TARGET): matrix_kernels.cpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_LDFLAGS) -o $@ $<
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ $<
 
 $(EMISSIVITY_TARGET): line_emissivity.cpp xstar_spectral_engine.h $(OPACITY_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_LDFLAGS) -o $@ line_emissivity.cpp -L. -lxstar_opacity $(RPATH_ORIGIN)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ line_emissivity.cpp -L. -lxstar_opacity $(RPATH_ORIGIN)
 
 $(OPACITY_TARGET): opacity_kernels.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPACITY_STRICT_FP_FLAGS) $(SHLIB_LDFLAGS) -o $@ opacity_kernels.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPACITY_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ opacity_kernels.cpp
 
 $(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_LDFLAGS) -o $@ thermal_kernels.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ thermal_kernels.cpp
 
 $(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ELEMENT_STRICT_FP_FLAGS) $(SHLIB_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ELEMENT_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
 
 $(LOCAL_ZONE_TARGET): local_zone_engine.cpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_local_zone_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_LDFLAGS) -o $@ local_zone_engine.cpp -L. -lxstar_engine -lxstar_emissivity $(RPATH_ORIGIN)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ local_zone_engine.cpp -L. -lxstar_engine -lxstar_emissivity $(RPATH_ORIGIN)
 
 $(FINAL_RECOMPUTE_TARGET): final_recompute_bridge.cpp xstar_final_recompute_bridge.h xstar_atdb_runtime.cpp xstar_atdb_runtime.hpp xstar_local_zone_engine.h $(LOCAL_ZONE_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_LDFLAGS) -o $@ final_recompute_bridge.cpp xstar_atdb_runtime.cpp -L. -lxstar_local_zone $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ final_recompute_bridge.cpp xstar_atdb_runtime.cpp -L. -lxstar_local_zone $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(PRODUCTION_ZONE_TARGET): xstar_standalone.cpp xstar_local_zone_internal.hpp xstar_production_zone_bridge.h xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_api.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(API_TARGET) $(LOCAL_ZONE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_LDFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_dynamic_library.o -L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_dynamic_library.o -L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(XSPEC_TABLE_TARGET): xstar_xspec_table.cpp xstar_xspec_table.h
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_LDFLAGS) -o $@ xstar_xspec_table.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_xspec_table.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH)
 
 $(XSPEC_TABLE_EXECUTABLE): xstar_xspec_table_cli.cpp xstar_xspec_table_writer.cpp xstar_xspec_table_internal.hpp xstar_xspec_table.cpp xstar_xspec_table.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_table_cli.cpp xstar_xspec_table_writer.cpp xstar_xspec_table.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS)
@@ -264,15 +308,15 @@ $(XSPEC_MPI_EXECUTABLE): xstar_xspec_mpi.cpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPE
 endif
 
 $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SHLIB_LDFLAGS) \
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_api.cpp compiled_case.cpp xstar_dynamic_library.o $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(CPP_BACKEND_TARGET): xstar_backend_cpp.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(PHYSICS_TARGETS) $(API_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_LDFLAGS) \
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_backend_cpp.cpp xstar_dynamic_library.o -L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_standalone_internal.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(API_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SHLIB_LDFLAGS) \
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp xstar_dynamic_library.o -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
 
 xstar_standalone.o: xstar_standalone.cpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp xstar_science_fits.hpp xstar_run_state.hpp xstar_step_log.hpp xstar_atdb_runtime.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_spectral_engine.h xstar_platform.hpp xstar_dynamic_library.hpp
@@ -307,6 +351,7 @@ print-config:
 	@echo SHLIB_EXT=$(SHLIB_EXT)
 	@echo EXEEXT=$(EXEEXT)
 	@echo SHLIB_LDFLAGS=$(SHLIB_LDFLAGS)
+	@echo SHLIB_INSTALL_NAME_MODE=$(SHLIB_INSTALL_NAME_MODE)
 	@echo PIC_FLAGS=$(PIC_FLAGS)
 	@echo DL_LIBS=$(DL_LIBS)
 	@echo THREAD_LIBS=$(THREAD_LIBS)
@@ -316,6 +361,14 @@ print-config:
 	@echo MPI_CXXFLAGS=$(MPI_CXXFLAGS)
 	@echo MPI_LDFLAGS=$(MPI_LDFLAGS)
 	@echo PYTHON_CONFIG=$(PYTHON_CONFIG)
+	@echo PKG_CONFIG=$(PKG_CONFIG)
+	@echo BREW=$(BREW)
+	@echo CFITSIO_DISCOVERY=$(CFITSIO_DISCOVERY)
+	@echo CFITSIO_BREW_PREFIX=$(CFITSIO_BREW_PREFIX)
+	@echo CFITSIO_CFLAGS=$(CFITSIO_CFLAGS)
+	@echo CFITSIO_LIBDIR=$(CFITSIO_LIBDIR)
+	@echo CFITSIO_LIBS=$(CFITSIO_LIBS)
+	@echo CFITSIO_RPATH=$(CFITSIO_RPATH)
 	@echo PYTHON_INCLUDES=$(PYTHON_INCLUDES)
 	@echo PYTHON_LIBS=$(PYTHON_LIBS)
 	@echo PYTHON_LIBDIRS=$(PYTHON_LIBDIRS)

@@ -6,7 +6,9 @@
 
 - **`0.6.85.1` — formally accepted:** serial/local-process native XSTAR2XSPEC, output-directory coexistence, non-destructive failure products, restart success markers, and real-host local parallel closure.
 - **`0.6.86` — formally accepted:** `TRUE_MPI_XSTAR2XSPEC`, adding the opt-in `xstar-xspec-mpi` executable. Real two-rank host qualification completed successfully with four XSTAR jobs and restart reuse.
-- **`0.6.88.2.1` — current candidate:** `PORTABLE_DYNAMIC_LIBRARY_LAYER_QUALIFICATION_CLOSURE`. Production C/C++ source/header bytes are identical to `.88.2`; this successor fixes only Linux qualification linkage, generated-predecessor filtering, and the stale fixed-state regression fixture. `0.6.88.1 PLATFORM_BUILD_ABSTRACTION` remains formally accepted; `.88.2` remains a historical host REJECT.
+- **`0.6.88.1` — formally accepted:** `PLATFORM_BUILD_ABSTRACTION`.
+- **`0.6.88.2.2` — formally accepted:** `FIXED_STATE_REGRESSION_SCAFFOLD_CLOSURE`, completing Linux qualification of the portable dynamic-library layer after the historical `.88.2` and `.88.2.1` host rejections.
+- **`0.6.88.3` — current candidate:** `MACOS_NATIVE_BUILD`, adding Apple-Clang defaults, Mach-O `.dylib` install-name/rpath support, and CFITSIO `pkg-config`/Homebrew discovery with no science changes.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
 
@@ -41,6 +43,24 @@ make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
 ```
 
 The MPI target uses `MPICXX ?= mpic++`. It is not part of the normal `all` target.
+
+### Native macOS build (`0.6.88.3`)
+
+On macOS, the native build defaults to Apple `clang++`, produces `.dylib` libraries, uses `@rpath` install names with an `@loader_path` runtime search path, and discovers CFITSIO through `pkg-config` with a Homebrew fallback. Typical prerequisites are:
+
+```bash
+brew install cfitsio pkg-config
+```
+
+Then:
+
+```bash
+cd src/xstar_tools/xstar/cpp
+make PLATFORM=macos print-config
+make -j4 PLATFORM=macos
+```
+
+CFITSIO discovery order is explicit `CFITSIO_*` overrides, `pkg-config`, `brew --prefix cfitsio` on macOS, then linker-default `-lcfitsio`. The default macOS build remains non-MPI; MPI is not part of the `0.6.88.3` acceptance gate.
 
 ## Running `xstar-cpp`
 

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.88.3 — MACOS_NATIVE_BUILD (candidate) - 2026-08-30
+
+- Branches from formally accepted `0.6.88.2.2`; XSTAR scientific arithmetic, controller decisions, traversal/contribution/accumulation order, cutoffs, publication semantics, and public science ABIs remain unchanged.
+- Makes Apple `clang++` the macOS default when `CXX` was not explicitly configured.
+- Keeps `.dylib` and `-dynamiclib` from the platform abstraction and adds Mach-O install names `@rpath/libxstar_*.dylib`; the existing macOS runtime rpath remains `@loader_path` for sibling-library resolution.
+- Preserves the accepted `0.6.88.2` macOS `dlopen`/`dlsym`/`dlclose`/`dladdr` runtime implementation.
+- Extends CFITSIO discovery: `pkg-config` remains first; on macOS, if it cannot resolve CFITSIO, `brew --prefix cfitsio` supplies include/lib paths before the historical linker-default `-lcfitsio` fallback.
+- Updates only package-version literals in `xstar_xspec_parallel.cpp` and `xstar_xspec_mpi.cpp`; all other C/C++ `.cpp/.hpp/.h` files remain byte-identical to `0.6.88.2.2`.
+- Linux `make -Bn all PLATFORM=linux` remains command-equivalent to `0.6.88.2.2` after package-version normalization.
+- Adds a Darwin/Apple-Clang host runner that requires native Mach-O dylibs, `@rpath` install names, `@loader_path`, CFITSIO discovery, sibling/plugin loading, package versions, and the complete regression suite to pass.
+- MPI is not part of the `0.6.88.3` macOS acceptance gate; the default build remains non-MPI.
+
 ## 0.6.88.2.2 — FIXED_STATE_REGRESSION_SCAFFOLD_CLOSURE - 2026-08-30
 
 Qualification/scaffold-only closure after the 0.6.88.2.1 host rejection. Production C/C++ source/header bytes remain identical to 0.6.88.2. Replaces the invalid relabeled historical 60486 fixture with a purpose-built ABI-60486 fixed-state regression scaffold, excludes legacy records whose current execution contracts require unavailable transport/source-order state (Types 49, 53, 57, 88, and 99), and wires `make test` to the new scaffold. The scaffold is explicitly not a science/parity oracle. Host qualification now runs the single-state, batch, and `run-fixed-state` scaffold commands as dedicated gates before the full Linux regression suite. Retains the 0.6.88.2.1 qualification fixes for GCC 8 `-lstdc++fs` and generated predecessor build artifacts.
