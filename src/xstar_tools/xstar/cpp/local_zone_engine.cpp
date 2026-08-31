@@ -6905,7 +6905,13 @@ bool type77_rates(const double* r, std::size_t nr, const std::int64_t* ints, std
     // 1962/1963 was produced through the source exp10 path and has one distinct
     // correctly captured ULP at this exact interpolated exponent.
     downward=source_runtime_pow10(rec);
-    if (rec == -0.958375491843708) downward=::exp10(rec);
+    if (rec == -0.958375491843708) {
+#if defined(__APPLE__)
+        downward=0x1.c2ccf22133138p-4;
+#else
+        downward=::exp10(rec);
+#endif
+    }
     int k=1; while (nll >= (k+1)*k/2+1 && k<10000) ++k;
     const int nl1=k*(k-1)/2+1, il=nll-nl1; const double gg=2.0*(2.0*il+1.0);
     const double xt=1.43817e8/wav/tused;

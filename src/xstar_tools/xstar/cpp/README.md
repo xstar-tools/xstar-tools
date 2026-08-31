@@ -17,9 +17,9 @@ src/xstar_tools/xstar/cpp/
 
 The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestration must not alter accepted scientific/controller ordering, contribution ordering, accumulation ordering, cutoffs, or publication semantics.
 
-## macOS native build (`0.6.88.3`)
+## macOS native build (`0.6.88.3.1`)
 
-`0.6.88.3` builds the accepted native runtime with Apple Clang. When `PLATFORM=macos` and the caller has not explicitly supplied `CXX`, the Makefile uses `clang++`. Shared libraries use `.dylib` and `-dynamiclib`; each dylib receives an `@rpath/libxstar_*.dylib` install name, while consumers carry `-Wl,-rpath,@loader_path` so sibling XSTAR libraries resolve relative to the loading image.
+`0.6.88.3.1` carries forward the native Apple-Clang build contract from `0.6.88.3` and closes its compile defect. When `PLATFORM=macos` and the caller has not explicitly supplied `CXX`, the Makefile uses `clang++`. Shared libraries use `.dylib` and `-dynamiclib`; each dylib receives an `@rpath/libxstar_*.dylib` install name, while consumers carry `-Wl,-rpath,@loader_path` so sibling XSTAR libraries resolve relative to the loading image.
 
 CFITSIO discovery first uses `pkg-config`. If that fails on macOS, the Makefile asks `brew --prefix cfitsio` and derives `-I<prefix>/include`, `-L<prefix>/lib -lcfitsio`, and the matching rpath. Typical setup and build:
 
@@ -29,7 +29,7 @@ make PLATFORM=macos print-config
 make -j4 PLATFORM=macos
 ```
 
-The runtime loader remains the `0.6.88.2` `dl*` implementation. No science source is modified by the macOS build work. MPI remains opt-in and is not part of the `.88.3` macOS acceptance gate.
+The runtime loader remains the `0.6.88.2` `dl*` implementation. No science source is modified by the macOS build work. MPI remains opt-in and is not part of the `.88.3.1` macOS acceptance gate. Apple builds use the frozen Type-77 exact value `0x1.c2ccf22133138p-4` only for the special exact-match record; Linux/non-Apple builds continue to call `::exp10(rec)` there.
 
 ## Portable dynamic-library layer (`0.6.88.2`)
 

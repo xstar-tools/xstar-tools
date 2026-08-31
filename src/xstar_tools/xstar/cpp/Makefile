@@ -6,11 +6,10 @@ PYTHON_CONFIG ?= python3-config
 PKG_CONFIG ?= pkg-config
 BREW ?= brew
 
-# v0.6.88.3 macOS native-build closure. No C/C++ science source/header is
-# modified in this release. The accepted 0.6.88.2 portable dynamic-library
-# layer and the 0.6.88.2.2 fixed-state regression scaffold remain frozen.
-# This Makefile revision adds Apple-Clang defaults, Mach-O install-name support,
-# and a macOS Homebrew CFITSIO fallback while preserving Linux build behavior.
+# v0.6.88.3.1 macOS native-build compile closure. The accepted 0.6.88.3
+# build contract is preserved; the only production-science source edit is the
+# narrow Apple-only Type-77 exact-value portability guard documented by this
+# release. Linux keeps the historical ::exp10 path unchanged.
 HOST_UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ifeq ($(origin PLATFORM),command line)
   XSTAR_DETECTED_PLATFORM := $(PLATFORM)
@@ -194,7 +193,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.3
+PACKAGE_VERSION ?= 0.6.88.3.1
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2

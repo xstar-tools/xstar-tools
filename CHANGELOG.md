@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.88.3.1 — MACOS_NATIVE_BUILD_COMPILE_CLOSURE (candidate) - 2026-08-31
+
+- Branches from the historical `0.6.88.3` host rejection while keeping formally accepted `0.6.88.2.2` as the Linux/science baseline.
+- Fixes the Apple-Clang compile failure in the Type-77 exact-match path: Apple builds use the exact hexadecimal `double` `0x1.c2ccf22133138p-4`, whose bits are `0x3fbc2ccf22133138`; non-Apple builds continue to call `::exp10(rec)` exactly as in `0.6.88.3`.
+- Leaves all other Type-77 records on `source_runtime_pow10(rec)` and does not change controller decisions, traversal/contribution/accumulation order, cutoffs, publication semantics, output schema, or public ABI values.
+- Carries forward the `0.6.88.3` Apple-Clang/Mach-O/CFITSIO build contract unchanged.
+- Uses the latest Darwin host-runner structure with optional `--predecessor`; provenance/source-diff gates are skipped explicitly when an unpacked `0.6.88.3` predecessor is unavailable.
+- Updates the GitHub Actions macOS workflow to use Python 3.12 and install `pytest` explicitly before qualification.
+- Historical status is preserved: `0.6.88.3` remains HOST REJECT because native Apple-Clang compilation stopped on nonportable `::exp10`, and its CI environment also lacked `pytest`.
+- Formal acceptance of `0.6.88.3.1` requires the corrected host runner to return `MACOS_NATIVE_BUILD_COMPILE_CLOSURE_068831_HOST_RESULT=ACCEPT` on both `macos-15` and `macos-15-intel`.
+
 ## 0.6.88.3 — MACOS_NATIVE_BUILD (candidate) - 2026-08-30
 
 - Branches from formally accepted `0.6.88.2.2`; XSTAR scientific arithmetic, controller decisions, traversal/contribution/accumulation order, cutoffs, publication semantics, and public science ABIs remain unchanged.
