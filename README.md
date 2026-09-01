@@ -14,7 +14,8 @@
 - **`0.6.88.5` — historical Windows HOST REJECT:** native MinGW build exposed wide `std::filesystem::path` to narrow C-API boundaries.
 - **`0.6.88.5.1` — historical Windows HOST REJECT:** most path boundaries closed, but two standalone path sites remained.
 - **`0.6.88.5.2` — historical Windows HOST REJECT:** path boundary closure reached the local-zone/Python backend, exposing MinGW Type-85 `far`, Windows `::exp10`, and Python path portability defects.
-- **`0.6.88.5.3` — current candidate:** `WINDOWS_LOCAL_ZONE_PORTABILITY_CLOSURE`; Linux-qualified, Windows-host-pending.
+- **`0.6.88.5.3` — historical Windows HOST REJECT:** the requested Type-85/Type-77/Python portability fixes all passed source qualification, but the later native Windows build still returned nonzero without surfacing the actionable compiler/linker diagnostic; the synthetic XSTAR2XSPEC pool was not run because the production build failed.
+- **`0.6.88.5.4` — current candidate:** `WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE`; qualification-only follow-up to the real 0.6.88.5.3 Windows-host rejection; Linux production/science inherited unchanged, Windows-host rerun pending.
 - **`0.6.88.3.2` — formally accepted:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, accepted on both `macos-15` arm64 and `macos-15-intel` x86_64.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
@@ -324,3 +325,7 @@ The project deliberately separates scientific acceptance, publication correctnes
 ### Windows / MinGW native build (0.6.88.5.1)
 
 `0.6.88.5` established the native UCRT64/MinGW build and Win32 `CreateProcessW` process backend, but its first Windows host run stopped at `std::filesystem::path` to narrow C-API boundaries because MinGW uses `wchar_t` as the native path value type. `0.6.88.5.1 — WINDOWS_PATH_ENCODING_CLOSURE` keeps the process backend unchanged and adapts only filesystem paths passed to existing narrow `const char*` CFITSIO/XSTAR interfaces. Windows builds produce `.dll` libraries, `.dll.a` import libraries, and `.exe` programs; Windows MPI remains out of scope. Use `.github/workflows/windows-build.yml` or the `run_windows_path_encoding_closure_host_0_6_88_5_1.py` host runner for UCRT64 qualification.
+
+### 0.6.88.5.4 Windows diagnostic closure
+
+The Windows portability line currently uses `0.6.88.5.4 — WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE` to diagnose the later-stage native build rejection seen in `.5.3`. This release changes qualification and version metadata only; scientific and process production code remains unchanged from `.5.3`. The Windows GitHub Actions runner records the failed parallel build and performs a serial evidence-only replay to surface the next actionable failure.

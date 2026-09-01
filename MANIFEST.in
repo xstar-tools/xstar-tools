@@ -1277,3 +1277,17 @@ include tools/qualification/run_windows_local_zone_portability_closure_host_0_6_
 include xstar_tools-0.6.88.5.2_host_rejection.md
 include xstar_tools-0.6.88.5.3_local_validation.md
 include xstar_tools-0.6.88.5.3_release_closure.md
+
+# 0.6.88.5.4 Windows build-failure diagnostic closure.
+include windows_build_failure_diagnostic_closure_0_6_88_5_4.md
+include docs/developer/windows_build_failure_diagnostic_closure_0_6_88_5_4.md
+include qualification/windows_build_failure_diagnostic_closure_0_6_88_5_4.json
+include tests/test_windows_build_failure_diagnostic_closure_0_6_88_5_4.py
+include tests/windows_process_smoke_0_6_88_5_4.cpp
+include tests/windows_xspec_fake_tool_0_6_88_5_4.cpp
+include tools/qualification/check_windows_build_failure_diagnostic_closure_0_6_88_5_4.py
+include tools/qualification/run_windows_build_failure_diagnostic_closure_host_0_6_88_5_4.py
+include xstar_tools-0.6.88.5.3_host_rejection.md
+include xstar_tools-0.6.88.5.4_local_validation.md
+include xstar_tools-0.6.88.5.4_release_closure.md
+include .github/workflows/windows-build.yml

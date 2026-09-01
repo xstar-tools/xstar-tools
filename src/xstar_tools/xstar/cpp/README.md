@@ -347,6 +347,10 @@ xout_etable.fits
 
 The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`. The MPI path writes `xstar2xspec-mpi.log`, `xstar2xspec-mpi-scheduler.log`, and per-rank logs.
 
+### Windows build-failure diagnostic closure (0.6.88.5.4)
+
+`0.6.88.5.4 — WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE` is qualification-only. It preserves the `.5.3` Type-85, Type-77, Python path-adapter, and CreateProcessW production code and changes only package-version metadata. The Windows host runner now emits the native-build return code, compiler/linker failure contexts, and a substantial `make all` log tail, while classifying build-dependent downstream gates as `SKIP_BUILD_FAILED`. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_build_failure_diagnostic_closure_host_0_6_88_5_4.py`.
+
 ### Windows local-zone portability closure (0.6.88.5.3)
 
 `0.6.88.5.3 — WINDOWS_LOCAL_ZONE_PORTABILITY_CLOSURE` is a narrow follow-up to the real UCRT64 host rejection of 0.6.88.5.2. It renames the Type-85 local identifier `far` to `far_coeff`, extends the existing exact Type-77 special-value branch to `_WIN32`, and sends the Python backend `addition` filesystem path through `XSTAR_C_PATH` before `PyUnicode_FromString`. Linux/macOS arithmetic and process behavior are intentionally unchanged. Qualification also audits the Python backend for direct path `c_str()` use and prints detailed synthetic `xstar-xspec` pool diagnostics on failure. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_local_zone_portability_closure_host_0_6_88_5_3.py`.
@@ -358,3 +362,7 @@ The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`.
 ### Windows / MinGW native build (0.6.88.5.1)
 
 `0.6.88.5` established the native UCRT64/MinGW build and Win32 `CreateProcessW` process backend, but its first Windows host run stopped at `std::filesystem::path` to narrow C-API boundaries because MinGW uses `wchar_t` as the native path value type. `0.6.88.5.1 — WINDOWS_PATH_ENCODING_CLOSURE` keeps the process backend unchanged and adapts only filesystem paths passed to existing narrow `const char*` CFITSIO/XSTAR interfaces. Windows builds produce `.dll` libraries, `.dll.a` import libraries, and `.exe` programs; Windows MPI remains out of scope. Use `.github/workflows/windows-build.yml` or the `run_windows_path_encoding_closure_host_0_6_88_5_1.py` host runner for UCRT64 qualification.
+
+### Windows build failure diagnostic closure (0.6.88.5.4)
+
+`0.6.88.5.4 — WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE` is qualification-only. It preserves the `.5.3` local-zone, Python path, and Win32 process implementation unchanged while improving the Windows host runner. A failed parallel `make -jN all PLATFORM=windows` now reports its exact return code, failure-context lines, and a large delimited log tail, then performs an evidence-only `make -j1 all PLATFORM=windows` replay without cleaning. The serial replay never promotes the original build result; it exists only to expose a deterministic compiler/linker error or show that the failure is parallel/resource-sensitive.

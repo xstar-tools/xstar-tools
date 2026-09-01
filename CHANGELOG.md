@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.88.5.4 - WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE - 2026-09-01
+
+- Preserves 0.6.88.5.3 as a historical Windows-host rejection.
+- Qualification-only closure: no scientific/production C++ changes beyond package-version metadata.
+- Always reports the Windows native-build return code, captured-log path/size, compiler/linker failure contexts, and a substantial build-log tail when `make all PLATFORM=windows` rejects.
+- After a failed parallel build, performs an evidence-only `make -j1 all PLATFORM=windows` replay without cleaning, records its return code, and emits its diagnostic output; this replay never promotes the original failed build gate.
+- Reports build-dependent PE/import/export/version/discovery/XSTAR2XSPEC/regression gates as `SKIP_BUILD_FAILED` rather than secondary `REJECT`s when the production build did not complete.
+- Continues to run the direct Win32 process smoke and synthetic fake-tool build independently so process-layer evidence is not lost behind a production-build failure.
+- Preserves the 0.6.88.5.3 Type-85 identifier, Type-77 exact Windows branch, Python path adapter, CreateProcessW backend, Linux/macOS arithmetic, ABI values, and frozen science outputs unchanged.
+- Windows MPI remains out of scope.
+
 ## 0.6.88.5.3 - WINDOWS_LOCAL_ZONE_PORTABILITY_CLOSURE - 2026-09-01
 
 - Preserves 0.6.88.5.2 as a historical Windows-host rejection.
