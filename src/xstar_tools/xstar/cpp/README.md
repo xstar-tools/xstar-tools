@@ -17,6 +17,10 @@ src/xstar_tools/xstar/cpp/
 
 The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestration must not alter accepted scientific/controller ordering, contribution ordering, accumulation ordering, cutoffs, or publication semantics.
 
+## Portable process layer (`0.6.88.4`)
+
+Process/environment operations now pass through `xstar_process.hpp`. The POSIX implementation intentionally delegates to the historical `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv` calls without changing arguments or status semantics. This isolates the later Windows/MinGW backend from XSTAR science and orchestration sources. Linux behavior is the qualification baseline for this release; Windows process creation is not yet claimed as accepted.
+
 ## macOS native build (`0.6.88.3.2`)
 
 `0.6.88.3.2` carries forward the Apple-Clang build and Type-77 compile closure and closes the Darwin direct-link defect found in `.88.3.1`. When `PLATFORM=macos` and the caller has not explicitly supplied `CXX`, the Makefile uses `clang++`. Shared libraries use `.dylib` and `-dynamiclib`; each dylib receives an `@rpath/libxstar_*.dylib` install name, while consumers carry `-Wl,-rpath,@loader_path` so sibling XSTAR libraries resolve relative to the loading image.

@@ -1,4 +1,4 @@
-// True MPI native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.3.2.
+// True MPI native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.4.
 //
 // Rank 0 creates the canonical xstinitable plan.  All ranks then claim grid
 // jobs from an MPI-3 RMA counter and execute exactly one xstar-cpp child at a
@@ -10,6 +10,8 @@
 // The executable intentionally contains no XSTAR scientific arithmetic.  It
 // composes the already-qualified xstar-xspec-initable, xstar-cpp, and
 // xstar-xspec-table executables.
+
+#include "xstar_process.hpp"
 
 #include <mpi.h>
 
@@ -35,7 +37,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.88.3.2";
+constexpr const char *kPackageVersion = "0.6.88.4";
+// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"
 constexpr int kQueueNextSlot = 0;
@@ -130,9 +133,7 @@ std::vector<std::string> shell_split(const std::string &line) {
 }
 
 int decode_wait_status(int status) {
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
-    return 127;
+    return xstar_process::decode_wait_status(status);
 }
 
 int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
@@ -140,14 +141,14 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
     if (args.empty()) return 127;
     int pipefd[2];
     if (::pipe(pipefd) != 0) throw std::runtime_error("pipe failed: " + std::string(std::strerror(errno)));
-    const pid_t pid = ::fork();
+    const xstar_process::process_id pid = xstar_process::fork_process();
     if (pid < 0) {
         ::close(pipefd[0]); ::close(pipefd[1]);
         throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
     }
     if (pid == 0) {
         ::close(pipefd[0]);
-        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) _exit(126);
+        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
         ::dup2(pipefd[1], STDOUT_FILENO);
         ::dup2(pipefd[1], STDERR_FILENO);
         ::close(pipefd[1]);
@@ -156,9 +157,8 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
         av.reserve(storage.size() + 1);
         for (auto &item : storage) av.push_back(item.data());
         av.push_back(nullptr);
-        if (storage[0].find('/') != std::string::npos) ::execv(storage[0].c_str(), av.data());
-        else ::execvp(storage[0].c_str(), av.data());
-        _exit(127);
+        xstar_process::exec_program(storage[0].c_str(), av.data(), storage[0].find('/') == std::string::npos);
+        xstar_process::exit_child(127);
     }
     ::close(pipefd[1]);
     char buffer[8192];
@@ -172,19 +172,19 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
     }
     ::close(pipefd[0]);
     int status = 0;
-    while (::waitpid(pid, &status, 0) < 0) if (errno != EINTR) return 127;
+    while (xstar_process::wait_process(pid, &status, 0) < 0) if (errno != EINTR) return 127;
     return decode_wait_status(status);
 }
 
-pid_t spawn_job(const std::vector<std::string> &args, const fs::path &cwd,
+xstar_process::process_id spawn_job(const std::vector<std::string> &args, const fs::path &cwd,
                 const fs::path &stdout_log) {
     if (args.empty()) throw std::runtime_error("empty xstar-cpp command");
-    const pid_t pid = ::fork();
+    const xstar_process::process_id pid = xstar_process::fork_process();
     if (pid < 0) throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
     if (pid == 0) {
-        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) _exit(126);
+        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
         const int fd = ::open(stdout_log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd < 0) _exit(126);
+        if (fd < 0) xstar_process::exit_child(126);
         ::dup2(fd, STDOUT_FILENO);
         ::dup2(fd, STDERR_FILENO);
         ::close(fd);
@@ -193,9 +193,8 @@ pid_t spawn_job(const std::vector<std::string> &args, const fs::path &cwd,
         av.reserve(storage.size() + 1);
         for (auto &item : storage) av.push_back(item.data());
         av.push_back(nullptr);
-        if (storage[0].find('/') != std::string::npos) ::execv(storage[0].c_str(), av.data());
-        else ::execvp(storage[0].c_str(), av.data());
-        _exit(127);
+        xstar_process::exec_program(storage[0].c_str(), av.data(), storage[0].find('/') == std::string::npos);
+        xstar_process::exit_child(127);
     }
     return pid;
 }
@@ -322,18 +321,18 @@ int claim_slot(MPI_Win win) {
     return slot;
 }
 
-void terminate_child(pid_t pid) {
+void terminate_child(xstar_process::process_id pid) {
     if (pid <= 0) return;
-    ::kill(pid, SIGTERM);
+    xstar_process::terminate_process(pid);
     for (int i = 0; i < 20; ++i) {
         int status = 0;
-        const pid_t got = ::waitpid(pid, &status, WNOHANG);
+        const xstar_process::process_id got = xstar_process::wait_process(pid, &status, xstar_process::wait_nohang());
         if (got == pid || (got < 0 && errno == ECHILD)) return;
         ::usleep(50000);
     }
-    ::kill(pid, SIGKILL);
+    xstar_process::force_kill_process(pid);
     int status = 0;
-    while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    while (xstar_process::wait_process(pid, &status, 0) < 0 && errno == EINTR) {}
 }
 
 int run_mpi_job(const std::vector<std::string> &command,
@@ -346,11 +345,11 @@ int run_mpi_job(const std::vector<std::string> &command,
                 MPI_Win win) {
     std::error_code ec;
     fs::remove(success_marker, ec);
-    const pid_t pid = spawn_job(command, cwd, stdout_log);
+    const xstar_process::process_id pid = spawn_job(command, cwd, stdout_log);
     int rc = 127;
     for (;;) {
         int status = 0;
-        const pid_t got = ::waitpid(pid, &status, WNOHANG);
+        const xstar_process::process_id got = xstar_process::wait_process(pid, &status, xstar_process::wait_nohang());
         if (got == pid) { rc = decode_wait_status(status); break; }
         if (got < 0 && errno != EINTR) { rc = 127; break; }
         if (read_failed(win)) {

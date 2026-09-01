@@ -9,6 +9,7 @@
 // Qualification: all-62 FITS 12.3.43.3; C++ 12.3.44; Python science 45.3.3.8
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_process.hpp"
 #include "xstar_science_fits.hpp"
 #include "xstar_constants.h"
 
@@ -11525,13 +11526,13 @@ IncrementalDetailResultV068233 append_incremental_detail_zone_v068233(
                 had = true;
                 previous = value;
             }
-            if (::setenv("XSTAR_TRUE_PRODUCTION", "1", 1) != 0) {
+            if (xstar_process::set_environment("XSTAR_TRUE_PRODUCTION", "1", 1) != 0) {
                 throw std::runtime_error("0.6.82.33.1 cannot enter incremental true-production publication");
             }
         }
         ~ScopedTrueProductionV0682331() {
-            if (had) ::setenv("XSTAR_TRUE_PRODUCTION", previous.c_str(), 1);
-            else ::unsetenv("XSTAR_TRUE_PRODUCTION");
+            if (had) xstar_process::set_environment("XSTAR_TRUE_PRODUCTION", previous.c_str(), 1);
+            else xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
         }
     } scoped_true_production_v0682331;
     if (one_zone_state.radial_zones.size() != 1u) {

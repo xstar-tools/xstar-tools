@@ -11,6 +11,7 @@
 #include "xstar_api.h"
 #include "xstar_parameter_contract.hpp"
 #include "xstar_production_zone_bridge.h"
+#include "xstar_process.hpp"
 
 #include <array>
 #include <cerrno>
@@ -31,12 +32,6 @@
 #include <utility>
 #include <vector>
 
-#if defined(__unix__) || defined(__APPLE__)
-#include <sys/wait.h>
-#include <unistd.h>
-#else
-#error "xstar-cpp native frontend currently requires a POSIX execv environment"
-#endif
 
 namespace {
 
@@ -453,7 +448,7 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
     if(input.parameters_out.empty()) {
         const auto temp_dir=std::filesystem::temp_directory_path(ec);
         if(ec) throw std::runtime_error("could not resolve temporary directory for parameter envelope");
-        path=temp_dir/("xstar-cpp-parameters-"+std::to_string(static_cast<long long>(::getpid()))+".json");
+        path=temp_dir/("xstar-cpp-parameters-"+std::to_string(xstar_process::current_process_id())+".json");
         std::filesystem::remove(path,ec);
         ec.clear();
     } else {
@@ -478,23 +473,21 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
 }
 
 int run_native_wait(const std::filesystem::path& native,const std::vector<std::string>& args) {
-    const pid_t pid=::fork();
+    const xstar_process::process_id pid=xstar_process::fork_process();
     if(pid<0) return 127;
     if(pid==0) {
         std::vector<std::string> storage; storage.reserve(args.size()+1u); storage.push_back(native.string()); storage.insert(storage.end(),args.begin(),args.end());
         std::vector<char*> av; av.reserve(storage.size()+1u); for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
-        ::execv(native.c_str(),av.data()); _exit(127);
+        xstar_process::exec_program(native.c_str(),av.data(),false); xstar_process::exit_child(127);
     }
-    int status=0; while(::waitpid(pid,&status,0)<0) { if(errno!=EINTR) return 127; }
-    if(WIFEXITED(status)) return WEXITSTATUS(status);
-    if(WIFSIGNALED(status)) return 128+WTERMSIG(status);
-    return 127;
+    int status=0; while(xstar_process::wait_process(pid,&status,0)<0) { if(errno!=EINTR) return 127; }
+    return xstar_process::decode_wait_status(status);
 }
 
 [[noreturn]] void exec_native(const std::filesystem::path& native,const std::vector<std::string>& args) {
     std::vector<std::string> storage; storage.reserve(args.size()+1u); storage.push_back(native.string()); storage.insert(storage.end(),args.begin(),args.end());
     std::vector<char*> av; av.reserve(storage.size()+1u); for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
-    ::execv(native.c_str(),av.data());
+    xstar_process::exec_program(native.c_str(),av.data(),false);
     std::cerr << "xstar-cpp: failed to exec " << native << ": errno=" << errno << "\n";
     std::exit(127);
 }
@@ -613,12 +606,12 @@ bool print_step_option(const std::filesystem::path& step_log,int requested,std::
 int run_frontend(const std::filesystem::path& native,FrontendInput& input) {
     RuntimeAbi abi;
     if(!verify_runtime_abi(std::cerr,&abi)) return kAbiMismatchExit;
-    if(input.threads>0) ::setenv("OMP_NUM_THREADS",std::to_string(input.threads).c_str(),1);
-    if(input.deterministic) ::setenv("XSTAR_TOOLS_REPRODUCIBLE","1",1);
+    if(input.threads>0) xstar_process::set_environment("OMP_NUM_THREADS",std::to_string(input.threads).c_str(),1);
+    if(input.deterministic) xstar_process::set_environment("XSTAR_TOOLS_REPRODUCIBLE","1",1);
     // 0.6.82.3: propagate the public progress mode to the native production
     // process.  The standalone controller uses this only for live textual
     // zone observability; no scientific state consumes the variable.
-    ::setenv("XSTAR_CPP_PROGRESS_MODE", input.progress.c_str(), 1);
+    xstar_process::set_environment("XSTAR_CPP_PROGRESS_MODE", input.progress.c_str(), 1);
     const bool retain_parameters=!input.parameters_out.empty();
     const auto parameters=write_envelope(input);
     auto remove_ephemeral_parameters=[&]() {

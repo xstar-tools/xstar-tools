@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.88.4 — PORTABLE_PROCESS_LAYER (candidate) - 2026-09-01
+
+- Branches from formally accepted `0.6.88.3.2`; the macOS build/link closure and frozen science/ABI boundaries remain unchanged.
+- Adds `xstar_process.hpp` as the common process/environment portability boundary for `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv`.
+- Linux/macOS implementations delegate directly to the historical POSIX primitives with the same arguments, wait-status decoding, termination signals, and environment overwrite semantics.
+- Routes `xstar-cpp`, serial/local-process XSTAR2XSPEC, true-MPI XSTAR2XSPEC, standalone/science support, final recompute, and local-zone diagnostic environment mutation through the abstraction.
+- Removes the `xstar-cpp` frontend's hard POSIX `execv` compile-time gate; Windows process creation/wait/termination implementation remains intentionally deferred to the MinGW native-build milestone.
+- Does not alter XSTAR scientific arithmetic, controller decisions, traversal/contribution/accumulation order, cutoffs, publication semantics, output schema, or public ABI values.
+- Qualification is Linux-first: direct named POSIX process/environment calls must exist only inside `xstar_process.hpp`, Linux build commands must remain equivalent after version/dependency normalization, and real Linux build/regression/version gates must pass before Windows behavior is attempted.
+
 ## 0.6.88.3.2 — MACOS_NATIVE_BUILD_LINK_CLOSURE (candidate) - 2026-08-31
 
 - Branches from the historical `0.6.88.3.1` host rejection; formally accepted Linux/science baseline remains `0.6.88.2.2`.

@@ -1,4 +1,4 @@
-// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.3.2.
+// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.4.
 //
 // This executable composes the already-qualified native components:
 //   xstar-xspec-initable -> bounded parallel xstar-cpp jobs -> xstar-xspec-table.
@@ -10,6 +10,8 @@
 // The worker pool is intentionally local-process based and has no MPI runtime
 // dependency. It preserves the scientifically relevant master/worker semantics
 // of MPI_XSTAR while keeping deployment identical to the serial native path.
+
+#include "xstar_process.hpp"
 
 #include <cerrno>
 #include <cstdio>
@@ -33,7 +35,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.88.3.2";
+constexpr const char *kPackageVersion = "0.6.88.4";
+// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"
 
@@ -54,7 +57,7 @@ struct Options {
 
 struct ActiveJob {
     std::size_t index = 0;
-    pid_t pid = -1;
+    xstar_process::process_id pid = -1;
     fs::path stdout_log;
 };
 
@@ -131,14 +134,14 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
     if (args.empty()) return 127;
     int pipefd[2];
     if (::pipe(pipefd) != 0) throw std::runtime_error("pipe failed: " + std::string(std::strerror(errno)));
-    const pid_t pid = ::fork();
+    const xstar_process::process_id pid = xstar_process::fork_process();
     if (pid < 0) {
         ::close(pipefd[0]); ::close(pipefd[1]);
         throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
     }
     if (pid == 0) {
         ::close(pipefd[0]);
-        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) _exit(126);
+        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
         ::dup2(pipefd[1], STDOUT_FILENO);
         ::dup2(pipefd[1], STDERR_FILENO);
         ::close(pipefd[1]);
@@ -147,9 +150,8 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
         av.reserve(storage.size() + 1);
         for (auto &item : storage) av.push_back(item.data());
         av.push_back(nullptr);
-        if (storage[0].find('/') != std::string::npos) ::execv(storage[0].c_str(), av.data());
-        else ::execvp(storage[0].c_str(), av.data());
-        _exit(127);
+        xstar_process::exec_program(storage[0].c_str(), av.data(), storage[0].find('/') == std::string::npos);
+        xstar_process::exit_child(127);
     }
     ::close(pipefd[1]);
     char buffer[8192];
@@ -163,10 +165,8 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
     }
     ::close(pipefd[0]);
     int status = 0;
-    while (::waitpid(pid, &status, 0) < 0) if (errno != EINTR) return 127;
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
-    return 127;
+    while (xstar_process::wait_process(pid, &status, 0) < 0) if (errno != EINTR) return 127;
+    return xstar_process::decode_wait_status(status);
 }
 
 std::vector<std::string> load_lines(const fs::path &path) {
@@ -247,14 +247,14 @@ void require_regular(const fs::path &path, const std::string &what) {
     if (!fs::is_regular_file(path)) throw std::runtime_error(what + " not produced: " + path.string());
 }
 
-pid_t spawn_job(const std::vector<std::string> &args, const fs::path &cwd, const fs::path &stdout_log) {
+xstar_process::process_id spawn_job(const std::vector<std::string> &args, const fs::path &cwd, const fs::path &stdout_log) {
     if (args.empty()) throw std::runtime_error("cannot spawn empty job command");
-    const pid_t pid = ::fork();
+    const xstar_process::process_id pid = xstar_process::fork_process();
     if (pid < 0) throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
     if (pid == 0) {
-        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) _exit(126);
+        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
         const int fd = ::open(stdout_log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd < 0) _exit(125);
+        if (fd < 0) xstar_process::exit_child(125);
         ::dup2(fd, STDOUT_FILENO);
         ::dup2(fd, STDERR_FILENO);
         ::close(fd);
@@ -263,24 +263,21 @@ pid_t spawn_job(const std::vector<std::string> &args, const fs::path &cwd, const
         av.reserve(storage.size() + 1);
         for (auto &item : storage) av.push_back(item.data());
         av.push_back(nullptr);
-        if (storage[0].find('/') != std::string::npos) ::execv(storage[0].c_str(), av.data());
-        else ::execvp(storage[0].c_str(), av.data());
-        _exit(127);
+        xstar_process::exec_program(storage[0].c_str(), av.data(), storage[0].find('/') == std::string::npos);
+        xstar_process::exit_child(127);
     }
     return pid;
 }
 
 int decode_wait_status(int status) {
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
-    return 127;
+    return xstar_process::decode_wait_status(status);
 }
 
-void terminate_active(std::map<pid_t, ActiveJob> &active) {
-    for (const auto &entry : active) ::kill(entry.first, SIGTERM);
+void terminate_active(std::map<xstar_process::process_id, ActiveJob> &active) {
+    for (const auto &entry : active) xstar_process::terminate_process(entry.first);
     for (const auto &entry : active) {
         int status = 0;
-        while (::waitpid(entry.first, &status, 0) < 0 && errno == EINTR) {}
+        while (xstar_process::wait_process(entry.first, &status, 0) < 0 && errno == EINTR) {}
     }
     active.clear();
 }
@@ -401,7 +398,7 @@ int main(int argc, char **argv) {
         scheduler << "jobs_pending=" << pending.size() << "\n";
         scheduler << "jobs_reused=" << reused << "\n";
 
-        std::map<pid_t, ActiveJob> active;
+        std::map<xstar_process::process_id, ActiveJob> active;
         std::vector<std::size_t> completion_order;
         std::size_t next = 0;
         std::size_t max_active = 0;
@@ -415,7 +412,7 @@ int main(int argc, char **argv) {
                     // retained until the new solver overwrites them.
                     std::error_code marker_ec;
                     fs::remove(success_markers[i], marker_ec);
-                    const pid_t pid = spawn_job(commands[i], invocation_dir, stdout_logs[i]);
+                    const xstar_process::process_id pid = spawn_job(commands[i], invocation_dir, stdout_logs[i]);
                     active.emplace(pid, ActiveJob{job_index, pid, stdout_logs[i]});
                     max_active = std::max(max_active, active.size());
                     scheduler << "launch loopcontrol=" << job_index << " pid=" << pid << "\n";
@@ -423,8 +420,8 @@ int main(int argc, char **argv) {
                 }
                 if (active.empty()) continue;
                 int status = 0;
-                pid_t pid;
-                do { pid = ::waitpid(-1, &status, 0); } while (pid < 0 && errno == EINTR);
+                xstar_process::process_id pid;
+                do { pid = xstar_process::wait_process(-1, &status, 0); } while (pid < 0 && errno == EINTR);
                 if (pid < 0) throw std::runtime_error("waitpid failed: " + std::string(std::strerror(errno)));
                 const auto it = active.find(pid);
                 if (it == active.end()) throw std::runtime_error("waitpid returned unknown child");

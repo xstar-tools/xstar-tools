@@ -203,7 +203,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.3.2
+PACKAGE_VERSION ?= 0.6.88.4
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.2
@@ -248,7 +249,7 @@ TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 MPI_TARGETS := $(XSPEC_MPI_EXECUTABLE)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
-INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp xstar_platform.hpp xstar_dynamic_library.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
+INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_process.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
 
 .PHONY: all physics standalone mpi test clean install print-config
 
@@ -288,13 +289,13 @@ $(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
 $(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ELEMENT_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
 
-$(LOCAL_ZONE_TARGET): local_zone_engine.cpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_local_zone_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET) $(OPACITY_TARGET)
+$(LOCAL_ZONE_TARGET): local_zone_engine.cpp xstar_process.hpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_local_zone_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET) $(OPACITY_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ local_zone_engine.cpp -L. $(LOCAL_ZONE_LINK_LIBS) $(RPATH_ORIGIN)
 
-$(FINAL_RECOMPUTE_TARGET): final_recompute_bridge.cpp xstar_final_recompute_bridge.h xstar_atdb_runtime.cpp xstar_atdb_runtime.hpp xstar_local_zone_engine.h $(LOCAL_ZONE_TARGET)
+$(FINAL_RECOMPUTE_TARGET): final_recompute_bridge.cpp xstar_process.hpp xstar_final_recompute_bridge.h xstar_atdb_runtime.cpp xstar_atdb_runtime.hpp xstar_local_zone_engine.h $(LOCAL_ZONE_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ final_recompute_bridge.cpp xstar_atdb_runtime.cpp -L. -lxstar_local_zone $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
-$(PRODUCTION_ZONE_TARGET): xstar_standalone.cpp xstar_local_zone_internal.hpp xstar_production_zone_bridge.h xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_api.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(API_TARGET) $(LOCAL_ZONE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET)
+$(PRODUCTION_ZONE_TARGET): xstar_standalone.cpp xstar_process.hpp xstar_local_zone_internal.hpp xstar_production_zone_bridge.h xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_api.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(API_TARGET) $(LOCAL_ZONE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_dynamic_library.o -L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(XSPEC_TABLE_TARGET): xstar_xspec_table.cpp xstar_xspec_table.h
@@ -306,7 +307,7 @@ $(XSPEC_TABLE_EXECUTABLE): xstar_xspec_table_cli.cpp xstar_xspec_table_writer.cp
 $(XSPEC_INITABLE_EXECUTABLE): xstar_xspec_initable_cli.cpp xstar_xspec_initable.cpp xstar_xspec_initable_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_initable_cli.cpp xstar_xspec_initable.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS)
 
-$(XSPEC_GRID_EXECUTABLE): xstar_xspec_parallel.cpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
+$(XSPEC_GRID_EXECUTABLE): xstar_xspec_parallel.cpp xstar_process.hpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_parallel.cpp $(FILESYSTEM_LIBS)
 
 ifeq ($(PLATFORM),windows)
@@ -314,7 +315,7 @@ $(XSPEC_MPI_EXECUTABLE):
 	@echo "xstar-xspec-mpi is not supported on PLATFORM=windows" >&2
 	@exit 2
 else
-$(XSPEC_MPI_EXECUTABLE): xstar_xspec_mpi.cpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
+$(XSPEC_MPI_EXECUTABLE): xstar_xspec_mpi.cpp xstar_process.hpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
 	$(MPICXX) $(CPPFLAGS) $(CXXFLAGS) $(MPI_CXXFLAGS) -o $@ xstar_xspec_mpi.cpp $(FILESYSTEM_LIBS) $(MPI_LDFLAGS)
 endif
 
@@ -330,14 +331,14 @@ $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plu
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp xstar_dynamic_library.o -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
 
-xstar_standalone.o: xstar_standalone.cpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp xstar_science_fits.hpp xstar_run_state.hpp xstar_step_log.hpp xstar_atdb_runtime.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_spectral_engine.h xstar_platform.hpp xstar_dynamic_library.hpp
+xstar_standalone.o: xstar_standalone.cpp xstar_process.hpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp xstar_science_fits.hpp xstar_run_state.hpp xstar_step_log.hpp xstar_atdb_runtime.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_spectral_engine.h xstar_platform.hpp xstar_dynamic_library.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
 
 xstar_dynamic_library.o: xstar_dynamic_library.cpp xstar_dynamic_library.hpp xstar_platform.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
-xstar_science_fits.o: xstar_science_fits.cpp xstar_science_fits.hpp xstar_run_state.hpp
+xstar_science_fits.o: xstar_science_fits.cpp xstar_process.hpp xstar_science_fits.hpp xstar_run_state.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
 xstar_run_state.o: xstar_run_state.cpp xstar_run_state.hpp
@@ -353,7 +354,7 @@ $(EXECUTABLE_TARGET): $(EXECUTABLE_OBJECTS) $(API_TARGET) $(LOCAL_ZONE_TARGET) $
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $(EXECUTABLE_OBJECTS) \
 		-L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
-$(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(API_TARGET) $(PRODUCTION_ZONE_TARGET) $(PUBLIC_EXECUTABLE_SOURCE)
+$(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(API_TARGET) $(PRODUCTION_ZONE_TARGET) $(PUBLIC_EXECUTABLE_SOURCE) xstar_process.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_TOOLS_PACKAGE_VERSION=\"$(PACKAGE_VERSION)\" -o $@ $(PUBLIC_EXECUTABLE_SOURCE) \
 		-L. -lxstar_api -lxstar_production_zone $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 

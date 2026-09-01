@@ -8,6 +8,7 @@
 // Qualification: terminal/publication closure 43.x-45.3.3.8
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_process.hpp"
 #include "xstar_final_recompute_bridge.h"
 #include "xstar_atdb_runtime.hpp"
 #include "xstar_local_zone_engine.h"
@@ -56,15 +57,15 @@ public:
     // XSTAR-FUNCTION-COMMENT-END
     ScopedEnvironment(const char* key, const char* value) : key_(key) {
         if (const char* current = std::getenv(key)) { had_value_ = true; old_value_ = current; }
-        ::setenv(key, value, 1);
+        xstar_process::set_environment(key, value, 1);
     }
     // XSTAR-FUNCTION-COMMENT-BEGIN
     // Purpose: Implement ~ScopedEnvironment as a local helper for the final recompute bridge module; inputs and outputs are kept in the source-compatible units expected by its caller.
     // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
     // XSTAR-FUNCTION-COMMENT-END
     ~ScopedEnvironment() {
-        if (had_value_) ::setenv(key_.c_str(), old_value_.c_str(), 1);
-        else ::unsetenv(key_.c_str());
+        if (had_value_) xstar_process::set_environment(key_.c_str(), old_value_.c_str(), 1);
+        else xstar_process::unset_environment(key_.c_str());
     }
     ScopedEnvironment(const ScopedEnvironment&) = delete;
     ScopedEnvironment& operator=(const ScopedEnvironment&) = delete;

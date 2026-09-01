@@ -7,6 +7,8 @@
 // order, and final XSPEC tables are assembled only after every spectrum has
 // completed successfully.
 
+#include "xstar_process.hpp"
+
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -109,14 +111,14 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
     if (args.empty()) return 127;
     int pipefd[2];
     if (::pipe(pipefd) != 0) throw std::runtime_error("pipe failed: " + std::string(std::strerror(errno)));
-    const pid_t pid = ::fork();
+    const xstar_process::process_id pid = xstar_process::fork_process();
     if (pid < 0) {
         ::close(pipefd[0]); ::close(pipefd[1]);
         throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
     }
     if (pid == 0) {
         ::close(pipefd[0]);
-        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) _exit(126);
+        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
         ::dup2(pipefd[1], STDOUT_FILENO);
         ::dup2(pipefd[1], STDERR_FILENO);
         ::close(pipefd[1]);
@@ -125,9 +127,8 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
         av.reserve(storage.size() + 1);
         for (auto &item : storage) av.push_back(item.data());
         av.push_back(nullptr);
-        if (storage[0].find('/') != std::string::npos) ::execv(storage[0].c_str(), av.data());
-        else ::execvp(storage[0].c_str(), av.data());
-        _exit(127);
+        xstar_process::exec_program(storage[0].c_str(), av.data(), storage[0].find('/') == std::string::npos);
+        xstar_process::exit_child(127);
     }
     ::close(pipefd[1]);
     char buffer[8192];
@@ -141,10 +142,8 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
     }
     ::close(pipefd[0]);
     int status = 0;
-    while (::waitpid(pid, &status, 0) < 0) if (errno != EINTR) return 127;
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
-    return 127;
+    while (xstar_process::wait_process(pid, &status, 0) < 0) if (errno != EINTR) return 127;
+    return xstar_process::decode_wait_status(status);
 }
 
 std::vector<std::string> load_lines(const fs::path &path) {

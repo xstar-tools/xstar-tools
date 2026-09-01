@@ -9,6 +9,7 @@
 // Qualification: all-62 STEP 12.3.42; FITS 12.3.43.3; three-mode 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_process.hpp"
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
 #include "xstar_local_zone_engine.h"
@@ -5044,8 +5045,8 @@ int fixed_dsec_evaluator(
     const std::size_t type95_records =
         (type95_contract.thermal_ledger_rows - type95_base_rows) / 2u;
     const std::string type95_records_text = std::to_string(type95_records);
-    if (::setenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", source_sequence_text.c_str(), 1) != 0 ||
-        ::setenv("XSTAR_QUALIFICATION_TYPE95_THERMAL_ONLY_RECORDS",
+    if (xstar_process::set_environment("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", source_sequence_text.c_str(), 1) != 0 ||
+        xstar_process::set_environment("XSTAR_QUALIFICATION_TYPE95_THERMAL_ONLY_RECORDS",
                  type95_records_text.c_str(), 1) != 0) {
         set_callback_error(error, error_size,
             "cannot bind source sequence / Type-95 source-domain occupancy");
@@ -5062,19 +5063,19 @@ int fixed_dsec_evaluator(
     if (source_mg_thermal_consumption_v17258) {
         const std::string closure_dir_text =
             data->thermal_consumption_closure_dir_v17255.string();
-        if (::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE", "1", 1) != 0 ||
-            ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR",
+        if (xstar_process::set_environment("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE", "1", 1) != 0 ||
+            xstar_process::set_environment("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR",
                      closure_dir_text.c_str(), 1) != 0 ||
-            ::setenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION", "1", 1) != 0) {
+            xstar_process::set_environment("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION", "1", 1) != 0) {
             set_callback_error(error, error_size,
                 "cannot bind Mg source thermal-consumption population closure");
             return 1;
         }
         ++data->mg_source_thermal_consumption_evaluations_v17255;
     } else {
-        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
-        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
-        ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
     }
     // v17.25.12: call-3 first-DSEC branches expose a source state transport
     // discontinuity not described by compact population replacement alone:
@@ -5093,16 +5094,16 @@ int fixed_dsec_evaluator(
         std::filesystem::is_regular_file(component_closure_file_v172512);
     if (component_closure_available_v172512) {
         const std::string component_dir_text = component_closure_dir_v172512.string();
-        if (::setenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE", "1", 1) != 0 ||
-            ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR",
+        if (xstar_process::set_environment("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE", "1", 1) != 0 ||
+            xstar_process::set_environment("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR",
                      component_dir_text.c_str(), 1) != 0) {
             set_callback_error(error, error_size,
                 "cannot bind source thermal component boundary closure");
             return 1;
         }
     } else {
-        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
-        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
     }
     snapshot.populations.assign(static_cast<std::size_t>(data->program_info.population_rows), 0.0);
     snapshot.lte_populations.assign(static_cast<std::size_t>(data->program_info.population_rows), 0.0);
@@ -5162,10 +5163,10 @@ int fixed_dsec_evaluator(
         }
         const std::string tau_in_path = runtime_workspace.line_tau_in.string();
         const std::string tau_out_path = runtime_workspace.line_tau_out.string();
-        if (::setenv("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
-            ::setenv("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0 ||
-            ::setenv("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
-            ::setenv("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0) {
+        if (xstar_process::set_environment("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
+            xstar_process::set_environment("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0 ||
+            xstar_process::set_environment("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
+            xstar_process::set_environment("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0) {
             set_callback_error(error, error_size, "cannot bind per-sequence Type-50 line optical-depth payloads");
             return 1;
         }
@@ -12763,7 +12764,7 @@ ProductPublicationResultV172524 publish_true_production_products(
         const std::vector<double> energy = product.fixed_evaluations.empty()
             ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev;
 
-        if (::setenv("XSTAR_TRUE_PRODUCTION", "1", 1) != 0) {
+        if (xstar_process::set_environment("XSTAR_TRUE_PRODUCTION", "1", 1) != 0) {
             throw std::runtime_error("cannot enable true production writer mode");
         }
         try {
@@ -12778,10 +12779,10 @@ ProductPublicationResultV172524 publish_true_production_products(
             auto step = xstar_step_log::write_native_step_log(output, product);
             result.step_log_lines = step.lines_written;
         } catch (...) {
-            ::unsetenv("XSTAR_TRUE_PRODUCTION");
+            xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
             throw;
         }
-        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
         result.fits_count = count_native_fits_products(output);
         result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
             regular_file_size_or_zero(output / "xout_step.log") > 0;
@@ -12790,9 +12791,9 @@ ProductPublicationResultV172524 publish_true_production_products(
         // 0.6.85.1: required products are validated above; unrelated files in
         // the output directory are allowed and preserved.
     } catch (const std::exception& exc) {
-        ::unsetenv("XSTAR_TRUE_PRODUCTION");
-        ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
-        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        xstar_process::unset_environment("XSTAR_NATIVE_PRODUCTION");
         result.error = exc.what();
         std::error_code retained_ec;
         if (std::filesystem::is_directory(output, retained_ec)) {
@@ -17108,26 +17109,26 @@ int standalone_iteration_evaluator(
         }
         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
         const std::string sequence = std::to_string(snapshot.sequence);
-        ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
+        xstar_process::set_environment("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
         // 0.6.48.11.6 diagnostic-only call identity lets local_zone_engine
         // emit a producer inventory for the first accepted C V zone without
         // changing the historical source-sequence semantics.
         const std::string native_call_v0648115 = std::to_string(data->call_index);
-        ::setenv("XSTAR_NATIVE_CALL_INDEX", native_call_v0648115.c_str(), 1);
+        xstar_process::set_environment("XSTAR_NATIVE_CALL_INDEX", native_call_v0648115.c_str(), 1);
         const char* sequence2_qualification_dir = std::getenv("XSTAR_V77_SEQUENCE2_HE_QUALIFICATION_DIR");
         const bool sequence2_qualification = snapshot.sequence == 2u &&
             sequence2_qualification_dir && *sequence2_qualification_dir;
         const bool sequence16_qualification = snapshot.sequence == 16u &&
             data->sequence16_precommit_gate_configured;
         if (sequence2_qualification || sequence16_qualification) {
-            ::setenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", sequence.c_str(), 1);
+            xstar_process::set_environment("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", sequence.c_str(), 1);
         }
         // v80: sequence 16 must remain genuinely native.  The exact v0.6.47.2
         // solve-stage capture is comparison-only and is never bound as a Thermal
         // population closure or controller input.
-        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
-        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
-        ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+        xstar_process::unset_environment("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
         snapshot.source_global_rnisg = data->global_rnisg;
         // 0.6.82.30.8.3 qualification-only Fe matrix/Lucy diagnostic.
         // Enable the existing iteration-resolved trace only around the actual
@@ -17172,11 +17173,11 @@ int standalone_iteration_evaluator(
         const auto saved_trace_dir_v06823083 =
             saved_env_v06823083("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR");
         if (fe_matrix_diag_active_v06823083) {
-            ::setenv("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE", "1", 1);
+            xstar_process::set_environment("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE", "1", 1);
             const std::string fe_trace_target_v06823083 = sequence + ":26";
-            ::setenv("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS",
+            xstar_process::set_environment("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS",
                      fe_trace_target_v06823083.c_str(), 1);
-            ::setenv("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR",
+            xstar_process::set_environment("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR",
                      fe_matrix_diag_root_v06823083, 1);
         }
         const bool preamble_timing_v068240236 =
@@ -17197,8 +17198,8 @@ int standalone_iteration_evaluator(
         }
         const auto restore_env_v06823083 = [](const char* name,
                                                const std::pair<bool,std::string>& saved) {
-            if (saved.first) ::setenv(name, saved.second.c_str(), 1);
-            else ::unsetenv(name);
+            if (saved.first) xstar_process::set_environment(name, saved.second.c_str(), 1);
+            else xstar_process::unset_environment(name);
         };
         if (fe_matrix_diag_active_v06823083) {
             restore_env_v06823083("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE",
@@ -18134,15 +18135,15 @@ FixedDsecSnapshot evaluate_full_boundary(
     source.line_profile_workspace_capacity = snapshot.line_profile_workspace.size();
     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
     const std::string sequence = std::to_string(snapshot.sequence);
-    ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
+    xstar_process::set_environment("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
     if (data.reference_diagnostics_enabled && snapshot.sequence == 59u) {
         const auto producer_path = data.sequence23_diagnostic_dir / "continuum_transfer" / "native_opacity_producer_inventory.csv";
         const auto mg53_kernel_path = data.sequence23_diagnostic_dir / "continuum_transfer" / "mg_type53_native_record_kernels.csv";
-        ::setenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH", producer_path.string().c_str(), 1);
-        ::setenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH", mg53_kernel_path.string().c_str(), 1);
+        xstar_process::set_environment("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH", producer_path.string().c_str(), 1);
+        xstar_process::set_environment("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH", mg53_kernel_path.string().c_str(), 1);
     } else {
-        ::unsetenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
-        ::unsetenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
+        xstar_process::unset_environment("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
+        xstar_process::unset_environment("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
     }
     write_fixed_radial_input(data, input, snapshot.sequence);
     write_postsolve_fixed_input_capture(data, input, snapshot);
@@ -18376,7 +18377,7 @@ FixedDsecSnapshot commit_prepared_boundary(
     data.current_sequence = snapshot.sequence;
     ++data.evaluations;
     const std::string sequence = std::to_string(snapshot.sequence);
-    ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
+    xstar_process::set_environment("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
     return finalize_accepted_boundary_snapshot(data, std::move(snapshot));
 }
 
@@ -19075,7 +19076,7 @@ void write_sequence23_diagnostic_preview(
     // xout_lines1 and the analyzer reported ELUM_SOURCE=UNKNOWN.
     create_native_retained_productwrite_schema(product);
 
-    ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
+    xstar_process::set_environment("XSTAR_TRUE_PRODUCTION", "1", 1);
     try {
         auto science = xstar_science_fits::write_historical_science_products(
             {}, preview_dir, product,
@@ -19086,10 +19087,10 @@ void write_sequence23_diagnostic_preview(
         auto step = xstar_step_log::write_native_step_log(preview_dir, product);
         (void)step;
     } catch (...) {
-        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
         throw;
     }
-    ::unsetenv("XSTAR_TRUE_PRODUCTION");
+    xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
 
     const std::size_t fits_count = count_native_fits_products(preview_dir);
     const bool step_written = std::filesystem::is_regular_file(preview_dir / "xout_step.log") &&
@@ -19179,7 +19180,7 @@ void write_full_trajectory_diagnostic_preview(
     create_native_retained_productwrite_schema(product);
     std::cout << "V048746255172582_PATCH520146_DIAGNOSTIC_PRODUCTWRITE_SCHEMA=CREATED\n";
 
-    ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
+    xstar_process::set_environment("XSTAR_TRUE_PRODUCTION", "1", 1);
     try {
         auto science = xstar_science_fits::write_historical_science_products(
             {}, preview_dir, product,
@@ -19190,10 +19191,10 @@ void write_full_trajectory_diagnostic_preview(
         auto step = xstar_step_log::write_native_step_log(preview_dir, product);
         (void)step;
     } catch (...) {
-        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
         throw;
     }
-    ::unsetenv("XSTAR_TRUE_PRODUCTION");
+    xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
 
     const std::size_t fits_count = count_native_fits_products(preview_dir);
     const bool step_written =
@@ -20769,7 +20770,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
                 "standalone_diagnostics" / "call1_dsec_population_sweep";
             const auto sequence58_rnisi_audit_path = data.sequence23_diagnostic_dir.parent_path() /
                 "sequence58_final_call1_lte" / "sequence58_native_rnisi_audit.csv";
-            ::setenv("XSTAR_V82_PATCH56_SEQUENCE58_RNISI_AUDIT_PATH",
+            xstar_process::set_environment("XSTAR_V82_PATCH56_SEQUENCE58_RNISI_AUDIT_PATH",
                 sequence58_rnisi_audit_path.string().c_str(), 1);
 
             const char* source_call2_workspace = std::getenv("XSTAR_V82_SEQUENCE22_SOURCE_WORKSPACE_DIR");
@@ -23410,10 +23411,10 @@ int command_run_standalone_case_probe(const Options& options) {
         data.hydrogen_ground_population_index = 0u;
         xstar_fixed_state_stats_init_v1(&data.cumulative_stats);
 
-        ::setenv("XSTAR_NATIVE_PRODUCTION", "1", 1);
-        ::setenv("XSTAR_V72_PROBE_PROGRESS", "1", 1);
+        xstar_process::set_environment("XSTAR_NATIVE_PRODUCTION", "1", 1);
+        xstar_process::set_environment("XSTAR_V72_PROBE_PROGRESS", "1", 1);
         const auto mg_dump_v70 = (std::filesystem::path(options.output_dir) / "sequence16_native_mg_compact.csv").string();
-        ::setenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS", mg_dump_v70.c_str(), 1);
+        xstar_process::set_environment("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS", mg_dump_v70.c_str(), 1);
         xstar_thermal_state_v1 state{};
         xstar_thermal_state_init_v1(&state);
         state.temperature_t4 = params.temperature_k / 1.0e4;
@@ -23467,16 +23468,16 @@ int command_run_standalone_case_probe(const Options& options) {
         csv.close();
         std::cout << "V048746255172582_PROBE_EVENTS=" << data.snapshots.size() << "\n"
                   << "V048746255172582_PROBE_CSV=" << csv_path.string() << "\n";
-        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
-        ::unsetenv("XSTAR_V72_PROBE_PROGRESS");
-        ::unsetenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
+        xstar_process::unset_environment("XSTAR_NATIVE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_V72_PROBE_PROGRESS");
+        xstar_process::unset_environment("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
         xstar_thermal_context_destroy(thermal);
         xstar_fixed_state_context_destroy(fixed);
         return 0;
     } catch (const std::exception& exc) {
-        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
-        ::unsetenv("XSTAR_V72_PROBE_PROGRESS");
-        ::unsetenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
+        xstar_process::unset_environment("XSTAR_NATIVE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_V72_PROBE_PROGRESS");
+        xstar_process::unset_environment("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
         if (thermal) xstar_thermal_context_destroy(thermal);
         if (fixed) xstar_fixed_state_context_destroy(fixed);
         std::cerr << "v70 standalone case probe failed: " << exc.what() << '\n';
@@ -25250,7 +25251,7 @@ int command_run_standalone_production(const Options& options, const std::filesys
         if (program.unsupported_record_count != 0 || program.records.empty() || program.rows.empty()) {
             throw std::runtime_error("ATDB lowering produced an incomplete program");
         }
-        ::setenv("XSTAR_NATIVE_PRODUCTION", "1", 1);
+        xstar_process::set_environment("XSTAR_NATIVE_PRODUCTION", "1", 1);
         std::cout << prefix << "CONTROLLER_BEGIN=YES\n" << std::flush;
         double controller_seconds = 0.0;
         std::size_t evaluations = 0;
@@ -25364,7 +25365,7 @@ int command_run_standalone_production(const Options& options, const std::filesys
         }
         std::cout << " final print:           1\n"
                   << " xstar: Prepping to write spectral data\n" << std::flush;
-        ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
+        xstar_process::set_environment("XSTAR_TRUE_PRODUCTION", "1", 1);
         const auto publication_started_v064890 = std::chrono::steady_clock::now();
         const auto science_fits_started_v064890 = std::chrono::steady_clock::now();
         auto science = xstar_science_fits::write_historical_science_products({}, output, product,
@@ -25422,7 +25423,7 @@ int command_run_standalone_production(const Options& options, const std::filesys
             performance_v064890.heap_after_final_hblkhd_v0682352 = heap_v0682352.hblkhd;
         }
         std::cout << " xstar: Done writing spectral data\n";
-        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
         const std::size_t fits_count = count_native_fits_products(output);
         const bool step_ok = std::filesystem::is_regular_file(output / "xout_step.log") &&
             regular_file_size_or_zero(output / "xout_step.log") > 0;
@@ -25434,8 +25435,8 @@ int command_run_standalone_production(const Options& options, const std::filesys
         // validate XSTAR-owned products above, but do not claim ownership of the
         // surrounding directory. Unrelated/pre-existing files are permitted and
         // are neither inspected as products nor removed.
-        ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
-        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        xstar_process::unset_environment("XSTAR_NATIVE_PRODUCTION");
         const std::size_t total_dsec = std::accumulate(
             trajectory.dsec_evaluations.begin(), trajectory.dsec_evaluations.end(), std::size_t{0});
         for (std::size_t i = 0; i < trajectory.dsec_evaluations.size(); ++i) {
@@ -25500,9 +25501,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
     } catch (const std::exception& exc) {
         g_performance_v064890 = nullptr;
         g_performance_v064892 = nullptr;
-        ::unsetenv("XSTAR_TRUE_PRODUCTION");
-        ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
-        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_TRUE_PRODUCTION");
+        xstar_process::unset_environment("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        xstar_process::unset_environment("XSTAR_NATIVE_PRODUCTION");
         // 0.6.85.1: failure is intentionally non-destructive. Partial, corrupt,
         // or otherwise invalid XSTAR products are retained exactly as written so
         // they can be inspected after the nonzero return. No environment opt-in
@@ -25591,7 +25592,7 @@ int command_run_native_resumable_trajectory(Options options, bool true_productio
             "XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW"
         };
         for (const char* flag : production_flags) {
-            if (::setenv(flag, "1", 1) != 0) {
+            if (xstar_process::set_environment(flag, "1", 1) != 0) {
                 std::cerr << "cannot enable production physics profile: " << flag << "\n";
                 return 66;
             }
@@ -26170,7 +26171,7 @@ int command_run_physical(Options options) {
         "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION",
     }};
     for (const char* name : qualification_flags) {
-        if (::setenv(name, "1", 1) != 0) {
+        if (xstar_process::set_environment(name, "1", 1) != 0) {
             std::cerr << "cannot activate qualification profile variable " << name << "\n";
             return 70;
         }
@@ -26186,7 +26187,7 @@ int command_run_physical(Options options) {
         {"XSTAR_QUALIFICATION_SOURCE_SOLVE_ROWS_CSV", source_solve_rows},
     }};
     for (const auto& item : qualification_paths) {
-        if (::setenv(item.first, item.second.c_str(), 1) != 0) {
+        if (xstar_process::set_environment(item.first, item.second.c_str(), 1) != 0) {
             std::cerr << "cannot activate qualification profile path " << item.first << "\n";
             return 70;
         }
@@ -26311,17 +26312,17 @@ extern "C" int32_t xstar_production_zone_run_all_v0648110(
         options.artifact_profile_explicit = true;
         const std::filesystem::path executable =
             (executable_path && *executable_path) ? std::filesystem::path(executable_path) : std::filesystem::path();
-        ::setenv("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
+        xstar_process::set_environment("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
         const int rc = command_run_standalone_production(options, executable);
-        ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
+        xstar_process::unset_environment("XSTAR_V0648110_SHARED_ZONE_MODE");
         set_message(rc == 0 ? "ACCEPT" : ("standalone production returned " + std::to_string(rc)));
         return rc;
     } catch (const std::exception& exc) {
-        ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
+        xstar_process::unset_environment("XSTAR_V0648110_SHARED_ZONE_MODE");
         set_message(exc.what());
         return 20;
     } catch (...) {
-        ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
+        xstar_process::unset_environment("XSTAR_V0648110_SHARED_ZONE_MODE");
         set_message("unknown shared production-zone exception");
         return 20;
     }
@@ -26362,9 +26363,9 @@ extern "C" int32_t xstar_production_zone_context_create_v0648110(
                 options.artifact_profile_explicit = true;
                 const std::filesystem::path executable = session->executable_path.empty()
                     ? std::filesystem::path() : std::filesystem::path(session->executable_path);
-                ::setenv("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
+                xstar_process::set_environment("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
                 const int rc = command_run_standalone_production(options, executable);
-                ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
+                xstar_process::unset_environment("XSTAR_V0648110_SHARED_ZONE_MODE");
                 {
                     std::lock_guard<std::mutex> lock(session->mutex);
                     session->rc = rc;
@@ -26372,13 +26373,13 @@ extern "C" int32_t xstar_production_zone_context_create_v0648110(
                     if (rc != 0) session->error = "standalone production returned " + std::to_string(rc);
                 }
             } catch (const std::exception& exc) {
-                ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
+                xstar_process::unset_environment("XSTAR_V0648110_SHARED_ZONE_MODE");
                 std::lock_guard<std::mutex> lock(session->mutex);
                 session->rc = 20;
                 session->error = exc.what();
                 session->finished = true;
             } catch (...) {
-                ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
+                xstar_process::unset_environment("XSTAR_V0648110_SHARED_ZONE_MODE");
                 std::lock_guard<std::mutex> lock(session->mutex);
                 session->rc = 20;
                 session->error = "unknown cpp-zone worker exception";

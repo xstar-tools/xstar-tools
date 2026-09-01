@@ -10,6 +10,7 @@
 // Qualification: 12.3.25 science repair; Type50 12.3.31; all-62 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_process.hpp"
 #include "xstar_local_zone_engine.h"
 #include "xstar_local_zone_internal.hpp"
 #include "source_real_energy_grid.hpp"
@@ -17544,10 +17545,10 @@ int run_impl(
                 << ',' << type50_outer_accepts_v064812321
                 << ',' << type50_outer_rejects_v064812321
                 << ',' << std::setprecision(17) << local_zone_source_real_literal(1.0e-34) << '\n';
-            ::setenv("XSTAR_V064812321_TYPE50_PHASE", "calc_emisab", 1);
+            xstar_process::set_environment("XSTAR_V064812321_TYPE50_PHASE", "calc_emisab", 1);
         }
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
-        ::unsetenv("XSTAR_V064812321_TYPE50_PHASE");
+        xstar_process::unset_environment("XSTAR_V064812321_TYPE50_PHASE");
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
 
         // v82 patch 5.20.10: literal calc_emis_ion does not assign kkkl in
@@ -18773,13 +18774,13 @@ int run_impl(
             std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> selected_error{};
             if (const char* diag_root_v064812321 = std::getenv("XSTAR_V064812321_DIAGNOSTICS_DIR");
                 diag_root_v064812321 && *diag_root_v064812321) {
-                ::setenv("XSTAR_V064812321_TYPE50_PHASE", "calc_emis", 1);
+                xstar_process::set_environment("XSTAR_V064812321_TYPE50_PHASE", "calc_emis", 1);
             }
             const int selected_rc = xstar_spectral_apply_contributions_v1(
                 ctx.spectral_context, selected_lines_v82_patch5206.data(), selected_lines_v82_patch5206.size(),
                 selected_seeds.data(), seed_stride, &selected_sw, &selected_stats,
                 selected_error.data(), selected_error.size());
-            ::unsetenv("XSTAR_V064812321_TYPE50_PHASE");
+            xstar_process::unset_environment("XSTAR_V064812321_TYPE50_PHASE");
             if (selected_rc != 0)
                 throw std::runtime_error(std::string("v82 patch 5.20.6 selected line replay failed: ") + selected_error.data());
             line_profile_opacity.swap(selected_line_profile);

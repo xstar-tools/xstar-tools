@@ -10,7 +10,8 @@
 - **`0.6.88.2.2` — formally accepted:** `FIXED_STATE_REGRESSION_SCAFFOLD_CLOSURE`, completing Linux qualification of the portable dynamic-library layer after the historical `.88.2` and `.88.2.1` host rejections.
 - **`0.6.88.3` — historical HOST REJECT:** native Apple-Clang compilation stopped on the nonportable Type-77 `::exp10` special path; the CI Python environment also lacked `pytest`.
 - **`0.6.88.3.1` — historical HOST REJECT:** the Apple Type-77 compile closure worked, but native macOS linking exposed a missing direct `libxstar_opacity` dependency and the qualification checker re-resolved Homebrew Python 3.14 without `pytest`.
-- **`0.6.88.3.2` — current candidate:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, adding the direct opacity link only on macOS and keeping qualification subprocesses on the setup-python interpreter.
+- **`0.6.88.4` — current candidate:** `PORTABLE_PROCESS_LAYER`, routing process creation/wait/termination, process-id lookup, and environment mutation through a common infrastructure boundary while preserving the accepted Linux POSIX behavior.
+- **`0.6.88.3.2` — formally accepted:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, accepted on both `macos-15` arm64 and `macos-15-intel` x86_64.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
 
@@ -45,6 +46,11 @@ make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
 ```
 
 The MPI target uses `MPICXX ?= mpic++`. It is not part of the normal `all` target.
+
+
+### Portable process layer (`0.6.88.4`)
+
+`0.6.88.4` introduces `xstar_process.hpp` as the sole native boundary for `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv`. Linux and macOS wrappers call the same POSIX primitives with unchanged arguments, wait-status decoding, signal choices, and orchestration order. The Windows process backend is deliberately deferred to the MinGW native-build milestone; this release first requires Linux build/regression and source-preservation closure before Windows behavior is implemented.
 
 ### Native macOS build (`0.6.88.3.2`)
 
