@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.88.5.3 - WINDOWS_LOCAL_ZONE_PORTABILITY_CLOSURE - 2026-09-01
+
+- Preserves 0.6.88.5.2 as a historical Windows-host rejection.
+- Renames the Type-85 local identifier `far` to `far_coeff` to avoid the MinGW header/macro collision while preserving the exact arithmetic expression and argument order.
+- Extends the existing exact Type-77 special-value portability branch from Apple-only to Apple-or-Windows; Linux remains on the historical `::exp10(rec)` branch.
+- Routes the Python backend `addition` filesystem path through the existing `XSTAR_C_PATH` narrow C-API adapter before `PyUnicode_FromString`.
+- Extends the filesystem-path direct-`c_str()` source audit to the Python backend.
+- Improves synthetic local-process XSTAR2XSPEC failure diagnostics with explicit predicate results, output-tree listing, scheduler log, and per-job stdout/success-marker reporting.
+- Preserves Linux/macOS arithmetic, ABI values, CreateProcessW process semantics, scientific ordering, and output contracts.
+- Windows MPI remains out of scope.
+
 ## 0.6.88.5.2 - WINDOWS_PATH_BOUNDARY_COMPLETION - 2026-09-01
 
 - Preserves 0.6.88.5.1 as a historical Windows-host rejection.

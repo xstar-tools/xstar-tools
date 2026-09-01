@@ -14,6 +14,7 @@
 #include <Python.h>
 
 #include "xstar_backend_plugin.h"
+#include "xstar_path_compat.hpp"
 #include "xstar_python_bridge.h"
 #include "xstar_standalone_internal.hpp"
 #include <algorithm>
@@ -90,7 +91,7 @@ bool ensure_python(const xstar_config_v1* config, std::string& error) {
     additions.push_back(cpp_dir.parent_path().parent_path().parent_path());
     for (const auto& addition : additions) {
         if (addition.empty()) continue;
-        PyObject* text = PyUnicode_FromString(addition.c_str());
+        PyObject* text = PyUnicode_FromString(XSTAR_C_PATH(addition));
         if (!text) {
             error = python_error_text();
             PyGILState_Release(gil);

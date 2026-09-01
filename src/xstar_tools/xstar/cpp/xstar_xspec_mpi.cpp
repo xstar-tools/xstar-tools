@@ -1,4 +1,4 @@
-// True MPI native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.5.2.
+// True MPI native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.5.3.
 //
 // Rank 0 creates the canonical xstinitable plan.  All ranks then claim grid
 // jobs from an MPI-3 RMA counter and execute exactly one xstar-cpp child at a
@@ -37,7 +37,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.88.5.2";
+constexpr const char *kPackageVersion = "0.6.88.5.3";
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"

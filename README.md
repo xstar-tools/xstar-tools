@@ -10,7 +10,11 @@
 - **`0.6.88.2.2` — formally accepted:** `FIXED_STATE_REGRESSION_SCAFFOLD_CLOSURE`, completing Linux qualification of the portable dynamic-library layer after the historical `.88.2` and `.88.2.1` host rejections.
 - **`0.6.88.3` — historical HOST REJECT:** native Apple-Clang compilation stopped on the nonportable Type-77 `::exp10` special path; the CI Python environment also lacked `pytest`.
 - **`0.6.88.3.1` — historical HOST REJECT:** the Apple Type-77 compile closure worked, but native macOS linking exposed a missing direct `libxstar_opacity` dependency and the qualification checker re-resolved Homebrew Python 3.14 without `pytest`.
-- **`0.6.88.4.2` — current candidate:** `MACOS_WARNING_CLEANUP_SYNTAX_CLOSURE`, preserving the `0.6.88.4` portable process layer while changing only the Apple-Clang unused-annotation spelling needed for Intel macOS compilation.
+- **`0.6.88.4.2` — formally accepted:** `MACOS_WARNING_CLEANUP_SYNTAX_CLOSURE`, accepted on both macOS arm64 and x86_64.
+- **`0.6.88.5` — historical Windows HOST REJECT:** native MinGW build exposed wide `std::filesystem::path` to narrow C-API boundaries.
+- **`0.6.88.5.1` — historical Windows HOST REJECT:** most path boundaries closed, but two standalone path sites remained.
+- **`0.6.88.5.2` — historical Windows HOST REJECT:** path boundary closure reached the local-zone/Python backend, exposing MinGW Type-85 `far`, Windows `::exp10`, and Python path portability defects.
+- **`0.6.88.5.3` — current candidate:** `WINDOWS_LOCAL_ZONE_PORTABILITY_CLOSURE`; Linux-qualified, Windows-host-pending.
 - **`0.6.88.3.2` — formally accepted:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, accepted on both `macos-15` arm64 and `macos-15-intel` x86_64.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
@@ -70,7 +74,7 @@ make -j4 PLATFORM=macos
 
 CFITSIO discovery order is explicit `CFITSIO_*` overrides, `pkg-config`, `brew --prefix cfitsio` on macOS, then linker-default `-lcfitsio`. The default macOS build remains non-MPI; MPI is not part of the `0.6.88.3.2` acceptance gate.
 
-The Apple Type-77 exact-value closure from `0.6.88.3.1` remains unchanged: Apple builds use `0x1.c2ccf22133138p-4`, while non-Apple builds retain `::exp10(rec)`. `0.6.88.3.2` additionally links `libxstar_local_zone.dylib` directly to `libxstar_opacity.dylib` on macOS; Linux keeps its historical local-zone link command.
+The Apple Type-77 exact-value closure from `0.6.88.3.1` remains unchanged: Apple and Windows builds use `0x1.c2ccf22133138p-4` for the special exact-match record, while Linux retains `::exp10(rec)`. `0.6.88.3.2` additionally links `libxstar_local_zone.dylib` directly to `libxstar_opacity.dylib` on macOS; Linux keeps its historical local-zone link command.
 
 ## Running `xstar-cpp`
 

@@ -33,7 +33,7 @@ make PLATFORM=macos print-config
 make -j4 PLATFORM=macos
 ```
 
-The runtime loader remains the `0.6.88.2` `dl*` implementation. No science source is modified by the macOS build work. MPI remains opt-in and is not part of the `.88.3.2` macOS acceptance gate. Apple builds use the frozen Type-77 exact value `0x1.c2ccf22133138p-4` only for the special exact-match record; Linux/non-Apple builds continue to call `::exp10(rec)` there. On macOS, `libxstar_local_zone.dylib` directly links `libxstar_opacity.dylib` because it directly calls the opacity ABI; Linux retains its accepted historical link command.
+The runtime loader remains the `0.6.88.2` `dl*` implementation. No science source is modified by the macOS build work. MPI remains opt-in and is not part of the `.88.3.2` macOS acceptance gate. Apple and Windows builds use the frozen Type-77 exact value `0x1.c2ccf22133138p-4` only for the special exact-match record; Linux continues to call `::exp10(rec)` there. On macOS, `libxstar_local_zone.dylib` directly links `libxstar_opacity.dylib` because it directly calls the opacity ABI; Linux retains its accepted historical link command.
 
 ## Portable dynamic-library layer (`0.6.88.2`)
 
@@ -346,6 +346,10 @@ xout_etable.fits
 ```
 
 The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`. The MPI path writes `xstar2xspec-mpi.log`, `xstar2xspec-mpi-scheduler.log`, and per-rank logs.
+
+### Windows local-zone portability closure (0.6.88.5.3)
+
+`0.6.88.5.3 — WINDOWS_LOCAL_ZONE_PORTABILITY_CLOSURE` is a narrow follow-up to the real UCRT64 host rejection of 0.6.88.5.2. It renames the Type-85 local identifier `far` to `far_coeff`, extends the existing exact Type-77 special-value branch to `_WIN32`, and sends the Python backend `addition` filesystem path through `XSTAR_C_PATH` before `PyUnicode_FromString`. Linux/macOS arithmetic and process behavior are intentionally unchanged. Qualification also audits the Python backend for direct path `c_str()` use and prints detailed synthetic `xstar-xspec` pool diagnostics on failure. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_local_zone_portability_closure_host_0_6_88_5_3.py`.
 
 ### Windows path-boundary completion (0.6.88.5.2)
 

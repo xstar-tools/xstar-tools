@@ -1264,3 +1264,16 @@ include tools/qualification/run_windows_path_boundary_completion_host_0_6_88_5_2
 include xstar_tools-0.6.88.5.1_host_rejection.md
 include xstar_tools-0.6.88.5.2_local_validation.md
 include xstar_tools-0.6.88.5.2_release_closure.md
+
+# 0.6.88.5.3 Windows local-zone portability closure.
+include windows_local_zone_portability_closure_0_6_88_5_3.md
+include docs/developer/windows_local_zone_portability_closure_0_6_88_5_3.md
+include qualification/windows_local_zone_portability_closure_0_6_88_5_3.json
+include tests/test_windows_local_zone_portability_closure_0_6_88_5_3.py
+include tests/windows_process_smoke_0_6_88_5_3.cpp
+include tests/windows_xspec_fake_tool_0_6_88_5_3.cpp
+include tools/qualification/check_windows_local_zone_portability_closure_0_6_88_5_3.py
+include tools/qualification/run_windows_local_zone_portability_closure_host_0_6_88_5_3.py
+include xstar_tools-0.6.88.5.2_host_rejection.md
+include xstar_tools-0.6.88.5.3_local_validation.md
+include xstar_tools-0.6.88.5.3_release_closure.md
