@@ -9,7 +9,8 @@
 - **`0.6.88.1` — formally accepted:** `PLATFORM_BUILD_ABSTRACTION`.
 - **`0.6.88.2.2` — formally accepted:** `FIXED_STATE_REGRESSION_SCAFFOLD_CLOSURE`, completing Linux qualification of the portable dynamic-library layer after the historical `.88.2` and `.88.2.1` host rejections.
 - **`0.6.88.3` — historical HOST REJECT:** native Apple-Clang compilation stopped on the nonportable Type-77 `::exp10` special path; the CI Python environment also lacked `pytest`.
-- **`0.6.88.3.1` — current candidate:** `MACOS_NATIVE_BUILD_COMPILE_CLOSURE`, preserving the `.88.3` build contract while using the frozen Linux/glibc Type-77 value on Apple and pinning Python 3.12 + `pytest` in macOS CI.
+- **`0.6.88.3.1` — historical HOST REJECT:** the Apple Type-77 compile closure worked, but native macOS linking exposed a missing direct `libxstar_opacity` dependency and the qualification checker re-resolved Homebrew Python 3.14 without `pytest`.
+- **`0.6.88.3.2` — current candidate:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, adding the direct opacity link only on macOS and keeping qualification subprocesses on the setup-python interpreter.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
 
@@ -45,7 +46,7 @@ make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
 
 The MPI target uses `MPICXX ?= mpic++`. It is not part of the normal `all` target.
 
-### Native macOS build (`0.6.88.3.1`)
+### Native macOS build (`0.6.88.3.2`)
 
 On macOS, the native build defaults to Apple `clang++`, produces `.dylib` libraries, uses `@rpath` install names with an `@loader_path` runtime search path, and discovers CFITSIO through `pkg-config` with a Homebrew fallback. Typical prerequisites are:
 
@@ -61,9 +62,9 @@ make PLATFORM=macos print-config
 make -j4 PLATFORM=macos
 ```
 
-CFITSIO discovery order is explicit `CFITSIO_*` overrides, `pkg-config`, `brew --prefix cfitsio` on macOS, then linker-default `-lcfitsio`. The default macOS build remains non-MPI; MPI is not part of the `0.6.88.3.1` acceptance gate.
+CFITSIO discovery order is explicit `CFITSIO_*` overrides, `pkg-config`, `brew --prefix cfitsio` on macOS, then linker-default `-lcfitsio`. The default macOS build remains non-MPI; MPI is not part of the `0.6.88.3.2` acceptance gate.
 
-`0.6.88.3.1` also closes the Apple compile failure in the Type-77 exact-match branch. Apple builds use the exact frozen hexadecimal `double` `0x1.c2ccf22133138p-4`; non-Apple builds retain the historical `::exp10(rec)` path.
+The Apple Type-77 exact-value closure from `0.6.88.3.1` remains unchanged: Apple builds use `0x1.c2ccf22133138p-4`, while non-Apple builds retain `::exp10(rec)`. `0.6.88.3.2` additionally links `libxstar_local_zone.dylib` directly to `libxstar_opacity.dylib` on macOS; Linux keeps its historical local-zone link command.
 
 ## Running `xstar-cpp`
 

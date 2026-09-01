@@ -1194,3 +1194,15 @@ include xstar_tools-0.6.88.3_host_rejection.md
 include xstar_tools-0.6.88.3.1_local_validation.md
 include xstar_tools-0.6.88.3.1_release_closure.md
 include .github/workflows/macos-build.yml
+
+
+# 0.6.88.3.2 native macOS link/interpreter closure.
+include macos_native_build_link_closure_0_6_88_3_2.md
+include docs/developer/macos_native_build_link_closure_0_6_88_3_2.md
+include tests/test_macos_native_build_link_closure_0_6_88_3_2.py
+include tools/qualification/check_macos_native_build_link_closure_0_6_88_3_2.py
+include tools/qualification/run_macos_native_build_link_closure_host_0_6_88_3_2.py
+include qualification/macos_native_build_link_closure_0_6_88_3_2.json
+include xstar_tools-0.6.88.3.1_host_rejection.md
+include xstar_tools-0.6.88.3.2_local_validation.md
+include xstar_tools-0.6.88.3.2_release_closure.md

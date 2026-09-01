@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.88.3.2 — MACOS_NATIVE_BUILD_LINK_CLOSURE (candidate) - 2026-08-31
+
+- Branches from the historical `0.6.88.3.1` host rejection; formally accepted Linux/science baseline remains `0.6.88.2.2`.
+- Carries the `.88.3.1` Apple-only Type-77 exact-value fix forward unchanged.
+- Fixes the native Darwin link failure on both arm64 and x86_64: `libxstar_local_zone.dylib` now links directly to `libxstar_opacity.dylib` on `PLATFORM=macos`, which defines the directly called `xstar_opacity_apply_line_profile_v1` ABI.
+- Keeps `LOCAL_ZONE_LINK_LIBS` set to the historical engine/emissivity pair on Linux so the accepted Linux local-zone link command remains unchanged after version normalization.
+- Fixes qualification interpreter drift by using `sys.executable` for checker/pytest subprocesses and `python` from `actions/setup-python` for CI installation and host-runner invocation.
+- No scientific C/C++ source, ABI, controller/traversal/contribution/accumulation ordering, cutoff, publication rule, or output schema changes relative to `.88.3.1`.
+- Historical status is preserved: `.88.3.1` remains HOST REJECT due to the Darwin direct-link failure and qualification interpreter mismatch.
+- Formal acceptance requires `MACOS_NATIVE_BUILD_LINK_CLOSURE_068832_HOST_RESULT=ACCEPT` on both `macos-15` and `macos-15-intel`.
+
 ## 0.6.88.3.1 — MACOS_NATIVE_BUILD_COMPILE_CLOSURE (candidate) - 2026-08-31
 
 - Branches from the historical `0.6.88.3` host rejection while keeping formally accepted `0.6.88.2.2` as the Linux/science baseline.

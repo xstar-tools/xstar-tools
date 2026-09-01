@@ -6,10 +6,11 @@ PYTHON_CONFIG ?= python3-config
 PKG_CONFIG ?= pkg-config
 BREW ?= brew
 
-# v0.6.88.3.1 macOS native-build compile closure. The accepted 0.6.88.3
-# build contract is preserved; the only production-science source edit is the
-# narrow Apple-only Type-77 exact-value portability guard documented by this
-# release. Linux keeps the historical ::exp10 path unchanged.
+# v0.6.88.3.2 macOS native-build link closure. The 0.6.88.3.1 Apple-only
+# Type-77 exact-value compile closure is carried forward unchanged. Darwin
+# additionally links libxstar_local_zone directly to libxstar_opacity because
+# local_zone_engine.cpp calls its public ABI. Linux keeps its accepted link
+# command unchanged.
 HOST_UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ifeq ($(origin PLATFORM),command line)
   XSTAR_DETECTED_PLATFORM := $(PLATFORM)
@@ -74,6 +75,15 @@ ifeq ($(PLATFORM),macos)
 else
   SHLIB_TARGET_LDFLAGS = $(SHLIB_LDFLAGS)
   SHLIB_INSTALL_NAME_MODE ?= none
+endif
+
+# Darwin's linker requires libxstar_local_zone to name the dylib that directly
+# defines xstar_opacity_apply_line_profile_v1. Linux preserves its accepted
+# historical command stream; Windows linkage remains a later portability gate.
+ifeq ($(PLATFORM),macos)
+  LOCAL_ZONE_LINK_LIBS ?= -lxstar_engine -lxstar_emissivity -lxstar_opacity
+else
+  LOCAL_ZONE_LINK_LIBS ?= -lxstar_engine -lxstar_emissivity
 endif
 
 # Historical caller compatibility: an explicitly supplied SO_LDFLAGS still
@@ -193,7 +203,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.3.1
+PACKAGE_VERSION ?= 0.6.88.3.2
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.1
@@ -277,8 +288,8 @@ $(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
 $(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ELEMENT_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
 
-$(LOCAL_ZONE_TARGET): local_zone_engine.cpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_local_zone_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ local_zone_engine.cpp -L. -lxstar_engine -lxstar_emissivity $(RPATH_ORIGIN)
+$(LOCAL_ZONE_TARGET): local_zone_engine.cpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_local_zone_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET) $(OPACITY_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ local_zone_engine.cpp -L. $(LOCAL_ZONE_LINK_LIBS) $(RPATH_ORIGIN)
 
 $(FINAL_RECOMPUTE_TARGET): final_recompute_bridge.cpp xstar_final_recompute_bridge.h xstar_atdb_runtime.cpp xstar_atdb_runtime.hpp xstar_local_zone_engine.h $(LOCAL_ZONE_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ final_recompute_bridge.cpp xstar_atdb_runtime.cpp -L. -lxstar_local_zone $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
