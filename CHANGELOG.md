@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.88.5.5 - WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE - 2026-09-01
+
+- Preserves 0.6.88.5.4 as a historical Windows-host rejection.
+- Fixes the deterministic MinGW compile failure in `xstar_xspec_parallel.cpp` exposed by the `.5.4` parallel and serial diagnostic builds.
+- Moves the already-required portable C++ standard headers `<fstream>`, `<iostream>`, `<map>`, `<sstream>`, `<stdexcept>`, `<string>`, and `<vector>` outside the `#if !defined(_WIN32)` guard.
+- Keeps only POSIX headers (`<fcntl.h>`, `<signal.h>`, `<sys/types.h>`, `<sys/wait.h>`, `<unistd.h>`) inside the non-Windows guard.
+- Makes no executable-statement, scheduler, process, scientific, ABI, path-adapter, local-zone, or Python-backend change.
+- Preserves the `.5.4` build-failure diagnostic replay so any later Windows compile/link failure is surfaced directly.
+- Windows MPI remains out of scope.
+
 ## 0.6.88.5.4 - WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE - 2026-09-01
 
 - Preserves 0.6.88.5.3 as a historical Windows-host rejection.

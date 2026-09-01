@@ -347,6 +347,10 @@ xout_etable.fits
 
 The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`. The MPI path writes `xstar2xspec-mpi.log`, `xstar2xspec-mpi-scheduler.log`, and per-rank logs.
 
+### Windows XSTAR2XSPEC standard-header closure (0.6.88.5.5)
+
+`0.6.88.5.5 — WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE` is the narrow follow-up to the real `.5.4` UCRT64 host rejection. The `.5.4` parallel and serial builds both failed in `xstar_xspec_parallel.cpp` because portable standard-library headers were inside `#if !defined(_WIN32)`. `.5.5` moves `<fstream>`, `<iostream>`, `<map>`, `<sstream>`, `<stdexcept>`, `<string>`, and `<vector>` outside that guard while leaving only POSIX headers guarded. No executable statements, scheduler/process behavior, science code, ABI values, path-adapter code, local-zone code, or Python-backend code change. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_xspec_standard_header_closure_host_0_6_88_5_5.py`.
+
 ### Windows build-failure diagnostic closure (0.6.88.5.4)
 
 `0.6.88.5.4 — WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE` is qualification-only. It preserves the `.5.3` Type-85, Type-77, Python path-adapter, and CreateProcessW production code and changes only package-version metadata. The Windows host runner now emits the native-build return code, compiler/linker failure contexts, and a substantial `make all` log tail, while classifying build-dependent downstream gates as `SKIP_BUILD_FAILED`. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_build_failure_diagnostic_closure_host_0_6_88_5_4.py`.
