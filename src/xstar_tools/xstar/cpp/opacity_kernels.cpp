@@ -8,6 +8,7 @@
 // Qualification: Type50 optimization 12.3.26-31; frozen production path 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_compiler_warnings.hpp"
 #include "xstar_backend_common.hpp"
 #include "xstar_spectral_engine.h"
 #include "xstar_constants.h"
@@ -209,7 +210,7 @@ static bool cpu_avx2_available() {
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
-static inline void voigte_small_a_farwing4(
+XSTAR_APPLE_MAYBE_UNUSED static inline void voigte_small_a_farwing4(
     const double* v, double aa, double* out) {
     const __m256d vv = _mm256_loadu_pd(v);
     const __m256d v2 = _mm256_mul_pd(vv, vv);
@@ -734,7 +735,7 @@ static inline void type50_apply_boundary(
 // Purpose: Implement type50 consume full as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static inline void type50_consume_full(
+XSTAR_APPLE_MAYBE_UNUSED static inline void type50_consume_full(
     double optpp, double current_energy, double profile,
     const double* epi, int n, double* opakc, long long* updated_bins,
     Type50ConsumeStateV064812328& state) {
@@ -782,7 +783,7 @@ static std::pair<int,int> small_a_core_bounds(
 // points are bit-for-bit the same integers as small_a_core_bounds(), while
 // normal production usually needs only the two seed calculations and zero or
 // a few local predicate corrections.
-static std::pair<int,int> small_a_core_bounds_localized_v0682382(
+XSTAR_APPLE_MAYBE_UNUSED static std::pair<int,int> small_a_core_bounds_localized_v0682382(
     int first_point, int last_point, double e00, double deleused,
     double line_energy_ev, double dele) {
     constexpr int ml2 = 10000;
@@ -1837,17 +1838,17 @@ static int apply_line_profile_optimized(
     static const bool force_scalar_v064812328 =
         env_truthy("XSTAR_V064812328_FORCE_SCALAR_TYPE50") ||
         env_truthy("XSTAR_V064812324_FORCE_SCALAR_TYPE50");
-    const bool production_inline_avx2_v064812328 = use_small_a_voigt &&
+    XSTAR_APPLE_MAYBE_UNUSED const bool production_inline_avx2_v064812328 = use_small_a_voigt &&
         cpu_avx2_available() && !force_scalar_v064812328;
-    static const bool decompose_v064812328 =
+    XSTAR_APPLE_MAYBE_UNUSED static const bool decompose_v064812328 =
         env_truthy("XSTAR_V064812328_TYPE50_DECOMPOSE");
-    static const bool force_12330_hint_consume_v064812331 =
+    XSTAR_APPLE_MAYBE_UNUSED static const bool force_12330_hint_consume_v064812331 =
         env_truthy("XSTAR_V064812331_FORCE_12330_HINT_CONSUME");
-    static const bool decompose_cursor_v064812331 =
+    XSTAR_APPLE_MAYBE_UNUSED static const bool decompose_cursor_v064812331 =
         env_truthy("XSTAR_V064812331_TYPE50_DECOMPOSE");
-    static const bool enable_tmpop_prep_v064812332 =
+    XSTAR_APPLE_MAYBE_UNUSED static const bool enable_tmpop_prep_v064812332 =
         env_truthy("XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP");
-    static const bool enable_tmpe_prep_v064812332 =
+    XSTAR_APPLE_MAYBE_UNUSED static const bool enable_tmpe_prep_v064812332 =
         env_truthy("XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP");
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))

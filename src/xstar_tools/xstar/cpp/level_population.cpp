@@ -7,6 +7,7 @@
 // Qualification: matrix/population qualification 12.3.25 and 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_compiler_warnings.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -39,7 +40,7 @@ inline double& M(std::vector<double>& a, int n, int i, int j) {
 // Purpose: Implement M as a local helper for the level population module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-inline const double& M(const std::vector<double>& a, int n, int i, int j) {
+XSTAR_APPLE_MAYBE_UNUSED inline const double& M(const std::vector<double>& a, int n, int i, int j) {
     return a[static_cast<size_t>(i) * static_cast<size_t>(n) + static_cast<size_t>(j)];
 }
 

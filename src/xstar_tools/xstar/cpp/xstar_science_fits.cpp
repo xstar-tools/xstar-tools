@@ -9,6 +9,7 @@
 // Qualification: all-62 FITS 12.3.43.3; C++ 12.3.44; Python science 45.3.3.8
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_compiler_warnings.hpp"
 #include "xstar_process.hpp"
 #include "xstar_science_fits.hpp"
 #include "xstar_constants.h"
@@ -184,8 +185,8 @@ void write_detal4_writer_projection(
 }
 
 
-constexpr double kErgPerEv = 1.602176634e-12;
-constexpr double kFourPi = 12.56637061435917295385;
+XSTAR_APPLE_MAYBE_UNUSED constexpr double kErgPerEv = 1.602176634e-12;
+XSTAR_APPLE_MAYBE_UNUSED constexpr double kFourPi = 12.56637061435917295385;
 
 const std::array<const char*,31> kSymbols = {
     "", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P",
@@ -1962,7 +1963,7 @@ const std::array<std::pair<long long,long long>,4> kOracleDetailRrcSegments = {
     std::pair<long long,long long>{1,133}, std::pair<long long,long long>{176,209}, std::pair<long long,long long>{7065,8712}, std::pair<long long,long long>{8761,8794}
 };
 
-const std::array<std::pair<long long,long long>,35> kOraclePublicRrcSegments = {
+XSTAR_APPLE_MAYBE_UNUSED const std::array<std::pair<long long,long long>,35> kOraclePublicRrcSegments = {
     std::pair<long long,long long>{1,133}, std::pair<long long,long long>{176,209}, std::pair<long long,long long>{7066,7069}, std::pair<long long,long long>{7102,7125},
     std::pair<long long,long long>{7281,7366}, std::pair<long long,long long>{7617,7625}, std::pair<long long,long long>{7627,7628}, std::pair<long long,long long>{7630,7631},
     std::pair<long long,long long>{7637,7655}, std::pair<long long,long long>{7657,7673}, std::pair<long long,long long>{7675,7675}, std::pair<long long,long long>{7677,7691},

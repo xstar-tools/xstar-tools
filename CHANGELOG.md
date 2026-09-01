@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.88.4.1 — MACOS_WARNING_CLEANUP (candidate) - 2026-09-01
+
+- Branches from Linux-qualified `0.6.88.4 — PORTABLE_PROCESS_LAYER`; process-layer behavior and frozen science remain unchanged.
+- Adds Apple-Clang-only `[[maybe_unused]]` annotations to the exact dormant helpers/constants reported by `macos-15` and `macos-15-intel`; declarations are retained rather than removed.
+- Keeps the non-Apple `std::shared_ptr::unique()` expression unchanged and suppresses libc++'s C++17 deprecation diagnostic only around that single Apple-Clang call.
+- Adds no global `-Wno-*` compiler flags and does not weaken `-Wall -Wextra -Wpedantic`.
+- Linux preservation requires dry-run equivalence, full build/regression, and predecessor/candidate fixed-state byte equivalence.
+- Formal macOS closure requires a warning-free native build plus the existing Mach-O/install-name/rpath/discovery/regression gates on both GitHub Actions macOS architectures.
+
 ## 0.6.88.4 — PORTABLE_PROCESS_LAYER (candidate) - 2026-09-01
 
 - Branches from formally accepted `0.6.88.3.2`; the macOS build/link closure and frozen science/ABI boundaries remain unchanged.

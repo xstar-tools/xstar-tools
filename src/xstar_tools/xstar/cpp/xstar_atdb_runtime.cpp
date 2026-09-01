@@ -8,6 +8,7 @@
 // Qualification: all-element pointer qualification; radius/default-REAL 12.3.36; C++ 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_compiler_warnings.hpp"
 #include "xstar_atdb_runtime.hpp"
 
 #include <fitsio.h>
@@ -31,11 +32,11 @@
 namespace xstar_atdb_runtime {
 namespace {
 
-constexpr int kProgramAbi = 60486;
+XSTAR_APPLE_MAYBE_UNUSED constexpr int kProgramAbi = 60486;
 constexpr int kType49PhextrapMaxPoints = 999;
-constexpr int kType53LayoutMagic = 221; // legacy Mg-only 12-stage payload
-constexpr int kType49LayoutMagic = 222; // legacy Mg-only 12-stage payload
-constexpr int kType99LayoutMagic = 223; // legacy 12-stage payload
+XSTAR_APPLE_MAYBE_UNUSED constexpr int kType53LayoutMagic = 221; // legacy Mg-only 12-stage payload
+XSTAR_APPLE_MAYBE_UNUSED constexpr int kType49LayoutMagic = 222; // legacy Mg-only 12-stage payload
+XSTAR_APPLE_MAYBE_UNUSED constexpr int kType99LayoutMagic = 223; // legacy 12-stage payload
 constexpr int kType99LayoutMagicZ1Z30V068213 = 226;
 constexpr int kType53LayoutMagicZ1Z30V06481231 = 224;
 constexpr int kType49LayoutMagicZ1Z30V06481231 = 225;

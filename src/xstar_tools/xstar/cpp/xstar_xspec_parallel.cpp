@@ -1,4 +1,4 @@
-// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.4.
+// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.4.1.
 //
 // This executable composes the already-qualified native components:
 //   xstar-xspec-initable -> bounded parallel xstar-cpp jobs -> xstar-xspec-table.
@@ -35,7 +35,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.88.4";
+constexpr const char *kPackageVersion = "0.6.88.4.1";
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"

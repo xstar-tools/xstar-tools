@@ -9,6 +9,7 @@
 // Qualification: all-62 STEP 12.3.42; FITS 12.3.43.3; three-mode 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_compiler_warnings.hpp"
 #include "xstar_process.hpp"
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
@@ -6957,7 +6958,7 @@ std::string canonical_public_spectrum_mode_v068228(std::string mode) {
 }
 
 constexpr double source_spectrum_ergsev_v068228 = static_cast<double>(static_cast<float>(1.602176634e-12));
-constexpr double source_brems_kev_per_t7_v068228 = static_cast<double>(static_cast<float>(0.861707));
+XSTAR_APPLE_MAYBE_UNUSED constexpr double source_brems_kev_per_t7_v068228 = static_cast<double>(static_cast<float>(0.861707));
 constexpr double source_brems_ev_per_t7_v068228 = static_cast<double>(
     static_cast<float>(static_cast<float>(1000.0) * static_cast<float>(0.861707)));
 constexpr double source_starf_xkt_v068228 = static_cast<double>(static_cast<float>(1.16e-3));
@@ -7972,7 +7973,7 @@ std::vector<std::string> build_true_native_xout_step_equivalent(const xstar_run_
 // v82: XSTAR public line products are a sparse 600-line inventory, not the
 // first 600 native line identities.  Native rcem/oplin/tau0/elum use the
 // source one-based line pointer directly; slot zero is unused.
-const std::array<long long,600> kV82PublicLineInventory = {
+XSTAR_APPLE_MAYBE_UNUSED const std::array<long long,600> kV82PublicLineInventory = {
     411, 410, 120, 119, 420, 16176, 419, 16184, 116, 445, 16312, 16016,
     115, 444, 106, 96, 95, 499, 418, 16056, 16325, 69, 105, 498,
     437, 439, 436, 438, 15205, 15329, 68, 16283, 23, 15328, 15659, 426,

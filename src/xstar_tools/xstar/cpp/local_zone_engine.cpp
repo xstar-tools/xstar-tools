@@ -10,6 +10,7 @@
 // Qualification: 12.3.25 science repair; Type50 12.3.31; all-62 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+#include "xstar_compiler_warnings.hpp"
 #include "xstar_process.hpp"
 #include "xstar_local_zone_engine.h"
 #include "xstar_local_zone_internal.hpp"
@@ -2360,10 +2361,23 @@ struct EvaluatedRecord {
     BoundFreeEvaluatedPayloadV06823087& bound_free_payload() {
         if (!bound_free_payload_v06823087) {
             bound_free_payload_v06823087 = std::make_shared<BoundFreeEvaluatedPayloadV06823087>();
+#if defined(__APPLE__) && defined(__clang__)
+        } else {
+            XSTAR_APPLE_CLANG_DIAGNOSTIC_PUSH
+            XSTAR_APPLE_CLANG_IGNORE_DEPRECATED_DECLARATIONS
+            const bool payload_unique_v068841 = bound_free_payload_v06823087.unique();
+            XSTAR_APPLE_CLANG_DIAGNOSTIC_POP
+            if (!payload_unique_v068841) {
+                bound_free_payload_v06823087 =
+                    std::make_shared<BoundFreeEvaluatedPayloadV06823087>(*bound_free_payload_v06823087);
+            }
+        }
+#else
         } else if (!bound_free_payload_v06823087.unique()) {
             bound_free_payload_v06823087 =
                 std::make_shared<BoundFreeEvaluatedPayloadV06823087>(*bound_free_payload_v06823087);
         }
+#endif
         return *bound_free_payload_v06823087;
     }
 

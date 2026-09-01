@@ -1216,3 +1216,14 @@ include tools/qualification/run_portable_process_layer_host_0_6_88_4.py
 include qualification/portable_process_layer_0_6_88_4.json
 include xstar_tools-0.6.88.4_local_validation.md
 include xstar_tools-0.6.88.4_release_closure.md
+
+# 0.6.88.4.1 macOS warning cleanup.
+include src/xstar_tools/xstar/cpp/xstar_compiler_warnings.hpp
+include tools/qualification/check_macos_warning_cleanup_0_6_88_4_1.py
+include tools/qualification/run_macos_warning_cleanup_host_0_6_88_4_1.py
+include tests/test_macos_warning_cleanup_0_6_88_4_1.py
+include macos_warning_cleanup_0_6_88_4_1.md
+include docs/developer/macos_warning_cleanup_0_6_88_4_1.md
+include qualification/macos_warning_cleanup_0_6_88_4_1.json
+include xstar_tools-0.6.88.4.1_local_validation.md
+include xstar_tools-0.6.88.4.1_release_closure.md
