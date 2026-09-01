@@ -13,7 +13,7 @@
 #include <stdint.h>
 
 #ifdef _WIN32
-#  define XSTAR_ELEMENT_EXPORT __declspec(dllexport)
+#  define XSTAR_ELEMENT_EXPORT
 #else
 #  define XSTAR_ELEMENT_EXPORT __attribute__((visibility("default")))
 #endif

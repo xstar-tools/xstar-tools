@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.88.5 — WINDOWS_MINGW_NATIVE_BUILD (candidate) - 2026-09-01
+
+- Branches from formally accepted `0.6.88.4.2`; Linux/macOS science/runtime contracts and the warning-free Apple-Clang closure remain frozen.
+- Implements the native MinGW/UCRT64 process backend with `CreateProcessW`, Win32 wait/termination, redirected inheritable handles, `_getpid`, `_putenv_s`, and explicit Windows argument quoting; Windows does not emulate `fork()`.
+- Adds `.exe` sibling discovery and PE DLL/import-library production (`libxstar_*.dll` + `libxstar_*.dll.a`) with no Windows rpath flags.
+- Corrects Windows backend/Python-bridge export ownership and avoids declaring split element/fixed-state DLL symbols as `dllexport` in consumers; MinGW exports definitions at the DLL link boundary.
+- Keeps `xstar-xspec --processes N` as N independent OS processes on Windows and preserves Windows MPI as explicitly unsupported.
+- Adds `windows-build.yml` for GitHub Actions `windows-latest` using MSYS2 UCRT64, MinGW-w64 GCC, CFITSIO, pkg-config, Python, and pytest.
+- Adds Windows host qualification for PE targets/import libraries/exports, sibling/plugin loading, version/ABI identity, native process/environment behavior, synthetic two-process XSTAR2XSPEC scheduling, and the existing fixed-state regression suite.
+- Linux is the preservation oracle: scientific `.cpp` files remain byte-identical and Linux `make -Bn all` must remain command-equivalent to `.88.4.2` after version normalization; full Linux build/regression is required before Windows host promotion.
+- Local Linux closure is ACCEPT: focused/source qualification 8/8, real `make all` + `make test`, package/science/ABI identity, and fixed-state products are exact against the frozen `.88.4.2` hashes; native Windows host qualification remains pending GitHub Actions UCRT64.
+
 ## 0.6.88.4.2 — MACOS_WARNING_CLEANUP_SYNTAX_CLOSURE (candidate) - 2026-09-01
 
 - Branches from the `0.6.88.4.1` macOS host result: `macos-15` arm64 fully ACCEPTED, while `macos-15-intel` rejected at compile time because Apple Clang/x86_64 rejected the pre-declaration placement of standard `[[maybe_unused]]` before `static inline` in `opacity_kernels.cpp`.

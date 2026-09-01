@@ -19,7 +19,7 @@ The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestratio
 
 ## Portable process layer (`0.6.88.4`)
 
-Process/environment operations now pass through `xstar_process.hpp`. The POSIX implementation intentionally delegates to the historical `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv` calls without changing arguments or status semantics. This isolates the later Windows/MinGW backend from XSTAR science and orchestration sources. Linux behavior is the qualification baseline for this release; Windows process creation is not yet claimed as accepted.
+Process/environment operations pass through `xstar_process.hpp`. Linux/macOS intentionally delegate to the historical `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv` calls without changing arguments or status semantics. On native MinGW/UCRT64, orchestration uses `CreateProcessW`, Win32 wait/termination APIs, `_getpid`, and `_putenv_s`; `xstar-xspec --processes N` therefore remains N independent OS processes rather than threads. Windows MPI remains intentionally unsupported.
 
 ## macOS native build (`0.6.88.3.2`)
 

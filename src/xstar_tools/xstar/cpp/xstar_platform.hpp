@@ -17,18 +17,25 @@ namespace xstar_platform {
 inline constexpr const char* kSharedLibraryPrefix = "lib";
 inline constexpr const char* kSharedLibraryExtension = ".dll";
 inline constexpr char kPathListSeparator = ';';
+inline constexpr const char* kExecutableExtension = ".exe";
 #elif defined(__APPLE__)
 inline constexpr const char* kSharedLibraryPrefix = "lib";
 inline constexpr const char* kSharedLibraryExtension = ".dylib";
 inline constexpr char kPathListSeparator = ':';
+inline constexpr const char* kExecutableExtension = "";
 #else
 inline constexpr const char* kSharedLibraryPrefix = "lib";
 inline constexpr const char* kSharedLibraryExtension = ".so";
 inline constexpr char kPathListSeparator = ':';
+inline constexpr const char* kExecutableExtension = "";
 #endif
 
 inline std::string shared_library_filename(const std::string& stem) {
     return std::string(kSharedLibraryPrefix) + stem + kSharedLibraryExtension;
+}
+
+inline std::string executable_filename(const std::string& stem) {
+    return stem + kExecutableExtension;
 }
 
 inline constexpr char path_list_separator() noexcept {

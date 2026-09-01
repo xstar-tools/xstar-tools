@@ -316,3 +316,8 @@ Start with:
 - `docs/developer/process_count_cli_0_6_87.md`
 
 The project deliberately separates scientific acceptance, publication correctness, performance qualification, and orchestration/interface changes. Historical formal ACCEPT/REJECT records are never rewritten when a later release changes a different contract.
+
+
+## Windows / MinGW UCRT64 native build
+
+`0.6.88.5 — WINDOWS_MINGW_NATIVE_BUILD` adds the native Windows build/runtime path using MSYS2 UCRT64 + MinGW-w64 GCC. The default build creates PE DLLs and import libraries, `xstar_cpp.exe`, `xstar-cpp.exe`, and `xstar-xspec.exe`. Local `--processes N` concurrency remains process-based through Win32 `CreateProcessW`; Windows MPI is deliberately not part of the supported contract. See `windows_mingw_native_build_0_6_88_5.md` and `.github/workflows/windows-build.yml`.

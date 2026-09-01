@@ -1,4 +1,4 @@
-// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.4.2.
+// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.5.
 //
 // This executable composes the already-qualified native components:
 //   xstar-xspec-initable -> bounded parallel xstar-cpp jobs -> xstar-xspec-table.
@@ -12,30 +12,34 @@
 // of MPI_XSTAR while keeping deployment identical to the serial native path.
 
 #include "xstar_process.hpp"
+#include "xstar_platform.hpp"
 
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fcntl.h>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <vector>
-#include <signal.h>
+#endif
 
 namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.88.4.2";
+constexpr const char *kPackageVersion = "0.6.88.5";
+// Historical qualification compatibility marker: kPackageVersion = "0.6.88.4.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"
@@ -95,7 +99,7 @@ fs::path sibling(const char *argv0, const char *name) {
     std::error_code ec;
     fs::path self = fs::absolute(fs::path(argv0), ec);
     if (ec) self = fs::path(argv0);
-    return self.parent_path() / name;
+    return self.parent_path() / xstar_platform::executable_filename(name);
 }
 
 std::vector<std::string> shell_split(const std::string &line) {
@@ -132,6 +136,41 @@ std::vector<std::string> shell_split(const std::string &line) {
 int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
                 std::ofstream &log, bool verbose) {
     if (args.empty()) return 127;
+#if defined(_WIN32)
+    static unsigned long long capture_sequence = 0;
+    std::error_code ec;
+    fs::path capture_root = fs::temp_directory_path(ec);
+    if (ec) capture_root = cwd.empty() ? fs::current_path() : cwd;
+    const fs::path capture = capture_root /
+        ("xstar-process-capture-" + std::to_string(xstar_process::current_process_id()) +
+         "-" + std::to_string(++capture_sequence) + ".log");
+    std::vector<std::string> storage = args;
+    std::vector<char*> av;
+    av.reserve(storage.size() + 1);
+    for (auto& item : storage) av.push_back(item.data());
+    av.push_back(nullptr);
+    const std::string cwd_text = cwd.empty() ? std::string{} : cwd.string();
+    const std::string capture_text = capture.string();
+    const bool search_path = storage[0].find('/') == std::string::npos && storage[0].find('\\') == std::string::npos;
+    const xstar_process::process_id pid = xstar_process::spawn_program(
+        storage[0].c_str(), av.data(), search_path,
+        cwd_text.empty() ? nullptr : cwd_text.c_str(), capture_text.c_str());
+    if (pid < 0) throw std::runtime_error("CreateProcessW failed: " + std::string(std::strerror(errno)));
+    int status = 0;
+    while (xstar_process::wait_process(pid, &status, 0) < 0) if (errno != EINTR) return 127;
+    std::ifstream in(capture, std::ios::binary);
+    char buffer[8192];
+    while (in) {
+        in.read(buffer, sizeof(buffer));
+        const std::streamsize n = in.gcount();
+        if (n > 0) {
+            log.write(buffer, n); log.flush();
+            if (verbose) { std::cout.write(buffer, n); std::cout.flush(); }
+        }
+    }
+    fs::remove(capture, ec);
+    return xstar_process::decode_wait_status(status);
+#else
     int pipefd[2];
     if (::pipe(pipefd) != 0) throw std::runtime_error("pipe failed: " + std::string(std::strerror(errno)));
     const xstar_process::process_id pid = xstar_process::fork_process();
@@ -167,6 +206,7 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
     int status = 0;
     while (xstar_process::wait_process(pid, &status, 0) < 0) if (errno != EINTR) return 127;
     return xstar_process::decode_wait_status(status);
+#endif
 }
 
 std::vector<std::string> load_lines(const fs::path &path) {
@@ -249,6 +289,21 @@ void require_regular(const fs::path &path, const std::string &what) {
 
 xstar_process::process_id spawn_job(const std::vector<std::string> &args, const fs::path &cwd, const fs::path &stdout_log) {
     if (args.empty()) throw std::runtime_error("cannot spawn empty job command");
+#if defined(_WIN32)
+    std::vector<std::string> storage = args;
+    std::vector<char*> av;
+    av.reserve(storage.size() + 1);
+    for (auto& item : storage) av.push_back(item.data());
+    av.push_back(nullptr);
+    const std::string cwd_text = cwd.empty() ? std::string{} : cwd.string();
+    const std::string log_text = stdout_log.string();
+    const bool search_path = storage[0].find('/') == std::string::npos && storage[0].find('\\') == std::string::npos;
+    const xstar_process::process_id pid = xstar_process::spawn_program(
+        storage[0].c_str(), av.data(), search_path,
+        cwd_text.empty() ? nullptr : cwd_text.c_str(), log_text.c_str());
+    if (pid < 0) throw std::runtime_error("CreateProcessW failed: " + std::string(std::strerror(errno)));
+    return pid;
+#else
     const xstar_process::process_id pid = xstar_process::fork_process();
     if (pid < 0) throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
     if (pid == 0) {
@@ -267,6 +322,7 @@ xstar_process::process_id spawn_job(const std::vector<std::string> &args, const 
         xstar_process::exit_child(127);
     }
     return pid;
+#endif
 }
 
 int decode_wait_status(int status) {

@@ -1236,3 +1236,18 @@ include tools/qualification/check_macos_warning_cleanup_syntax_closure_0_6_88_4_
 include tools/qualification/run_macos_warning_cleanup_syntax_closure_host_0_6_88_4_2.py
 include xstar_tools-0.6.88.4.2_local_validation.md
 include xstar_tools-0.6.88.4.2_release_closure.md
+
+# 0.6.88.5 Windows MinGW/UCRT64 native build.
+include windows_mingw_native_build_0_6_88_5.md
+include docs/developer/windows_mingw_native_build_0_6_88_5.md
+include tests/test_windows_mingw_native_build_0_6_88_5.py
+include tests/windows_process_smoke_0_6_88_5.cpp
+include tests/windows_xspec_fake_tool_0_6_88_5.cpp
+include tools/qualification/check_windows_mingw_native_build_0_6_88_5.py
+include tools/qualification/run_windows_mingw_native_build_host_0_6_88_5.py
+include qualification/windows_mingw_native_build_0_6_88_5.json
+include .github/workflows/windows-build.yml
+include xstar_tools-0.6.88.4.2_formal_host_acceptance.md
+include xstar_tools-0.6.88.5_local_validation.md
+include xstar_tools-0.6.88.5_release_closure.md
+include xstar_tools_conversation_summary_through_0.6.88.5_candidate.md

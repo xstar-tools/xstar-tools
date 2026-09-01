@@ -11,6 +11,16 @@
 
 #include "xstar_api.h"
 
+#ifdef _WIN32
+#  ifdef XSTAR_BACKEND_BUILD
+#    define XSTAR_BACKEND_EXPORT __declspec(dllexport)
+#  else
+#    define XSTAR_BACKEND_EXPORT
+#  endif
+#else
+#  define XSTAR_BACKEND_EXPORT __attribute__((visibility("default")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,7 +44,7 @@ typedef struct xstar_backend_descriptor_v1 {
 
 typedef const xstar_backend_descriptor_v1* (*xstar_backend_get_descriptor_v1_fn)(void);
 
-XSTAR_API_EXPORT const xstar_backend_descriptor_v1* xstar_backend_get_descriptor_v1(void);
+XSTAR_BACKEND_EXPORT const xstar_backend_descriptor_v1* xstar_backend_get_descriptor_v1(void);
 
 #ifdef __cplusplus
 }

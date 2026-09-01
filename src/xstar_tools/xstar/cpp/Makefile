@@ -6,11 +6,9 @@ PYTHON_CONFIG ?= python3-config
 PKG_CONFIG ?= pkg-config
 BREW ?= brew
 
-# v0.6.88.3.2 macOS native-build link closure. The 0.6.88.3.1 Apple-only
-# Type-77 exact-value compile closure is carried forward unchanged. Darwin
-# additionally links libxstar_local_zone directly to libxstar_opacity because
-# local_zone_engine.cpp calls its public ABI. Linux keeps its accepted link
-# command unchanged.
+# v0.6.88.5 Windows/MinGW native-build closure. Linux/macOS commands remain
+# qualified baselines. Windows uses native PE DLLs/import libraries and the
+# Win32 process layer; Windows MPI remains out of scope.
 HOST_UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ifeq ($(origin PLATFORM),command line)
   XSTAR_DETECTED_PLATFORM := $(PLATFORM)
@@ -68,10 +66,14 @@ endif
 
 # Shared-library target flags. Mach-O dylibs need an @rpath install name so
 # the accepted @loader_path runtime rpath resolves sibling XSTAR libraries.
-# Linux and Windows expand this to the historical SHLIB_LDFLAGS byte-for-byte.
+# Linux expands this to the historical SHLIB_LDFLAGS byte-for-byte; Windows
+# adds PE export/import-library flags without changing the Linux/macOS commands.
 ifeq ($(PLATFORM),macos)
   SHLIB_TARGET_LDFLAGS = $(SHLIB_LDFLAGS) -Wl,-install_name,@rpath/$@
   SHLIB_INSTALL_NAME_MODE ?= @rpath
+else ifeq ($(PLATFORM),windows)
+  SHLIB_TARGET_LDFLAGS = $(SHLIB_LDFLAGS) -Wl,--export-all-symbols -Wl,--enable-auto-import -Wl,--out-implib,$@.a
+  SHLIB_INSTALL_NAME_MODE ?= pe-import-library
 else
   SHLIB_TARGET_LDFLAGS = $(SHLIB_LDFLAGS)
   SHLIB_INSTALL_NAME_MODE ?= none
@@ -79,8 +81,9 @@ endif
 
 # Darwin's linker requires libxstar_local_zone to name the dylib that directly
 # defines xstar_opacity_apply_line_profile_v1. Linux preserves its accepted
-# historical command stream; Windows linkage remains a later portability gate.
-ifeq ($(PLATFORM),macos)
+# historical command stream; Windows, like Darwin, names the direct opacity
+# dependency required by the native DLL linker.
+ifneq ($(filter $(PLATFORM),macos windows),)
   LOCAL_ZONE_LINK_LIBS ?= -lxstar_engine -lxstar_emissivity -lxstar_opacity
 else
   LOCAL_ZONE_LINK_LIBS ?= -lxstar_engine -lxstar_emissivity
@@ -120,6 +123,8 @@ V068240_PROFILE_DIR ?= $(if $(filter-out $(CURDIR)/.v064897_pgo,$(V064897_PROFIL
 V068240_NATIVE ?= 0
 ifeq ($(PLATFORM),macos)
   V0682401_PRODUCTION_COMPILER ?= APPLECLANG
+else ifeq ($(PLATFORM),windows)
+  V0682401_PRODUCTION_COMPILER ?= MINGW64
 else
   V0682401_PRODUCTION_COMPILER ?= GCC
 endif
@@ -186,14 +191,20 @@ ifeq ($(strip $(CFITSIO_LIBS)),)
   endif
 endif
 CFITSIO_RPATH :=
-ifneq ($(strip $(CFITSIO_LIBDIR)),)
-CFITSIO_RPATH := -Wl,-rpath,$(CFITSIO_LIBDIR)
+ifneq ($(PLATFORM),windows)
+  ifneq ($(strip $(CFITSIO_LIBDIR)),)
+    CFITSIO_RPATH := -Wl,-rpath,$(CFITSIO_LIBDIR)
+  endif
 endif
 override CPPFLAGS += $(CFITSIO_CFLAGS)
 PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
 PYTHON_LIBDIRS := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LIBS)))
+ifeq ($(PLATFORM),windows)
+PYTHON_RPATHS :=
+else
 PYTHON_RPATHS := $(foreach d,$(PYTHON_LIBDIRS),-Wl,-rpath,$(d))
+endif
 # C++17 filesystem compatibility.  Linux preserves the accepted GCC 8
 # compatibility link to libstdc++fs.  The platform block above leaves this
 # empty for libc++/macOS and MinGW/Windows.  Callers may still override it.
@@ -203,7 +214,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.4.2
+PACKAGE_VERSION ?= 0.6.88.5
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.4.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3
@@ -324,12 +336,22 @@ $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.
 		-o $@ xstar_api.cpp compiled_case.cpp xstar_dynamic_library.o $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(CPP_BACKEND_TARGET): xstar_backend_cpp.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(PHYSICS_TARGETS) $(API_TARGET)
+ifeq ($(PLATFORM),windows)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_BACKEND_BUILD $(SHLIB_TARGET_LDFLAGS) \
+		-o $@ xstar_backend_cpp.cpp xstar_dynamic_library.o -L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+else
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_backend_cpp.cpp xstar_dynamic_library.o -L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+endif
 
 $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_standalone_internal.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(API_TARGET)
+ifeq ($(PLATFORM),windows)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) -DXSTAR_BACKEND_BUILD -DXSTAR_PYTHON_BACKEND_BUILD $(SHLIB_TARGET_LDFLAGS) \
+		-o $@ xstar_backend_python.cpp xstar_dynamic_library.o -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
+else
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp xstar_dynamic_library.o -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
+endif
 
 xstar_standalone.o: xstar_standalone.cpp xstar_process.hpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp xstar_science_fits.hpp xstar_run_state.hpp xstar_step_log.hpp xstar_atdb_runtime.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_spectral_engine.h xstar_platform.hpp xstar_dynamic_library.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
@@ -431,4 +453,4 @@ install: all
 	@pwd
 
 clean:
-	rm -f $(TARGETS) $(MPI_TARGETS) *.o
+	rm -f $(TARGETS) $(MPI_TARGETS) *.o *.dll.a

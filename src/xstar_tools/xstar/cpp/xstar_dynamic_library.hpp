@@ -14,7 +14,7 @@
 
 namespace xstar_platform {
 
-#if defined(__GNUC__) || defined(__clang__)
+#if !defined(_WIN32) && (defined(__GNUC__) || defined(__clang__))
 #define XSTAR_PLATFORM_INTERNAL __attribute__((visibility("hidden")))
 #else
 #define XSTAR_PLATFORM_INTERNAL

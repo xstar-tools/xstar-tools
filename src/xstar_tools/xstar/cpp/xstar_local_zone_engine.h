@@ -17,7 +17,7 @@
 #include <stdint.h>
 
 #ifdef _WIN32
-#  define XSTAR_FIXED_STATE_EXPORT __declspec(dllexport)
+#  define XSTAR_FIXED_STATE_EXPORT
 #else
 #  define XSTAR_FIXED_STATE_EXPORT __attribute__((visibility("default")))
 #endif
