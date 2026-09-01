@@ -1251,3 +1251,16 @@ include xstar_tools-0.6.88.5_host_rejection.md
 include xstar_tools-0.6.88.5.1_local_validation.md
 include xstar_tools-0.6.88.5.1_release_closure.md
 include .github/workflows/windows-build.yml
+
+# 0.6.88.5.2 Windows path-boundary completion.
+include windows_path_boundary_completion_0_6_88_5_2.md
+include docs/developer/windows_path_boundary_completion_0_6_88_5_2.md
+include qualification/windows_path_boundary_completion_0_6_88_5_2.json
+include tests/test_windows_path_boundary_completion_0_6_88_5_2.py
+include tests/windows_process_smoke_0_6_88_5_2.cpp
+include tests/windows_xspec_fake_tool_0_6_88_5_2.cpp
+include tools/qualification/check_windows_path_boundary_completion_0_6_88_5_2.py
+include tools/qualification/run_windows_path_boundary_completion_host_0_6_88_5_2.py
+include xstar_tools-0.6.88.5.1_host_rejection.md
+include xstar_tools-0.6.88.5.2_local_validation.md
+include xstar_tools-0.6.88.5.2_release_closure.md

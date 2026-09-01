@@ -1949,7 +1949,7 @@ int command_production_self_test(const Options& options) {
     xstar_compiled_case_stats_init_v1(&stats);
     std::array<char, XSTAR_MESSAGE_SIZE> message{};
     const int status = xstar_compiled_case_run_files_v1(
-        context, output.c_str(), &stats, message.data(), message.size());
+        context, XSTAR_C_PATH(output), &stats, message.data(), message.size());
     const bool step_log_written = std::filesystem::is_regular_file(output / "xout_step.log");
     const bool accepted = status == XSTAR_STATUS_OK && stats.evaluations_native == 61 &&
         stats.python_callbacks == 0 && stats.science_files_written == 9 &&
@@ -2244,7 +2244,7 @@ int command_run_fixed_state(const Options& options) {
             for (std::size_t k = 0; k < output.populations_count; ++k) step << "population[" << k << "]=" << populations[k] << "\n";
         }
         rc = xstar_fixed_state_write_visited_report_v1(
-            context, (outdir / "visited_records.csv").c_str(), message.data(), message.size());
+            context, XSTAR_C_PATH(outdir / "visited_records.csv"), message.data(), message.size());
         if (rc != 0) throw std::runtime_error(std::string("visited report failed: ") + message.data());
         {
             std::ofstream csv(outdir / "xstar_native_spectrum.csv");

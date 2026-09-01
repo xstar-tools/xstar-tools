@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.88.5.2 - WINDOWS_PATH_BOUNDARY_COMPLETION - 2026-09-01
+
+- Preserves 0.6.88.5.1 as a historical Windows-host rejection.
+- Closes the two remaining MinGW filesystem-path to narrow C-API call sites found by the real 0.6.88.5.1 host run.
+- Removes two Win32-only `-Wmisleading-indentation` warnings without changing process semantics.
+- Corrects the synthetic XSTAR2XSPEC qualification runner to read the actual root-level `xstar2xspec_scheduler.log`; the prior `xstar2xspec-work/scheduler.log` lookup could only reject.
+- Strengthens source qualification with a declared-filesystem-path direct-`c_str()` audit.
+- Keeps the 0.6.88.5 CreateProcessW backend, Windows DLL/import-library contract, science revision, and public ABIs unchanged.
+- Windows MPI remains out of scope.
+
 ## 0.6.88.5.1 - WINDOWS_PATH_ENCODING_CLOSURE - 2026-09-01
 
 - Preserves 0.6.88.5 as a historical Windows-host rejection.

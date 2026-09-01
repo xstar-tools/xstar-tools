@@ -118,7 +118,8 @@ inline process_id wait_process(process_id pid,int* status,int options) noexcept 
         if (pid>=0) {
             auto it=procs.find(pid); if (it==procs.end()) { errno=ECHILD; return -1; }
             const DWORD wr=WaitForSingleObject(it->second,nohang?0:INFINITE);
-            if (wr==WAIT_TIMEOUT) return 0; if (wr!=WAIT_OBJECT_0) { errno=ECHILD; return -1; }
+            if (wr == WAIT_TIMEOUT) return 0;
+            if (wr != WAIT_OBJECT_0) { errno=ECHILD; return -1; }
             DWORD code=127; GetExitCodeProcess(it->second,&code); if(status) *status=static_cast<int>(code);
             CloseHandle(it->second); procs.erase(it); return pid;
         }
@@ -146,7 +147,8 @@ inline int decode_wait_status(int status) noexcept { return status; }
 inline void exit_child(int code) noexcept { std::_Exit(code); }
 inline long long current_process_id() noexcept { return static_cast<long long>(::_getpid()); }
 inline int set_environment(const char* name,const char* value,int overwrite) noexcept {
-    if(!overwrite && std::getenv(name)!=nullptr) return 0; return ::_putenv_s(name,value);
+    if (!overwrite && std::getenv(name) != nullptr) return 0;
+    return ::_putenv_s(name,value);
 }
 inline int unset_environment(const char* name) noexcept { return ::_putenv_s(name,""); }
 

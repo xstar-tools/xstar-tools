@@ -347,6 +347,10 @@ xout_etable.fits
 
 The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`. The MPI path writes `xstar2xspec-mpi.log`, `xstar2xspec-mpi-scheduler.log`, and per-rank logs.
 
+### Windows path-boundary completion (0.6.88.5.2)
+
+`0.6.88.5.2 — WINDOWS_PATH_BOUNDARY_COMPLETION` closes two remaining `std::filesystem::path` to narrow `const char*` C-API call sites reported by the real UCRT64 host run of 0.6.88.5.1. It also removes two Win32-only misleading-indentation warnings and corrects the synthetic XSTAR2XSPEC host qualification to read the actual root-level `xstar2xspec_scheduler.log`. The CreateProcessW backend and scientific code paths are unchanged. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_path_boundary_completion_host_0_6_88_5_2.py`.
+
 ### Windows / MinGW native build (0.6.88.5.1)
 
 `0.6.88.5` established the native UCRT64/MinGW build and Win32 `CreateProcessW` process backend, but its first Windows host run stopped at `std::filesystem::path` to narrow C-API boundaries because MinGW uses `wchar_t` as the native path value type. `0.6.88.5.1 — WINDOWS_PATH_ENCODING_CLOSURE` keeps the process backend unchanged and adapts only filesystem paths passed to existing narrow `const char*` CFITSIO/XSTAR interfaces. Windows builds produce `.dll` libraries, `.dll.a` import libraries, and `.exe` programs; Windows MPI remains out of scope. Use `.github/workflows/windows-build.yml` or the `run_windows_path_encoding_closure_host_0_6_88_5_1.py` host runner for UCRT64 qualification.
