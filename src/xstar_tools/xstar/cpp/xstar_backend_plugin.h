@@ -12,13 +12,13 @@
 #include "xstar_api.h"
 
 #ifdef _WIN32
-#  ifdef XSTAR_BACKEND_BUILD
-#    define XSTAR_BACKEND_EXPORT __declspec(dllexport)
-#  else
-#    define XSTAR_BACKEND_EXPORT
-#  endif
+# ifdef XSTAR_BACKEND_BUILD
+#  define XSTAR_BACKEND_EXPORT __declspec(dllexport)
+# else
+#  define XSTAR_BACKEND_EXPORT
+# endif
 #else
-#  define XSTAR_BACKEND_EXPORT __attribute__((visibility("default")))
+# define XSTAR_BACKEND_EXPORT __attribute__((visibility("default")))
 #endif
 
 #ifdef __cplusplus

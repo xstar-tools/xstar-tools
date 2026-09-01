@@ -11,6 +11,7 @@
 
 #include "xstar_compiler_warnings.hpp"
 #include "xstar_process.hpp"
+#include "xstar_path_compat.hpp"
 #include "xstar_science_fits.hpp"
 #include "xstar_constants.h"
 
@@ -1131,7 +1132,7 @@ void check_fits(int status, const std::string& where) {
 std::string read_atdata(const std::filesystem::path& atdb) {
     fitsfile* fptr = nullptr;
     int status = 0;
-    fits_open_file(&fptr, atdb.c_str(), READONLY, &status);
+    fits_open_file(&fptr, XSTAR_C_PATH(atdb), READONLY, &status);
     if (status != 0) return "unknown";
     char value[FLEN_VALUE]{};
     int read_status = 0;

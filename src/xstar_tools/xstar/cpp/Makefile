@@ -6,9 +6,11 @@ PYTHON_CONFIG ?= python3-config
 PKG_CONFIG ?= pkg-config
 BREW ?= brew
 
-# v0.6.88.5 Windows/MinGW native-build closure. Linux/macOS commands remain
-# qualified baselines. Windows uses native PE DLLs/import libraries and the
-# Win32 process layer; Windows MPI remains out of scope.
+# v0.6.88.3.2 macOS native-build link closure. The 0.6.88.3.1 Apple-only
+# Type-77 exact-value compile closure is carried forward unchanged. Darwin
+# additionally links libxstar_local_zone directly to libxstar_opacity because
+# local_zone_engine.cpp calls its public ABI. Linux keeps its accepted link
+# command unchanged.
 HOST_UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
 ifeq ($(origin PLATFORM),command line)
   XSTAR_DETECTED_PLATFORM := $(PLATFORM)
@@ -66,8 +68,7 @@ endif
 
 # Shared-library target flags. Mach-O dylibs need an @rpath install name so
 # the accepted @loader_path runtime rpath resolves sibling XSTAR libraries.
-# Linux expands this to the historical SHLIB_LDFLAGS byte-for-byte; Windows
-# adds PE export/import-library flags without changing the Linux/macOS commands.
+# Linux and Windows expand this to the historical SHLIB_LDFLAGS byte-for-byte.
 ifeq ($(PLATFORM),macos)
   SHLIB_TARGET_LDFLAGS = $(SHLIB_LDFLAGS) -Wl,-install_name,@rpath/$@
   SHLIB_INSTALL_NAME_MODE ?= @rpath
@@ -81,8 +82,7 @@ endif
 
 # Darwin's linker requires libxstar_local_zone to name the dylib that directly
 # defines xstar_opacity_apply_line_profile_v1. Linux preserves its accepted
-# historical command stream; Windows, like Darwin, names the direct opacity
-# dependency required by the native DLL linker.
+# historical command stream; Windows linkage remains a later portability gate.
 ifneq ($(filter $(PLATFORM),macos windows),)
   LOCAL_ZONE_LINK_LIBS ?= -lxstar_engine -lxstar_emissivity -lxstar_opacity
 else
@@ -166,6 +166,15 @@ endif
 
 COMMON_LIBS ?= $(DL_LIBS) $(THREAD_LIBS)
 
+WINDOWS_PRODUCTION_ZONE_DEFINE :=
+WINDOWS_BACKEND_DEFINE :=
+WINDOWS_PYTHON_BACKEND_DEFINE :=
+ifeq ($(PLATFORM),windows)
+  WINDOWS_PRODUCTION_ZONE_DEFINE := -DXSTAR_PRODUCTION_ZONE_BUILD
+  WINDOWS_BACKEND_DEFINE := -DXSTAR_BACKEND_BUILD
+  WINDOWS_PYTHON_BACKEND_DEFINE := -DXSTAR_PYTHON_BACKEND_BUILD
+endif
+
 # CFITSIO discovery order:
 #   1. caller-provided CFITSIO_* values;
 #   2. pkg-config (all platforms);
@@ -192,18 +201,17 @@ ifeq ($(strip $(CFITSIO_LIBS)),)
 endif
 CFITSIO_RPATH :=
 ifneq ($(PLATFORM),windows)
-  ifneq ($(strip $(CFITSIO_LIBDIR)),)
-    CFITSIO_RPATH := -Wl,-rpath,$(CFITSIO_LIBDIR)
-  endif
+ifneq ($(strip $(CFITSIO_LIBDIR)),)
+CFITSIO_RPATH := -Wl,-rpath,$(CFITSIO_LIBDIR)
+endif
 endif
 override CPPFLAGS += $(CFITSIO_CFLAGS)
 PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
 PYTHON_LIBDIRS := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LIBS)))
-ifeq ($(PLATFORM),windows)
-PYTHON_RPATHS :=
-else
 PYTHON_RPATHS := $(foreach d,$(PYTHON_LIBDIRS),-Wl,-rpath,$(d))
+ifeq ($(PLATFORM),windows)
+  PYTHON_RPATHS :=
 endif
 # C++17 filesystem compatibility.  Linux preserves the accepted GCC 8
 # compatibility link to libstdc++fs.  The platform block above leaves this
@@ -214,8 +222,7 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.88.5
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.4.2
+PACKAGE_VERSION ?= 0.6.88.5.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3
@@ -261,7 +268,7 @@ TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 MPI_TARGETS := $(XSPEC_MPI_EXECUTABLE)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
-INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_process.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
+INTERNAL_HEADERS := xstar_path_compat.hpp xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_process.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
 
 .PHONY: all physics standalone mpi test clean install print-config
 
@@ -308,7 +315,7 @@ $(FINAL_RECOMPUTE_TARGET): final_recompute_bridge.cpp xstar_process.hpp xstar_fi
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ final_recompute_bridge.cpp xstar_atdb_runtime.cpp -L. -lxstar_local_zone $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(PRODUCTION_ZONE_TARGET): xstar_standalone.cpp xstar_process.hpp xstar_local_zone_internal.hpp xstar_production_zone_bridge.h xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_api.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(API_TARGET) $(LOCAL_ZONE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_dynamic_library.o -L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(WINDOWS_PRODUCTION_ZONE_DEFINE) $(THERMAL_STRICT_FP_FLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp xstar_atdb_runtime.cpp xstar_dynamic_library.o -L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(XSPEC_TABLE_TARGET): xstar_xspec_table.cpp xstar_xspec_table.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) -o $@ xstar_xspec_table.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH)
@@ -319,7 +326,7 @@ $(XSPEC_TABLE_EXECUTABLE): xstar_xspec_table_cli.cpp xstar_xspec_table_writer.cp
 $(XSPEC_INITABLE_EXECUTABLE): xstar_xspec_initable_cli.cpp xstar_xspec_initable.cpp xstar_xspec_initable_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_initable_cli.cpp xstar_xspec_initable.cpp $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS)
 
-$(XSPEC_GRID_EXECUTABLE): xstar_xspec_parallel.cpp xstar_process.hpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
+$(XSPEC_GRID_EXECUTABLE): xstar_xspec_parallel.cpp xstar_process.hpp xstar_platform.hpp $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_TABLE_EXECUTABLE) $(PUBLIC_EXECUTABLE_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_xspec_parallel.cpp $(FILESYSTEM_LIBS)
 
 ifeq ($(PLATFORM),windows)
@@ -336,37 +343,27 @@ $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.
 		-o $@ xstar_api.cpp compiled_case.cpp xstar_dynamic_library.o $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(CPP_BACKEND_TARGET): xstar_backend_cpp.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(PHYSICS_TARGETS) $(API_TARGET)
-ifeq ($(PLATFORM),windows)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_BACKEND_BUILD $(SHLIB_TARGET_LDFLAGS) \
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(WINDOWS_BACKEND_DEFINE) $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_backend_cpp.cpp xstar_dynamic_library.o -L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
-else
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SHLIB_TARGET_LDFLAGS) \
-		-o $@ xstar_backend_cpp.cpp xstar_dynamic_library.o -L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
-endif
 
 $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_standalone_internal.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_dynamic_library.o $(API_TARGET)
-ifeq ($(PLATFORM),windows)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) -DXSTAR_BACKEND_BUILD -DXSTAR_PYTHON_BACKEND_BUILD $(SHLIB_TARGET_LDFLAGS) \
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(WINDOWS_PYTHON_BACKEND_DEFINE) $(SHLIB_TARGET_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp xstar_dynamic_library.o -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
-else
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SHLIB_TARGET_LDFLAGS) \
-		-o $@ xstar_backend_python.cpp xstar_dynamic_library.o -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
-endif
 
-xstar_standalone.o: xstar_standalone.cpp xstar_process.hpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp xstar_science_fits.hpp xstar_run_state.hpp xstar_step_log.hpp xstar_atdb_runtime.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_spectral_engine.h xstar_platform.hpp xstar_dynamic_library.hpp
+xstar_standalone.o: xstar_standalone.cpp xstar_process.hpp xstar_local_zone_internal.hpp source_real_energy_grid.hpp xstar_science_fits.hpp xstar_run_state.hpp xstar_step_log.hpp xstar_atdb_runtime.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_local_zone_engine.h xstar_thermal_engine.h xstar_spectral_engine.h xstar_platform.hpp xstar_dynamic_library.hpp xstar_path_compat.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
 
 xstar_dynamic_library.o: xstar_dynamic_library.cpp xstar_dynamic_library.hpp xstar_platform.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
-xstar_science_fits.o: xstar_science_fits.cpp xstar_process.hpp xstar_science_fits.hpp xstar_run_state.hpp
+xstar_science_fits.o: xstar_science_fits.cpp xstar_process.hpp xstar_science_fits.hpp xstar_run_state.hpp xstar_path_compat.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
 xstar_run_state.o: xstar_run_state.cpp xstar_run_state.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
-xstar_step_log.o: xstar_step_log.cpp xstar_step_log.hpp xstar_run_state.hpp
+xstar_step_log.o: xstar_step_log.cpp xstar_step_log.hpp xstar_run_state.hpp xstar_path_compat.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
 xstar_atdb_runtime.o: xstar_atdb_runtime.cpp xstar_atdb_runtime.hpp xstar_local_zone_engine.h xstar_run_state.hpp
@@ -376,7 +373,7 @@ $(EXECUTABLE_TARGET): $(EXECUTABLE_OBJECTS) $(API_TARGET) $(LOCAL_ZONE_TARGET) $
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $(EXECUTABLE_OBJECTS) \
 		-L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
-$(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(API_TARGET) $(PRODUCTION_ZONE_TARGET) $(PUBLIC_EXECUTABLE_SOURCE) xstar_process.hpp
+$(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(API_TARGET) $(PRODUCTION_ZONE_TARGET) $(PUBLIC_EXECUTABLE_SOURCE) xstar_process.hpp xstar_platform.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_TOOLS_PACKAGE_VERSION=\"$(PACKAGE_VERSION)\" -o $@ $(PUBLIC_EXECUTABLE_SOURCE) \
 		-L. -lxstar_api -lxstar_production_zone $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 

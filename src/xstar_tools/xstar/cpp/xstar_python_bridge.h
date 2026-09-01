@@ -14,13 +14,13 @@
 #include "xstar_api.h"
 
 #ifdef _WIN32
-#  ifdef XSTAR_PYTHON_BACKEND_BUILD
-#    define XSTAR_PYTHON_BRIDGE_EXPORT __declspec(dllexport)
-#  else
-#    define XSTAR_PYTHON_BRIDGE_EXPORT
-#  endif
+# ifdef XSTAR_PYTHON_BACKEND_BUILD
+#  define XSTAR_PYTHON_BRIDGE_EXPORT __declspec(dllexport)
+# else
+#  define XSTAR_PYTHON_BRIDGE_EXPORT
+# endif
 #else
-#  define XSTAR_PYTHON_BRIDGE_EXPORT __attribute__((visibility("default")))
+# define XSTAR_PYTHON_BRIDGE_EXPORT __attribute__((visibility("default")))
 #endif
 
 #ifdef __cplusplus

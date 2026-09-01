@@ -317,7 +317,6 @@ Start with:
 
 The project deliberately separates scientific acceptance, publication correctness, performance qualification, and orchestration/interface changes. Historical formal ACCEPT/REJECT records are never rewritten when a later release changes a different contract.
 
+### Windows / MinGW native build (0.6.88.5.1)
 
-## Windows / MinGW UCRT64 native build
-
-`0.6.88.5 — WINDOWS_MINGW_NATIVE_BUILD` adds the native Windows build/runtime path using MSYS2 UCRT64 + MinGW-w64 GCC. The default build creates PE DLLs and import libraries, `xstar_cpp.exe`, `xstar-cpp.exe`, and `xstar-xspec.exe`. Local `--processes N` concurrency remains process-based through Win32 `CreateProcessW`; Windows MPI is deliberately not part of the supported contract. See `windows_mingw_native_build_0_6_88_5.md` and `.github/workflows/windows-build.yml`.
+`0.6.88.5` established the native UCRT64/MinGW build and Win32 `CreateProcessW` process backend, but its first Windows host run stopped at `std::filesystem::path` to narrow C-API boundaries because MinGW uses `wchar_t` as the native path value type. `0.6.88.5.1 — WINDOWS_PATH_ENCODING_CLOSURE` keeps the process backend unchanged and adapts only filesystem paths passed to existing narrow `const char*` CFITSIO/XSTAR interfaces. Windows builds produce `.dll` libraries, `.dll.a` import libraries, and `.exe` programs; Windows MPI remains out of scope. Use `.github/workflows/windows-build.yml` or the `run_windows_path_encoding_closure_host_0_6_88_5_1.py` host runner for UCRT64 qualification.

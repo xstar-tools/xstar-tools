@@ -1,4 +1,4 @@
-// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.5.
+// Parallel native XSTAR2XSPEC orchestration for xstar_tools 0.6.88.5.1.
 //
 // This executable composes the already-qualified native components:
 //   xstar-xspec-initable -> bounded parallel xstar-cpp jobs -> xstar-xspec-table.
@@ -19,27 +19,26 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#if !defined(_WIN32)
+#include <fcntl.h>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <vector>
-#if !defined(_WIN32)
-#include <fcntl.h>
-#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
+#include <signal.h>
 #endif
 
 namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.88.5";
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.4.2"
+constexpr const char *kPackageVersion = "0.6.88.5.1";
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"
@@ -137,75 +136,27 @@ int run_capture(const std::vector<std::string> &args, const fs::path &cwd,
                 std::ofstream &log, bool verbose) {
     if (args.empty()) return 127;
 #if defined(_WIN32)
-    static unsigned long long capture_sequence = 0;
-    std::error_code ec;
-    fs::path capture_root = fs::temp_directory_path(ec);
-    if (ec) capture_root = cwd.empty() ? fs::current_path() : cwd;
-    const fs::path capture = capture_root /
-        ("xstar-process-capture-" + std::to_string(xstar_process::current_process_id()) +
-         "-" + std::to_string(++capture_sequence) + ".log");
-    std::vector<std::string> storage = args;
-    std::vector<char*> av;
-    av.reserve(storage.size() + 1);
-    for (auto& item : storage) av.push_back(item.data());
-    av.push_back(nullptr);
-    const std::string cwd_text = cwd.empty() ? std::string{} : cwd.string();
-    const std::string capture_text = capture.string();
-    const bool search_path = storage[0].find('/') == std::string::npos && storage[0].find('\\') == std::string::npos;
-    const xstar_process::process_id pid = xstar_process::spawn_program(
-        storage[0].c_str(), av.data(), search_path,
-        cwd_text.empty() ? nullptr : cwd_text.c_str(), capture_text.c_str());
-    if (pid < 0) throw std::runtime_error("CreateProcessW failed: " + std::string(std::strerror(errno)));
-    int status = 0;
-    while (xstar_process::wait_process(pid, &status, 0) < 0) if (errno != EINTR) return 127;
-    std::ifstream in(capture, std::ios::binary);
-    char buffer[8192];
-    while (in) {
-        in.read(buffer, sizeof(buffer));
-        const std::streamsize n = in.gcount();
-        if (n > 0) {
-            log.write(buffer, n); log.flush();
-            if (verbose) { std::cout.write(buffer, n); std::cout.flush(); }
-        }
-    }
-    fs::remove(capture, ec);
+    const fs::path capture = cwd / (".xstar-capture-" + std::to_string(xstar_process::current_process_id()) + ".log");
+    const auto pid = xstar_process::spawn_program(args, cwd, capture);
+    if (pid < 0) throw std::runtime_error("CreateProcessW failed");
+    int status=0; while (xstar_process::wait_process(pid,&status,0)<0) if(errno!=EINTR) return 127;
+    std::ifstream in(capture,std::ios::binary); char buffer[8192];
+    while(in){ in.read(buffer,sizeof(buffer)); auto n=in.gcount(); if(n>0){log.write(buffer,n); if(verbose) std::cout.write(buffer,n);} }
+    log.flush(); if(verbose) std::cout.flush(); std::error_code ec; fs::remove(capture,ec);
     return xstar_process::decode_wait_status(status);
 #else
     int pipefd[2];
     if (::pipe(pipefd) != 0) throw std::runtime_error("pipe failed: " + std::string(std::strerror(errno)));
     const xstar_process::process_id pid = xstar_process::fork_process();
-    if (pid < 0) {
-        ::close(pipefd[0]); ::close(pipefd[1]);
-        throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
-    }
+    if (pid < 0) { ::close(pipefd[0]); ::close(pipefd[1]); throw std::runtime_error("fork failed: " + std::string(std::strerror(errno))); }
     if (pid == 0) {
-        ::close(pipefd[0]);
-        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
-        ::dup2(pipefd[1], STDOUT_FILENO);
-        ::dup2(pipefd[1], STDERR_FILENO);
-        ::close(pipefd[1]);
-        std::vector<std::string> storage = args;
-        std::vector<char *> av;
-        av.reserve(storage.size() + 1);
-        for (auto &item : storage) av.push_back(item.data());
-        av.push_back(nullptr);
-        xstar_process::exec_program(storage[0].c_str(), av.data(), storage[0].find('/') == std::string::npos);
-        xstar_process::exit_child(127);
+        ::close(pipefd[0]); if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
+        ::dup2(pipefd[1], STDOUT_FILENO); ::dup2(pipefd[1], STDERR_FILENO); ::close(pipefd[1]);
+        std::vector<std::string> storage=args; std::vector<char*> av; for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
+        xstar_process::exec_program(storage[0].c_str(),av.data(),storage[0].find('/')==std::string::npos); xstar_process::exit_child(127);
     }
-    ::close(pipefd[1]);
-    char buffer[8192];
-    for (;;) {
-        const ssize_t n = ::read(pipefd[0], buffer, sizeof(buffer));
-        if (n > 0) {
-            log.write(buffer, n); log.flush();
-            if (verbose) { std::cout.write(buffer, n); std::cout.flush(); }
-        } else if (n == 0) break;
-        else if (errno != EINTR) break;
-    }
-    ::close(pipefd[0]);
-    int status = 0;
-    while (xstar_process::wait_process(pid, &status, 0) < 0) if (errno != EINTR) return 127;
-    return xstar_process::decode_wait_status(status);
+    ::close(pipefd[1]); char buffer[8192]; for(;;){const ssize_t n=::read(pipefd[0],buffer,sizeof(buffer)); if(n>0){log.write(buffer,n);log.flush();if(verbose){std::cout.write(buffer,n);std::cout.flush();}} else if(n==0)break; else if(errno!=EINTR)break;} ::close(pipefd[0]);
+    int status=0; while(xstar_process::wait_process(pid,&status,0)<0) if(errno!=EINTR)return 127; return xstar_process::decode_wait_status(status);
 #endif
 }
 
@@ -290,38 +241,12 @@ void require_regular(const fs::path &path, const std::string &what) {
 xstar_process::process_id spawn_job(const std::vector<std::string> &args, const fs::path &cwd, const fs::path &stdout_log) {
     if (args.empty()) throw std::runtime_error("cannot spawn empty job command");
 #if defined(_WIN32)
-    std::vector<std::string> storage = args;
-    std::vector<char*> av;
-    av.reserve(storage.size() + 1);
-    for (auto& item : storage) av.push_back(item.data());
-    av.push_back(nullptr);
-    const std::string cwd_text = cwd.empty() ? std::string{} : cwd.string();
-    const std::string log_text = stdout_log.string();
-    const bool search_path = storage[0].find('/') == std::string::npos && storage[0].find('\\') == std::string::npos;
-    const xstar_process::process_id pid = xstar_process::spawn_program(
-        storage[0].c_str(), av.data(), search_path,
-        cwd_text.empty() ? nullptr : cwd_text.c_str(), log_text.c_str());
-    if (pid < 0) throw std::runtime_error("CreateProcessW failed: " + std::string(std::strerror(errno)));
+    const auto pid=xstar_process::spawn_program(args,cwd,stdout_log);
+    if(pid<0) throw std::runtime_error("CreateProcessW failed");
     return pid;
 #else
-    const xstar_process::process_id pid = xstar_process::fork_process();
-    if (pid < 0) throw std::runtime_error("fork failed: " + std::string(std::strerror(errno)));
-    if (pid == 0) {
-        if (!cwd.empty() && ::chdir(cwd.c_str()) != 0) xstar_process::exit_child(126);
-        const int fd = ::open(stdout_log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd < 0) xstar_process::exit_child(125);
-        ::dup2(fd, STDOUT_FILENO);
-        ::dup2(fd, STDERR_FILENO);
-        ::close(fd);
-        std::vector<std::string> storage = args;
-        std::vector<char *> av;
-        av.reserve(storage.size() + 1);
-        for (auto &item : storage) av.push_back(item.data());
-        av.push_back(nullptr);
-        xstar_process::exec_program(storage[0].c_str(), av.data(), storage[0].find('/') == std::string::npos);
-        xstar_process::exit_child(127);
-    }
-    return pid;
+    const xstar_process::process_id pid=xstar_process::fork_process(); if(pid<0) throw std::runtime_error("fork failed: "+std::string(std::strerror(errno)));
+    if(pid==0){ if(!cwd.empty()&&::chdir(cwd.c_str())!=0)xstar_process::exit_child(126); const int fd=::open(stdout_log.c_str(),O_WRONLY|O_CREAT|O_TRUNC,0666); if(fd<0)xstar_process::exit_child(125); ::dup2(fd,STDOUT_FILENO);::dup2(fd,STDERR_FILENO);::close(fd); std::vector<std::string> storage=args; std::vector<char*> av; for(auto& item:storage)av.push_back(item.data());av.push_back(nullptr); xstar_process::exec_program(storage[0].c_str(),av.data(),storage[0].find('/')==std::string::npos);xstar_process::exit_child(127);} return pid;
 #endif
 }
 

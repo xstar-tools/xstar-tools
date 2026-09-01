@@ -9,6 +9,7 @@
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
 #include "xstar_step_log.hpp"
+#include "xstar_path_compat.hpp"
 #include "xstar_constants.h"
 
 #include <algorithm>
@@ -100,7 +101,7 @@ void require_legacy_pprint_payload(const xstar_run_state::ProductWritingState& s
 std::string read_atomic_data_version(const std::filesystem::path& atdb) {
     fitsfile* fptr = nullptr;
     int status = 0;
-    fits_open_file(&fptr, atdb.c_str(), READONLY, &status);
+    fits_open_file(&fptr, XSTAR_C_PATH(atdb), READONLY, &status);
     if (status != 0) return "unknown";
     char value[FLEN_VALUE]{};
     int read_status = 0;
@@ -365,7 +366,7 @@ void append_native_radial_summary(std::ofstream& out,
     fitsfile* af = nullptr;
     int status = 0;
     const auto abundance_path = output_dir / "xout_abund1.fits";
-    fits_open_file(&af, abundance_path.c_str(), READONLY, &status);
+    fits_open_file(&af, XSTAR_C_PATH(abundance_path), READONLY, &status);
     if (status == 0) {
         status = 0;
         fits_movnam_hdu(af, ANY_HDU, const_cast<char*>("ABUNDANCES"), 0, &status);
@@ -472,7 +473,7 @@ void append_native_radial_summary(std::ofstream& out,
     }
     fitsfile* df=nullptr; status=0;
     const auto detail_path=output_dir/"xo01_detal4.fits";
-    fits_open_file(&df,detail_path.c_str(),READONLY,&status);
+    fits_open_file(&df,XSTAR_C_PATH(detail_path),READONLY,&status);
     if(status==0){
         int nh=0; fits_get_num_hdus(df,&nh,&status);
         double fallback_source_integral=0.0;
@@ -1010,7 +1011,7 @@ void append_native_public_line_sections(std::ofstream& out,
                                         const xstar_run_state::ProductWritingState& state) {
     fitsfile* fptr=nullptr; int status=0;
     const auto path=output_dir/"xout_lines1.fits";
-    fits_open_file(&fptr,path.c_str(),READONLY,&status);
+    fits_open_file(&fptr,XSTAR_C_PATH(path),READONLY,&status);
     if(status!=0 || !move_to_last_named_hdu(fptr,"XSTAR_LINES")){
         if(fptr){int cs=0;fits_close_file(fptr,&cs);} out<<"\n public line sections unavailable: xout_lines1.fits not readable.\n\n"; return;
     }
@@ -1054,7 +1055,7 @@ void append_native_public_line_sections(std::ofstream& out,
     final_line_detail_name_v0682279 << "xo" << std::setw(2) << std::setfill('0')
                                     << final_pass_v0682279 << "_detal2.fits";
     const auto final_line_detail_path_v0682279 = output_dir / final_line_detail_name_v0682279.str();
-    fits_open_file(&detail,final_line_detail_path_v0682279.c_str(),READONLY,&status);
+    fits_open_file(&detail,XSTAR_C_PATH(final_line_detail_path_v0682279),READONLY,&status);
     if(status==0 && move_to_last_named_hdu(detail,"XSTAR_RADIAL")){
         const int di=column_number(detail,"index"),dion=column_number(detail,"ion"),dw=column_number(detail,"wavelength"),
             dti=column_number(detail,"tau_in"),dto=column_number(detail,"tau_out");
@@ -1311,7 +1312,7 @@ void append_native_public_rrc_sections(std::ofstream& out,
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
 void append_native_ion_columns(std::ofstream& out,const std::filesystem::path& output_dir){
-    fitsfile*f=nullptr;int status=0;fits_open_file(&f,(output_dir/"xout_abund1.fits").c_str(),READONLY,&status);
+    fitsfile*f=nullptr;int status=0;fits_open_file(&f,XSTAR_C_PATH(output_dir/"xout_abund1.fits"),READONLY,&status);
     out<<" print option:27\n ion column densities\n index, ion, column density\n";
     // Source pprint(27) uses `if (xcoltmp(lk).gt.1.e-15)` and format
     // `(1x,i4,1x,9a1,1pe16.8)`.  Preserve the default-REAL threshold and
@@ -1463,7 +1464,7 @@ bool read_spectrum_column(const std::filesystem::path& path,
                           std::vector<double>& energy,
                           std::vector<std::vector<double>>& values) {
     fitsfile* f=nullptr; int status=0;
-    fits_open_file(&f,path.c_str(),READONLY,&status);
+    fits_open_file(&f,XSTAR_C_PATH(path),READONLY,&status);
     if(status!=0 || !move_to_last_named_hdu(f,extname)) {
         if(f){int cs=0;fits_close_file(f,&cs);} return false;
     }
@@ -1524,7 +1525,7 @@ void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& o
         !cv.empty() && finite_nonzero_vector(cv.front());
     if(!have_incident){
         fitsfile* cf=nullptr;int cstatus=0;
-        fits_open_file(&cf,detail_path_v0682277.c_str(),READONLY,&cstatus);
+        fits_open_file(&cf,XSTAR_C_PATH(detail_path_v0682277),READONLY,&cstatus);
         if(cstatus==0){
             const auto hdus=named_hdu_numbers(cf,"XSTAR_RADIAL");
             if(!hdus.empty()){

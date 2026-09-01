@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.88.5.1 - WINDOWS_PATH_ENCODING_CLOSURE - 2026-09-01
+
+- Preserves 0.6.88.5 as a historical Windows-host rejection.
+- Fixes MinGW `std::filesystem::path` (`wchar_t`) to narrow `const char*` boundaries used by CFITSIO and XSTAR fixed-state/publication C APIs.
+- Adds `xstar_path_compat.hpp`; on non-Windows platforms `XSTAR_C_PATH(path)` expands directly to the historical `path.c_str()`.
+- Carries the accepted 0.6.88.5 Win32 CreateProcessW process backend unchanged.
+- Repairs qualification metadata and adds an explicit 0.6.88.5 host-rejection record.
+- Windows MPI remains out of scope.
+
 ## 0.6.88.5 — WINDOWS_MINGW_NATIVE_BUILD (candidate) - 2026-09-01
 
 - Branches from formally accepted `0.6.88.4.2`; Linux/macOS science/runtime contracts and the warning-free Apple-Clang closure remain frozen.

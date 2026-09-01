@@ -12,6 +12,16 @@
 #include <cstddef>
 #include <cstdint>
 
+#ifdef _WIN32
+# ifdef XSTAR_PRODUCTION_ZONE_BUILD
+#  define XSTAR_PRODUCTION_ZONE_EXPORT __declspec(dllexport)
+# else
+#  define XSTAR_PRODUCTION_ZONE_EXPORT
+# endif
+#else
+# define XSTAR_PRODUCTION_ZONE_EXPORT __attribute__((visibility("default")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,11 +40,11 @@ typedef struct xstar_production_zone_result_v0648110 {
     double heating_minus_cooling_percent;
 } xstar_production_zone_result_v0648110;
 
-int32_t xstar_production_zone_abi_version_v0648110(void);
-const char* xstar_production_zone_backend_name_v0648110(void);
+XSTAR_PRODUCTION_ZONE_EXPORT int32_t xstar_production_zone_abi_version_v0648110(void);
+XSTAR_PRODUCTION_ZONE_EXPORT const char* xstar_production_zone_backend_name_v0648110(void);
 
 /* One-shot exact standalone-production trajectory (cpp-all). */
-int32_t xstar_production_zone_run_all_v0648110(
+XSTAR_PRODUCTION_ZONE_EXPORT int32_t xstar_production_zone_run_all_v0648110(
     const char* parameters_path,
     const char* output_dir,
     const char* executable_path,
@@ -42,7 +52,7 @@ int32_t xstar_production_zone_run_all_v0648110(
     std::size_t message_size);
 
 /* Persistent exact standalone-production context (cpp-zone). */
-int32_t xstar_production_zone_context_create_v0648110(
+XSTAR_PRODUCTION_ZONE_EXPORT int32_t xstar_production_zone_context_create_v0648110(
     const char* parameters_path,
     const char* output_dir,
     const char* executable_path,
@@ -51,25 +61,25 @@ int32_t xstar_production_zone_context_create_v0648110(
     std::size_t message_size);
 
 /* Release exactly the next physical radial zone. */
-int32_t xstar_production_zone_context_run_next_zone_v0648110(
+XSTAR_PRODUCTION_ZONE_EXPORT int32_t xstar_production_zone_context_run_next_zone_v0648110(
     void* context,
     xstar_production_zone_result_v0648110* out_result,
     char* message,
     std::size_t message_size);
 
 /* Query whether the physical radial loop has completed. */
-int32_t xstar_production_zone_context_done_v0648110(
+XSTAR_PRODUCTION_ZONE_EXPORT int32_t xstar_production_zone_context_done_v0648110(
     void* context,
     int32_t* out_done,
     int32_t* out_completed_zones,
     char* message,
     std::size_t message_size);
 
-int32_t xstar_production_zone_context_finalize_v0648110(
+XSTAR_PRODUCTION_ZONE_EXPORT int32_t xstar_production_zone_context_finalize_v0648110(
     void* context,
     char* message,
     std::size_t message_size);
-void xstar_production_zone_context_destroy_v0648110(void* context);
+XSTAR_PRODUCTION_ZONE_EXPORT void xstar_production_zone_context_destroy_v0648110(void* context);
 
 #ifdef __cplusplus
 }

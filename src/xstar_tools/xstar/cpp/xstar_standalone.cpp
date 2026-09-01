@@ -11,6 +11,7 @@
 
 #include "xstar_compiler_warnings.hpp"
 #include "xstar_process.hpp"
+#include "xstar_path_compat.hpp"
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
 #include "xstar_local_zone_engine.h"
@@ -2761,7 +2762,7 @@ int command_run_fixed_trajectory(const Options& options) {
              << " hmctot=" << out.hmctot << " computed_xee=" << out.electron_fraction_xee << " charge_residual=" << native_charge_residual
              << " heating=" << out.total_heating << " cooling=" << out.total_cooling << '\n';
     }
-    rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
+    rc=xstar_fixed_state_write_visited_report_v1(context,XSTAR_C_PATH(std::filesystem::path(options.output_dir)/"visited_records.csv"),message.data(),message.size());
     if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
     summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.26\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
@@ -2920,14 +2921,14 @@ int command_run_fixed_evaluation(const Options& options) {
     spectrum_file << "bin,energy_ev,spectrum,opacity\n" << std::setprecision(17);
     for (std::size_t k = 0; k < bins; ++k) spectrum_file << k + 1 << ',' << radiation.energy_ev[k] << ',' << spectrum[k] << ',' << opacity[k] << '\n';
     rc = xstar_fixed_state_write_last_thermal_budget_v1(
-        context, (output_root / "native_thermal_budget.csv").c_str(), 1,
+        context, XSTAR_C_PATH(output_root / "native_thermal_budget.csv"), 1,
         static_cast<std::uint64_t>(row.call_index), static_cast<std::uint64_t>(row.evaluation_index),
         "replay", message.data(), message.size());
     if (rc != 0) { std::cerr << "evaluation thermal-budget ledger failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     const std::filesystem::path diagnostics_root = options.diagnostics_dir.empty()
         ? output_root / "diagnostics" : std::filesystem::path(options.diagnostics_dir);
     rc = xstar_fixed_state_write_last_diagnostics_v1(
-        context, diagnostics_root.c_str(), static_cast<std::uint64_t>(options.evaluation), message.data(), message.size());
+        context, XSTAR_C_PATH(diagnostics_root), static_cast<std::uint64_t>(options.evaluation), message.data(), message.size());
     if (rc != 0) { std::cerr << "evaluation diagnostics failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     {
         std::ostringstream diagnostic_name;
@@ -6161,7 +6162,7 @@ int command_run_fixed_dsec(const Options& options) {
              << " heating=" << snapshot.total_heating << " cooling=" << snapshot.total_cooling << '\n';
     }
     rc = xstar_fixed_state_write_visited_report_v1(
-        fixed_context, (std::filesystem::path(options.output_dir) / "visited_records.csv").c_str(), message.data(), message.size());
+        fixed_context, XSTAR_C_PATH(std::filesystem::path(options.output_dir) / "visited_records.csv"), message.data(), message.size());
     if (rc != 0) {
         std::cerr << "visited report failed: " << message.data() << "\n";
         xstar_thermal_context_destroy(thermal_context);
@@ -26188,7 +26189,7 @@ int command_run_physical(Options options) {
         {"XSTAR_QUALIFICATION_SOURCE_SOLVE_ROWS_CSV", source_solve_rows},
     }};
     for (const auto& item : qualification_paths) {
-        if (xstar_process::set_environment(item.first, item.second.c_str(), 1) != 0) {
+        if (xstar_process::set_environment(item.first, XSTAR_C_PATH(item.second), 1) != 0) {
             std::cerr << "cannot activate qualification profile path " << item.first << "\n";
             return 70;
         }

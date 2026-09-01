@@ -476,8 +476,7 @@ std::filesystem::path write_envelope(const FrontendInput& input) {
 int run_native_wait(const std::filesystem::path& native,const std::vector<std::string>& args) {
 #if defined(_WIN32)
     std::vector<std::string> storage; storage.reserve(args.size()+1u); storage.push_back(native.string()); storage.insert(storage.end(),args.begin(),args.end());
-    std::vector<char*> av; av.reserve(storage.size()+1u); for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
-    const xstar_process::process_id pid=xstar_process::spawn_program(storage[0].c_str(),av.data(),false);
+    const xstar_process::process_id pid=xstar_process::spawn_program(storage);
     if(pid<0) return 127;
     int status=0; while(xstar_process::wait_process(pid,&status,0)<0) { if(errno!=EINTR) return 127; }
     return xstar_process::decode_wait_status(status);
@@ -496,14 +495,17 @@ int run_native_wait(const std::filesystem::path& native,const std::vector<std::s
 
 [[noreturn]] void exec_native(const std::filesystem::path& native,const std::vector<std::string>& args) {
     std::vector<std::string> storage; storage.reserve(args.size()+1u); storage.push_back(native.string()); storage.insert(storage.end(),args.begin(),args.end());
-    std::vector<char*> av; av.reserve(storage.size()+1u); for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
 #if defined(_WIN32)
-    xstar_process::exec_program(storage[0].c_str(),av.data(),false);
+    const xstar_process::process_id pid=xstar_process::spawn_program(storage);
+    if(pid<0) { std::cerr << "xstar-cpp: failed to spawn " << native << ": errno=" << errno << "\n"; std::exit(127); }
+    int status=0; while(xstar_process::wait_process(pid,&status,0)<0) { if(errno!=EINTR) std::exit(127); }
+    std::exit(xstar_process::decode_wait_status(status));
 #else
+    std::vector<char*> av; av.reserve(storage.size()+1u); for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
     xstar_process::exec_program(native.c_str(),av.data(),false);
-#endif
     std::cerr << "xstar-cpp: failed to exec " << native << ": errno=" << errno << "\n";
     std::exit(127);
+#endif
 }
 
 void progress_event(const FrontendInput& input,const std::string& event,const std::string& detail="") {

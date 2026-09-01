@@ -19,7 +19,7 @@ The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestratio
 
 ## Portable process layer (`0.6.88.4`)
 
-Process/environment operations pass through `xstar_process.hpp`. Linux/macOS intentionally delegate to the historical `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv` calls without changing arguments or status semantics. On native MinGW/UCRT64, orchestration uses `CreateProcessW`, Win32 wait/termination APIs, `_getpid`, and `_putenv_s`; `xstar-xspec --processes N` therefore remains N independent OS processes rather than threads. Windows MPI remains intentionally unsupported.
+Process/environment operations now pass through `xstar_process.hpp`. The POSIX implementation intentionally delegates to the historical `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv` calls without changing arguments or status semantics. This isolates the later Windows/MinGW backend from XSTAR science and orchestration sources. Linux behavior is the qualification baseline for this release; Windows process creation is not yet claimed as accepted.
 
 ## macOS native build (`0.6.88.3.2`)
 
@@ -346,3 +346,7 @@ xout_etable.fits
 ```
 
 The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`. The MPI path writes `xstar2xspec-mpi.log`, `xstar2xspec-mpi-scheduler.log`, and per-rank logs.
+
+### Windows / MinGW native build (0.6.88.5.1)
+
+`0.6.88.5` established the native UCRT64/MinGW build and Win32 `CreateProcessW` process backend, but its first Windows host run stopped at `std::filesystem::path` to narrow C-API boundaries because MinGW uses `wchar_t` as the native path value type. `0.6.88.5.1 — WINDOWS_PATH_ENCODING_CLOSURE` keeps the process backend unchanged and adapts only filesystem paths passed to existing narrow `const char*` CFITSIO/XSTAR interfaces. Windows builds produce `.dll` libraries, `.dll.a` import libraries, and `.exe` programs; Windows MPI remains out of scope. Use `.github/workflows/windows-build.yml` or the `run_windows_path_encoding_closure_host_0_6_88_5_1.py` host runner for UCRT64 qualification.
