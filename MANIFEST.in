@@ -1227,3 +1227,12 @@ include docs/developer/macos_warning_cleanup_0_6_88_4_1.md
 include qualification/macos_warning_cleanup_0_6_88_4_1.json
 include xstar_tools-0.6.88.4.1_local_validation.md
 include xstar_tools-0.6.88.4.1_release_closure.md
+include macos_warning_cleanup_syntax_closure_0_6_88_4_2.md
+include xstar_tools-0.6.88.4.1_host_rejection.md
+include docs/developer/macos_warning_cleanup_syntax_closure_0_6_88_4_2.md
+include qualification/macos_warning_cleanup_syntax_closure_0_6_88_4_2.json
+include tests/test_macos_warning_cleanup_syntax_closure_0_6_88_4_2.py
+include tools/qualification/check_macos_warning_cleanup_syntax_closure_0_6_88_4_2.py
+include tools/qualification/run_macos_warning_cleanup_syntax_closure_host_0_6_88_4_2.py
+include xstar_tools-0.6.88.4.2_local_validation.md
+include xstar_tools-0.6.88.4.2_release_closure.md

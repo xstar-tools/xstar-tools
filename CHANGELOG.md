@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.88.4.2 — MACOS_WARNING_CLEANUP_SYNTAX_CLOSURE (candidate) - 2026-09-01
+
+- Branches from the `0.6.88.4.1` macOS host result: `macos-15` arm64 fully ACCEPTED, while `macos-15-intel` rejected at compile time because Apple Clang/x86_64 rejected the pre-declaration placement of standard `[[maybe_unused]]` before `static inline` in `opacity_kernels.cpp`.
+- Changes only the Apple-Clang `XSTAR_APPLE_MAYBE_UNUSED` spelling from `[[maybe_unused]]` to `__attribute__((unused))`; all warning-site `.cpp` files remain byte-identical to `0.6.88.4.1` apart from package-version-only orchestration files.
+- Keeps the warning cleanup Apple-only, adds no global `-Wno-*` flags, and preserves the scoped `shared_ptr::unique()` deprecation suppression unchanged.
+- Preserves Linux preprocessing/runtime behavior because `XSTAR_APPLE_MAYBE_UNUSED` still expands to nothing off Apple Clang.
+- Requires Linux dry-run/build/regression and fixed-state byte-equivalence closure before macOS rerun.
+- Formal macOS acceptance requires warning-free native builds and the existing Mach-O/install-name/rpath/discovery/regression gates on both `macos-15` and `macos-15-intel`.
+
 ## 0.6.88.4.1 — MACOS_WARNING_CLEANUP (candidate) - 2026-09-01
 
 - Branches from Linux-qualified `0.6.88.4 — PORTABLE_PROCESS_LAYER`; process-layer behavior and frozen science remain unchanged.
