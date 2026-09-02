@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.88.5.6 - WINDOWS_EMBEDDED_PYTHON_DLL_SEARCH_CLOSURE - 2026-09-01
+
+- Preserves `0.6.88.5.5` as a historical Windows-host rejection: its full native build, PE/import/export/version/discovery gates, direct Win32 process smoke, and synthetic XSTAR2XSPEC process pool accepted; the final regression failed only when embedded CPython imported `_ctypes`.
+- Adds a Windows-only embedded-Python DLL-search registration in `xstar_backend_python.cpp` before any `xstar_tools` package import.
+- Uses the initialized `Py_GetPrefix()` and registers `<prefix>/bin` through `os.add_dll_directory()`, with `<prefix>` as the fallback when `bin` is absent.
+- Retains the returned DLL-directory handle on the `sys` module so registration remains active for the interpreter lifetime and is idempotent across backend-context creation.
+- Keeps Linux/macOS behavior unchanged because the helper and call site are `_WIN32`-guarded.
+- Splits Windows host regression evidence into external `ctypes`, fixed-state self/batch/output, embedded Python backend, Python bridge, and full-regression gates.
+- Makes no scientific arithmetic/order, scheduler/process, local-zone, output-schema, or public-ABI change. Windows MPI remains out of scope.
+
 ## 0.6.88.5.5 - WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE - 2026-09-01
 
 - Preserves 0.6.88.5.4 as a historical Windows-host rejection.

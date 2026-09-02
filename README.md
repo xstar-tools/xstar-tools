@@ -16,7 +16,8 @@
 - **`0.6.88.5.2` — historical Windows HOST REJECT:** path boundary closure reached the local-zone/Python backend, exposing MinGW Type-85 `far`, Windows `::exp10`, and Python path portability defects.
 - **`0.6.88.5.3` — historical Windows HOST REJECT:** the requested Type-85/Type-77/Python portability fixes all passed source qualification, but the later native Windows build still returned nonzero without surfacing the actionable compiler/linker diagnostic; the synthetic XSTAR2XSPEC pool was not run because the production build failed.
 - **`0.6.88.5.4` — historical Windows HOST REJECT:** the diagnostic closure exposed a deterministic `xstar_xspec_parallel.cpp` compile failure on both parallel and serial MinGW builds because portable standard-library headers were incorrectly hidden inside `#if !defined(_WIN32)`; the direct Win32 process smoke still passed.
-- **`0.6.88.5.5` — current candidate:** `WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE`; moves the already-required portable C++ headers outside the Windows exclusion guard while keeping POSIX headers guarded; Windows-host rerun pending.
+- **`0.6.88.5.5` — historical Windows HOST REJECT:** the standard-header closure fully fixed the native Windows build and the process/XSTAR2XSPEC gates, but the final regression failed when embedded CPython imported `_ctypes` because its extension-DLL dependency directory was not registered.
+- **`0.6.88.5.6` — current candidate:** `WINDOWS_EMBEDDED_PYTHON_DLL_SEARCH_CLOSURE`; registers the initialized Windows Python runtime DLL directory in the embedder before package import and splits fixed-state/Python regression attribution; Windows-host rerun pending.
 - **`0.6.88.3.2` — formally accepted:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, accepted on both `macos-15` arm64 and `macos-15-intel` x86_64.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
@@ -327,8 +328,14 @@ The project deliberately separates scientific acceptance, publication correctnes
 
 `0.6.88.5` established the native UCRT64/MinGW build and Win32 `CreateProcessW` process backend, but its first Windows host run stopped at `std::filesystem::path` to narrow C-API boundaries because MinGW uses `wchar_t` as the native path value type. `0.6.88.5.1 — WINDOWS_PATH_ENCODING_CLOSURE` keeps the process backend unchanged and adapts only filesystem paths passed to existing narrow `const char*` CFITSIO/XSTAR interfaces. Windows builds produce `.dll` libraries, `.dll.a` import libraries, and `.exe` programs; Windows MPI remains out of scope. Use `.github/workflows/windows-build.yml` or the `run_windows_path_encoding_closure_host_0_6_88_5_1.py` host runner for UCRT64 qualification.
 
+### 0.6.88.5.6 Windows embedded-Python DLL-search closure
+
+`0.6.88.5.5` is now a historical Windows-host rejection even though its native build, PE/import/export/version/discovery, Win32 process smoke, and local XSTAR2XSPEC process-pool gates all accepted. Its remaining failure was isolated to embedded CPython: `_ctypes` could not load one of its dependent DLLs during the Python-backend regression, after the fixed-state C++ scaffold had already accepted.
+
+`0.6.88.5.6 — WINDOWS_EMBEDDED_PYTHON_DLL_SEARCH_CLOSURE` keeps that successful native Windows path unchanged and fixes only the embedder. On Windows, `xstar_backend_python.cpp` registers `<Py_GetPrefix()>/bin` with `os.add_dll_directory()` before importing `xstar_tools` and retains the returned handle on `sys` for the interpreter lifetime; when `bin` is absent it falls back to the prefix itself. Linux/macOS are unchanged. The Windows host runner separately reports external `ctypes`, fixed-state, embedded-Python, Python-bridge, and full-regression gates.
+
 ### 0.6.88.5.5 Windows XSTAR2XSPEC standard-header closure
 
 `0.6.88.5.4 — WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE` is now a historical Windows-host rejection. Its parallel and serial MinGW builds both failed deterministically in `xstar_xspec_parallel.cpp`: portable standard-library headers such as `<fstream>` and `<iostream>` were inside `#if !defined(_WIN32)`, leaving Windows compilation without complete stream declarations or `std::cout`.
 
-`0.6.88.5.5 — WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE` moves the portable C++ headers outside that guard and leaves only POSIX headers guarded. No executable statements, process semantics, science code, path adapters, local-zone code, Python backend code, or public ABI values change. The `.5.4` build-failure diagnostics are retained for the next Windows host run.
+`0.6.88.5.5 — WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE` moved the portable C++ headers outside that guard and left only POSIX headers guarded. Its real UCRT64 host run then fully accepted the native build and process/XSTAR2XSPEC gates, but the final embedded-Python regression rejected at `_ctypes`; `.5.5` is therefore preserved as a historical Windows HOST REJECT and `.5.6` owns that new runtime closure.

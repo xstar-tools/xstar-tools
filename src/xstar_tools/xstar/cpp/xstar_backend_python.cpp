@@ -25,6 +25,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -61,6 +62,63 @@ std::string python_error_text() {
     return result;
 }
 
+#if defined(_WIN32)
+// Keep Python's Windows DLL-search handle alive on the sys module for the
+// interpreter lifetime.  MSYS2/UCRT64 installs extension dependencies such
+// as libffi beside the Python runtime in <prefix>/bin; ordinary PATH lookup is
+// not sufficient for dependencies of imported extension modules.
+bool ensure_windows_python_dll_search(std::string& error) {
+    PyObject* sys = PyImport_ImportModule("sys");
+    if (!sys) {
+        error = python_error_text();
+        return false;
+    }
+
+    constexpr const char* kHandleAttribute = "_xstar_windows_dll_directory_handle";
+    const int already_registered = PyObject_HasAttrString(sys, kHandleAttribute);
+    if (already_registered < 0) {
+        error = python_error_text();
+        Py_DECREF(sys);
+        return false;
+    }
+    if (already_registered == 1) {
+        Py_DECREF(sys);
+        return true;
+    }
+
+    const wchar_t* prefix_text = Py_GetPrefix();
+    if (!prefix_text || prefix_text[0] == L'\0') {
+        error = "Py_GetPrefix returned an empty Windows Python prefix";
+        Py_DECREF(sys);
+        return false;
+    }
+
+    const std::filesystem::path prefix(prefix_text);
+    std::filesystem::path dll_directory = prefix / L"bin";
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dll_directory, ec)) {
+        dll_directory = prefix;
+    }
+    const std::wstring dll_directory_text = dll_directory.native();
+
+    PyObject* os = PyImport_ImportModule("os");
+    PyObject* add_dll_directory = os ? PyObject_GetAttrString(os, "add_dll_directory") : nullptr;
+    PyObject* directory = PyUnicode_FromWideChar(dll_directory_text.c_str(), -1);
+    PyObject* handle = (add_dll_directory && directory)
+        ? PyObject_CallOneArg(add_dll_directory, directory)
+        : nullptr;
+    bool ok = handle && PyObject_SetAttrString(sys, kHandleAttribute, handle) == 0;
+    if (!ok) error = python_error_text();
+
+    Py_XDECREF(handle);
+    Py_XDECREF(directory);
+    Py_XDECREF(add_dll_directory);
+    Py_XDECREF(os);
+    Py_DECREF(sys);
+    return ok;
+}
+#endif
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement ensure python as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
@@ -78,6 +136,12 @@ bool ensure_python(const xstar_config_v1* config, std::string& error) {
         return false;
     }
     PyGILState_STATE gil = PyGILState_Ensure();
+#if defined(_WIN32)
+    if (!ensure_windows_python_dll_search(error)) {
+        PyGILState_Release(gil);
+        return false;
+    }
+#endif
     PyObject* path = PySys_GetObject("path");
     if (!path) {
         error = "could not access sys.path";

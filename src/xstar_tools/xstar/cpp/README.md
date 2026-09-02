@@ -347,9 +347,15 @@ xout_etable.fits
 
 The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`. The MPI path writes `xstar2xspec-mpi.log`, `xstar2xspec-mpi-scheduler.log`, and per-rank logs.
 
+### Windows embedded-Python DLL-search closure (0.6.88.5.6)
+
+`0.6.88.5.5` closed the native MinGW build defect: the real UCRT64 build, PE/import/export/version/discovery checks, Win32 process smoke, and synthetic local-process XSTAR2XSPEC pool all accepted. The remaining host rejection occurred only in the embedded Python backend when `_ctypes` could not load a dependent DLL.
+
+`0.6.88.5.6 — WINDOWS_EMBEDDED_PYTHON_DLL_SEARCH_CLOSURE` adds a `_WIN32`-only embedder step in `xstar_backend_python.cpp`. After CPython initialization and before package import, it registers `<Py_GetPrefix()>/bin` using `os.add_dll_directory()` (falling back to the prefix when necessary) and retains the returned handle on `sys`. No scheduler/process/science/ABI behavior changes. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_embedded_python_dll_search_closure_host_0_6_88_5_6.py`.
+
 ### Windows XSTAR2XSPEC standard-header closure (0.6.88.5.5)
 
-`0.6.88.5.5 — WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE` is the narrow follow-up to the real `.5.4` UCRT64 host rejection. The `.5.4` parallel and serial builds both failed in `xstar_xspec_parallel.cpp` because portable standard-library headers were inside `#if !defined(_WIN32)`. `.5.5` moves `<fstream>`, `<iostream>`, `<map>`, `<sstream>`, `<stdexcept>`, `<string>`, and `<vector>` outside that guard while leaving only POSIX headers guarded. No executable statements, scheduler/process behavior, science code, ABI values, path-adapter code, local-zone code, or Python-backend code change. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_xspec_standard_header_closure_host_0_6_88_5_5.py`.
+`0.6.88.5.5 — WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE` moved `<fstream>`, `<iostream>`, `<map>`, `<sstream>`, `<stdexcept>`, `<string>`, and `<vector>` outside the Windows exclusion guard while leaving only POSIX headers guarded. Its real UCRT64 run accepted the native build, DLL/export/discovery checks, Win32 process smoke, and synthetic XSTAR2XSPEC pool, then rejected only when the embedded Python backend imported `_ctypes`. `.5.5` remains a historical Windows HOST REJECT; `.5.6` is the narrow embedder follow-up.
 
 ### Windows build-failure diagnostic closure (0.6.88.5.4)
 
