@@ -387,6 +387,10 @@ The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`.
 
 `0.6.88.5.7 — WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE` is formally accepted on MSYS2 UCRT64. It preserves the `.5.6` Windows DLL-search behavior but removes deprecated `Py_GetPrefix()` usage. The embedder reads `sys.base_prefix`, converts it with `PyUnicode_AsWideCharString()`, frees the owned buffer with `PyMem_Free()`, then continues the existing `<prefix>/bin`/prefix fallback and retained `os.add_dll_directory()` handle. No warning suppression, scheduler/process, science, or ABI behavior changes. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_embedded_python_prefix_api_closure_host_0_6_88_5_7.py`.
 
+### 0.6.88.6.1.1 cross-platform workflow discovery closure
+
+`0.6.88.6.1.1` is qualification-only relative to `0.6.88.6.1`. The cross-platform checker discovers the active GitHub Actions workflow by content from either `.yml` or `.yaml` files instead of hard-coding one filename. No scientific, loader, process, Python-backend, scheduler, fixed-state comparator, tolerance, or ABI behavior changes.
+
 ### 0.6.88.6.1 cross-platform fixed-state equivalence closure
 
 `0.6.88.6.1` is qualification-only relative to `0.6.88.6`. Native C++ implementation and scientific behavior are unchanged except package-version metadata. The cross-platform host runner now separates same-host raw-byte determinism from cross-architecture fixed-state equivalence: text line endings are normalized for comparison, discrete traversal/state remains exact, FITS structure remains exact, and finite numerical fields use a strict `1e-13` relative plus `64 ULP` envelope. Windows MPI remains out of scope.

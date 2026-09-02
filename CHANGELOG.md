@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.88.6.1.1 - CROSS_PLATFORM_WORKFLOW_DISCOVERY_CLOSURE - 2026-09-02
+
+- Preserve `0.6.88.6.1` as a historical four-host rejection: Linux GCC, macOS arm64, macOS Intel, and Windows UCRT64 all accepted build/runtime/fixed-state equivalence, but the source checker crashed because it hard-coded one GitHub Actions workflow filename.
+- Keep production/science implementation byte-identical to `.88.6.1` except normal package-version metadata.
+- Discover candidate workflows from `.github/workflows/*.yml` and `*.yaml` by required four-host/current-runner content instead of requiring `.github/workflows/cross-platform-qualification.yml`.
+- Emit workflow candidate/match/path diagnostics and convert a missing workflow into a normal qualification rejection rather than `FileNotFoundError`.
+- Preserve the `.88.6.1` same-host determinism and cross-platform fixed-state equivalence comparator/tolerances/reference payload unchanged. Windows MPI remains out of scope.
+
 ## 0.6.88.6.1 - CROSS_PLATFORM_FIXED_STATE_EQUIVALENCE_CLOSURE - 2026-09-02
 
 - Preserve `0.6.88.6` as a historical cross-platform host rejection: Linux GCC and macOS Intel accepted; macOS arm64 and Windows UCRT64 rejected only at the unconditional `FIXED_STATE_HASHES` gate.
