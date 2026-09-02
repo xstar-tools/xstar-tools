@@ -6,6 +6,7 @@ Start here if you want to install `xstar-tools`, configure XSTAR atomic data, ru
 :maxdepth: 2
 
 installation
+windows_installation_and_usage
 atomic_data
 first_run
 configuration

@@ -18,7 +18,8 @@
 - **`0.6.88.5.4` — historical Windows HOST REJECT:** the diagnostic closure exposed a deterministic `xstar_xspec_parallel.cpp` compile failure on both parallel and serial MinGW builds because portable standard-library headers were incorrectly hidden inside `#if !defined(_WIN32)`; the direct Win32 process smoke still passed.
 - **`0.6.88.5.5` — historical Windows HOST REJECT:** the standard-header closure fully fixed the native Windows build and the process/XSTAR2XSPEC gates, but the final regression failed when embedded CPython imported `_ctypes` because its extension-DLL dependency directory was not registered.
 - **`0.6.88.5.6` — historical Windows HOST REJECT:** the DLL-search closure fixed `_ctypes` loading and all runtime/regression gates passed, but Python 3.14.7 warned that `Py_GetPrefix()` is deprecated, so the strict warning-free gate rejected the host run.
-- **`0.6.88.5.7` — current candidate:** `WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE`; replaces only the deprecated prefix lookup with `sys.base_prefix` while preserving the accepted `.5.6` DLL-search/runtime behavior; Windows-host rerun pending.
+- **`0.6.88.5.7` — formally accepted:** `WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE`; the real MSYS2 UCRT64 host passed warning-free native build, process/XSTAR2XSPEC, fixed-state, embedded-Python, bridge, and full-regression gates.
+- **`0.6.88.6` — current candidate:** `CROSS_PLATFORM_QUALIFICATION`; qualification/documentation closure across Linux GCC, macOS arm64/x86_64 Apple Clang, and Windows MSYS2 UCRT64/MinGW-w64 with production behavior frozen to `.5.7`.
 - **`0.6.88.3.2` — formally accepted:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, accepted on both `macos-15` arm64 and `macos-15-intel` x86_64.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
@@ -334,6 +335,12 @@ The project deliberately separates scientific acceptance, publication correctnes
 `0.6.88.5.5` is now a historical Windows-host rejection even though its native build, PE/import/export/version/discovery, Win32 process smoke, and local XSTAR2XSPEC process-pool gates all accepted. Its remaining failure was isolated to embedded CPython: `_ctypes` could not load one of its dependent DLLs during the Python-backend regression, after the fixed-state C++ scaffold had already accepted.
 
 `0.6.88.5.6 — WINDOWS_EMBEDDED_PYTHON_DLL_SEARCH_CLOSURE` kept that successful native Windows path unchanged and fixed only the embedder. Its real UCRT64 run confirmed external `ctypes`, embedded-Python, fixed-state, Python-bridge, XSTAR2XSPEC process-pool, and full-regression ACCEPT. The host still rejected because Python 3.14.7 warned that the `.5.6` `Py_GetPrefix()` call is deprecated, violating the strict warning-free build contract.
+
+### 0.6.88.6 cross-platform qualification
+
+`0.6.88.6 — CROSS_PLATFORM_QUALIFICATION` unifies the native qualification contract across Linux GCC, macOS arm64/x86_64 Apple Clang, and Windows MSYS2 UCRT64/MinGW-w64. It is a qualification/documentation milestone: production C++ behavior is frozen to accepted `.5.7` except normal package-version metadata. The host matrix requires warning-free builds, native binary formats/exports, runtime library discovery, process and local XSTAR2XSPEC scheduler smokes, ABI60486 fixed-state hashes, embedded Python/bridge tests, and the existing regression suite. Windows MPI remains out of scope.
+
+For Windows native setup, build commands, atomic-data configuration, examples, XSTAR2XSPEC use, and troubleshooting, see `docs/user/windows_installation_and_usage.md`.
 
 ### 0.6.88.5.7 Windows embedded-Python prefix-API closure
 

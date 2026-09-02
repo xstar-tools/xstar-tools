@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.88.6 - CROSS_PLATFORM_QUALIFICATION - 2026-09-01
+
+- Formally records `0.6.88.5.7` as accepted on the real MSYS2 UCRT64 Windows host: warning-free build, PE/import/export/version/discovery, Win32 process smoke, synthetic local XSTAR2XSPEC pool, fixed-state scaffold, embedded Python, Python bridge, and full regression all accepted.
+- Adds one cross-platform qualification contract for Linux GCC, macOS arm64 Apple Clang, macOS x86_64 Apple Clang, and Windows MSYS2 UCRT64/MinGW-w64.
+- Keeps production C++ behavior byte-identical to `.5.7` except package-version metadata; scientific arithmetic/order, publication, loader/process semantics, paths, and public ABIs remain frozen.
+- Requires warning-free native builds, platform-native binary/shared-library formats, public exports, version reporting, sibling/plugin discovery, a direct process smoke, and a synthetic four-job `xstar-xspec --processes 2` scheduler smoke on every host.
+- Requires the ABI60486 fixed-state scaffold to reproduce the accepted SHA-256 payloads for `xout_step.log`, `xout_native_state.fits`, and `visited_records.csv` on every host, followed by embedded-Python/bridge checks and the existing regression suite.
+- Adds `docs/user/windows_installation_and_usage.md` with MSYS2 UCRT64 installation, native build commands, atomic-data configuration, included examples, direct `name=value` usage, local-process XSTAR2XSPEC, and troubleshooting.
+- Adds a four-target GitHub Actions workflow for Linux, both macOS architectures, and Windows. Windows MPI remains out of scope.
+
 ## 0.6.88.5.7 - WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE - 2026-09-01
 
 - Replace the deprecated Windows embedded-Python `Py_GetPrefix()` lookup with `sys.base_prefix` plus `PyUnicode_AsWideCharString()` / `PyMem_Free()` ownership.

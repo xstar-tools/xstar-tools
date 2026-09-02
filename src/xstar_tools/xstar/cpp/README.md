@@ -17,6 +17,12 @@ src/xstar_tools/xstar/cpp/
 
 The canonical scientific oracle remains FORTRAN XSTAR 2.59g. Native orchestration must not alter accepted scientific/controller ordering, contribution ordering, accumulation ordering, cutoffs, or publication semantics.
 
+## Cross-platform qualification (`0.6.88.6`)
+
+`0.6.88.6 — CROSS_PLATFORM_QUALIFICATION` freezes production behavior to the formally accepted `.5.7` Windows closure and runs one host contract across Linux GCC, macOS arm64/x86_64 Apple Clang, and Windows MSYS2 UCRT64/MinGW-w64. The normal build remains non-MPI on Windows; Windows MPI is out of scope.
+
+Windows users should follow `docs/user/windows_installation_and_usage.md` for MSYS2 UCRT64 prerequisites, `PLATFORM=windows`, native build commands, atomic-data setup, included examples, local-process `xstar-xspec`, and troubleshooting.
+
 ## Portable process layer (`0.6.88.4`)
 
 Process/environment operations now pass through `xstar_process.hpp`. The POSIX implementation intentionally delegates to the historical `fork`, `execv`/`execvp`, `waitpid`, `kill`, `getpid`, `setenv`, and `unsetenv` calls without changing arguments or status semantics. This isolates the later Windows/MinGW backend from XSTAR science and orchestration sources. Linux behavior is the qualification baseline for this release; Windows process creation is not yet claimed as accepted.
@@ -379,4 +385,4 @@ The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`.
 
 ### Windows embedded-Python prefix-API closure (0.6.88.5.7)
 
-`0.6.88.5.7 — WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE` preserves the `.5.6` Windows DLL-search behavior but removes deprecated `Py_GetPrefix()` usage. The embedder reads `sys.base_prefix`, converts it with `PyUnicode_AsWideCharString()`, frees the owned buffer with `PyMem_Free()`, then continues the existing `<prefix>/bin`/prefix fallback and retained `os.add_dll_directory()` handle. No warning suppression, scheduler/process, science, or ABI behavior changes. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_embedded_python_prefix_api_closure_host_0_6_88_5_7.py`.
+`0.6.88.5.7 — WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE` is formally accepted on MSYS2 UCRT64. It preserves the `.5.6` Windows DLL-search behavior but removes deprecated `Py_GetPrefix()` usage. The embedder reads `sys.base_prefix`, converts it with `PyUnicode_AsWideCharString()`, frees the owned buffer with `PyMem_Free()`, then continues the existing `<prefix>/bin`/prefix fallback and retained `os.add_dll_directory()` handle. No warning suppression, scheduler/process, science, or ABI behavior changes. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_embedded_python_prefix_api_closure_host_0_6_88_5_7.py`.

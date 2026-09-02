@@ -17,6 +17,7 @@ xstar_cpp
 c_abi
 adding_atomic_data
 qualification
+cross_platform_qualification_0_6_88_6
 performance_rules
 versioning_and_freeze
 packaging
