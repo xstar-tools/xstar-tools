@@ -21,23 +21,23 @@ def text(path):
 
 
 def test_version_metadata():
-    assert 'version = "0.6.88.6.1.1"' in text("pyproject.toml")
-    assert "PACKAGE_VERSION ?= 0.6.88.6.1.1" in (CPP / "Makefile").read_text()
-    assert 'kPackageVersion = "0.6.88.6.1.1"' in (CPP / "xstar_xspec_parallel.cpp").read_text()
-    assert 'kPackageVersion = "0.6.88.6.1.1"' in (CPP / "xstar_xspec_mpi.cpp").read_text()
+    assert 'version = "0.6.88.6.1.2"' in text("pyproject.toml")
+    assert "PACKAGE_VERSION ?= 0.6.88.6.1.2" in (CPP / "Makefile").read_text()
+    assert 'kPackageVersion = "0.6.88.6.1.2"' in (CPP / "xstar_xspec_parallel.cpp").read_text()
+    assert 'kPackageVersion = "0.6.88.6.1.2"' in (CPP / "xstar_xspec_mpi.cpp").read_text()
 
 
 def test_predecessor_rejection_is_recorded():
-    record = text("xstar_tools-0.6.88.6.1_host_rejection.md")
+    record = text("xstar_tools-0.6.88.6.1.1_host_rejection.md")
     for token in ("Linux GCC", "macOS arm64", "macOS Intel", "Windows UCRT64", "SOURCE_QUALIFICATION"):
         assert token in record
     assert "historical" in record.lower()
 
 
 def test_equivalence_design_is_indexed():
-    assert "CROSS_PLATFORM_WORKFLOW_DISCOVERY_CLOSURE" in text("cross_platform_workflow_discovery_closure_0_6_88_6_1_1.md")
-    assert "cross_platform_workflow_discovery_closure_0_6_88_6_1_1" in text("docs/developer/index.md")
-    assert "CROSS_PLATFORM_WORKFLOW_DISCOVERY_CLOSURE" in text("docs/developer/cross_platform_workflow_discovery_closure_0_6_88_6_1_1.md")
+    assert "WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE" in text("windows_reference_payload_line_ending_closure_0_6_88_6_1_2.md")
+    assert "windows_reference_payload_line_ending_closure_0_6_88_6_1_2" in text("docs/developer/index.md")
+    assert "WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE" in text("docs/developer/windows_reference_payload_line_ending_closure_0_6_88_6_1_2.md")
 
 
 def test_reference_payload_hashes_are_frozen():
@@ -48,7 +48,10 @@ def test_reference_payload_hashes_are_frozen():
         "visited_records.csv": "7d1addd4a66f29eda03d96954f8f07b3aa5bd627e8d506d84a3079f47474c3a3",
     }
     for name, digest in expected.items():
-        assert hashlib.sha256((REF / name).read_bytes()).hexdigest() == digest
+        payload = (REF / name).read_bytes()
+        if name in {"xout_step.log", "visited_records.csv"}:
+            payload = payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        assert hashlib.sha256(payload).hexdigest() == digest
 
 
 def test_reference_compares_exactly_to_itself():
@@ -62,8 +65,8 @@ def test_crlf_text_serialization_is_equivalent(tmp_path):
     cand = tmp_path / "cand"
     shutil.copytree(REF, cand)
     for name in ("xout_step.log", "visited_records.csv"):
-        payload = (cand / name).read_bytes().replace(b"\n", b"\r\n")
-        (cand / name).write_bytes(payload)
+        payload = (cand / name).read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        (cand / name).write_bytes(payload.replace(b"\n", b"\r\n"))
     result = compare_fixed_state(REF, cand)
     assert result.ok
     assert result.visited_records_exact
@@ -107,6 +110,13 @@ def test_numeric_contract_is_strict():
     assert MAX_ULP == 64
 
 
+def test_reference_payload_git_attributes_are_binary_safe():
+    attrs = text(".gitattributes")
+    assert "qualification/cross_platform_fixed_state_reference_0_6_88_6_1/xout_step.log -text" in attrs
+    assert "qualification/cross_platform_fixed_state_reference_0_6_88_6_1/visited_records.csv -text" in attrs
+    assert "qualification/cross_platform_fixed_state_reference_0_6_88_6_1/xout_native_state.fits binary" in attrs
+
+
 def test_runner_uses_same_host_determinism_and_equivalence():
     runner = text("tools/qualification/run_cross_platform_fixed_state_equivalence_closure_host_0_6_88_6_1.py")
     for token in (
@@ -130,7 +140,7 @@ def _qualifying_workflows(base):
         w = p.read_text(errors="replace")
         if all(token in w for token in (
             "ubuntu-24.04", "macos-15", "macos-15-intel", "windows-latest", "UCRT64",
-            "run_cross_platform_workflow_discovery_closure_host_0_6_88_6_1_1.py",
+            "run_windows_reference_payload_line_ending_closure_host_0_6_88_6_1_2.py",
         )):
             out.append(p)
     return out
@@ -145,7 +155,7 @@ def test_workflow_discovery_accepts_any_yaml_filename():
 
 
 def test_checker_does_not_hardcode_workflow_filename():
-    checker = text("tools/qualification/check_cross_platform_workflow_discovery_closure_0_6_88_6_1_1.py")
+    checker = text("tools/qualification/check_windows_reference_payload_line_ending_closure_0_6_88_6_1_2.py")
     assert 'glob("*.yml")' in checker
     assert 'glob("*.yaml")' in checker
     assert 'read(root / ".github/workflows/cross-platform-qualification.yml")' not in checker

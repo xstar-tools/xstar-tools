@@ -394,3 +394,8 @@ The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`.
 ### 0.6.88.6.1 cross-platform fixed-state equivalence closure
 
 `0.6.88.6.1` is qualification-only relative to `0.6.88.6`. Native C++ implementation and scientific behavior are unchanged except package-version metadata. The cross-platform host runner now separates same-host raw-byte determinism from cross-architecture fixed-state equivalence: text line endings are normalized for comparison, discrete traversal/state remains exact, FITS structure remains exact, and finite numerical fields use a strict `1e-13` relative plus `64 ULP` envelope. Windows MPI remains out of scope.
+
+
+### 0.6.88.6.1.2 Windows reference payload line-ending closure
+
+`0.6.88.6.1.2` is qualification-only relative to `0.6.88.6.1.1`. Windows Git checkout had rewritten the checked-in canonical text fixtures to CRLF, causing only the source fixture hash test to reject. `.gitattributes` now protects those fixture bytes and the text-fixture hash test normalizes line endings defensively. Native C++ production behavior and public ABIs are unchanged.

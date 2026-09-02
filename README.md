@@ -20,7 +20,8 @@
 - **`0.6.88.5.6` — historical Windows HOST REJECT:** the DLL-search closure fixed `_ctypes` loading and all runtime/regression gates passed, but Python 3.14.7 warned that `Py_GetPrefix()` is deprecated, so the strict warning-free gate rejected the host run.
 - **`0.6.88.5.7` — formally accepted:** `WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE`; the real MSYS2 UCRT64 host passed warning-free native build, process/XSTAR2XSPEC, fixed-state, embedded-Python, bridge, and full-regression gates.
 - **`0.6.88.6` — historical cross-platform HOST REJECT:** Linux GCC and macOS Intel accepted; macOS arm64 and Windows UCRT64 rejected only because the first unified runner required Linux/x86-64 raw fixed-state hashes across unlike platforms.
-- **`0.6.88.6.1.1` — current candidate:** `CROSS_PLATFORM_WORKFLOW_DISCOVERY_CLOSURE`; qualification-only correction for the `.6.1` hard-coded GitHub Actions workflow filename. Production/science behavior and the accepted fixed-state equivalence contract are unchanged. Windows MPI remains out of scope.
+- **`0.6.88.6.1.2` — current candidate:** `WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE`; qualification-only correction for Windows Git checkout rewriting the canonical text reference fixtures to CRLF. The fixture files are now byte-preserved by `.gitattributes`, while text-reference hash qualification also normalizes line endings defensively. Production/science behavior is unchanged; Windows MPI remains out of scope.
+- **`0.6.88.6.1.1` — historical Windows HOST REJECT / other three hosts ACCEPT:** workflow discovery was fixed, but Windows source qualification rejected only because the checked-in LF reference text fixtures were converted to CRLF during checkout. All Windows runtime/science equivalence gates accepted.
 - **`0.6.88.6.1` — historical four-host REJECT:** all build/runtime/fixed-state equivalence gates accepted on Linux GCC, macOS arm64, macOS Intel, and Windows UCRT64, but `SOURCE_QUALIFICATION` crashed when the active workflow filename differed from the checker's hard-coded path.
 - **`0.6.88.3.2` — formally accepted:** `MACOS_NATIVE_BUILD_LINK_CLOSURE`, accepted on both `macos-15` arm64 and `macos-15-intel` x86_64.
 
@@ -361,3 +362,8 @@ For Windows native setup, build commands, atomic-data configuration, examples, X
 `0.6.88.5.4 — WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE` is now a historical Windows-host rejection. Its parallel and serial MinGW builds both failed deterministically in `xstar_xspec_parallel.cpp`: portable standard-library headers such as `<fstream>` and `<iostream>` were inside `#if !defined(_WIN32)`, leaving Windows compilation without complete stream declarations or `std::cout`.
 
 `0.6.88.5.5 — WINDOWS_XSPEC_STANDARD_HEADER_CLOSURE` moved the portable C++ headers outside that guard and left only POSIX headers guarded. Its real UCRT64 host run then fully accepted the native build and process/XSTAR2XSPEC gates, but the final embedded-Python regression rejected at `_ctypes`; `.5.5` is therefore preserved as a historical Windows HOST REJECT and `.5.6` owns that new runtime closure.
+
+
+### 0.6.88.6.1.2 Windows reference payload line-ending closure
+
+`0.6.88.6.1.2 — WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE` is qualification-only. It preserves the canonical fixed-state reference text payloads with `.gitattributes` and makes the source-qualification digest checks line-ending-neutral for text fixtures. Generated fixed-state outputs still require raw byte identity on repeated runs of the same host; cross-platform comparison remains semantic with exact discrete state and the existing `1e-13` relative / `64 ULP` finite-number limits. No production science, process, loader, Python-backend, scheduler, or ABI behavior changes.

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.88.6.1.2 - WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE - 2026-09-02
+
+- Qualification-only closure on `0.6.88.6.1.1`; production/science sources remain unchanged except package-version metadata.
+- Records `.6.1.1` as Linux/macOS ACCEPT and Windows HOST REJECT solely because Git checkout changed canonical text reference fixtures from LF to CRLF before source-qualification hashing.
+- Adds `.gitattributes` byte-preservation rules for the canonical fixed-state text/FITS fixtures.
+- Canonical text-reference hash checks now normalize CRLF/CR to LF before hashing; the FITS reference remains raw byte-exact.
+- Hardens the synthetic CRLF equivalence test so it begins from normalized LF bytes and cannot create CRCRLF on Windows.
+- Same-host raw-byte determinism, exact discrete-state checks, `1e-13` relative / `64 ULP` numerical limits, and Windows-MPI-out-of-scope policy are unchanged.
+
 ## 0.6.88.6.1.1 - CROSS_PLATFORM_WORKFLOW_DISCOVERY_CLOSURE - 2026-09-02
 
 - Preserve `0.6.88.6.1` as a historical four-host rejection: Linux GCC, macOS arm64, macOS Intel, and Windows UCRT64 all accepted build/runtime/fixed-state equivalence, but the source checker crashed because it hard-coded one GitHub Actions workflow filename.
