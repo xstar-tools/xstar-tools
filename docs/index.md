@@ -44,3 +44,5 @@ science/index
 
 history/index
 ```
+
+- `0.6.88.5.7 — WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE`: see `developer/windows_embedded_python_prefix_api_closure_0_6_88_5_7.md`.

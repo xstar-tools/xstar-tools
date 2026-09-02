@@ -86,14 +86,36 @@ bool ensure_windows_python_dll_search(std::string& error) {
         return true;
     }
 
-    const wchar_t* prefix_text = Py_GetPrefix();
-    if (!prefix_text || prefix_text[0] == L'\0') {
-        error = "Py_GetPrefix returned an empty Windows Python prefix";
+    PyObject* prefix_object = PyObject_GetAttrString(sys, "base_prefix");
+    if (!prefix_object) {
+        error = python_error_text();
+        Py_DECREF(sys);
+        return false;
+    }
+    if (!PyUnicode_Check(prefix_object)) {
+        error = "sys.base_prefix is not a Unicode string";
+        Py_DECREF(prefix_object);
+        Py_DECREF(sys);
+        return false;
+    }
+
+    Py_ssize_t prefix_length = 0;
+    wchar_t* prefix_text = PyUnicode_AsWideCharString(prefix_object, &prefix_length);
+    Py_DECREF(prefix_object);
+    if (!prefix_text) {
+        error = python_error_text();
+        Py_DECREF(sys);
+        return false;
+    }
+    if (prefix_length == 0) {
+        PyMem_Free(prefix_text);
+        error = "sys.base_prefix is empty";
         Py_DECREF(sys);
         return false;
     }
 
     const std::filesystem::path prefix(prefix_text);
+    PyMem_Free(prefix_text);
     std::filesystem::path dll_directory = prefix / L"bin";
     std::error_code ec;
     if (!std::filesystem::is_directory(dll_directory, ec)) {

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.88.5.7 - WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE - 2026-09-01
+
+- Replace the deprecated Windows embedded-Python `Py_GetPrefix()` lookup with `sys.base_prefix` plus `PyUnicode_AsWideCharString()` / `PyMem_Free()` ownership.
+- Preserve the accepted `.5.6` `<prefix>/bin` DLL-directory registration, prefix fallback, retained `os.add_dll_directory()` handle, and all process/XSTAR2XSPEC/fixed-state/science behavior.
+- Keep warning suppression forbidden; the real MSYS2/UCRT64 host must pass the existing strict warning-free build gate.
+- Add focused source qualification and a Windows host runner carrying forward the `.5.6` split runtime/regression gates.
+
 ## 0.6.88.5.6 - WINDOWS_EMBEDDED_PYTHON_DLL_SEARCH_CLOSURE - 2026-09-01
 
 - Preserves `0.6.88.5.5` as a historical Windows-host rejection: its full native build, PE/import/export/version/discovery gates, direct Win32 process smoke, and synthetic XSTAR2XSPEC process pool accepted; the final regression failed only when embedded CPython imported `_ctypes`.

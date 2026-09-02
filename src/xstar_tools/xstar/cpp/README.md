@@ -376,3 +376,7 @@ The local-process path writes `xstar2xspec.log` and `xstar2xspec_scheduler.log`.
 ### Windows build failure diagnostic closure (0.6.88.5.4)
 
 `0.6.88.5.4 — WINDOWS_BUILD_FAILURE_DIAGNOSTIC_CLOSURE` is qualification-only. It preserves the `.5.3` local-zone, Python path, and Win32 process implementation unchanged while improving the Windows host runner. A failed parallel `make -jN all PLATFORM=windows` now reports its exact return code, failure-context lines, and a large delimited log tail, then performs an evidence-only `make -j1 all PLATFORM=windows` replay without cleaning. The serial replay never promotes the original build result; it exists only to expose a deterministic compiler/linker error or show that the failure is parallel/resource-sensitive.
+
+### Windows embedded-Python prefix-API closure (0.6.88.5.7)
+
+`0.6.88.5.7 — WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE` preserves the `.5.6` Windows DLL-search behavior but removes deprecated `Py_GetPrefix()` usage. The embedder reads `sys.base_prefix`, converts it with `PyUnicode_AsWideCharString()`, frees the owned buffer with `PyMem_Free()`, then continues the existing `<prefix>/bin`/prefix fallback and retained `os.add_dll_directory()` handle. No warning suppression, scheduler/process, science, or ABI behavior changes. Use `.github/workflows/windows-build.yml` or `tools/qualification/run_windows_embedded_python_prefix_api_closure_host_0_6_88_5_7.py`.
