@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.88.6.1 - CROSS_PLATFORM_FIXED_STATE_EQUIVALENCE_CLOSURE - 2026-09-02
+
+- Preserve `0.6.88.6` as a historical cross-platform host rejection: Linux GCC and macOS Intel accepted; macOS arm64 and Windows UCRT64 rejected only at the unconditional `FIXED_STATE_HASHES` gate.
+- Keep production science/portability implementation byte-identical to `.88.6` except normal package-version metadata.
+- Replace cross-architecture raw-hash acceptance with raw same-host repeatability plus cross-platform semantic equivalence.
+- Normalize CRLF/CR to LF for qualification text comparison; require exact visited-record contents and exact non-floating step-log state.
+- Parse the fixed-state FITS payload and require exact HDU/schema/row/column structure.
+- Require every non-identical finite floating value to satisfy both relative difference `<= 1e-13` and ULP distance `<= 64`; zero/nonzero, NaN, infinity, schema, and discrete-state mismatches remain hard failures.
+- Package the accepted Linux/macOS-Intel x86-64 fixed-state payload as a qualification-only reference.
+- Windows MPI remains out of scope.
+
 ## 0.6.88.6 - CROSS_PLATFORM_QUALIFICATION - 2026-09-01
 
 - Formally records `0.6.88.5.7` as accepted on the real MSYS2 UCRT64 Windows host: warning-free build, PE/import/export/version/discovery, Win32 process smoke, synthetic local XSTAR2XSPEC pool, fixed-state scaffold, embedded Python, Python bridge, and full regression all accepted.

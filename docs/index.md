@@ -45,6 +45,7 @@ science/index
 history/index
 ```
 
-- `0.6.88.6 — CROSS_PLATFORM_QUALIFICATION`: see `developer/cross_platform_qualification_0_6_88_6.md`.
+- `0.6.88.6.1 — CROSS_PLATFORM_FIXED_STATE_EQUIVALENCE_CLOSURE`: see `developer/cross_platform_fixed_state_equivalence_closure_0_6_88_6_1.md`.
+- `0.6.88.6 — CROSS_PLATFORM_QUALIFICATION` (historical two-host rejection under raw cross-host hash contract): see `developer/cross_platform_qualification_0_6_88_6.md`.
 - Windows native installation and usage: see `user/windows_installation_and_usage.md`.
 - `0.6.88.5.7 — WINDOWS_EMBEDDED_PYTHON_PREFIX_API_CLOSURE`: formally accepted on MSYS2 UCRT64; see `developer/windows_embedded_python_prefix_api_closure_0_6_88_5_7.md`.

@@ -18,6 +18,7 @@ c_abi
 adding_atomic_data
 qualification
 cross_platform_qualification_0_6_88_6
+cross_platform_fixed_state_equivalence_closure_0_6_88_6_1
 performance_rules
 versioning_and_freeze
 packaging

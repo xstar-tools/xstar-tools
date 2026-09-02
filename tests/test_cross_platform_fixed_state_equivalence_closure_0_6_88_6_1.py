@@ -1,0 +1,131 @@
+from pathlib import Path
+import shutil
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+CPP = ROOT / "src/xstar_tools/xstar/cpp"
+QUAL = ROOT / "tools/qualification"
+sys.path.insert(0, str(QUAL))
+
+from fixed_state_equivalence_0_6_88_6_1 import (  # noqa: E402
+    MAX_ULP,
+    REL_TOL,
+    compare_fixed_state,
+)
+
+REF = ROOT / "qualification/cross_platform_fixed_state_reference_0_6_88_6_1"
+
+
+def text(path):
+    return (ROOT / path).read_text()
+
+
+def test_version_metadata():
+    assert 'version = "0.6.88.6.1"' in text("pyproject.toml")
+    assert "PACKAGE_VERSION ?= 0.6.88.6.1" in (CPP / "Makefile").read_text()
+    assert 'kPackageVersion = "0.6.88.6.1"' in (CPP / "xstar_xspec_parallel.cpp").read_text()
+    assert 'kPackageVersion = "0.6.88.6.1"' in (CPP / "xstar_xspec_mpi.cpp").read_text()
+
+
+def test_predecessor_rejection_is_recorded():
+    record = text("xstar_tools-0.6.88.6_host_rejection.md")
+    assert "macOS arm64" in record
+    assert "Windows UCRT64" in record
+    assert "FIXED_STATE_HASHES" in record
+    assert "historical" in record.lower()
+
+
+def test_equivalence_design_is_indexed():
+    assert "CROSS_PLATFORM_FIXED_STATE_EQUIVALENCE_CLOSURE" in text("cross_platform_fixed_state_equivalence_closure_0_6_88_6_1.md")
+    assert "cross_platform_fixed_state_equivalence_closure_0_6_88_6_1" in text("docs/developer/index.md")
+    assert "CROSS_PLATFORM_FIXED_STATE_EQUIVALENCE_CLOSURE" in text("docs/developer/cross_platform_fixed_state_equivalence_closure_0_6_88_6_1.md")
+
+
+def test_reference_payload_hashes_are_frozen():
+    import hashlib
+    expected = {
+        "xout_step.log": "5508313e40d514d63b4d5443bc67198fe1a62a82f76f428958e6a5ea07cafa38",
+        "xout_native_state.fits": "e430573df3bd1666fef4b3e5e8305f0b912e06456685aa921f4737f305e875f4",
+        "visited_records.csv": "7d1addd4a66f29eda03d96954f8f07b3aa5bd627e8d506d84a3079f47474c3a3",
+    }
+    for name, digest in expected.items():
+        assert hashlib.sha256((REF / name).read_bytes()).hexdigest() == digest
+
+
+def test_reference_compares_exactly_to_itself():
+    result = compare_fixed_state(REF, REF)
+    assert result.ok
+    assert result.numeric.differing == 0
+    assert result.numeric.max_ulp == 0
+
+
+def test_crlf_text_serialization_is_equivalent(tmp_path):
+    cand = tmp_path / "cand"
+    shutil.copytree(REF, cand)
+    for name in ("xout_step.log", "visited_records.csv"):
+        payload = (cand / name).read_bytes().replace(b"\n", b"\r\n")
+        (cand / name).write_bytes(payload)
+    result = compare_fixed_state(REF, cand)
+    assert result.ok
+    assert result.visited_records_exact
+    assert result.step_discrete_exact
+
+
+def test_last_bit_step_difference_is_equivalent(tmp_path):
+    cand = tmp_path / "cand"
+    shutil.copytree(REF, cand)
+    p = cand / "xout_step.log"
+    s = p.read_text()
+    s = s.replace("total_heating=6.4304308882626018e-12", "total_heating=6.430430888262601e-12")
+    p.write_text(s)
+    result = compare_fixed_state(REF, cand)
+    assert result.ok
+    assert result.numeric.differing >= 1
+
+
+def test_discrete_state_change_is_rejected(tmp_path):
+    cand = tmp_path / "cand"
+    shutil.copytree(REF, cand)
+    p = cand / "xout_step.log"
+    p.write_text(p.read_text().replace("records_evaluated=23", "records_evaluated=22"))
+    result = compare_fixed_state(REF, cand)
+    assert not result.ok
+    assert not result.step_discrete_exact
+
+
+def test_visited_record_change_is_rejected(tmp_path):
+    cand = tmp_path / "cand"
+    shutil.copytree(REF, cand)
+    p = cand / "visited_records.csv"
+    p.write_text(p.read_text().replace("56,1", "56,2"))
+    result = compare_fixed_state(REF, cand)
+    assert not result.ok
+    assert not result.visited_records_exact
+
+
+def test_numeric_contract_is_strict():
+    assert REL_TOL == 1.0e-13
+    assert MAX_ULP == 64
+
+
+def test_runner_uses_same_host_determinism_and_equivalence():
+    runner = text("tools/qualification/run_cross_platform_fixed_state_equivalence_closure_host_0_6_88_6_1.py")
+    for token in (
+        "FIXED_STATE_SAME_HOST_DETERMINISM",
+        "FIXED_STATE_VISITED_RECORDS_EXACT",
+        "FIXED_STATE_STEP_DISCRETE_STATE",
+        "FIXED_STATE_FITS_STRUCTURE",
+        "FIXED_STATE_NUMERIC_EQUIVALENCE",
+        "FIXED_STATE_REFERENCE_EQUIVALENCE",
+    ):
+        assert token in runner
+    assert 'gate("FIXED_STATE_HASHES"' not in runner
+
+
+def test_workflow_has_four_non_mpi_hosts():
+    workflow = text(".github/workflows/cross-platform-qualification.yml")
+    for token in ("ubuntu-24.04", "macos-15", "macos-15-intel", "windows-latest", "UCRT64"):
+        assert token in workflow
+    assert "run_cross_platform_fixed_state_equivalence_closure_host_0_6_88_6_1.py" in workflow
+    assert "make mpi" not in workflow
+    assert "mingw-w64-ucrt-x86_64-msmpi" not in workflow

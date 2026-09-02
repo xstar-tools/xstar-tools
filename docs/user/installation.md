@@ -72,7 +72,7 @@ RPATH, `.so` naming). macOS/Windows native support should be added as a
 separate portability qualification rather than hidden behind an untested build
 translation.
 
-## Native source builds in 0.6.88.6
+## Native source builds in 0.6.88.6.1
 
 The current native source tree has qualified build contracts for Linux GCC, macOS Apple Clang on arm64 and x86_64, and Windows MSYS2 UCRT64/MinGW-w64. This is distinct from older wheel-policy milestones documented above; source-build portability was added later in the `0.6.88` series.
 

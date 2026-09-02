@@ -66,8 +66,8 @@ Windows drive `C:` is visible in MSYS2 as `/c`. For example, if the source archi
 
 ```bash
 cd /c/Users/you/Downloads
-tar -xzf xstar_tools-0.6.88.6.tar.gz
-cd xstar_tools-0.6.88.6/src/xstar_tools/xstar/cpp
+tar -xzf xstar_tools-0.6.88.6.1.tar.gz
+cd xstar_tools-0.6.88.6.1/src/xstar_tools/xstar/cpp
 ```
 
 For a Git checkout, enter the same `src/xstar_tools/xstar/cpp` directory.
@@ -295,12 +295,12 @@ Inside MSYS2 commands, prefer POSIX-style paths such as `/c/xstar/data`. The nat
 
 ## 12. Windows qualification command
 
-The `0.6.88.6` cross-platform host runner can be executed directly from an MSYS2 UCRT64 checkout:
+The `0.6.88.6.1` cross-platform fixed-state equivalence host runner can be executed directly from an MSYS2 UCRT64 checkout:
 
 ```bash
-python tools/qualification/run_cross_platform_qualification_host_0_6_88_6.py \
+python tools/qualification/run_cross_platform_fixed_state_equivalence_closure_host_0_6_88_6_1.py \
   --package "$PWD" \
-  --output-root "$PWD/run_cross_platform_qualification_06886_windows" \
+  --output-root "$PWD/run_cross_platform_fixed_state_equivalence_closure_068861_windows" \
   --jobs 4
 ```
 
