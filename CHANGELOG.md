@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.88.6.1.2.1 - WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE - 2026-09-02
+
+- **FORMALLY ACCEPTED** on Linux GCC x86_64, macOS arm64, macOS Intel x86_64, and Windows MSYS2 UCRT64/AMD64. All four hosts returned `WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE_06886121_HOST_RESULT=ACCEPT`.
+- The accepted cross-platform fixed-state results are canonical byte-exact on Linux/macOS Intel; Windows FITS is byte-exact with CRLF-only text serialization; macOS arm64 is same-host deterministic with maximum observed `4.5635339780748665e-15` relative difference and `39 ULP`.
+- Qualification/workflow-only closure on `0.6.88.6.1.2`; production/science sources remain unchanged except package-version metadata.
+- Records `.6.1.2` as Linux GCC/macOS arm64/macOS Intel ACCEPT and Windows workflow REJECT before the host runner because `git check-attr` was executed in `shell: msys2 {0}` where GitHub's native Git was not on `PATH`.
+- Moves the canonical fixture Git-attribute preflight to native `pwsh` before MSYS2 setup.
+- Turns that preflight into an actual assertion: both text fixtures must report `text: unset`, the FITS fixture must report `binary: set`, and Git command failure is fatal.
+- Preserves `.gitattributes`, line-ending-neutral reference hashing, same-host byte determinism, cross-platform exact discrete state, `1e-13` relative / `64 ULP` numerical limits, and Windows MPI out-of-scope policy unchanged.
+
 ## 0.6.88.6.1.2 - WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE - 2026-09-02
 
 - Qualification-only closure on `0.6.88.6.1.1`; production/science sources remain unchanged except package-version metadata.

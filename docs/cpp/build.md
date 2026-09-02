@@ -1,70 +1,78 @@
 # Native build
 
-## pip/wheel build
+The accepted native build continues to use the retained GNU Make build rather than translating the scientific tree to a new build system.
 
-Milestone 8 makes setuptools the authoritative PEP 517 backend while preserving
-the already-qualified native Makefile and compiler defaults.
+## Platform matrix
 
-On Linux:
+| Platform | Toolchain | Non-MPI native status |
+|---|---|---|
+| Linux x86_64 | GCC / GNU Make | ACCEPT |
+| macOS arm64 | Apple Clang / GNU Make | ACCEPT |
+| macOS x86_64 | Apple Clang / GNU Make | ACCEPT |
+| Windows x86_64 | MSYS2 UCRT64 / MinGW-w64 GCC / GNU Make | ACCEPT |
 
-```bash
-XSTAR_TOOLS_NATIVE=required python -m build --wheel
-```
-
-The build hook copies the native source into an isolated temporary directory,
-runs the retained Makefile there, and copies **only runtime artifacts** into the
-wheel. It does not build in or contaminate the source checkout.
-
-The installed native payload contains the shared libraries required by the
-public C++ modes, `xstar_cpp`, `xstar-cpp`, `constants.def`, public ABI headers,
-and `native_build.json`. C++ implementation sources, object files, Makefiles,
-historical qualification data, and caches are not wheel payload.
-
-Build policy is controlled by:
-
-```text
-XSTAR_TOOLS_NATIVE=auto|required|off
-XSTAR_TOOLS_NATIVE_JOBS=N
-```
-
-`auto` is the default. In 0.6.71 it enables native compilation on Linux and
-selects Python-only packaging on unsupported platforms. `required` converts an
-unavailable native prerequisite into a build failure. `off` creates a pure
-Python wheel.
+Current accepted portability closure: `0.6.88.6.1.2.1`.
 
 ## Source checkout build
 
-The direct source build remains available and uses the same Makefile:
+Normal non-MPI build:
 
 ```bash
-make -C src/xstar_tools/xstar/cpp -j2
+make -C src/xstar_tools/xstar/cpp -j4
 ```
 
-Requirements:
+Inspect resolved platform values:
 
-- a C++17 compiler;
-- CFITSIO development headers/libraries;
-- `python3-config` for the Python backend plugin;
-- a standard library with C++17 filesystem support.
+```bash
+make -C src/xstar_tools/xstar/cpp print-config
+```
 
-For GNU/libstdc++ compatibility the retained Makefile exposes:
+Important build-abstraction variables include:
 
 ```text
-FILESYSTEM_LIBS ?= -lstdc++fs
+PLATFORM
+SHLIB_EXT
+EXEEXT
+SHLIB_LDFLAGS
+PIC_FLAGS
+DL_LIBS
+THREAD_LIBS
+RPATH_ORIGIN
+FILESYSTEM_LIBS
 ```
 
-Override it only when required by the host toolchain:
+### Linux
 
 ```bash
-make -C src/xstar_tools/xstar/cpp FILESYSTEM_LIBS= -j2
+make -C src/xstar_tools/xstar/cpp -j4 PLATFORM=linux
 ```
 
-The packaging layer does not alter the frozen default scientific compiler flags
-or introduce CMake/scikit-build translation in this milestone.
+Requirements include a C++17 compiler, CFITSIO development files, `pkg-config`, and Python development support for the embedded Python backend.
+
+### macOS
+
+```bash
+brew install cfitsio pkg-config
+make -C src/xstar_tools/xstar/cpp -j4 PLATFORM=macos
+```
+
+The accepted build uses `.dylib`, `@rpath`, and `@loader_path` conventions.
+
+### Windows
+
+From an MSYS2 UCRT64 terminal:
+
+```bash
+make -C src/xstar_tools/xstar/cpp -j4 PLATFORM=windows
+```
+
+Windows builds `.dll`, `.dll.a`, and `.exe` artifacts and uses the qualified Win32 process backend. See {doc}`../user/windows_installation_and_usage` for packages and examples.
+
+Windows MPI is intentionally out of scope.
 
 ## Optional MPI build
 
-`0.6.86` established `xstar-xspec-mpi` as an explicitly optional, formally accepted target. The default native build and wheel build do not require MPI and do not compile the MPI source.
+`xstar-xspec-mpi` is opt-in and not part of `all`:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi
@@ -76,16 +84,21 @@ or:
 make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
 ```
 
-The compiler wrapper is configurable:
+Override the compiler wrapper when needed:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi MPICXX=/path/to/mpic++
 ```
 
-A normal:
+The accepted production use case is Linux/HPC. A shared filesystem is required by the current file-backed MPI implementation.
 
-```bash
-make -C src/xstar_tools/xstar/cpp
+## Python/wheel build controls
+
+The Python packaging hook can request native compilation without changing the qualified Makefile/compiler policy:
+
+```text
+XSTAR_TOOLS_NATIVE=auto|required|off
+XSTAR_TOOLS_NATIVE_JOBS=N
 ```
 
-must remain MPI-free. This separation prevents an MPI development package/runtime from becoming a dependency of ordinary `xstar-cpp` or local-process `xstar-xspec` users.
+`required` converts missing native prerequisites into a build failure; `off` creates a Python-only installation. Packaging policy and direct source-build portability are deliberately treated as separate contracts.

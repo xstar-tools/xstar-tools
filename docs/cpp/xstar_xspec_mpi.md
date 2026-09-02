@@ -1,6 +1,6 @@
 # `xstar-xspec-mpi`
 
-`xstar-xspec-mpi` is the formally accepted `0.6.86` true-MPI XSTAR2XSPEC executable. It is separate from the local-process `xstar-xspec` path.
+`xstar-xspec-mpi` is the formally accepted `0.6.86` true-MPI XSTAR2XSPEC executable. It is separate from the local-process `xstar-xspec` path. The accepted production use case is Linux/HPC; Windows MPI is intentionally out of scope and deferred.
 
 ## Build
 

@@ -2,6 +2,8 @@
 
 ## Native `xstar-cpp`
 
+Commands below use the Unix executable spelling. In an MSYS2 UCRT64 Windows build, use `xstar-cpp.exe` / `xstar-xspec.exe`.
+
 Using an XSTAR parameter file:
 
 ```bash

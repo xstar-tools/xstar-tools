@@ -21,23 +21,23 @@ def text(path):
 
 
 def test_version_metadata():
-    assert 'version = "0.6.88.6.1.2"' in text("pyproject.toml")
-    assert "PACKAGE_VERSION ?= 0.6.88.6.1.2" in (CPP / "Makefile").read_text()
-    assert 'kPackageVersion = "0.6.88.6.1.2"' in (CPP / "xstar_xspec_parallel.cpp").read_text()
-    assert 'kPackageVersion = "0.6.88.6.1.2"' in (CPP / "xstar_xspec_mpi.cpp").read_text()
+    assert 'version = "0.6.88.6.1.2.1"' in text("pyproject.toml")
+    assert "PACKAGE_VERSION ?= 0.6.88.6.1.2.1" in (CPP / "Makefile").read_text()
+    assert 'kPackageVersion = "0.6.88.6.1.2.1"' in (CPP / "xstar_xspec_parallel.cpp").read_text()
+    assert 'kPackageVersion = "0.6.88.6.1.2.1"' in (CPP / "xstar_xspec_mpi.cpp").read_text()
 
 
 def test_predecessor_rejection_is_recorded():
-    record = text("xstar_tools-0.6.88.6.1.1_host_rejection.md")
-    for token in ("Linux GCC", "macOS arm64", "macOS Intel", "Windows UCRT64", "SOURCE_QUALIFICATION"):
+    record = text("xstar_tools-0.6.88.6.1.2_host_rejection.md")
+    for token in ("Linux GCC", "macOS arm64", "macOS Intel", "Windows", "git: command not found"):
         assert token in record
     assert "historical" in record.lower()
 
 
 def test_equivalence_design_is_indexed():
-    assert "WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE" in text("windows_reference_payload_line_ending_closure_0_6_88_6_1_2.md")
-    assert "windows_reference_payload_line_ending_closure_0_6_88_6_1_2" in text("docs/developer/index.md")
-    assert "WINDOWS_REFERENCE_PAYLOAD_LINE_ENDING_CLOSURE" in text("docs/developer/windows_reference_payload_line_ending_closure_0_6_88_6_1_2.md")
+    assert "WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE" in text("windows_git_preflight_shell_closure_0_6_88_6_1_2_1.md")
+    assert "windows_git_preflight_shell_closure_0_6_88_6_1_2_1" in text("docs/developer/index.md")
+    assert "WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE" in text("docs/developer/windows_git_preflight_shell_closure_0_6_88_6_1_2_1.md")
 
 
 def test_reference_payload_hashes_are_frozen():
@@ -140,7 +140,7 @@ def _qualifying_workflows(base):
         w = p.read_text(errors="replace")
         if all(token in w for token in (
             "ubuntu-24.04", "macos-15", "macos-15-intel", "windows-latest", "UCRT64",
-            "run_windows_reference_payload_line_ending_closure_host_0_6_88_6_1_2.py",
+            "run_windows_git_preflight_shell_closure_host_0_6_88_6_1_2_1.py",
         )):
             out.append(p)
     return out
@@ -154,8 +154,25 @@ def test_workflow_discovery_accepts_any_yaml_filename():
     assert "mingw-w64-ucrt-x86_64-msmpi" not in workflow
 
 
+def test_windows_git_preflight_uses_native_powershell_and_asserts_attributes():
+    matches = _qualifying_workflows(ROOT)
+    assert matches
+    workflow = matches[0].read_text(errors="replace")
+    verify = workflow.index("name: Verify canonical fixture attributes")
+    setup = workflow.index("name: Set up MSYS2 UCRT64")
+    assert verify < setup
+    block = workflow[verify:setup]
+    assert "shell: pwsh" in block
+    assert "git check-attr text --" in block
+    assert "git check-attr binary --" in block
+    assert "text: unset" in block
+    assert "binary: set" in block
+    assert "$LASTEXITCODE" in block
+    assert "shell: msys2" not in block
+
+
 def test_checker_does_not_hardcode_workflow_filename():
-    checker = text("tools/qualification/check_windows_reference_payload_line_ending_closure_0_6_88_6_1_2.py")
+    checker = text("tools/qualification/check_windows_git_preflight_shell_closure_0_6_88_6_1_2_1.py")
     assert 'glob("*.yml")' in checker
     assert 'glob("*.yaml")' in checker
     assert 'read(root / ".github/workflows/cross-platform-qualification.yml")' not in checker

@@ -1,8 +1,10 @@
 # Windows native installation and usage
 
-`xstar-tools` supports a native Windows build through **MSYS2 UCRT64**, MinGW-w64 GCC, GNU Make, CFITSIO, and pkg-config. The `0.6.88.5.7` Windows host qualification accepted this toolchain with warning-free native compilation, PE DLL/import-library/export checks, shared-library discovery, the Win32 process layer, local-process XSTAR2XSPEC scheduling, the fixed-state regression scaffold, the embedded Python backend, and the Python bridge.
+`xstar-tools` supports a native Windows build through **MSYS2 UCRT64**, MinGW-w64 GCC, GNU Make, CFITSIO, and pkg-config. The current accepted portability baseline, `0.6.88.6.1.2.1`, qualifies this toolchain as part of the full four-host matrix. Windows passes warning-free native compilation, PE DLL/import-library/export checks, shared-library discovery, the Win32 process layer, local-process XSTAR2XSPEC scheduling, fixed-state same-host determinism and cross-platform reference equivalence, the embedded Python backend, the Python bridge, and the existing regression suite.
 
 Windows MPI is not part of the accepted Windows contract. Use `xstar-xspec --processes N` for local parallel XSTAR2XSPEC work on Windows. Do not expect `xstar-xspec-mpi` to be produced by the Windows build.
+
+The accepted Windows fixed-state run reproduces the canonical FITS payload byte-exactly. Its text products may use CRLF line endings; the qualified cross-platform comparison normalizes line endings and requires exact discrete state plus strict numerical equivalence.
 
 ## 1. Install MSYS2 and open UCRT64
 
@@ -66,8 +68,8 @@ Windows drive `C:` is visible in MSYS2 as `/c`. For example, if the source archi
 
 ```bash
 cd /c/Users/you/Downloads
-tar -xzf xstar_tools-0.6.88.6.1.tar.gz
-cd xstar_tools-0.6.88.6.1/src/xstar_tools/xstar/cpp
+tar -xzf xstar_tools-0.6.88.6.1.2.1.tar.gz
+cd xstar_tools-0.6.88.6.1.2.1/src/xstar_tools/xstar/cpp
 ```
 
 For a Git checkout, enter the same `src/xstar_tools/xstar/cpp` directory.
@@ -295,13 +297,19 @@ Inside MSYS2 commands, prefer POSIX-style paths such as `/c/xstar/data`. The nat
 
 ## 12. Windows qualification command
 
-The `0.6.88.6.1` cross-platform fixed-state equivalence host runner can be executed directly from an MSYS2 UCRT64 checkout:
+The current accepted `0.6.88.6.1.2.1` host runner can be executed directly from an MSYS2 UCRT64 checkout:
 
 ```bash
-python tools/qualification/run_cross_platform_fixed_state_equivalence_closure_host_0_6_88_6_1.py \
+python tools/qualification/run_windows_git_preflight_shell_closure_host_0_6_88_6_1_2_1.py \
   --package "$PWD" \
-  --output-root "$PWD/run_cross_platform_fixed_state_equivalence_closure_068861_windows" \
+  --output-root "$PWD/run_windows_git_preflight_shell_closure_06886121_windows" \
   --jobs 4
 ```
 
-It checks the Windows native build, warnings, PE/import/export contract, runtime discovery, process abstraction, local XSTAR2XSPEC process pool, frozen fixed-state outputs, embedded Python backend, Python bridge, and regression suite. It does not require Windows MPI.
+It checks the Windows native build, warnings, PE/import/export contract, runtime discovery, process abstraction, local XSTAR2XSPEC process pool, same-host fixed-state determinism, cross-platform fixed-state reference equivalence, embedded Python backend, Python bridge, and regression suite. The GitHub Actions workflow additionally performs the canonical fixture Git-attribute preflight under native PowerShell before entering MSYS2. Windows MPI is not required.
+
+The formal Windows acceptance marker is:
+
+```text
+WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE_06886121_HOST_RESULT=ACCEPT
+```
