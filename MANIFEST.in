@@ -1358,3 +1358,18 @@ include docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md
 include pypi_linux_profile_build_target_closure_0_6_89_2_2.md
 include xstar_tools-0.6.89.2.2_local_validation.md
 include xstar_tools-0.6.89.2.1_manylinux_rejection.md
+
+# 0.6.89.3 PyPI native macOS wheels and GPL-3.0 license transition.
+include .github/workflows/pypi-native-wheel-macos.yml
+include qualification/pypi_native_wheel_macos_0_6_89_3.json
+include tools/packaging/build_macos_cfitsio.sh
+include tools/packaging/pypi_macos_wheel_smoke.py
+include tools/qualification/check_pypi_native_wheel_macos_0_6_89_3.py
+include tools/qualification/check_pypi_native_wheel_macos_artifacts_0_6_89_3.py
+include tools/qualification/run_pypi_native_wheel_macos_host_0_6_89_3.py
+include tests/test_pypi_native_wheel_macos_0_6_89_3.py
+include docs/developer/pypi_native_wheel_macos_0_6_89_3.md
+include pypi_native_wheel_macos_0_6_89_3.md
+include xstar_tools_conversation_summary_through_0.6.89.3_candidate.md
+include xstar_tools-0.6.89.3_local_validation.md
+include tools/qualification/replay_pypi_native_wheel_macos_0_6_89_3.py

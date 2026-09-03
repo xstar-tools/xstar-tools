@@ -2,9 +2,9 @@
 
 `pyproject.toml` is the authoritative Python package metadata/build configuration. The small `setup.py` file exists only to register the native setuptools build hook.
 
-`0.6.89.1.3 — PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE` is formally accepted across Linux x86_64, macOS arm64, macOS Intel x86_64, and Windows UCRT64/AMD64. `0.6.89.2.2 — PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE` is the current release-wheel candidate. It retains the `0.6.89.2` CPython 3.9–3.14 `manylinux_2_28` wheel contract and the `.89.2.1` preflight dependency fix, and adds a dedicated `pypi-linux` native build target so the optional standalone Python-embedding plugin is not linked against `libpython` during wheel production. The frozen science revision and public ABIs are unchanged.
+`0.6.89.2.2 — PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE` is formally accepted for CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels. `0.6.89.3 — PYPI_NATIVE_WHEEL_MACOS` is the current macOS release-wheel candidate, producing native arm64 and x86_64 wheels rather than `universal2`. The frozen science revision and public ABIs are unchanged.
 
-The PyPI Linux binary profile deliberately omits only `libxstar_backend_python.so`, the optional standalone Python-embedding plugin, because it directly links `libpythonX.Y`. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present in the PyPI Linux wheel. MPI remains opt-in and `atdb.fits` remains external.
+The PyPI Linux and macOS binary profiles deliberately omit only the optional standalone Python-embedding plugin (`libxstar_backend_python.so` / `.dylib`) so distributable wheels do not acquire a Python-runtime library dependency. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present. MPI remains opt-in and `atdb.fits` remains external. Starting with 0.6.89.3, package metadata uses the project license designation `GPL-3.0` and ships the GNU GPL Version 3 `LICENSE` file.
 
 ## Python package installation
 

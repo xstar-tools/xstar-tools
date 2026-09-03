@@ -4,9 +4,9 @@
 
 ## Current status
 
-**Current formally accepted packaging baseline: `0.6.89.1.3` — `PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE`.** The full GitHub Actions matrix (Linux x86_64, macOS arm64, macOS Intel x86_64, and Windows UCRT64/AMD64) returned host ACCEPT.
+**Current formally accepted PyPI native-wheel baseline: `0.6.89.2.2` — `PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE`.** CPython 3.9 through 3.14 `manylinux_2_28_x86_64` wheels all passed repaired-wheel artifact checks, clean-install smoke, and `twine check`.
 
-**Current release-wheel candidate: `0.6.89.2.2` — `PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE`.** It retains the `0.6.89.2` manylinux publication contract and the `0.6.89.2.1` preflight dependency fix, while correcting the native build boundary: the `pypi-linux` profile now invokes a dedicated Makefile target that never builds the standalone Python-embedding plugin. The candidate still targets repaired `manylinux_2_28_x86_64` native wheels for CPython 3.9 through 3.14, keeps MPI out of ordinary wheels, and keeps `atdb.fits` external.
+**Current release-wheel candidate: `0.6.89.3` — `PYPI_NATIVE_WHEEL_MACOS`.** It adds native arm64 and x86_64 macOS wheels, deliberately avoids `universal2`, pins `MACOSX_DEPLOYMENT_TARGET=11.0`, uses delocate to vendor CFITSIO, retains MPI exclusion and external `atdb.fits`, and changes the project license designation to `GPL-3.0` from this release onward.
 
 The accepted cross-platform source-build contract remains non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/HPC build.
 
@@ -24,9 +24,9 @@ A normal native source wheel remains available when platform prerequisites are i
 XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
 ```
 
-`0.6.89.2` introduced the Linux PyPI release profile; `0.6.89.2.1` fixed release-workflow preflight dependency ordering; `0.6.89.2.2` closes the first manylinux native-build failure by ensuring the PyPI profile excludes the standalone Python-embedding plugin at build time as well as staging time. Release wheels are built inside `manylinux_2_28_x86_64`, use a pinned CFITSIO 4.6.2 build, and are repaired so CFITSIO is wheel-local. The release profile contains `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, `xstar-xspec`, the C++ production libraries, and the public C API. It deliberately omits only the optional standalone Python-embedding plugin because a portable manylinux wheel must not depend on or vendor `libpythonX.Y`. Source/native installs retain the full plugin set.
+`0.6.89.2.2` formally closes Linux PyPI wheel production: repaired CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels carry wheel-local CFITSIO and exclude only the standalone Python-embedding plugin. `0.6.89.3` extends that publication model to macOS with separate `arm64` and `x86_64` wheels, a common macOS 11 deployment target, and delocate repair. Source/native installs retain the full plugin set.
 
-The ordinary wheel still excludes `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_native_wheel_linux_0_6_89_2.md` for the retained release-wheel contract, `docs/developer/pypi_native_wheel_linux_preflight_dependency_closure_0_6_89_2_1.md` for the preflight closure, and `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md` for the native build-target closure.
+Ordinary wheels still exclude `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md` for the accepted Linux closure and `docs/developer/pypi_native_wheel_macos_0_6_89_3.md` for the macOS candidate.
 
 ## Quick start
 
@@ -347,3 +347,8 @@ The long portability investigation and historical host rejections are intentiona
 ## Development rule of thumb
 
 For documentation/API/build-system changes, run the narrow qualification gates that cover the changed boundary. For scientific or orchestration changes, begin with representative fast fixtures and preserve the frozen oracle/ABI contracts. Expensive broad or multi-element qualification should be reserved for changes that actually require it.
+
+## License
+
+Starting with `0.6.89.3`, `xstar-tools` is distributed under the project license designation **GPL-3.0**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). Historical release notes that mention the former MIT declaration are retained only as historical records.
+

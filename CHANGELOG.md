@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.89.3 - PYPI_NATIVE_WHEEL_MACOS - 2026-09-03
+
+- Builds native, architecture-specific macOS PyPI wheel candidates for CPython 3.9 through 3.14 on both Apple Silicon (`arm64`) and Intel (`x86_64`) using matching GitHub-hosted runners; `universal2` is intentionally not produced.
+- Adds `XSTAR_TOOLS_NATIVE_PROFILE=pypi-macos` and `make pypi-macos`, omitting only the optional standalone Python-embedding plugin at build/staging time while retaining the public C API, C++ backend, science/runtime libraries, `xstar-cpp`, and non-MPI XSTAR2XSPEC executables.
+- Pins `MACOSX_DEPLOYMENT_TARGET=11.0`, builds pinned CFITSIO 4.6.2 from the HEASARC source archive, and uses cibuildwheel/delocate to vendor external dylib dependencies into repaired wheels.
+- Adds clean installed-wheel qualification for exact single-architecture Mach-O payloads, no Python-runtime dylib/framework dependency, wheel-local CFITSIO, public ABI/version surfaces, `zone-cpp`, an offline `bremem` science smoke, MPI exclusion, and external `atdb.fits` policy.
+- Changes the project license designation from MIT to `GPL-3.0` for this release and later: `pyproject.toml` now declares `license = "GPL-3.0"`, and `LICENSE` is replaced by the supplied GNU General Public License Version 3 text.
+- Preserves science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60486`, XSPEC table ABI `1`, and the accepted Linux PyPI wheel contract from `0.6.89.2.2`.
+
 ## 0.6.89.2.2 - PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE - 2026-09-03
 
 - Preserves `0.6.89.2.1` as a historical six-selector manylinux build REJECT: cibuildwheel reached native compilation, but `build_support.py` still invoked `make all`, so the optional standalone Python-embedding plugin was built even though the `pypi-linux` wheel artifact profile excluded it.
