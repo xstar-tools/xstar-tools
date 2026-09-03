@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.89.1.1"
+version = "0.6.89.1.2"
 # Historical qualification compatibility marker: version = "0.6.89.1"
 # Historical qualification compatibility marker: version = "0.6.88.6.1.2.1"
 # Historical qualification compatibility marker: version = "0.6.88.3.2"
@@ -100,3 +100,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["historical"]
+
+# Historical package-version markers retained for predecessor qualification replay.
+# version = "0.6.89.1.1"
+# Historical package-version marker: version = "0.6.89.1"
+# Historical package-version marker: version = "0.6.89"

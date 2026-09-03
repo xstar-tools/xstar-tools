@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.89.1.2 - PIP_PYTHON_CONFIG_PATH_EQUIVALENCE_CLOSURE - 2026-09-03
+
+- Preserves `0.6.89.1.1` as Windows MSYS2 UCRT64/AMD64 HOST ACCEPT and macOS arm64 / macOS Intel x86_64 source-qualification REJECT at `WINDOWS_PIP_PYTHON_CONFIG_DISCOVERY_CLOSURE_068911_EXTENSIONLESS_SIBLING_DISCOVERY=REJECT`; Linux `.89.1.1` was not rerun.
+- Identifies the macOS rejection as qualification-only: `_python_config_sibling()` intentionally resolves the interpreter directory, while `TemporaryDirectory` can expose `/var/...` and macOS canonicalizes the same path as `/private/var/...`; the predecessor checker compared those equivalent paths as raw strings.
+- Replaces raw-string path identity in the new qualification with canonical `Path.resolve()` equivalence, while separately requiring the returned helper path to exist and retain forward-slash form for the MSYS2/GNU Make boundary.
+- Keeps `build_support.py` and `src/xstar_tools/native_runtime.py` byte-identical to `0.6.89.1.1`; only qualification/docs and normal package-version metadata change.
+- Makes no scientific, ABI, native-artifact, MPI, or atomic-data policy change. Ordinary wheels remain non-MPI and `atdb.fits` remains external.
+
 ## 0.6.89.1.1 - WINDOWS_PIP_PYTHON_CONFIG_DISCOVERY_CLOSURE - 2026-09-03
 
 - Preserves `0.6.89.1` as Linux GCC x86_64 ACCEPT, macOS arm64 ACCEPT, macOS Intel x86_64 ACCEPT, and Windows MSYS2 UCRT64 HOST REJECT at `PIP_PACKAGING_REFRESH_HOST_RUNNER_CLOSURE_06891_HOST_WHEEL_BUILD_REQUIRED=REJECT`.

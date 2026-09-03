@@ -6,7 +6,7 @@
 
 **Current formally accepted release: `0.6.88.6.1.2.1` — `WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE`.**
 
-**Current packaging candidate: `0.6.89.1.1` — `WINDOWS_PIP_PYTHON_CONFIG_DISCOVERY_CLOSURE`.** `0.6.89.1` is host-accepted on Linux x86_64, macOS arm64, and macOS Intel x86_64. Its Windows UCRT64 Python-only wheel accepted, but the native-required wheel stopped before C++ compilation because native Windows `shutil.which()` did not discover MSYS2's extensionless `python3-config` / `python-config` scripts. `.89.1.1` adds a same-interpreter sibling fallback while retaining the accepted packaging/science contract.
+**Current packaging candidate: `0.6.89.1.2` — `PIP_PYTHON_CONFIG_PATH_EQUIVALENCE_CLOSURE`.** `0.6.89.1.1` is host-accepted on Windows MSYS2 UCRT64/AMD64, while both macOS GitHub runners rejected only in source qualification because the checker compared an unresolved `/var/...` temporary path with its resolved `/private/var/...` spelling. `.89.1.2` makes that qualification path comparison canonical while leaving `build_support.py`, native runtime discovery, wheel contents, science, ABI, MPI exclusion, and external `atdb.fits` policy unchanged.
 
 The native non-MPI path is qualified on all four supported CI hosts:
 
@@ -25,7 +25,7 @@ The accepted optimized C++ science/performance lineage remains rooted in `0.6.82
 
 ## Pip packaging candidate
 
-`0.6.89.1.1` retains the `0.6.89` platform-neutral packaging contract and the `.89.1` corrected wheel inspection. An explicit Python-only wheel can be built with:
+`0.6.89.1.2` retains the `0.6.89` platform-neutral packaging contract, the `.89.1` corrected wheel inspection, and the `.89.1.1` Windows Python-config fallback. An explicit Python-only wheel can be built with:
 
 ```bash
 XSTAR_TOOLS_NATIVE=off python -m pip wheel . --no-deps
