@@ -2,7 +2,7 @@
 
 `pyproject.toml` is the authoritative Python package metadata/build configuration. The small `setup.py` file exists only to register the native setuptools build hook.
 
-`0.6.89.1.2 — PIP_PYTHON_CONFIG_PATH_EQUIVALENCE_CLOSURE` is the current packaging candidate. `.89.1.1` closed the Windows UCRT64 native-wheel Python-config discovery failure and reached a full Windows host ACCEPT. The subsequent macOS `.89.1.1` runs rejected only in source qualification because the synthetic checker compared unresolved `/var/...` and resolved `/private/var/...` spellings of the same temporary file. `.89.1.2` fixes that qualification comparison without changing the native packaging implementation. The formally accepted native source-build baseline remains `0.6.88.6.1.2.1`. PyPI repair/publication is intentionally deferred to later packaging closures.
+`0.6.89.1.3 — PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE` is the current packaging candidate. `.89.1.2` reached full host ACCEPT on Linux GCC x86_64, macOS arm64, and macOS Intel x86_64; its Windows run rejected before wheel construction only because the source checker hashed raw CRLF checkout bytes against canonical LF hashes. `.89.1.3` normalizes text line endings for those frozen-source qualification hashes without changing the native packaging implementation. The formally accepted native source-build baseline remains `0.6.88.6.1.2.1`. PyPI repair/publication is intentionally deferred to later packaging closures.
 
 ## Python package installation
 

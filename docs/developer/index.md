@@ -1,7 +1,7 @@
 # Developer guide
 
 
-Packaging development after the portability closure is documented in {doc}`pip_packaging_refresh_0_6_89`, its host-runner closure {doc}`pip_packaging_refresh_host_runner_closure_0_6_89_1`, and the Windows Python-config discovery closure {doc}`windows_pip_python_config_discovery_closure_0_6_89_1_1`.
+Packaging development after the portability closure is documented in {doc}`pip_packaging_refresh_0_6_89`, its host-runner closure {doc}`pip_packaging_refresh_host_runner_closure_0_6_89_1`, the Windows Python-config discovery closure {doc}`windows_pip_python_config_discovery_closure_0_6_89_1_1`, the macOS path-equivalence closure {doc}`pip_python_config_path_equivalence_closure_0_6_89_1_2`, and the Windows source-line-ending closure {doc}`pip_source_line_ending_equivalence_closure_0_6_89_1_3`.
 The developer documentation is organized around the frozen scientific boundary, the Fortran/Python/C++ source concordance, native execution ownership, qualification, and release portability.
 
 For the current platform matrix and the accepted `0.6.88.6.1.2.1` closure, start with {doc}`cross_platform_portability_status`.
@@ -32,6 +32,8 @@ windows_git_preflight_shell_closure_0_6_88_6_1_2_1
 pip_packaging_refresh_0_6_89
 pip_packaging_refresh_host_runner_closure_0_6_89_1
 windows_pip_python_config_discovery_closure_0_6_89_1_1
+pip_python_config_path_equivalence_closure_0_6_89_1_2
+pip_source_line_ending_equivalence_closure_0_6_89_1_3
 packaging
 conda_packaging
 documentation_policy

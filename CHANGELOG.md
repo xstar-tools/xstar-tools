@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.89.1.3 - PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE - 2026-09-03
+
+- Preserves `0.6.89.1.2` as Linux GCC x86_64 ACCEPT, macOS arm64 ACCEPT, macOS Intel x86_64 ACCEPT, and Windows MSYS2 UCRT64/AMD64 source-qualification REJECT at `PIP_PYTHON_CONFIG_PATH_EQUIVALENCE_CLOSURE_068912_BUILD_SUPPORT_BYTE_IDENTICAL=REJECT`.
+- Identifies the Windows rejection as qualification-only: ordinary Git checkout can materialize Python text with CRLF, while `.89.1.2` compared raw file bytes against the canonical LF SHA-256 for `build_support.py`.
+- Replaces checkout-specific raw-byte hashing of the frozen text implementation files with CRLF/CR-to-LF normalized qualification hashing, retaining the same canonical LF SHA-256 values and adding explicit synthetic-CRLF equivalence gates.
+- Keeps `build_support.py` and `src/xstar_tools/native_runtime.py` implementation text unchanged from `0.6.89.1.2`; only qualification/docs and normal package-version metadata change.
+- Writes `host_context.json` before source qualification so GitHub artifact upload retains diagnostic evidence even if a future source gate rejects early.
+- Makes no scientific, ABI, native-artifact, MPI, or atomic-data policy change. Ordinary wheels remain non-MPI and `atdb.fits` remains external.
+
 ## 0.6.89.1.2 - PIP_PYTHON_CONFIG_PATH_EQUIVALENCE_CLOSURE - 2026-09-03
 
 - Preserves `0.6.89.1.1` as Windows MSYS2 UCRT64/AMD64 HOST ACCEPT and macOS arm64 / macOS Intel x86_64 source-qualification REJECT at `WINDOWS_PIP_PYTHON_CONFIG_DISCOVERY_CLOSURE_068911_EXTENSIONLESS_SIBLING_DISCOVERY=REJECT`; Linux `.89.1.1` was not rerun.

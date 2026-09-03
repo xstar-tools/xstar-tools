@@ -6,7 +6,7 @@
 
 **Current formally accepted release: `0.6.88.6.1.2.1` — `WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE`.**
 
-**Current packaging candidate: `0.6.89.1.2` — `PIP_PYTHON_CONFIG_PATH_EQUIVALENCE_CLOSURE`.** `0.6.89.1.1` is host-accepted on Windows MSYS2 UCRT64/AMD64, while both macOS GitHub runners rejected only in source qualification because the checker compared an unresolved `/var/...` temporary path with its resolved `/private/var/...` spelling. `.89.1.2` makes that qualification path comparison canonical while leaving `build_support.py`, native runtime discovery, wheel contents, science, ABI, MPI exclusion, and external `atdb.fits` policy unchanged.
+**Current packaging candidate: `0.6.89.1.3` — `PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE`.** `0.6.89.1.2` is host-accepted on Linux GCC x86_64, macOS arm64, and macOS Intel x86_64; Windows rejected only in source qualification because raw SHA-256 hashing treated the CRLF checkout of unchanged Python source as different from the canonical LF text. `.89.1.3` makes frozen-source qualification line-ending-neutral while leaving `build_support.py`, native runtime discovery, wheel contents, science, ABI, MPI exclusion, and external `atdb.fits` policy unchanged.
 
 The native non-MPI path is qualified on all four supported CI hosts:
 
@@ -25,7 +25,7 @@ The accepted optimized C++ science/performance lineage remains rooted in `0.6.82
 
 ## Pip packaging candidate
 
-`0.6.89.1.2` retains the `0.6.89` platform-neutral packaging contract, the `.89.1` corrected wheel inspection, and the `.89.1.1` Windows Python-config fallback. An explicit Python-only wheel can be built with:
+`0.6.89.1.3` retains the `0.6.89` platform-neutral packaging contract, the `.89.1` corrected wheel inspection, the `.89.1.1` Windows Python-config fallback, and the `.89.1.2` canonical path-equivalence closure. It additionally makes qualification hashes for the frozen text implementation line-ending-neutral so Windows CRLF checkout does not create a false source rejection. An explicit Python-only wheel can be built with:
 
 ```bash
 XSTAR_TOOLS_NATIVE=off python -m pip wheel . --no-deps
