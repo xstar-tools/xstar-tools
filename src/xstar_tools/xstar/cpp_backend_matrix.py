@@ -30,6 +30,8 @@ from typing import Any, Mapping
 
 import numpy as np
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 
 @dataclass(frozen=True)
 class MatrixBackendStatus:
@@ -182,28 +184,11 @@ def _compact_matrix_arrays(master: Any, derived: Any) -> tuple[np.ndarray, np.nd
 # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
 # XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths() -> list[Path]:
-    env_path = os.environ.get("XSTAR_ATOMIC_MATRIX_LIB")
-    paths: list[Path] = []
-    if env_path:
-        paths.append(Path(env_path).expanduser())
-    here = Path(__file__).resolve().parent
-    names = (
-        "libxstar_matrix.so",
-        "xstar_matrix.so",
-        "libxstar_matrix.dylib",
-        "xstar_matrix.dll",
+    return native_library_candidates(
+        "xstar_matrix",
+        env_var="XSTAR_ATOMIC_MATRIX_LIB",
+        compatibility_names=("xstar_matrix.so", "xstar_matrix.dll"),
     )
-    # Single shared-library location: src/xstar_tools/xstar/cpp/.
-    for name in names:
-        paths.append(here / "cpp" / name)
-    seen: set[str] = set()
-    unique: list[Path] = []
-    for path in paths:
-        key = str(path)
-        if key not in seen:
-            seen.add(key)
-            unique.append(path)
-    return unique
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -222,6 +207,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             attempted.append(str(path))
             if not path.exists():
                 continue
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             lib.xstar_matrix_abi_version.argtypes = []
             lib.xstar_matrix_abi_version.restype = ctypes.c_int

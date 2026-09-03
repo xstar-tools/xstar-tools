@@ -26,6 +26,8 @@ import time
 from typing import Any
 from types import SimpleNamespace
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 import numpy as np
 
 _ABI = 60451
@@ -213,14 +215,11 @@ def _load() -> ctypes.CDLL:
     global _LIB, _LOAD_ERROR
     if _LIB is not None:
         return _LIB
-    candidates: list[Path] = []
-    explicit = os.environ.get("XSTAR_ATOMIC_CPP_ENGINE_LIB", "").strip()
-    if explicit:
-        candidates.append(Path(explicit))
-    candidates.append(Path(__file__).resolve().parent / "cpp" / "libxstar_engine.so")
+    candidates = native_library_candidates("xstar_engine", env_var="XSTAR_ATOMIC_CPP_ENGINE_LIB")
     errors: list[str] = []
     for path in candidates:
         try:
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             lib.xstar_element_engine_abi_version.restype = ctypes.c_uint32
             if int(lib.xstar_element_engine_abi_version()) != _ABI:
@@ -247,7 +246,7 @@ def _load() -> ctypes.CDLL:
         except Exception as exc:  # pragma: no cover - environment dependent
             errors.append(f"{path}: {exc}")
     _LOAD_ERROR = "; ".join(errors)
-    raise RuntimeError(_LOAD_ERROR or "libxstar_engine.so unavailable")
+    raise RuntimeError(_LOAD_ERROR or "native xstar_engine library unavailable")
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN

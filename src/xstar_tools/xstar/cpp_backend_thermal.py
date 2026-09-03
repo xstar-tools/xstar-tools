@@ -24,6 +24,8 @@ import threading
 import time
 from typing import Any, Callable, Iterable, Mapping
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 import numpy as np
 
 _ABI = 60471
@@ -164,14 +166,11 @@ def _load() -> ctypes.CDLL:
     global _LIB
     if _LIB is not None:
         return _LIB
-    paths = []
-    explicit = os.environ.get("XSTAR_ATOMIC_THERMAL_LIB", "").strip()
-    if explicit:
-        paths.append(Path(explicit))
-    paths.append(Path(__file__).resolve().parent / "cpp" / "libxstar_thermal.so")
+    paths = native_library_candidates("xstar_thermal", env_var="XSTAR_ATOMIC_THERMAL_LIB")
     errors: list[str] = []
     for path in paths:
         try:
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             lib.xstar_thermal_engine_abi_version.restype = ctypes.c_uint32
             if int(lib.xstar_thermal_engine_abi_version()) != _ABI:

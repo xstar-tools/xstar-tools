@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.88.6.1.2.1"
+version = "0.6.89"
+# Historical qualification compatibility marker: version = "0.6.88.6.1.2.1"
 # Historical qualification compatibility marker: version = "0.6.88.3.2"
 # Historical qualification compatibility marker: version = "0.6.88.3.1"
 # Historical qualification compatibility marker: version = "0.6.88.3"
@@ -50,6 +51,9 @@ sparse = ["scipy>=1.8"]
 
 xstar-tools = "xstar_tools.cli.main:main"
 xstar-cpp = "xstar_tools.cli.xstar_cpp:main"
+xstar-xspec-initable = "xstar_tools.cli.native_exec:main_xstar_xspec_initable"
+xstar-xspec-table = "xstar_tools.cli.native_exec:main_xstar_xspec_table"
+xstar-xspec = "xstar_tools.cli.native_exec:main_xstar_xspec"
 xstar-tools-benchmark = "xstar_tools.benchmarks.public_suite:main"
 xstar-tools-run-xstar = "xstar_tools.cli.run_xstar:main"
 xstar-tools-inspect-atdb = "xstar_tools.cli.inspect_atdb:main"

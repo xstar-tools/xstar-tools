@@ -34,6 +34,8 @@ import tempfile
 import time
 from typing import Any
 
+from xstar_tools.native_runtime import packaged_native_library_path, prepare_native_library_search
+
 ABI_VERSION = 6048110
 BACKEND_NAME = "xstar_shared_standalone_production_zone_v0648110"
 _PRODUCT_NAMES = (
@@ -74,8 +76,7 @@ def _cpp_dir() -> Path:
 # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
 # XSTAR-FUNCTION-COMMENT-END
 def _library_path() -> Path:
-    override = os.environ.get("XSTAR_PRODUCTION_ZONE_LIBRARY")
-    return Path(override).expanduser().resolve() if override else (_cpp_dir() / "libxstar_production_zone.so")
+    return packaged_native_library_path("xstar_production_zone", env_var="XSTAR_PRODUCTION_ZONE_LIBRARY")
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
@@ -88,6 +89,7 @@ def _load_library() -> ctypes.CDLL:
         raise SharedProductionZoneError(
             f"shared standalone-production zone library is missing: {path}; build the C++ backends first"
         )
+    prepare_native_library_search(path)
     lib = ctypes.CDLL(str(path), mode=getattr(ctypes, "RTLD_GLOBAL", 0))
     lib.xstar_production_zone_abi_version_v0648110.argtypes = []
     lib.xstar_production_zone_abi_version_v0648110.restype = ctypes.c_int32

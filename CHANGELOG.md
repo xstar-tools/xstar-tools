@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.89 - PIP_PACKAGING_REFRESH - 2026-09-03
+
+- Packaging/productization-only successor to the formally accepted `0.6.88.6.1.2.1` four-host non-MPI portability baseline; frozen science revision and public ABIs are unchanged.
+- Modernizes `build_support.py` so native wheel staging derives platform-native `.so` / `.dylib` / `.dll` library names and unsuffixed / `.exe` executable names for Linux, macOS, and Windows.
+- Ordinary native wheels now stage `xstar_cpp`, `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, and `xstar-xspec` together with the retained `libxstar_*` runtime libraries.
+- Keeps `xstar-xspec-mpi` out of ordinary wheels: the wheel build invokes the retained Makefile `all` target only; MPI remains an explicit `make mpi` / `make xstar-xspec-mpi` HPC operation.
+- Adds `src/xstar_tools/native_runtime.py` as the single platform-neutral Python discovery boundary for packaged native libraries and executables.
+- Adds Windows package-local DLL search registration through retained `os.add_dll_directory()` handles so sibling native dependencies remain discoverable for `ctypes` loads.
+- Adds direct pip console launchers for `xstar-xspec-initable`, `xstar-xspec-table`, and `xstar-xspec` alongside the existing `xstar-cpp` launcher.
+- Preserves the external `atdb.fits` policy and accepted runtime atomic-data discovery order; this milestone does not bundle the atomic database.
+- Adds source/host packaging qualification for platform artifact naming, Python-only and native wheel contents, MPI exclusion, console scripts, and the external atomic-data boundary.
+
 ## 0.6.88.6.1.2.1 - WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE - 2026-09-02
 
 - **FORMALLY ACCEPTED** on Linux GCC x86_64, macOS arm64, macOS Intel x86_64, and Windows MSYS2 UCRT64/AMD64. All four hosts returned `WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE_06886121_HOST_RESULT=ACCEPT`.

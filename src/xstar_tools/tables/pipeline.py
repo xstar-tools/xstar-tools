@@ -3,32 +3,27 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Iterable
+
+from xstar_tools.native_runtime import packaged_native_executable_path, native_executable_is_runnable
 
 
 def _native_xstar2xspec_executable(explicit: str | os.PathLike[str] | None = None) -> Path:
     if explicit is not None:
         path = Path(explicit).expanduser().resolve()
-        if path.is_file() and os.access(path, os.X_OK):
+        if native_executable_is_runnable(path):
             return path
         raise FileNotFoundError(f"native xstar-xspec executable is not runnable: {path}")
-    env = os.environ.get("XSTAR_XSPEC_BIN")
-    if env:
-        path = Path(env).expanduser().resolve()
-        if path.is_file() and os.access(path, os.X_OK):
-            return path
-    found = shutil.which("xstar-xspec")
-    if found:
-        return Path(found).resolve()
-    source = Path(__file__).resolve().parents[1] / "xstar" / "cpp" / "xstar-xspec"
-    if source.is_file() and os.access(source, os.X_OK):
-        return source
+    path = packaged_native_executable_path(
+        "xstar-xspec", env_var="XSTAR_XSPEC_BIN", include_path=True
+    )
+    if path is not None:
+        return path
     raise FileNotFoundError(
-        "xstar-xspec is not available; build it with "
-        "`make -C src/xstar_tools/xstar/cpp xstar-xspec` or set XSTAR_XSPEC_BIN"
+        "xstar-xspec is not available; install a native wheel, build it with "
+        "`make -C src/xstar_tools/xstar/cpp xstar-xspec`, or set XSTAR_XSPEC_BIN"
     )
 
 

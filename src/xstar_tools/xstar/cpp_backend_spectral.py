@@ -23,6 +23,8 @@ import threading
 import time
 from typing import Any, Iterable, Mapping
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 import numpy as np
 
 _ABI = 60460
@@ -121,14 +123,11 @@ def _load() -> ctypes.CDLL:
     global _LIB, _LOAD_ERROR
     if _LIB is not None:
         return _LIB
-    candidates: list[Path] = []
-    explicit = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_LIB", "").strip()
-    if explicit:
-        candidates.append(Path(explicit))
-    candidates.append(Path(__file__).resolve().parent / "cpp" / "libxstar_emissivity.so")
+    candidates = native_library_candidates("xstar_emissivity", env_var="XSTAR_ATOMIC_EMISSIVITY_LIB")
     errors: list[str] = []
     for path in candidates:
         try:
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             lib.xstar_spectral_engine_abi_version.restype = ctypes.c_uint32
             if int(lib.xstar_spectral_engine_abi_version()) != _ABI:
@@ -157,7 +156,7 @@ def _load() -> ctypes.CDLL:
         except Exception as exc:  # pragma: no cover - environment dependent
             errors.append(f"{path}: {exc}")
     _LOAD_ERROR = "; ".join(errors)
-    raise RuntimeError(_LOAD_ERROR or "libxstar_emissivity.so unavailable")
+    raise RuntimeError(_LOAD_ERROR or "native xstar_emissivity library unavailable")
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN

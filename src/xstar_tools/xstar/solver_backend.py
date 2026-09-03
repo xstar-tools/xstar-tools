@@ -19,6 +19,8 @@ from typing import Literal
 
 import numpy as np
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 SolverBackendName = Literal["python", "cpp", "auto"]
 
 _VALID_BACKENDS = {"python", "cpp", "auto"}
@@ -76,41 +78,11 @@ def get_solver_backend() -> SolverBackendName:
 # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
 # XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths() -> list[Path]:
-    env_path = os.environ.get("XSTAR_ATOMIC_SOLVER_LIB")
-    paths: list[Path] = []
-    if env_path:
-        paths.append(Path(env_path).expanduser())
-
-    # Runtime loader anchor.  This works both for installed packages and for
-    # source-tree execution such as ``PYTHONPATH=src python ...`` because
-    # ``__file__`` points at ``src/xstar_tools/source_port/solver_backend.py``.
-    here = Path(__file__).resolve().parent
-    names = (
-        "libxstar_solver.so",
-        "xstar_solver.so",
-        "libxstar_solver.dylib",
-        "xstar_solver.dll",
+    return native_library_candidates(
+        "xstar_solver",
+        env_var="XSTAR_ATOMIC_SOLVER_LIB",
+        compatibility_names=("xstar_solver.so", "xstar_solver.dll"),
     )
-
-    # Preferred source-tree/install location.  As of v0.5.60 the shared
-    # libraries live in one place under source_port/cpp; the historical copy
-    # beside this module is kept only as a backward-compatible fallback.
-    source_tree_cpp_dir = here / "cpp"
-    for name in names:
-        paths.append(source_tree_cpp_dir / name)
-
-    # No runtime-copy fallback: shared libraries live in the cpp/ directory.
-
-    # Deduplicate while preserving order.
-    seen: set[str] = set()
-    unique: list[Path] = []
-    for path in paths:
-        key = str(path)
-        if key not in seen:
-            seen.add(key)
-            unique.append(path)
-    return unique
-
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Load cpp library for this module while preserving the surrounding source/runtime invariants.
@@ -128,6 +100,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             attempted.append(str(path))
             if not path.exists():
                 continue
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             lib.xstar_solver_abi_version.argtypes = []
             lib.xstar_solver_abi_version.restype = ctypes.c_int

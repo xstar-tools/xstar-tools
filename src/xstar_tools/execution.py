@@ -20,6 +20,14 @@ import shutil
 from typing import Any, Mapping
 from contextlib import contextmanager
 
+from .native_runtime import (
+    native_cpp_dir,
+    native_executable_candidates as _runtime_executable_candidates,
+    native_executable_is_runnable,
+    packaged_native_library_path,
+    prepare_native_library_search,
+)
+
 SCIENCE_REVISION = "0.6.48.12.3.45.3.3.8"
 ZONE_ABI_VERSION = 6048110
 C_API_ABI_VERSION = 60487
@@ -193,10 +201,11 @@ def atomic_data_identity(atdb_path: str | Path | None, coheat_path: str | Path |
 
 
 def _api_library_identity() -> dict[str, Any]:
-    path = _cpp_dir() / "libxstar_api.so"
+    path = packaged_native_library_path("xstar_api")
     if not path.is_file():
         return {"available": False, "path": str(path), "version": None, "abi": None}
     try:
+        prepare_native_library_search(path)
         lib = ctypes.CDLL(str(path))
         lib.xstar_api_version_string.argtypes = []
         lib.xstar_api_version_string.restype = ctypes.c_char_p
@@ -349,26 +358,27 @@ def _public_python_provenance(provenance: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _cpp_dir() -> Path:
-    return Path(__file__).resolve().parent / "xstar" / "cpp"
+    return native_cpp_dir()
 
 
 def native_executable_candidates() -> list[Path]:
-    paths: list[Path] = []
-    if os.environ.get("XSTAR_CPP_EXECUTABLE"):
-        paths.append(Path(os.environ["XSTAR_CPP_EXECUTABLE"]).expanduser())
-    paths.extend((_cpp_dir() / "xstar-cpp", _cpp_dir() / "xstar_cpp"))
-    return paths
+    return _runtime_executable_candidates(
+        "xstar-cpp",
+        env_var="XSTAR_CPP_EXECUTABLE",
+        compatibility_names=("xstar_cpp",),
+        include_path=False,
+    )
 
 
 def native_executable_path() -> Path | None:
-    for p in native_executable_candidates():
-        if p.is_file() and os.access(p, os.X_OK):
-            return p.resolve()
+    for path in native_executable_candidates():
+        if native_executable_is_runnable(path):
+            return path.resolve()
     return None
 
 
 def native_build_info() -> dict[str, Any]:
-    path = _cpp_dir() / "native_build.json"
+    path = native_cpp_dir() / "native_build.json"
     if not path.is_file():
         return {"metadata_available": False, "path": str(path)}
     try:

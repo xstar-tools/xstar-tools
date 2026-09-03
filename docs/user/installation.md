@@ -2,6 +2,8 @@
 
 `pyproject.toml` is the authoritative Python package metadata/build configuration. The small `setup.py` file exists only to register the native setuptools build hook.
 
+`0.6.89 — PIP_PACKAGING_REFRESH` is the current packaging candidate. It supports platform-neutral native wheel staging on Linux, macOS, and Windows while the formally accepted native source-build baseline remains `0.6.88.6.1.2.1`. PyPI publication/repair is intentionally deferred to later packaging closures.
+
 ## Python package installation
 
 For a released package:
@@ -27,6 +29,8 @@ To require native compilation instead of allowing fallback:
 ```bash
 XSTAR_TOOLS_NATIVE=required python -m pip install .
 ```
+
+The native packaging hook stages `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, and `xstar-xspec` plus their platform-native shared libraries. It does not stage `xstar-xspec-mpi`, and it does not bundle `atdb.fits`.
 
 `XSTAR_TOOLS_NATIVE_JOBS=N` controls Make parallelism used by the Python build hook.
 

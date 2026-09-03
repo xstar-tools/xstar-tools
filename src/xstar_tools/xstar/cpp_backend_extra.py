@@ -28,6 +28,8 @@ from typing import Any
 
 import numpy as np
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 
 @dataclass(frozen=True)
 class ExtraBackendStatus:
@@ -57,19 +59,19 @@ _LIBRARY_INFO = {
     "opacity": {
         "env": "XSTAR_ATOMIC_OPACITY_LIB",
         "backend_env": "XSTAR_ATOMIC_OPACITY_BACKEND",
-        "names": ("libxstar_opacity.so", "xstar_opacity.so", "libxstar_opacity.dylib", "xstar_opacity.dll"),
+        "stem": "xstar_opacity",
         "prefix": "xstar_opacity",
     },
     "thermal": {
         "env": "XSTAR_ATOMIC_THERMAL_LIB",
         "backend_env": "XSTAR_ATOMIC_THERMAL_BACKEND",
-        "names": ("libxstar_thermal.so", "xstar_thermal.so", "libxstar_thermal.dylib", "xstar_thermal.dll"),
+        "stem": "xstar_thermal",
         "prefix": "xstar_thermal",
     },
     "engine": {
         "env": "XSTAR_ATOMIC_ENGINE_LIB",
         "backend_env": "XSTAR_ATOMIC_ENGINE_BACKEND",
-        "names": ("libxstar_engine.so", "xstar_engine.so", "libxstar_engine.dylib", "xstar_engine.dll"),
+        "stem": "xstar_engine",
         "prefix": "xstar_engine",
     },
 }
@@ -81,22 +83,11 @@ _LIBRARY_INFO = {
 # XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths(kind: str) -> list[Path]:
     info = _LIBRARY_INFO[kind]
-    paths: list[Path] = []
-    env_path = os.environ.get(str(info["env"]))
-    if env_path:
-        paths.append(Path(env_path).expanduser())
-    here = Path(__file__).resolve().parent
-    for name in info["names"]:
-        paths.append(here / "cpp" / str(name))
-    seen: set[str] = set()
-    unique: list[Path] = []
-    for path in paths:
-        key = str(path)
-        if key not in seen:
-            seen.add(key)
-            unique.append(path)
-    return unique
-
+    return native_library_candidates(
+        str(info["stem"]),
+        env_var=str(info["env"]),
+        compatibility_names=(f"xstar_{kind}.so", f"xstar_{kind}.dll"),
+    )
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Load library for this module while preserving the surrounding source/runtime invariants.
@@ -113,6 +104,7 @@ def _load_library(kind: str) -> ctypes.CDLL | None:
             attempted.append(str(path))
             if not path.exists():
                 continue
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             getattr(lib, f"{prefix}_abi_version").argtypes = []
             getattr(lib, f"{prefix}_abi_version").restype = ctypes.c_int

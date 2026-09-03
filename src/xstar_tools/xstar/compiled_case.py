@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 _ABI = 60487
 _LIB: ctypes.CDLL | None = None
 
@@ -49,14 +51,11 @@ def _load() -> ctypes.CDLL:
     global _LIB
     if _LIB is not None:
         return _LIB
-    candidates: list[Path] = []
-    explicit = os.environ.get("XSTAR_ATOMIC_API_LIB", "").strip()
-    if explicit:
-        candidates.append(Path(explicit))
-    candidates.append(Path(__file__).resolve().parent / "cpp" / "libxstar_api.so")
+    candidates = native_library_candidates("xstar_api", env_var="XSTAR_ATOMIC_API_LIB")
     errors: list[str] = []
     for path in candidates:
         try:
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             lib.xstar_api_abi_version.restype = ctypes.c_uint32
             if int(lib.xstar_api_abi_version()) != _ABI:
@@ -83,7 +82,7 @@ def _load() -> ctypes.CDLL:
             return lib
         except Exception as exc:  # pragma: no cover - platform dependent
             errors.append(f"{path}: {exc}")
-    raise RuntimeError("; ".join(errors) or "libxstar_api.so unavailable")
+    raise RuntimeError("; ".join(errors) or "native xstar_api library unavailable")
 
 
 # XSTAR-FUNCTION-COMMENT-BEGIN

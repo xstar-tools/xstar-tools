@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from xstar_tools.native_runtime import packaged_native_library_path, prepare_native_library_search
+
 import numpy as np
 
 ABI = 60481231
@@ -113,9 +115,10 @@ def _load() -> ctypes.CDLL:
     global _LIB
     if _LIB is not None:
         return _LIB
-    path = Path(__file__).resolve().parent / "cpp" / "libxstar_final_recompute.so"
+    path = packaged_native_library_path("xstar_final_recompute")
     if not path.exists():
         raise RuntimeError(f"native final recompute library is missing: {path}")
+    prepare_native_library_search(path)
     lib = ctypes.CDLL(str(path))
     lib.xstar_final_recompute_bridge_abi_version.argtypes = []
     lib.xstar_final_recompute_bridge_abi_version.restype = ctypes.c_uint32

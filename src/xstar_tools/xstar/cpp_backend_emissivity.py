@@ -23,6 +23,8 @@ from typing import Any
 
 import numpy as np
 
+from xstar_tools.native_runtime import native_library_candidates, prepare_native_library_search
+
 
 @dataclass(frozen=True)
 class EmissivityBackendStatus:
@@ -53,20 +55,11 @@ _CPP_LIBRARY_PATH: str | None = None
 # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
 # XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths() -> list[Path]:
-    env_path = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_LIB")
-    paths: list[Path] = []
-    if env_path:
-        paths.append(Path(env_path).expanduser())
-    here = Path(__file__).resolve().parent
-    for name in ("libxstar_emissivity.so", "xstar_emissivity.so", "libxstar_emissivity.dylib", "xstar_emissivity.dll"):
-        paths.append(here / "cpp" / name)
-    seen: set[str] = set(); out: list[Path] = []
-    for p in paths:
-        k = str(p)
-        if k not in seen:
-            seen.add(k); out.append(p)
-    return out
-
+    return native_library_candidates(
+        "xstar_emissivity",
+        env_var="XSTAR_ATOMIC_EMISSIVITY_LIB",
+        compatibility_names=("xstar_emissivity.so", "xstar_emissivity.dll"),
+    )
 
 # XSTAR-FUNCTION-COMMENT-BEGIN
 # Purpose: Load cpp library for this module while preserving the surrounding source/runtime invariants.
@@ -84,6 +77,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             attempted.append(str(path))
             if not path.exists():
                 continue
+            prepare_native_library_search(path)
             lib = ctypes.CDLL(str(path))
             lib.xstar_emissivity_abi_version.argtypes = []
             lib.xstar_emissivity_abi_version.restype = ctypes.c_int
@@ -104,7 +98,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return lib
-        raise FileNotFoundError("could not find libxstar_emissivity.so; attempted " + ", ".join(attempted))
+        raise FileNotFoundError("could not find native xstar_emissivity library; attempted " + ", ".join(attempted))
     except BaseException as exc:
         _CPP_LOAD_ERROR = exc
         return None

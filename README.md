@@ -6,6 +6,8 @@
 
 **Current formally accepted release: `0.6.88.6.1.2.1` — `WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE`.**
 
+**Current packaging candidate: `0.6.89` — `PIP_PACKAGING_REFRESH`.** It modernizes native pip-wheel staging and Python native-runtime discovery without changing the frozen science boundary. Formal four-host native source acceptance remains `0.6.88.6.1.2.1` until the packaging candidate is qualified.
+
 The native non-MPI path is qualified on all four supported CI hosts:
 
 | Host | Toolchain | Status |
@@ -20,6 +22,22 @@ The accepted cross-platform fixed-state contract separates **same-host byte dete
 Windows MPI is intentionally **out of scope**. The default Windows path supports `xstar-cpp` and local-process `xstar-xspec --processes N`. True MPI remains an opt-in Linux/HPC path and is not required for the ordinary build.
 
 The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Detailed historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
+
+## Pip packaging candidate
+
+`0.6.89` can build an explicit Python-only wheel with:
+
+```bash
+XSTAR_TOOLS_NATIVE=off python -m pip wheel . --no-deps
+```
+
+A native source wheel build uses the retained qualified Makefile and requires the platform C++/CFITSIO prerequisites:
+
+```bash
+XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
+```
+
+The ordinary native wheel contains `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, and `xstar-xspec`; it deliberately excludes `xstar-xspec-mpi`. `atdb.fits` remains external. PyPI repair/tagging and publication are later release-wheel closures, not part of this milestone.
 
 ## Quick start
 
