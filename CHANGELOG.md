@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.89.1 - PIP_PACKAGING_REFRESH_HOST_RUNNER_CLOSURE - 2026-09-03
+
+- Preserves `0.6.89` as a historical Linux host REJECT at `PIP_PACKAGING_REFRESH_0689_HOST_NATIVE_ARTIFACTS=REJECT`.
+- Confirms from the exact uploaded native wheel (`sha256 4c8665381e14ad187d6e463c5d0aeeb0c6b581d8b83c5e777fb5d41e99afe705`) that the required native artifacts were present; the rejection was qualification-only.
+- Fixes the host-runner wheel-member selector: wheel ZIP names begin with `xstar_tools/xstar/cpp/` and must not be tested for an invented leading `/`.
+- Uses `PurePosixPath` for wheel archive member basenames and cross-checks required native payloads against `native_build.json`.
+- Keeps the `0.6.89` packaging implementation unchanged apart from normal package-version metadata: no science/ABI/runtime-discovery change, no MPI in ordinary wheels, and `atdb.fits` remains external.
+
 ## 0.6.89 - PIP_PACKAGING_REFRESH - 2026-09-03
 
 - Packaging/productization-only successor to the formally accepted `0.6.88.6.1.2.1` four-host non-MPI portability baseline; frozen science revision and public ABIs are unchanged.

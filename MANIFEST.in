@@ -1301,3 +1301,15 @@ include docs/developer/pip_packaging_refresh_0_6_89.md
 include pip_packaging_refresh_0_6_89.md
 include tools/qualification/replay_pip_packaging_refresh_0_6_89.py
 include xstar_tools-0.6.89_local_validation.md
+
+# 0.6.89.1 pip packaging host-runner closure.
+include qualification/pip_packaging_refresh_host_runner_closure_0_6_89_1.json
+include tools/qualification/check_pip_packaging_refresh_host_runner_closure_0_6_89_1.py
+include tools/qualification/run_pip_packaging_refresh_host_runner_closure_host_0_6_89_1.py
+include tests/test_pip_packaging_refresh_host_runner_closure_0_6_89_1.py
+include docs/developer/pip_packaging_refresh_host_runner_closure_0_6_89_1.md
+include pip_packaging_refresh_host_runner_closure_0_6_89_1.md
+include xstar_tools-0.6.89_host_rejection.md
+include xstar_tools-0.6.89.1_local_validation.md
+
+include tools/qualification/replay_pip_packaging_refresh_host_runner_closure_0_6_89_1.py

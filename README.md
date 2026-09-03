@@ -6,7 +6,7 @@
 
 **Current formally accepted release: `0.6.88.6.1.2.1` — `WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE`.**
 
-**Current packaging candidate: `0.6.89` — `PIP_PACKAGING_REFRESH`.** It modernizes native pip-wheel staging and Python native-runtime discovery without changing the frozen science boundary. Formal four-host native source acceptance remains `0.6.88.6.1.2.1` until the packaging candidate is qualified.
+**Current packaging candidate: `0.6.89.1` — `PIP_PACKAGING_REFRESH_HOST_RUNNER_CLOSURE`.** The `0.6.89` native Linux wheel built successfully, but its host runner falsely rejected the complete payload because it required a nonexistent leading slash in wheel ZIP member names. `.89.1` fixes that qualification boundary without changing the `0.6.89` packaging implementation or frozen science boundary.
 
 The native non-MPI path is qualified on all four supported CI hosts:
 
@@ -25,7 +25,7 @@ The accepted optimized C++ science/performance lineage remains rooted in `0.6.82
 
 ## Pip packaging candidate
 
-`0.6.89` can build an explicit Python-only wheel with:
+`0.6.89.1` retains the `0.6.89` packaging implementation. An explicit Python-only wheel can be built with:
 
 ```bash
 XSTAR_TOOLS_NATIVE=off python -m pip wheel . --no-deps

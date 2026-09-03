@@ -2,7 +2,7 @@
 
 `pyproject.toml` is the authoritative Python package metadata/build configuration. The small `setup.py` file exists only to register the native setuptools build hook.
 
-`0.6.89 — PIP_PACKAGING_REFRESH` is the current packaging candidate. It supports platform-neutral native wheel staging on Linux, macOS, and Windows while the formally accepted native source-build baseline remains `0.6.88.6.1.2.1`. PyPI publication/repair is intentionally deferred to later packaging closures.
+`0.6.89.1 — PIP_PACKAGING_REFRESH_HOST_RUNNER_CLOSURE` is the current packaging candidate. It retains the platform-neutral native wheel staging introduced in `0.6.89` and fixes only the host-runner ZIP-member inspection that falsely rejected a complete Linux native wheel. The formally accepted native source-build baseline remains `0.6.88.6.1.2.1`. PyPI repair/publication is intentionally deferred to later packaging closures.
 
 ## Python package installation
 
