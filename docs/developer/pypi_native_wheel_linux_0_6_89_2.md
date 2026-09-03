@@ -1,5 +1,7 @@
 # 0.6.89.2 — PYPI_NATIVE_WHEEL_LINUX
 
+> **Historical CI result:** all six release selectors rejected during source preflight because the qualification interpreter had not installed setuptools before importing `build_support.py`. The production-wheel design was not reached. This is closed by `0.6.89.2.1`.
+
 `0.6.89.2` is the first publishable-wheel closure after the accepted
 `0.6.89.1.3` pip-packaging-refresh series.  It does not change XSTAR science, public ABIs, MPI policy, or atomic-data policy. It adds one PyPI-specific binary staging profile while leaving the normal source/native profile intact.
 

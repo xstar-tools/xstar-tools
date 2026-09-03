@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.89.2.1 - PYPI_NATIVE_WHEEL_LINUX_PREFLIGHT_DEPENDENCY_CLOSURE - 2026-09-03
+
+- Preserves `0.6.89.2` as a historical six-selector GitHub Actions REJECT before cibuildwheel: every job stopped in source qualification because `check_pypi_native_wheel_linux_0_6_89_2.py` imported `build_support.py` before the qualification Python environment installed setuptools.
+- Adds an explicit preflight step that installs the package's declared PEP 517 build-backend requirements (`setuptools>=77` and `wheel`) before source qualification.
+- Converts missing-setuptools preflight state into a normal qualification gate instead of an uncaught `ModuleNotFoundError`.
+- Keeps `build_support.py`, `src/xstar_tools/native_runtime.py`, the pinned CFITSIO build script, `manylinux_2_28_x86_64` policy, `pypi-linux` binary profile, scientific arithmetic/order, public ABIs, ordinary-wheel MPI exclusion, and external `atdb.fits` policy unchanged apart from normal package-version metadata and qualification/smoke markers.
+- Retains the six CPython selectors (`cp39` through `cp314`) and the repaired-wheel artifact/clean-install gates introduced by `0.6.89.2`.
+
 ## 0.6.89.2 - PYPI_NATIVE_WHEEL_LINUX - 2026-09-03
 
 - Formally closes the preceding `0.6.89.1.3` pip-packaging-refresh qualification series after Linux x86_64, macOS arm64, macOS Intel x86_64, and Windows UCRT64/AMD64 all returned host ACCEPT.
