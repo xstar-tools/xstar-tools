@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.89.2.2 - PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE - 2026-09-03
+
+- Preserves `0.6.89.2.1` as a historical six-selector manylinux build REJECT: cibuildwheel reached native compilation, but `build_support.py` still invoked `make all`, so the optional standalone Python-embedding plugin was built even though the `pypi-linux` wheel artifact profile excluded it.
+- Adds a packaging-only `make pypi-linux` target that excludes only `libxstar_backend_python` at build time while retaining the public C API, C++ backend, all normal production/science libraries, and the four native command-line programs.
+- Maps `XSTAR_TOOLS_NATIVE_PROFILE=pypi-linux` to `make pypi-linux`; the ordinary `full` profile continues to use `make all` unchanged.
+- Keeps MPI opt-in, keeps `atdb.fits` external, retains the pinned CFITSIO 4.6.2/auditwheel manylinux contract, and changes no scientific kernel or ABI.
+
 ## 0.6.89.2.1 - PYPI_NATIVE_WHEEL_LINUX_PREFLIGHT_DEPENDENCY_CLOSURE - 2026-09-03
 
 - Preserves `0.6.89.2` as a historical six-selector GitHub Actions REJECT before cibuildwheel: every job stopped in source qualification because `check_pypi_native_wheel_linux_0_6_89_2.py` imported `build_support.py` before the qualification Python environment installed setuptools.

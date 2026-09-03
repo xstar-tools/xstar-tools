@@ -222,7 +222,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.89.2.1
+PACKAGE_VERSION ?= 0.6.89.2.2
+# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.2.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.6.1.2.1
@@ -267,15 +268,23 @@ EXECUTABLE_OBJECTS := xstar_standalone.o xstar_science_fits.o xstar_run_state.o 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
 	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(LOCAL_ZONE_TARGET) $(FINAL_RECOMPUTE_TARGET) $(PRODUCTION_ZONE_TARGET) $(XSPEC_TABLE_TARGET)
 STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_TARGET) $(XSPEC_TABLE_EXECUTABLE) $(XSPEC_INITABLE_EXECUTABLE) $(XSPEC_GRID_EXECUTABLE)
+# PyPI manylinux intentionally omits only the standalone Python-embedding
+# plugin. The public C API, Python-to-C++ backend, CLI programs, and all
+# scientific/runtime libraries remain identical to the ordinary native build.
+PYPI_LINUX_STANDALONE_TARGETS := $(filter-out $(PYTHON_BACKEND_TARGET),$(STANDALONE_TARGETS))
+PYPI_LINUX_TARGETS := $(PHYSICS_TARGETS) $(PYPI_LINUX_STANDALONE_TARGETS)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 MPI_TARGETS := $(XSPEC_MPI_EXECUTABLE)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
 INTERNAL_HEADERS := xstar_path_compat.hpp xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_process.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
 
-.PHONY: all physics standalone mpi test clean install print-config
+.PHONY: all pypi-linux physics standalone mpi test clean install print-config
 
 all: $(TARGETS)
+# Packaging-only manylinux target. It deliberately does not build
+# libxstar_backend_python, avoiding a libpython link dependency in PyPI wheels.
+pypi-linux: $(PYPI_LINUX_TARGETS)
 physics: $(PHYSICS_TARGETS)
 standalone: $(STANDALONE_TARGETS)
 

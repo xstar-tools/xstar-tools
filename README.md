@@ -6,7 +6,7 @@
 
 **Current formally accepted packaging baseline: `0.6.89.1.3` — `PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE`.** The full GitHub Actions matrix (Linux x86_64, macOS arm64, macOS Intel x86_64, and Windows UCRT64/AMD64) returned host ACCEPT.
 
-**Current release-wheel candidate: `0.6.89.2.1` — `PYPI_NATIVE_WHEEL_LINUX_PREFLIGHT_DEPENDENCY_CLOSURE`.** It retains the `0.6.89.2` manylinux wheel contract and closes the GitHub preflight failure by installing the declared setuptools/wheel build-backend requirements before source qualification. The candidate still targets repaired `manylinux_2_28_x86_64` native wheels for CPython 3.9 through 3.14, keeps MPI out of ordinary wheels, and keeps `atdb.fits` external.
+**Current release-wheel candidate: `0.6.89.2.2` — `PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE`.** It retains the `0.6.89.2` manylinux publication contract and the `0.6.89.2.1` preflight dependency fix, while correcting the native build boundary: the `pypi-linux` profile now invokes a dedicated Makefile target that never builds the standalone Python-embedding plugin. The candidate still targets repaired `manylinux_2_28_x86_64` native wheels for CPython 3.9 through 3.14, keeps MPI out of ordinary wheels, and keeps `atdb.fits` external.
 
 The accepted cross-platform source-build contract remains non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/HPC build.
 
@@ -24,9 +24,9 @@ A normal native source wheel remains available when platform prerequisites are i
 XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
 ```
 
-`0.6.89.2` introduced the Linux PyPI release profile; `0.6.89.2.1` retains it unchanged and fixes only the release-workflow preflight dependency ordering. Release wheels are built inside `manylinux_2_28_x86_64`, use a pinned CFITSIO 4.6.2 build, and are repaired so CFITSIO is wheel-local. The release profile contains `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, `xstar-xspec`, the C++ production libraries, and the public C API. It deliberately omits only the optional standalone Python-embedding plugin because a portable manylinux wheel must not depend on or vendor `libpythonX.Y`. Source/native installs retain the full plugin set.
+`0.6.89.2` introduced the Linux PyPI release profile; `0.6.89.2.1` fixed release-workflow preflight dependency ordering; `0.6.89.2.2` closes the first manylinux native-build failure by ensuring the PyPI profile excludes the standalone Python-embedding plugin at build time as well as staging time. Release wheels are built inside `manylinux_2_28_x86_64`, use a pinned CFITSIO 4.6.2 build, and are repaired so CFITSIO is wheel-local. The release profile contains `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, `xstar-xspec`, the C++ production libraries, and the public C API. It deliberately omits only the optional standalone Python-embedding plugin because a portable manylinux wheel must not depend on or vendor `libpythonX.Y`. Source/native installs retain the full plugin set.
 
-The ordinary wheel still excludes `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_native_wheel_linux_0_6_89_2.md` for the retained release-wheel contract and `docs/developer/pypi_native_wheel_linux_preflight_dependency_closure_0_6_89_2_1.md` for the preflight closure.
+The ordinary wheel still excludes `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_native_wheel_linux_0_6_89_2.md` for the retained release-wheel contract, `docs/developer/pypi_native_wheel_linux_preflight_dependency_closure_0_6_89_2_1.md` for the preflight closure, and `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md` for the native build-target closure.
 
 ## Quick start
 

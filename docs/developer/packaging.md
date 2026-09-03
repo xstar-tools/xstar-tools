@@ -37,9 +37,9 @@ The build hook:
 
 This design prevents old `.o`/`.so` files in a checkout from entering a wheel.
 
-### PyPI Linux release profile (`0.6.89.2`, preflight closure `0.6.89.2.1`)
+### PyPI Linux release profile (`0.6.89.2`, closures through `0.6.89.2.2`)
 
-The `0.6.89.2.1` workflow first installs the declared PEP 517 build-backend requirements (`setuptools>=77` and `wheel`) into the qualification interpreter before importing `build_support.py`; this closes the predecessor CI preflight failure without changing the native wheel payload. Public Linux release wheels are produced with cibuildwheel in a `manylinux_2_28_x86_64` container and repaired with auditwheel. CFITSIO 4.6.2 is built from a pinned official source archive inside the container and its runtime library is vendored into the repaired wheel.
+The `0.6.89.2.1` workflow first installs the declared PEP 517 build-backend requirements (`setuptools>=77` and `wheel`) into the qualification interpreter before importing `build_support.py`. `0.6.89.2.2` additionally maps the `pypi-linux` packaging profile to a dedicated `make pypi-linux` target so the standalone Python-embedding plugin is never built in the release-wheel path; ordinary `make all` remains unchanged. Public Linux release wheels are produced with cibuildwheel in a `manylinux_2_28_x86_64` container and repaired with auditwheel. CFITSIO 4.6.2 is built from a pinned official source archive inside the container and its runtime library is vendored into the repaired wheel.
 
 `XSTAR_TOOLS_NATIVE_PROFILE=pypi-linux` changes only the staged binary payload: it omits `libxstar_backend_python.so`, whose standalone embedding contract links `libpythonX.Y` and therefore is not a valid portable manylinux dependency. The default `full` profile used by ordinary source/native installations is unchanged. The PyPI profile still contains the public C API, production-zone library, modular C++ libraries, `xstar-cpp`, and all non-MPI XSTAR2XSPEC executables.
 
