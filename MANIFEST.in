@@ -1313,3 +1313,14 @@ include xstar_tools-0.6.89_host_rejection.md
 include xstar_tools-0.6.89.1_local_validation.md
 
 include tools/qualification/replay_pip_packaging_refresh_host_runner_closure_0_6_89_1.py
+
+# 0.6.89.1.1 Windows pip Python-config discovery closure.
+include qualification/windows_pip_python_config_discovery_closure_0_6_89_1_1.json
+include tools/qualification/check_windows_pip_python_config_discovery_closure_0_6_89_1_1.py
+include tools/qualification/run_windows_pip_python_config_discovery_closure_host_0_6_89_1_1.py
+include tests/test_windows_pip_python_config_discovery_closure_0_6_89_1_1.py
+include docs/developer/windows_pip_python_config_discovery_closure_0_6_89_1_1.md
+include windows_pip_python_config_discovery_closure_0_6_89_1_1.md
+include xstar_tools-0.6.89.1_host_rejection.md
+include tools/qualification/replay_windows_pip_python_config_discovery_closure_0_6_89_1_1.py
+include xstar_tools-0.6.89.1.1_local_validation.md

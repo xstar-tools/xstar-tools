@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.89.1.1 - WINDOWS_PIP_PYTHON_CONFIG_DISCOVERY_CLOSURE - 2026-09-03
+
+- Preserves `0.6.89.1` as Linux GCC x86_64 ACCEPT, macOS arm64 ACCEPT, macOS Intel x86_64 ACCEPT, and Windows MSYS2 UCRT64 HOST REJECT at `PIP_PACKAGING_REFRESH_HOST_RUNNER_CLOSURE_06891_HOST_WHEEL_BUILD_REQUIRED=REJECT`.
+- Confirms the Windows Python-only wheel path remained accepted; the native-required wheel stopped before C++ compilation because `build_support.py` could not discover `python3-config` / `python-config`.
+- Fixes the Windows/MSYS2 discovery boundary without changing the Makefile Python embedding interface: normal `PYTHON_CONFIG` override and `shutil.which()` discovery remain first, followed by a same-interpreter sibling lookup for extensionless `python3-config` / `python-config` scripts.
+- Returns the sibling config-script path in forward-slash form so the retained MSYS2/GNU Make shell can execute it.
+- Makes no scientific, ABI, native-artifact, MPI, or atomic-data policy change. Ordinary wheels remain non-MPI and `atdb.fits` remains external.
+
 ## 0.6.89.1 - PIP_PACKAGING_REFRESH_HOST_RUNNER_CLOSURE - 2026-09-03
 
 - Preserves `0.6.89` as a historical Linux host REJECT at `PIP_PACKAGING_REFRESH_0689_HOST_NATIVE_ARTIFACTS=REJECT`.
