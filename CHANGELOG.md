@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.89.2 - PYPI_NATIVE_WHEEL_LINUX - 2026-09-03
+
+- Formally closes the preceding `0.6.89.1.3` pip-packaging-refresh qualification series after Linux x86_64, macOS arm64, macOS Intel x86_64, and Windows UCRT64/AMD64 all returned host ACCEPT.
+- Adds a Linux PyPI release-wheel path using `cibuildwheel` 4.2.1 and `manylinux_2_28_x86_64` rather than publishing host-built `linux_x86_64` wheels.
+- Builds CPython 3.9 through 3.14 x86_64 wheels as parallel CI jobs; free-threaded builds are deferred.
+- Pins CFITSIO 4.6.2 and its source SHA-256, builds it in the manylinux container, and uses `auditwheel repair` to vendor the runtime dependency into each repaired wheel.
+- Adds clean installed-wheel qualification covering `pip check`, native CLI/version/ABI, `zone-cpp` loading, direct C API ABI 60487, ELF dependency closure, wheel-local CFITSIO resolution, a pinned offline `bremem` science smoke, MPI exclusion, and the external `atdb.fits` policy.
+- Adds post-repair artifact qualification requiring `manylinux_2_28_x86_64` tags, expected native artifacts/metadata, vendored CFITSIO, and no C++ implementation-source leakage.
+- Adds a `pypi-linux` staging profile in `build_support.py` that omits only the optional `libxstar_backend_python.so` embedding plugin so the published wheel does not depend on/vendor `libpythonX.Y`; the default `full` source/native profile is unchanged. `native_runtime.py`, scientific arithmetic/order, public ABIs, ordinary-wheel MPI exclusion, and external atomic-data discovery remain unchanged apart from package-version metadata.
+
 ## 0.6.89.1.3 - PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE - 2026-09-03
 
 - Preserves `0.6.89.1.2` as Linux GCC x86_64 ACCEPT, macOS arm64 ACCEPT, macOS Intel x86_64 ACCEPT, and Windows MSYS2 UCRT64/AMD64 source-qualification REJECT at `PIP_PYTHON_CONFIG_PATH_EQUIVALENCE_CLOSURE_068912_BUILD_SUPPORT_BYTE_IDENTICAL=REJECT`.

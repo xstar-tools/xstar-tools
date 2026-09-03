@@ -1324,3 +1324,14 @@ include windows_pip_python_config_discovery_closure_0_6_89_1_1.md
 include xstar_tools-0.6.89.1_host_rejection.md
 include tools/qualification/replay_windows_pip_python_config_discovery_closure_0_6_89_1_1.py
 include xstar_tools-0.6.89.1.1_local_validation.md
+
+# 0.6.89.2 PyPI native Linux wheel production/qualification.
+recursive-include tools/packaging *.py *.sh
+include .github/workflows/pypi-native-wheel-linux.yml
+include tools/qualification/check_pypi_native_wheel_linux_0_6_89_2.py
+include tools/qualification/check_pypi_native_wheel_linux_artifacts_0_6_89_2.py
+include tools/qualification/run_pypi_native_wheel_linux_host_0_6_89_2.py
+include qualification/pypi_native_wheel_linux_0_6_89_2.json
+include docs/developer/pypi_native_wheel_linux_0_6_89_2.md
+include tools/qualification/replay_pypi_native_wheel_linux_0_6_89_2.py
+include xstar_tools-0.6.89.2_local_validation.md

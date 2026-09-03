@@ -222,7 +222,7 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.89.1.3
+PACKAGE_VERSION ?= 0.6.89.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.6.1.2.1

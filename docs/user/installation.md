@@ -2,7 +2,9 @@
 
 `pyproject.toml` is the authoritative Python package metadata/build configuration. The small `setup.py` file exists only to register the native setuptools build hook.
 
-`0.6.89.1.3 — PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE` is the current packaging candidate. `.89.1.2` reached full host ACCEPT on Linux GCC x86_64, macOS arm64, and macOS Intel x86_64; its Windows run rejected before wheel construction only because the source checker hashed raw CRLF checkout bytes against canonical LF hashes. `.89.1.3` normalizes text line endings for those frozen-source qualification hashes without changing the native packaging implementation. The formally accepted native source-build baseline remains `0.6.88.6.1.2.1`. PyPI repair/publication is intentionally deferred to later packaging closures.
+`0.6.89.1.3 — PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE` is formally accepted across Linux x86_64, macOS arm64, macOS Intel x86_64, and Windows UCRT64/AMD64. `0.6.89.2 — PYPI_NATIVE_WHEEL_LINUX` is the current release-wheel candidate. It builds CPython 3.9–3.14 Linux x86_64 wheels in a `manylinux_2_28` container and repairs them with auditwheel so CFITSIO is wheel-local. The frozen science revision and public ABIs are unchanged.
+
+The PyPI Linux binary profile deliberately omits only `libxstar_backend_python.so`, the optional standalone Python-embedding plugin, because it directly links `libpythonX.Y`. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present in the PyPI Linux wheel. MPI remains opt-in and `atdb.fits` remains external.
 
 ## Python package installation
 

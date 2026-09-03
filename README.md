@@ -4,40 +4,29 @@
 
 ## Current status
 
-**Current formally accepted release: `0.6.88.6.1.2.1` — `WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE`.**
+**Current formally accepted packaging baseline: `0.6.89.1.3` — `PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE`.** The full GitHub Actions matrix (Linux x86_64, macOS arm64, macOS Intel x86_64, and Windows UCRT64/AMD64) returned host ACCEPT.
 
-**Current packaging candidate: `0.6.89.1.3` — `PIP_SOURCE_LINE_ENDING_EQUIVALENCE_CLOSURE`.** `0.6.89.1.2` is host-accepted on Linux GCC x86_64, macOS arm64, and macOS Intel x86_64; Windows rejected only in source qualification because raw SHA-256 hashing treated the CRLF checkout of unchanged Python source as different from the canonical LF text. `.89.1.3` makes frozen-source qualification line-ending-neutral while leaving `build_support.py`, native runtime discovery, wheel contents, science, ABI, MPI exclusion, and external `atdb.fits` policy unchanged.
+**Current release-wheel candidate: `0.6.89.2` — `PYPI_NATIVE_WHEEL_LINUX`.** This milestone produces repaired `manylinux_2_28_x86_64` native wheels for CPython 3.9 through 3.14 using cibuildwheel and auditwheel. It preserves the frozen science/ABI boundary, keeps MPI out of ordinary wheels, and keeps `atdb.fits` external.
 
-The native non-MPI path is qualified on all four supported CI hosts:
+The accepted cross-platform source-build contract remains non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/HPC build.
 
-| Host | Toolchain | Status |
-|---|---|---|
-| Linux x86_64 | GCC / GNU Make | ACCEPT |
-| macOS arm64 | Apple Clang / GNU Make | ACCEPT |
-| macOS x86_64 | Apple Clang / GNU Make | ACCEPT |
-| Windows x86_64 | MSYS2 UCRT64 / MinGW-w64 GCC / GNU Make | ACCEPT |
+## Pip / PyPI packaging
 
-The accepted cross-platform fixed-state contract separates **same-host byte determinism** from **cross-platform scientific equivalence**. Linux and macOS Intel reproduce the canonical fixed-state payload byte-for-byte. Windows reproduces the FITS payload exactly and differs in text serialization only by CRLF line endings. macOS arm64 is same-host deterministic and matches the canonical reference within the accepted strict numerical envelope; the observed qualification maximum was approximately `4.56e-15` relative difference and `39 ULP`.
-
-Windows MPI is intentionally **out of scope**. The default Windows path supports `xstar-cpp` and local-process `xstar-xspec --processes N`. True MPI remains an opt-in Linux/HPC path and is not required for the ordinary build.
-
-The accepted optimized C++ science/performance lineage remains rooted in `0.6.82.40.2.46.1`. Detailed historical ACCEPT/REJECT records are preserved in `CHANGELOG.md` and `docs/developer/`.
-
-## Pip packaging candidate
-
-`0.6.89.1.3` retains the `0.6.89` platform-neutral packaging contract, the `.89.1` corrected wheel inspection, the `.89.1.1` Windows Python-config fallback, and the `.89.1.2` canonical path-equivalence closure. It additionally makes qualification hashes for the frozen text implementation line-ending-neutral so Windows CRLF checkout does not create a false source rejection. An explicit Python-only wheel can be built with:
+A Python-only source wheel remains explicit:
 
 ```bash
 XSTAR_TOOLS_NATIVE=off python -m pip wheel . --no-deps
 ```
 
-A native source wheel build uses the retained qualified Makefile and requires the platform C++/CFITSIO prerequisites:
+A normal native source wheel remains available when platform prerequisites are installed:
 
 ```bash
 XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
 ```
 
-The ordinary native wheel contains `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, and `xstar-xspec`; it deliberately excludes `xstar-xspec-mpi`. `atdb.fits` remains external. PyPI repair/tagging and publication are later release-wheel closures, not part of this milestone.
+`0.6.89.2` adds the Linux PyPI release profile. Release wheels are built inside `manylinux_2_28_x86_64`, use a pinned CFITSIO 4.6.2 build, and are repaired so CFITSIO is wheel-local. The release profile contains `xstar-cpp`, `xstar-xspec-initable`, `xstar-xspec-table`, `xstar-xspec`, the C++ production libraries, and the public C API. It deliberately omits only the optional standalone Python-embedding plugin because a portable manylinux wheel must not depend on or vendor `libpythonX.Y`. Source/native installs retain the full plugin set.
+
+The ordinary wheel still excludes `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_native_wheel_linux_0_6_89_2.md` for the release-wheel contract and qualification procedure.
 
 ## Quick start
 

@@ -28,7 +28,7 @@ The build hook:
 
 1. builds normal Python modules/package data;
 2. evaluates `XSTAR_TOOLS_NATIVE`;
-3. validates Linux build prerequisites;
+3. validates platform-native build prerequisites;
 4. copies the self-contained `src/xstar_tools/xstar/cpp/` tree to a temporary staging directory;
 5. runs `make clean` and then the retained `make all` there;
 6. verifies every required runtime artifact exists;
@@ -36,6 +36,14 @@ The build hook:
 8. writes `native_build.json` with package/science/ABI/build provenance.
 
 This design prevents old `.o`/`.so` files in a checkout from entering a wheel.
+
+### PyPI Linux release profile (`0.6.89.2`)
+
+Public Linux release wheels are produced with cibuildwheel in a `manylinux_2_28_x86_64` container and repaired with auditwheel. CFITSIO 4.6.2 is built from a pinned official source archive inside the container and its runtime library is vendored into the repaired wheel.
+
+`XSTAR_TOOLS_NATIVE_PROFILE=pypi-linux` changes only the staged binary payload: it omits `libxstar_backend_python.so`, whose standalone embedding contract links `libpythonX.Y` and therefore is not a valid portable manylinux dependency. The default `full` profile used by ordinary source/native installations is unchanged. The PyPI profile still contains the public C API, production-zone library, modular C++ libraries, `xstar-cpp`, and all non-MPI XSTAR2XSPEC executables.
+
+The clean installed-wheel test exercises `zone-cpp`, so omission of the embedding plugin does not weaken the Python-to-native production path.
 
 ## Wheel contents
 
@@ -45,7 +53,7 @@ Normal wheels include only installed Python modules plus required runtime data:
 - `coheat.dat`;
 - `constants.def`;
 - public C/production-zone ABI headers;
-- built native runtime artifacts on native Linux wheels;
+- built native runtime artifacts on native wheels;
 - `native_build.json`.
 
 They exclude:

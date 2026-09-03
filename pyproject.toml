@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.89.1.3"
+version = "0.6.89.2"
 # Historical qualification compatibility marker: version = "0.6.89.1.2"
 # Historical qualification compatibility marker: version = "0.6.89.1"
 # Historical qualification compatibility marker: version = "0.6.88.6.1.2.1"
@@ -106,3 +106,19 @@ norecursedirs = ["historical"]
 # version = "0.6.89.1.1"
 # Historical package-version marker: version = "0.6.89.1"
 # Historical package-version marker: version = "0.6.89"
+
+[tool.cibuildwheel]
+build = "cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
+skip = "cp3??t-*"
+build-verbosity = 1
+test-command = "python {package}/tools/packaging/pypi_linux_wheel_smoke.py"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+manylinux-x86_64-image = "manylinux_2_28"
+before-all = [
+  "dnf install -y zlib-devel pkgconf-pkg-config",
+  "bash {package}/tools/packaging/build_manylinux_cfitsio.sh",
+]
+environment = { XSTAR_TOOLS_NATIVE="required", XSTAR_TOOLS_NATIVE_PROFILE="pypi-linux", XSTAR_TOOLS_NATIVE_JOBS="2", XSTAR_TOOLS_CFITSIO_PREFIX="/opt/xstar-cfitsio", PKG_CONFIG_PATH="/opt/xstar-cfitsio/lib/pkgconfig:/opt/xstar-cfitsio/lib64/pkgconfig", LD_LIBRARY_PATH="/opt/xstar-cfitsio/lib:/opt/xstar-cfitsio/lib64" }
+repair-wheel-command = "auditwheel repair --wheel-dir {dest_dir} {wheel}"
