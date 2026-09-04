@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from xstar_tools.native_runtime import packaged_native_executable_path
+from xstar_tools.native_runtime import native_subprocess_environment, packaged_native_executable_path
 
 
 def _run(name: str, env_var: str, *, compatibility_names: tuple[str, ...] = ()) -> int:
@@ -19,7 +19,7 @@ def _run(name: str, env_var: str, *, compatibility_names: tuple[str, ...] = ()) 
             f"{name} native runtime is not installed for this environment. "
             "Install a native xstar-tools wheel or build the retained C++ Makefile targets."
         )
-    return subprocess.run([str(executable), *sys.argv[1:]], check=False).returncode
+    return subprocess.run([str(executable), *sys.argv[1:]], check=False, env=native_subprocess_environment()).returncode
 
 
 def main_xstar_xspec_initable() -> int:

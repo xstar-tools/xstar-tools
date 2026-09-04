@@ -1373,3 +1373,19 @@ include pypi_native_wheel_macos_0_6_89_3.md
 include xstar_tools_conversation_summary_through_0.6.89.3_candidate.md
 include xstar_tools-0.6.89.3_local_validation.md
 include tools/qualification/replay_pypi_native_wheel_macos_0_6_89_3.py
+
+# 0.6.89.4 PyPI native Windows wheels.
+include .github/workflows/pypi-native-wheel-windows.yml
+include qualification/pypi_native_wheel_windows_0_6_89_4.json
+include tools/packaging/build_windows_cfitsio.sh
+include tools/packaging/pypi_windows_wheel_smoke.py
+include tools/qualification/check_pypi_native_wheel_windows_0_6_89_4.py
+include tools/qualification/check_pypi_native_wheel_windows_artifacts_0_6_89_4.py
+include tools/qualification/run_pypi_native_wheel_windows_host_0_6_89_4.py
+include tools/qualification/replay_pypi_native_wheel_windows_0_6_89_4.py
+include tests/test_pypi_native_wheel_windows_0_6_89_4.py
+include docs/developer/pypi_native_wheel_windows_0_6_89_4.md
+include pypi_native_wheel_windows_0_6_89_4.md
+include xstar_tools-0.6.89.3_formal_host_acceptance.md
+include xstar_tools_conversation_summary_through_0.6.89.4_candidate.md
+include xstar_tools-0.6.89.4_local_validation.md

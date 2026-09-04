@@ -1,7 +1,7 @@
 # Developer guide
 
 
-Packaging development after the portability closure is documented in {doc}`pip_packaging_refresh_0_6_89`, its host-runner closure {doc}`pip_packaging_refresh_host_runner_closure_0_6_89_1`, the Windows Python-config discovery closure {doc}`windows_pip_python_config_discovery_closure_0_6_89_1_1`, the macOS path-equivalence closure {doc}`pip_python_config_path_equivalence_closure_0_6_89_1_2`, the Windows source-line-ending closure {doc}`pip_source_line_ending_equivalence_closure_0_6_89_1_3`, and the PyPI release-wheel milestones including {doc}`pypi_native_wheel_macos_0_6_89_3`.
+Packaging development after the portability closure is documented in {doc}`pip_packaging_refresh_0_6_89`, its host-runner closure {doc}`pip_packaging_refresh_host_runner_closure_0_6_89_1`, the Windows Python-config discovery closure {doc}`windows_pip_python_config_discovery_closure_0_6_89_1_1`, the macOS path-equivalence closure {doc}`pip_python_config_path_equivalence_closure_0_6_89_1_2`, the Windows source-line-ending closure {doc}`pip_source_line_ending_equivalence_closure_0_6_89_1_3`, and the PyPI release-wheel milestones including {doc}`pypi_native_wheel_macos_0_6_89_3` and {doc}`pypi_native_wheel_windows_0_6_89_4`.
 The developer documentation is organized around the frozen scientific boundary, the Fortran/Python/C++ source concordance, native execution ownership, qualification, and release portability.
 
 For the current platform matrix and the accepted `0.6.88.6.1.2.1` closure, start with {doc}`cross_platform_portability_status`.
@@ -38,6 +38,7 @@ pypi_native_wheel_linux_0_6_89_2
 pypi_native_wheel_linux_preflight_dependency_closure_0_6_89_2_1
 pypi_linux_profile_build_target_closure_0_6_89_2_2
 pypi_native_wheel_macos_0_6_89_3
+pypi_native_wheel_windows_0_6_89_4
 packaging
 conda_packaging
 documentation_policy

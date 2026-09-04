@@ -222,7 +222,7 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.89.3
+PACKAGE_VERSION ?= 0.6.89.4
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.2.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1
@@ -277,13 +277,19 @@ PYPI_LINUX_TARGETS := $(PHYSICS_TARGETS) $(PYPI_LINUX_STANDALONE_TARGETS)
 # omit only the standalone Python-embedding plugin.  Normal `make all` retains it.
 PYPI_MACOS_STANDALONE_TARGETS := $(filter-out $(PYTHON_BACKEND_TARGET),$(STANDALONE_TARGETS))
 PYPI_MACOS_TARGETS := $(PHYSICS_TARGETS) $(PYPI_MACOS_STANDALONE_TARGETS)
+
+# PyPI Windows wheels use the same public runtime boundary as Linux/macOS:
+# exclude only the standalone Python-embedding plugin so release wheels never
+# acquire a CPython runtime DLL dependency.
+PYPI_WINDOWS_STANDALONE_TARGETS := $(filter-out $(PYTHON_BACKEND_TARGET),$(STANDALONE_TARGETS))
+PYPI_WINDOWS_TARGETS := $(PHYSICS_TARGETS) $(PYPI_WINDOWS_STANDALONE_TARGETS)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 MPI_TARGETS := $(XSPEC_MPI_EXECUTABLE)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
 INTERNAL_HEADERS := xstar_path_compat.hpp xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_process.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
 
-.PHONY: all pypi-linux pypi-macos physics standalone mpi test clean install print-config
+.PHONY: all pypi-linux pypi-macos pypi-windows physics standalone mpi test clean install print-config
 
 all: $(TARGETS)
 # Packaging-only manylinux target. It deliberately does not build
@@ -292,6 +298,9 @@ pypi-linux: $(PYPI_LINUX_TARGETS)
 # Packaging-only macOS target.  As on Linux, keep the public C API/backend and
 # science runtime but never build the standalone Python-embedding plugin.
 pypi-macos: $(PYPI_MACOS_TARGETS)
+# Packaging-only Windows target. Keep the accepted MinGW/UCRT64 public runtime
+# while excluding only the standalone Python-embedding plugin.
+pypi-windows: $(PYPI_WINDOWS_TARGETS)
 physics: $(PHYSICS_TARGETS)
 standalone: $(STANDALONE_TARGETS)
 

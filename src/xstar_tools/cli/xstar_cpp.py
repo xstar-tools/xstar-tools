@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import platform
+import subprocess
 import sys
 
 
@@ -17,6 +19,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 69
+    if platform.system() == "Windows":
+        from xstar_tools.native_runtime import native_subprocess_environment
+
+        return subprocess.run(
+            [str(executable), *sys.argv[1:]],
+            check=False,
+            env=native_subprocess_environment(),
+        ).returncode
     os.execv(str(executable), [str(executable), *sys.argv[1:]])
     return 70  # pragma: no cover
 

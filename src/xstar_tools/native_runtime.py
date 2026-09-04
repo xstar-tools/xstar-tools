@@ -102,6 +102,31 @@ def packaged_native_library_path(stem: str, *, env_var: str | None = None) -> Pa
     return candidates[0].resolve() if candidates[0].is_absolute() else candidates[0]
 
 
+
+def windows_vendored_dll_dirs() -> list[Path]:
+    """Return delvewheel vendor directories adjacent to the installed package."""
+    if native_platform_key() != "windows":
+        return []
+    package_dir = Path(__file__).resolve().parent
+    site_dir = package_dir.parent
+    return sorted(
+        (p.resolve() for p in site_dir.glob("xstar_tools*.libs") if p.is_dir()),
+        key=str,
+    )
+
+
+def native_subprocess_environment() -> dict[str, str]:
+    """Return an environment that lets packaged Windows EXEs find wheel DLLs."""
+    env = os.environ.copy()
+    if native_platform_key() != "windows":
+        return env
+    dirs = [native_cpp_dir().resolve(), *windows_vendored_dll_dirs()]
+    prefix = os.pathsep.join(str(p) for p in dirs if p.is_dir())
+    if prefix:
+        current = env.get("PATH", "")
+        env["PATH"] = prefix + (os.pathsep + current if current else "")
+    return env
+
 def prepare_native_library_search(path: Path | None = None) -> None:
     """Make sibling dependent DLLs discoverable on Windows Python 3.8+.
 
@@ -113,13 +138,14 @@ def prepare_native_library_search(path: Path | None = None) -> None:
     """
     if native_platform_key() != "windows" or not hasattr(os, "add_dll_directory"):
         return
-    directory = (path.parent if path is not None else native_cpp_dir()).resolve()
-    key = str(directory)
-    if key in _WINDOWS_DLL_DIRECTORIES or not directory.is_dir():
-        return
-    handle = os.add_dll_directory(key)
-    _WINDOWS_DLL_DIRECTORY_HANDLES.append(handle)
-    _WINDOWS_DLL_DIRECTORIES.add(key)
+    primary = (path.parent if path is not None else native_cpp_dir()).resolve()
+    for directory in [primary, *windows_vendored_dll_dirs()]:
+        key = str(directory)
+        if key in _WINDOWS_DLL_DIRECTORIES or not directory.is_dir():
+            continue
+        handle = os.add_dll_directory(key)
+        _WINDOWS_DLL_DIRECTORY_HANDLES.append(handle)
+        _WINDOWS_DLL_DIRECTORIES.add(key)
 
 
 def native_executable_candidates(

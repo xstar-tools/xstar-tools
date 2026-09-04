@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.89.4 - PYPI_NATIVE_WHEEL_WINDOWS - 2026-09-03
+
+- Adds publishable CPython 3.9 through 3.14 `win_amd64` wheel production on GitHub-hosted Windows using ordinary Python.org CPython wheel tags while retaining the accepted MSYS2 UCRT64 / MinGW-w64 XSTAR native runtime.
+- Adds `XSTAR_TOOLS_NATIVE_PROFILE=pypi-windows` and `make pypi-windows`, omitting only the optional standalone Python-embedding plugin at build/staging time; ordinary `make all` remains unchanged.
+- Makes `python-config` unnecessary for the `pypi-windows` profile so official CPython build environments can package the Python-independent native runtime without adopting the MSYS2 Python ABI/tag.
+- Builds pinned CFITSIO 4.6.2 from the HEASARC source archive under UCRT64, then repairs wheels with `delvewheel --analyze-existing --analyze-existing-exes` so CFITSIO and required MinGW runtime DLLs are wheel-local.
+- Extends Windows runtime discovery so both `ctypes` loads and packaged native executable subprocesses can locate delvewheel-vendored DLLs; this is inert on Linux/macOS and on unrepaired Windows source builds without a vendor directory.
+- Adds repaired-wheel qualification for `win_amd64` tags, AMD64 PE payloads, GPL-3.0 metadata/license text, native artifact metadata, vendored CFITSIO/MinGW runtimes, native CLI/C API/`zone-cpp`, an offline `bremem` science smoke, MPI exclusion, and external `atdb.fits`.
+- Preserves science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60486`, XSPEC table ABI `1`, the accepted Linux `0.6.89.2.2` wheel contract, and the accepted macOS `0.6.89.3` wheel contract.
+
 ## 0.6.89.3 - PYPI_NATIVE_WHEEL_MACOS - 2026-09-03
 
 - Builds native, architecture-specific macOS PyPI wheel candidates for CPython 3.9 through 3.14 on both Apple Silicon (`arm64`) and Intel (`x86_64`) using matching GitHub-hosted runners; `universal2` is intentionally not produced.

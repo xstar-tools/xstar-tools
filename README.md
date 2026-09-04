@@ -4,9 +4,9 @@
 
 ## Current status
 
-**Current formally accepted PyPI native-wheel baseline: `0.6.89.2.2` — `PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE`.** CPython 3.9 through 3.14 `manylinux_2_28_x86_64` wheels all passed repaired-wheel artifact checks, clean-install smoke, and `twine check`.
+**Current formally accepted PyPI native-wheel baselines:** `0.6.89.2.2` closes Linux CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels, and `0.6.89.3` closes separate CPython 3.9–3.14 macOS `arm64` / `x86_64` wheels with correct single-architecture tags.
 
-**Current release-wheel candidate: `0.6.89.3` — `PYPI_NATIVE_WHEEL_MACOS`.** It adds native arm64 and x86_64 macOS wheels, deliberately avoids `universal2`, pins `MACOSX_DEPLOYMENT_TARGET=11.0`, uses delocate to vendor CFITSIO, retains MPI exclusion and external `atdb.fits`, and changes the project license designation to `GPL-3.0` from this release onward.
+**Current release-wheel candidate: `0.6.89.4` — `PYPI_NATIVE_WHEEL_WINDOWS`.** It adds ordinary CPython `win_amd64` publication wheels backed by the accepted MSYS2 UCRT64 / MinGW-w64 native runtime, uses delvewheel to vendor CFITSIO and MinGW runtime DLLs, retains GPL-3.0, excludes MPI and the standalone Python-embedding plugin, and keeps `atdb.fits` external.
 
 The accepted cross-platform source-build contract remains non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/HPC build.
 
@@ -24,9 +24,9 @@ A normal native source wheel remains available when platform prerequisites are i
 XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
 ```
 
-`0.6.89.2.2` formally closes Linux PyPI wheel production: repaired CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels carry wheel-local CFITSIO and exclude only the standalone Python-embedding plugin. `0.6.89.3` extends that publication model to macOS with separate `arm64` and `x86_64` wheels, a common macOS 11 deployment target, and delocate repair. Source/native installs retain the full plugin set.
+`0.6.89.2.2` formally closes Linux PyPI wheel production: repaired CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels carry wheel-local CFITSIO and exclude only the standalone Python-embedding plugin. `0.6.89.3` formally extends that model to separate macOS `arm64` and `x86_64` wheels. `0.6.89.4` adds a Windows publication candidate with ordinary `win_amd64` tags and a repaired UCRT64/MinGW runtime. Source/native installs retain the full plugin set.
 
-Ordinary wheels still exclude `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md` for the accepted Linux closure and `docs/developer/pypi_native_wheel_macos_0_6_89_3.md` for the macOS candidate.
+Ordinary wheels still exclude `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md`, `docs/developer/pypi_native_wheel_macos_0_6_89_3.md`, and `docs/developer/pypi_native_wheel_windows_0_6_89_4.md`.
 
 ## Quick start
 
