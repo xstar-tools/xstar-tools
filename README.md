@@ -6,7 +6,7 @@
 
 **Current formally accepted PyPI native-wheel baselines:** `0.6.89.2.2` closes Linux CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels, and `0.6.89.3` closes separate CPython 3.9–3.14 macOS `arm64` / `x86_64` wheels with correct single-architecture tags.
 
-**Current release-wheel candidate: `0.6.89.4` — `PYPI_NATIVE_WHEEL_WINDOWS`.** It adds ordinary CPython `win_amd64` publication wheels backed by the accepted MSYS2 UCRT64 / MinGW-w64 native runtime, uses delvewheel to vendor CFITSIO and MinGW runtime DLLs, retains GPL-3.0, excludes MPI and the standalone Python-embedding plugin, and keeps `atdb.fits` external.
+**Current release-wheel candidate: `0.6.89.4.1` — `WINDOWS_PYPI_CFITSIO_LIBRARY_ONLY_BUILD_CLOSURE`.** The initial `0.6.89.4` Windows PyPI candidate was rejected before XSTAR compilation because CFITSIO's default `make` also built the Unix-only `smem` utility, which requires `sys/ipc.h`. `0.6.89.4.1` keeps the same UCRT64/MinGW XSTAR wheel contract but builds only the CFITSIO library and installs only its library, public headers, and pkg-config metadata.
 
 The accepted cross-platform source-build contract remains non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/HPC build.
 
@@ -24,9 +24,9 @@ A normal native source wheel remains available when platform prerequisites are i
 XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
 ```
 
-`0.6.89.2.2` formally closes Linux PyPI wheel production: repaired CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels carry wheel-local CFITSIO and exclude only the standalone Python-embedding plugin. `0.6.89.3` formally extends that model to separate macOS `arm64` and `x86_64` wheels. `0.6.89.4` adds a Windows publication candidate with ordinary `win_amd64` tags and a repaired UCRT64/MinGW runtime. Source/native installs retain the full plugin set.
+`0.6.89.2.2` formally closes Linux PyPI wheel production: repaired CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels carry wheel-local CFITSIO and exclude only the standalone Python-embedding plugin. `0.6.89.3` formally extends that model to separate macOS `arm64` and `x86_64` wheels. The initial Windows publication candidate `0.6.89.4` was rejected in the pinned-CFITSIO prebuild because CFITSIO's default target compiled the Unix-only `smem` helper. `0.6.89.4.1` narrows the Windows CFITSIO build to `libcfitsio.la` plus leaf install targets while retaining ordinary `win_amd64` tags and delvewheel repair. Source/native installs retain the full plugin set.
 
-Ordinary wheels still exclude `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md`, `docs/developer/pypi_native_wheel_macos_0_6_89_3.md`, and `docs/developer/pypi_native_wheel_windows_0_6_89_4.md`.
+Ordinary wheels still exclude `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md`, `docs/developer/pypi_native_wheel_macos_0_6_89_3.md`, `docs/developer/pypi_native_wheel_windows_0_6_89_4.md`, and `docs/developer/windows_pypi_cfitsio_library_only_build_closure_0_6_89_4_1.md`.
 
 ## Quick start
 

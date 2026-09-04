@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.89.4.1 - WINDOWS_PYPI_CFITSIO_LIBRARY_ONLY_BUILD_CLOSURE - 2026-09-03
+
+- Close the Windows PyPI-wheel CFITSIO prebuild failure observed across all six CPython selectors.
+- Build only `libcfitsio.la` under MSYS2 UCRT64 instead of CFITSIO's default `all` target, which also builds the Unix-only `smem` helper and fails on missing `sys/ipc.h`.
+- Install only the CFITSIO library, public headers, and `cfitsio.pc` through Automake leaf install targets; do not invoke top-level `make install`.
+- Retain CFITSIO 4.6.2 and its pinned source SHA-256, the `pypi-windows` XSTAR native profile, delvewheel repair contract, GPL-3.0 licensing, frozen science revision, public ABIs, MPI exclusion, and external `atdb.fits` policy.
+
 ## 0.6.89.4 - PYPI_NATIVE_WHEEL_WINDOWS - 2026-09-03
 
 - Adds publishable CPython 3.9 through 3.14 `win_amd64` wheel production on GitHub-hosted Windows using ordinary Python.org CPython wheel tags while retaining the accepted MSYS2 UCRT64 / MinGW-w64 XSTAR native runtime.
