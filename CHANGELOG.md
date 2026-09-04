@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.89.4.2 - WINDOWS_PYPI_CFITSIO_SHARED_DLL_LINK_CLOSURE - 2026-09-03
+
+- Records `0.6.89.4.1` as a historical Windows PyPI wheel REJECT at the pinned-CFITSIO shared-library link stage: the library-only build correctly avoided the Unix-only `smem` helper, but GNU libtool declined to emit a PE/COFF DLL without the `-no-undefined` declaration and installed only `libcfitsio.a`.
+- Keeps the pinned CFITSIO 4.6.2 source and SHA-256 unchanged, configures the Windows dependency build explicitly as shared-only (`--enable-shared --disable-static`), and builds `libcfitsio.la` with the upstream `-version-info 10` plus the native-Windows libtool contract `-no-undefined`.
+- Preserves the leaf-only CFITSIO installation boundary (`install-libLTLIBRARIES`, `install-includeHEADERS`, `install-pkgconfigDATA`) so helper utilities are still not built.
+- Preserves the `pypi-windows` XSTAR native profile, ordinary `win_amd64` CPython 3.9-3.14 publication matrix, delvewheel repair contract, accepted Linux/macOS wheel contracts, frozen science revision and public ABIs, GPL-3.0 licensing, MPI exclusion, and external `atdb.fits` policy.
+
 ## 0.6.89.4.1 - WINDOWS_PYPI_CFITSIO_LIBRARY_ONLY_BUILD_CLOSURE - 2026-09-03
 
 - Close the Windows PyPI-wheel CFITSIO prebuild failure observed across all six CPython selectors.
