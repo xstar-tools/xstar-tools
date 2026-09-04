@@ -38,7 +38,7 @@ namespace fs = std::filesystem;
 namespace {
 
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.6.1.2.1"
-constexpr const char *kPackageVersion = "0.6.89.4.3";
+constexpr const char *kPackageVersion = "0.6.89.4.4";
 // Historical qualification compatibility marker: kPackageVersion = "0.6.89.1.2"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.89.1"
 // Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.89.4.4 - WINDOWS_PYPI_PKG_CONFIG_QUALIFICATION_LAUNCHER_CLOSURE - 2026-09-04
+
+- Records `0.6.89.4.3` as a historical Windows PyPI preflight REJECT: all six CPython 3.9-3.14 jobs stopped in source qualification before cibuildwheel because the checker created a POSIX shebang fake `pkg-config` script and native Windows `CreateProcess` rejected it with `WinError 193`.
+- Makes the source qualification platform-neutral by mocking only the `subprocess.run` boundary used by `_pkg_config_cfitsio_make_variables()`, while asserting the exact three `pkg-config` argument vectors, returned metadata, and Windows backslash-to-forward-slash normalization.
+- Keeps `build_support.py`, `src/xstar_tools/native_runtime.py`, and the pinned CFITSIO 4.6.2 Windows build script byte-identical to `0.6.89.4.3`; the `.89.4.3` production metadata-propagation fix is unchanged.
+- Leaves Linux/macOS wheel contracts, science revision `0.6.48.12.3.45.3.3.8`, public ABIs, GPL-3.0, MPI exclusion, and external `atdb.fits` policy unchanged.
+
 ## 0.6.89.4.3 - WINDOWS_PYPI_CFITSIO_METADATA_PROPAGATION_CLOSURE - 2026-09-04
 
 - Preserves the pinned CFITSIO 4.6.2 library-only shared-DLL build accepted by the `.89.4.2` source/local qualification.

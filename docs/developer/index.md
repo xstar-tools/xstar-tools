@@ -46,3 +46,5 @@ documentation_policy
 ```
 
 Historical milestone notes remain available in this directory even when they are not all listed in the primary navigation. Their original ACCEPT/REJECT status is preserved rather than rewritten by later closures.
+
+windows_pypi_pkg_config_qualification_launcher_closure_0_6_89_4_4
