@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.89.4.3 - WINDOWS_PYPI_CFITSIO_METADATA_PROPAGATION_CLOSURE - 2026-09-04
+
+- Preserves the pinned CFITSIO 4.6.2 library-only shared-DLL build accepted by the `.89.4.2` source/local qualification.
+- Records `.89.4.2` as a historical Windows host REJECT: all six CPython 3.9-3.14 jobs reached XSTAR native compilation, then `xstar_xspec_table.cpp` failed with `fitsio.h: No such file or directory` because Make fell back to a bare `-lcfitsio` link line.
+- Resolves the already-validated `pkg-config` CFITSIO metadata directly in `build_support.py` for the `pypi-windows` profile and passes `CFITSIO_CFLAGS`, `CFITSIO_LIBDIR`, and `CFITSIO_LIBS` explicitly to Make.
+- Normalizes Windows backslashes returned by `pkg-config` to forward slashes before crossing into the MSYS2/Make command boundary.
+- Leaves Linux/macOS wheel paths, native runtime loading, science revision `0.6.48.12.3.45.3.3.8`, public ABIs, MPI exclusion, and external `atdb.fits` policy unchanged.
+
 ## 0.6.89.4.2 - WINDOWS_PYPI_CFITSIO_SHARED_DLL_LINK_CLOSURE - 2026-09-03
 
 - Records `0.6.89.4.1` as a historical Windows PyPI wheel REJECT at the pinned-CFITSIO shared-library link stage: the library-only build correctly avoided the Unix-only `smem` helper, but GNU libtool declined to emit a PE/COFF DLL without the `-no-undefined` declaration and installed only `libcfitsio.a`.
