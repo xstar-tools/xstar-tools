@@ -1,32 +1,21 @@
 # xstar-tools
 
-`xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. The canonical scientific oracle remains **FORTRAN XSTAR 2.59g**. Package, interface, portability, orchestration, and performance work are qualified without silently changing that scientific boundary.
+`xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. The scientific oracle remains **FORTRAN XSTAR 2.59g**. Packaging, portability, orchestration, interface, and performance work are qualified without silently changing that scientific boundary.
 
-## Current status
+## Status
 
-**Current formally accepted PyPI native-wheel baselines:** `0.6.89.2.2` closes Linux CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels, and `0.6.89.3` closes separate CPython 3.9–3.14 macOS `arm64` / `x86_64` wheels with correct single-architecture tags.
+The native release-wheel path is now formally qualified on all three supported desktop/server platforms:
 
-**Current release-wheel candidate: `0.6.89.4.4` — `WINDOWS_PYPI_PKG_CONFIG_QUALIFICATION_LAUNCHER_CLOSURE`.** `.89.4.3` retains the production fix that resolves CFITSIO metadata in the Python build backend and passes `CFITSIO_CFLAGS`, `CFITSIO_LIBDIR`, and `CFITSIO_LIBS` explicitly to the Windows Make invocation. Its six GitHub jobs were rejected before cibuildwheel because the source checker attempted to launch a POSIX shebang fake `pkg-config` script through native Windows `CreateProcess` (`WinError 193`). `.89.4.4` is qualification-only: the checker now mocks the subprocess boundary portably while the production build implementation remains byte-identical to `.89.4.3`.
+| Platform | Qualified wheels | Accepted milestone |
+|---|---|---|
+| Linux x86_64 | CPython 3.9–3.14, `manylinux_2_28_x86_64` | `0.6.89.2.2` |
+| macOS arm64 | CPython 3.9–3.14, `macosx_11_0_arm64` | `0.6.89.3` |
+| macOS x86_64 | CPython 3.9–3.14, `macosx_11_0_x86_64` | `0.6.89.3` |
+| Windows AMD64 | CPython 3.9–3.14, `win_amd64` | `0.6.89.4.5` |
 
-The accepted cross-platform source-build contract remains non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/HPC build.
+`0.6.89.4.5 — WINDOWS_PYPI_DELVEWHEEL_EXISTING_DLL_RESOLUTION_CLOSURE` is formally accepted across all six Windows selectors. The repaired wheels use ordinary `win_amd64` tags, vendor CFITSIO and the required MinGW runtime DLLs, retain XSTAR's own DLLs in-package, exclude the standalone Python-embedding DLL, exclude MPI, and keep `atdb.fits` external.
 
-## Pip / PyPI packaging
-
-A Python-only source wheel remains explicit:
-
-```bash
-XSTAR_TOOLS_NATIVE=off python -m pip wheel . --no-deps
-```
-
-A normal native source wheel remains available when platform prerequisites are installed:
-
-```bash
-XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
-```
-
-`0.6.89.2.2` formally closes Linux PyPI wheel production: repaired CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels carry wheel-local CFITSIO and exclude only the standalone Python-embedding plugin. `0.6.89.3` formally extends that model to separate macOS `arm64` and `x86_64` wheels. The initial Windows publication candidate `0.6.89.4` was rejected in the pinned-CFITSIO prebuild because CFITSIO's default target compiled the Unix-only `smem` helper. `0.6.89.4.1` narrowed the build to `libcfitsio.la`, while `.89.4.2` closed the MinGW shared-DLL link with `-no-undefined`. All six `.89.4.2` jobs then reached XSTAR compilation and failed because the CFITSIO development prefix was not propagated into Make. `0.6.89.4.3` passes the `pkg-config`-resolved include/library flags explicitly for the Windows PyPI profile; `.89.4.4` closes the Windows-only qualification launcher defect without changing that implementation. Source/native installs retain the full plugin set.
-
-Ordinary wheels still exclude `xstar-xspec-mpi`; `atdb.fits` remains external. See `docs/developer/pypi_linux_profile_build_target_closure_0_6_89_2_2.md`, `docs/developer/pypi_native_wheel_macos_0_6_89_3.md`, `docs/developer/pypi_native_wheel_windows_0_6_89_4.md`, and `docs/developer/windows_pypi_cfitsio_library_only_build_closure_0_6_89_4_1.md`, and `docs/developer/windows_pypi_cfitsio_shared_dll_link_closure_0_6_89_4_2.md`, and `docs/developer/windows_pypi_cfitsio_metadata_propagation_closure_0_6_89_4_3.md`, plus `docs/developer/windows_pypi_pkg_config_qualification_launcher_closure_0_6_89_4_4.md`.
+The accepted cross-platform source-build contract is non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/macOS/HPC build.
 
 ## Quick start
 
@@ -55,13 +44,41 @@ src/xstar_tools/xstar/cpp/xstar-xspec \
   --processes 2
 ```
 
-`--processes 2` means **two independent `xstar-cpp` operating-system processes**, not two threads and not two MPI ranks.
+`--processes 2` means **two independent `xstar-cpp` operating-system processes**. It does not mean two threads or two MPI ranks.
+
+## Python / wheel builds
+
+Python requires **3.9 or newer**.
+
+Build a Python-only wheel explicitly:
+
+```bash
+XSTAR_TOOLS_NATIVE=off python -m pip wheel . --no-deps
+```
+
+Build a native wheel when platform prerequisites are available:
+
+```bash
+XSTAR_TOOLS_NATIVE=required python -m pip wheel . --no-deps
+```
+
+The release-wheel profiles are deliberately narrower than a full source build:
+
+- Linux uses `pypi-linux`;
+- macOS uses `pypi-macos`;
+- Windows uses `pypi-windows`;
+- all ordinary release wheels exclude `xstar-xspec-mpi`;
+- all release profiles exclude the standalone Python-embedding native plugin;
+- `atdb.fits` is never bundled into ordinary wheels;
+- CFITSIO is vendored into repaired release wheels.
+
+The detailed qualification history is in `docs/developer/packaging.md` and the platform-specific milestone documents under `docs/developer/`.
 
 ## Native build by platform
 
 ### Linux
 
-Typical prerequisites on Debian/Ubuntu are a C++17 compiler, GNU Make, Python development tools, `pkg-config`, and CFITSIO development files. Then:
+Typical prerequisites are a C++17 compiler, GNU Make, Python development support, `pkg-config`, and CFITSIO development files.
 
 ```bash
 make -C src/xstar_tools/xstar/cpp -j4 PLATFORM=linux
@@ -81,11 +98,11 @@ Build with Apple Clang:
 make -C src/xstar_tools/xstar/cpp -j4 PLATFORM=macos
 ```
 
-The qualified macOS build produces `.dylib` libraries with `@rpath` install names and `@loader_path` sibling-library lookup.
+The qualified Darwin build uses `.dylib` libraries, `@rpath` install names, and `@loader_path` sibling-library lookup.
 
 ### Windows
 
-Use an **MSYS2 UCRT64** terminal, not the plain MSYS shell. Install at least:
+Use an **MSYS2 UCRT64** terminal, not the plain MSYS shell. A normal source build can use the packaged MSYS2 CFITSIO development package:
 
 ```bash
 pacman -S --needed \
@@ -104,11 +121,9 @@ Then build:
 make -C src/xstar_tools/xstar/cpp -j4 PLATFORM=windows
 ```
 
-Windows produces `.dll`, `.dll.a`, and `.exe` artifacts. See `docs/user/windows_installation_and_usage.md` for the full setup and troubleshooting guide.
+Windows produces `.dll`, `.dll.a`, and `.exe` artifacts. The accepted source-runtime backend uses native Win32 process creation. See `docs/user/windows_installation_and_usage.md` for the complete setup and troubleshooting guide.
 
-### Inspect the build contract
-
-For any platform:
+### Inspect the resolved build contract
 
 ```bash
 make -C src/xstar_tools/xstar/cpp print-config
@@ -128,11 +143,28 @@ xstar-xspec-mpi       true MPI XSTAR2XSPEC; opt-in build only
 
 The compatibility executable `xstar_cpp` is also retained.
 
+When installed through the Python package, the primary native console entry points are:
+
+```text
+xstar-cpp
+xstar-xspec-initable
+xstar-xspec-table
+xstar-xspec
+```
+
+Useful package inspection commands include:
+
+```bash
+xstar-tools version
+xstar-tools backends
+xstar-tools doctor
+```
+
 ## Atomic data
 
-Native scientific execution requires `atdb.fits` and `coheat.dat`. These files are external and are not silently downloaded.
+Native scientific execution requires `atdb.fits` and `coheat.dat`. These files are not silently downloaded, and `atdb.fits` remains external to ordinary wheels.
 
-The most explicit setup is:
+The clearest reproducible setup is:
 
 ```bash
 xstar-cpp \
@@ -141,7 +173,7 @@ xstar-cpp \
   --output-dir run_xstar
 ```
 
-or independent file selection:
+or select the two files independently:
 
 ```bash
 xstar-cpp \
@@ -151,14 +183,14 @@ xstar-cpp \
   --output-dir run_xstar
 ```
 
-When explicit paths are omitted, native discovery includes direct parameter/envelope paths, `XSTAR_ATOMIC_DB` / `XSTAR_ATDB_FITS`, `XSTAR_COHEAT`, `XSTAR_DATA`, `$HEADAS/refdata`, `XSTAR_HOME/data`, executable/package-local fallbacks, and finally the current directory. See `docs/user/atomic_data.md` for the exact precedence.
+When explicit paths are omitted, discovery includes parameter/envelope paths, `XSTAR_ATOMIC_DB` / `XSTAR_ATDB_FITS`, `XSTAR_COHEAT`, `XSTAR_DATA`, `$HEADAS/refdata`, `XSTAR_HOME/data`, executable/package-relative fallbacks, and finally the current directory. See `docs/user/atomic_data.md` for the exact precedence.
 
 ## `xstar-cpp`
 
 ### With `xstar.par`
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-cpp \
+xstar-cpp \
   --input xstar.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_xstar
@@ -167,16 +199,15 @@ src/xstar_tools/xstar/cpp/xstar-cpp \
 The positional input form is also accepted:
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-cpp \
-  xstar.par \
+xstar-cpp xstar.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_xstar
 ```
 
-Values after the file override values from the file:
+Values supplied after the file override values from the file:
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-cpp \
+xstar-cpp \
   --input xstar.par \
   --output-dir run_override \
   density=1.0e+12 rlogxi=3 modelname=override_model
@@ -187,7 +218,7 @@ src/xstar_tools/xstar/cpp/xstar-cpp \
 Direct XSTAR-style `key=value` parameters are supported:
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-cpp \
+xstar-cpp \
   --data-dir /path/to/xstar/data \
   --output-dir run_direct \
   spectrum=pow spectun=0 trad=-1 \
@@ -200,11 +231,11 @@ src/xstar_tools/xstar/cpp/xstar-cpp \
   vturbi=100 npass=1 ncn2=9999
 ```
 
-For the complete parameter examples and output contract, see `src/xstar_tools/xstar/cpp/README.md` and `docs/cpp/xstar_cpp.md`.
+For the complete parameter and output contract, see `src/xstar_tools/xstar/cpp/README.md` and `docs/cpp/xstar_cpp.md`.
 
 ## `xstar-xspec`
 
-`xstar-xspec` owns the complete native local XSTAR2XSPEC pipeline:
+`xstar-xspec` owns the complete local XSTAR2XSPEC pipeline:
 
 ```text
 xstar-xspec-initable
@@ -213,24 +244,20 @@ xstar-xspec-initable
         -> xstar-xspec-table
 ```
 
-### Parameter-file grid
+Parameter-file grid:
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-xspec \
+xstar-xspec \
   --input xstinitable.par \
   --data-dir /path/to/xstar/data \
   --output-dir run_xspec \
   --processes 2
 ```
 
-The canonical spelling is `--processes N`; `--workers N` and `-j N` remain compatibility aliases. `-np` is reserved for MPI launchers.
-
-### Direct grid
-
-A small 2 x 2 grid can be launched without `xstinitable.par`:
+A direct 2 x 2 grid can be launched without `xstinitable.par`:
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-xspec \
+xstar-xspec \
   --data-dir /path/to/xstar/data \
   --output-dir run_grid \
   --processes 2 \
@@ -238,21 +265,23 @@ src/xstar_tools/xstar/cpp/xstar-xspec \
   rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
 ```
 
-### Restart and retained products
+The canonical spelling is `--processes N`; `--workers N` and `-j N` remain compatibility aliases. `-np` is reserved for MPI launchers.
+
+Restart a local grid with:
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-xspec \
+xstar-xspec \
   --input xstinitable.par \
   --output-dir run_xspec \
   --processes 2 \
   --restart
 ```
 
-A job is reusable only when its required scientific products and `xstar-cpp.success` marker are present. Partial/failed products are retained for inspection rather than deleted merely because unrelated files coexist in the job directory.
+A job is reusable only when its required scientific products and `xstar-cpp.success` marker are present. Partial or failed products are retained for inspection rather than deleted merely because unrelated files coexist in the job directory.
 
 ## True MPI XSTAR2XSPEC
 
-`xstar-xspec-mpi` is an **optional** build and is not part of normal `make`:
+`xstar-xspec-mpi` is optional and is not part of normal `make` or ordinary PyPI wheels:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi
@@ -264,8 +293,6 @@ or:
 make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
 ```
 
-The MPI compiler wrapper defaults to `MPICXX=mpic++` and can be overridden.
-
 Typical Linux/HPC execution is:
 
 ```bash
@@ -275,7 +302,7 @@ mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
   --output-dir /shared/run_mpi
 ```
 
-MPI concurrency comes from the communicator size. There is no local `--processes` option in `xstar-xspec-mpi`. The current file-backed MPI path requires shared visibility of executables, work/output directories, atomic data, and external model files. **Windows MPI is deferred and is not part of the accepted Windows contract.**
+MPI concurrency comes from the communicator size. There is no local `--processes` option in `xstar-xspec-mpi`. The current file-backed MPI path requires shared visibility of executables, work/output directories, atomic data, and external model files. **Windows MPI is deferred.**
 
 ## Outputs
 
@@ -300,25 +327,11 @@ xout_mtable.fits
 xout_etable.fits
 ```
 
-The local-process scheduler keeps its visible work tree under `xstar2xspec-work/jobs/NNNNNN/`.
-
-## Python interfaces
-
-The established Python package remains available alongside the native executables. Stable execution modes include `pure-python`, `zone-python`, `zone-cpp`, `zone-all`, and `xstar-cpp`.
-
-Useful inspection commands are:
-
-```bash
-xstar-tools version
-xstar-tools backends
-xstar-tools doctor
-```
-
-See `docs/user/backends.md` and `docs/developer/execution_modes.md` for ownership boundaries and compatibility aliases.
+The local-process scheduler keeps its work tree under `xstar2xspec-work/jobs/NNNNNN/`.
 
 ## Scientific and ABI freeze
 
-The portability work does not redefine the scientific baseline. Important frozen identities include:
+Important accepted identities are:
 
 ```text
 canonical oracle         FORTRAN XSTAR 2.59g
@@ -336,19 +349,20 @@ Cross-platform qualification preserves scientific arithmetic/order, controller d
 Start with:
 
 - `docs/user/index.md` — installation and normal use;
-- `docs/user/windows_installation_and_usage.md` — MSYS2 UCRT64 Windows guide;
+- `docs/user/atomic_data.md` — atomic-data discovery and precedence;
+- `docs/user/windows_installation_and_usage.md` — Windows/MSYS2 UCRT64 source-build guide;
+- `src/xstar_tools/xstar/cpp/README.md` — native C++ programs and detailed examples;
 - `docs/cpp/index.md` — native C++/CLI reference;
-- `docs/developer/index.md` — architecture, qualification, portability, and release history;
-- `docs/developer/cross_platform_portability_status.md` — current platform support and accepted portability closure;
+- `docs/developer/packaging.md` — packaging architecture and release-wheel policy;
+- `docs/developer/cross_platform_portability_status.md` — accepted source-build portability status;
 - `CHANGELOG.md` — chronological release history.
 
-The long portability investigation and historical host rejections are intentionally kept out of this top-level README; their detailed evidence remains in `docs/developer/`.
+Historical qualification failures and their closure evidence intentionally live in `docs/developer/` rather than this top-level README.
 
 ## Development rule of thumb
 
-For documentation/API/build-system changes, run the narrow qualification gates that cover the changed boundary. For scientific or orchestration changes, begin with representative fast fixtures and preserve the frozen oracle/ABI contracts. Expensive broad or multi-element qualification should be reserved for changes that actually require it.
+Use the narrowest qualification gate that covers the changed boundary. Packaging/documentation changes should not reopen science or performance work. Scientific or orchestration changes should begin with representative fast fixtures and preserve the frozen oracle/ABI contracts before any expensive broad qualification.
 
 ## License
 
-Starting with `0.6.89.3`, `xstar-tools` is distributed under the project license designation **GPL-3.0**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). Historical release notes that mention the former MIT declaration are retained only as historical records.
-
+Starting with `0.6.89.3`, `xstar-tools` uses the project license designation **GPL-3.0**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). Historical release notes that mention the former MIT declaration remain historical records.

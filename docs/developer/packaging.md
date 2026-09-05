@@ -111,3 +111,7 @@ stage.
 ## Conda packaging
 
 The conda-forge recipe reuses this same build hook and native capability policy; see [Conda and conda-forge packaging](conda_packaging.md).
+
+### Windows delvewheel in-wheel dependency resolution
+
+For the `pypi-windows` profile, XSTAR DLLs are already packaged under `xstar_tools/xstar/cpp`. The repair command intentionally uses `--ignore-existing` together with `--analyze-existing --analyze-existing-exes`: the first enables resolution of DLLs already inside the wheel and keeps those XSTAR DLLs in place; the analysis flags still discover external CFITSIO and MinGW runtime dependencies for vendoring. The external search path remains `XSTAR_TOOLS_WINDOWS_DLL_PATH`.

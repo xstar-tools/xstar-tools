@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.89.4.4"
+version = "0.6.89.4.5"
 # Historical qualification compatibility marker: version = "0.6.89.1.2"
 # Historical qualification compatibility marker: version = "0.6.89.1"
 # Historical qualification compatibility marker: version = "0.6.88.6.1.2.1"
@@ -132,5 +132,5 @@ test-command = "python {package}/tools/packaging/pypi_macos_wheel_smoke.py"
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
 environment = { XSTAR_TOOLS_NATIVE="required", XSTAR_TOOLS_NATIVE_PROFILE="pypi-windows", XSTAR_TOOLS_NATIVE_JOBS="2" }
-repair-wheel-command = "delvewheel repair --analyze-existing --analyze-existing-exes --add-path %XSTAR_TOOLS_WINDOWS_DLL_PATH% -w {dest_dir} -v {wheel}"
+repair-wheel-command = "delvewheel repair --ignore-existing --analyze-existing --analyze-existing-exes --add-path %XSTAR_TOOLS_WINDOWS_DLL_PATH% -w {dest_dir} -v {wheel}"
 test-command = "python {package}/tools/packaging/pypi_windows_wheel_smoke.py"

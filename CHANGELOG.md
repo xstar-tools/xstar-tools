@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.89.4.5 - WINDOWS_PYPI_DELVEWHEEL_EXISTING_DLL_RESOLUTION_CLOSURE - 2026-09-05
+
+- Preserves `0.6.89.4.4` as a historical six-selector Windows PyPI wheel REJECT at the delvewheel repair stage: CFITSIO and XSTAR native compilation succeeded and the unrepaired wheel contained the expected XSTAR DLL payload, but delvewheel could not resolve sibling `libxstar_api.dll` while analyzing `libxstar_backend_cpp.dll`.
+- Adds `--ignore-existing` to the retained `--analyze-existing --analyze-existing-exes` repair contract. In delvewheel 1.13.1 this enables the in-wheel DLL lookup map, so packaged `libxstar_*.dll` dependencies resolve to the copies already present under `xstar_tools/xstar/cpp` instead of being searched only through external paths.
+- Retains the CFITSIO/MSYS2 `--add-path` boundary so external CFITSIO and MinGW runtime dependencies are still discovered and vendored into the repaired wheel.
+- Adds post-repair qualification that requires the canonical XSTAR DLLs to remain in `xstar_tools/xstar/cpp` and not be duplicated into the delvewheel vendor directory.
+- Keeps `build_support.py`, `native_runtime.py`, the pinned CFITSIO build script, scientific kernels/order, science revision `0.6.48.12.3.45.3.3.8`, public ABIs, GPL-3.0 license, MPI exclusion, and external `atdb.fits` policy unchanged apart from normal package-version metadata.
+
 ## 0.6.89.4.4 - WINDOWS_PYPI_PKG_CONFIG_QUALIFICATION_LAUNCHER_CLOSURE - 2026-09-04
 
 - Records `0.6.89.4.3` as a historical Windows PyPI preflight REJECT: all six CPython 3.9-3.14 jobs stopped in source qualification before cibuildwheel because the checker created a POSIX shebang fake `pkg-config` script and native Windows `CreateProcess` rejected it with `WinError 193`.
