@@ -1,0 +1,265 @@
+name: PyPI cross-platform release closure
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.selector }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        selector:
+          - cp39-manylinux_x86_64
+          - cp310-manylinux_x86_64
+          - cp311-manylinux_x86_64
+          - cp312-manylinux_x86_64
+          - cp313-manylinux_x86_64
+          - cp314-manylinux_x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Source qualification
+        run: python tools/qualification/check_pypi_cross_platform_release_closure_0_6_89_5.py
+      - name: Build and repair Linux wheel
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: ${{ matrix.selector }}
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+      - name: Inspect Linux wheel
+        run: |
+          python tools/qualification/check_pypi_cross_platform_release_linux_artifacts_0_6_89_5.py \
+            --wheelhouse wheelhouse --selector "${{ matrix.selector }}"
+          python -m pip install --upgrade "twine>=6,<7"
+          python -m twine check wheelhouse/*.whl
+      - name: Mark Linux selector accepted
+        run: |
+          echo "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_LINUX_SELECTOR=${{ matrix.selector }}"
+          echo "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_LINUX_JOB_RESULT=ACCEPT"
+      - name: Upload Linux wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-linux-${{ matrix.selector }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  macos:
+    name: macOS ${{ matrix.selector }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15,       arch: arm64,  selector: cp39-macosx_arm64 }
+          - { runner: macos-15,       arch: arm64,  selector: cp310-macosx_arm64 }
+          - { runner: macos-15,       arch: arm64,  selector: cp311-macosx_arm64 }
+          - { runner: macos-15,       arch: arm64,  selector: cp312-macosx_arm64 }
+          - { runner: macos-15,       arch: arm64,  selector: cp313-macosx_arm64 }
+          - { runner: macos-15,       arch: arm64,  selector: cp314-macosx_arm64 }
+          - { runner: macos-15-intel, arch: x86_64, selector: cp39-macosx_x86_64 }
+          - { runner: macos-15-intel, arch: x86_64, selector: cp310-macosx_x86_64 }
+          - { runner: macos-15-intel, arch: x86_64, selector: cp311-macosx_x86_64 }
+          - { runner: macos-15-intel, arch: x86_64, selector: cp312-macosx_x86_64 }
+          - { runner: macos-15-intel, arch: x86_64, selector: cp313-macosx_x86_64 }
+          - { runner: macos-15-intel, arch: x86_64, selector: cp314-macosx_x86_64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Source qualification
+        run: python tools/qualification/check_pypi_cross_platform_release_closure_0_6_89_5.py
+      - name: Build and repair macOS wheel
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: ${{ matrix.selector }}
+          CIBW_ARCHS_MACOS: ${{ matrix.arch }}
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+      - name: Inspect macOS wheel
+        run: |
+          python tools/qualification/check_pypi_cross_platform_release_macos_artifacts_0_6_89_5.py \
+            --wheelhouse wheelhouse --selector "${{ matrix.selector }}"
+          python -m pip install --upgrade "twine>=6,<7"
+          python -m twine check wheelhouse/*.whl
+      - name: Mark macOS selector accepted
+        run: |
+          echo "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_MACOS_SELECTOR=${{ matrix.selector }}"
+          echo "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_MACOS_JOB_RESULT=ACCEPT"
+      - name: Upload macOS wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-macos-${{ matrix.selector }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  windows:
+    name: Windows ${{ matrix.selector }}
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        selector:
+          - cp39-win_amd64
+          - cp310-win_amd64
+          - cp311-win_amd64
+          - cp312-win_amd64
+          - cp313-win_amd64
+          - cp314-win_amd64
+    steps:
+      - name: Preserve LF source checkout
+        shell: pwsh
+        run: git config --global core.autocrlf input
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Set up MSYS2 UCRT64 toolchain
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make
+            curl
+            diffutils
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-zlib
+      - name: Build pinned CFITSIO 4.6.2 shared DLL
+        shell: msys2 {0}
+        run: |
+          export XSTAR_TOOLS_CFITSIO_PREFIX="$PWD/.xstar-cfitsio"
+          export XSTAR_TOOLS_CFITSIO_JOBS=2
+          set -o pipefail
+          bash tools/packaging/build_windows_cfitsio.sh 2>&1 | tee cfitsio-build.log
+      - name: Expose UCRT64 build and repair paths
+        shell: pwsh
+        run: |
+          $root = "${{ steps.msys2.outputs.msys2-location }}"
+          $prefix = Join-Path $env:GITHUB_WORKSPACE ".xstar-cfitsio"
+          $ucrtBin = Join-Path $root "ucrt64\bin"
+          $usrBin = Join-Path $root "usr\bin"
+          $pc = Get-ChildItem -Path $prefix -Recurse -Filter "cfitsio.pc" | Select-Object -First 1
+          if (-not $pc) { throw "cfitsio.pc not found under $prefix" }
+          $cfitsioDll = Get-ChildItem -Path $prefix -Recurse -Filter "*cfitsio*.dll" | Select-Object -First 1
+          if (-not $cfitsioDll) { throw "CFITSIO DLL not found under $prefix" }
+          $cfitsioBin = $cfitsioDll.Directory.FullName
+          $pkgconfig = $pc.Directory.FullName
+          $ucrtBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $usrBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $cfitsioBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "MSYSTEM=UCRT64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PKG_CONFIG_PATH=$pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "XSTAR_TOOLS_WINDOWS_DLL_PATH=$cfitsioBin;$ucrtBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Source qualification
+        shell: pwsh
+        run: python tools/qualification/check_pypi_cross_platform_release_closure_0_6_89_5.py
+      - name: Build and repair Windows wheel
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: ${{ matrix.selector }}
+          CIBW_ARCHS_WINDOWS: AMD64
+          XSTAR_TOOLS_NATIVE: required
+          XSTAR_TOOLS_NATIVE_PROFILE: pypi-windows
+          XSTAR_TOOLS_NATIVE_JOBS: "2"
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+      - name: Inspect Windows wheel
+        shell: pwsh
+        run: |
+          python tools/qualification/check_pypi_cross_platform_release_windows_artifacts_0_6_89_5.py --wheelhouse wheelhouse --selector "${{ matrix.selector }}"
+          python -m pip install --upgrade "twine>=6,<7"
+          python -m twine check wheelhouse/*.whl
+      - name: Mark Windows selector accepted
+        shell: pwsh
+        run: |
+          Write-Host "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_WINDOWS_SELECTOR=${{ matrix.selector }}"
+          Write-Host "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_WINDOWS_JOB_RESULT=ACCEPT"
+      - name: Upload Windows wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-windows-${{ matrix.selector }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+      - name: Upload Windows dependency-build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-log-${{ matrix.selector }}
+          path: cfitsio-build.log
+          if-no-files-found: warn
+
+  sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Source qualification
+        run: python tools/qualification/check_pypi_cross_platform_release_closure_0_6_89_5.py
+      - name: Build source distribution
+        run: |
+          python -m pip install --upgrade build "twine>=6,<7"
+          python -m build --sdist --outdir sdist
+          python -m twine check sdist/*.tar.gz
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-sdist-0.6.89.5
+          path: sdist/*.tar.gz
+          if-no-files-found: error
+
+  aggregate:
+    name: Aggregate release bundle
+    runs-on: ubuntu-latest
+    needs: [linux, macos, windows, sdist]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Download release distributions
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-wheel-*
+          path: release-dist
+          merge-multiple: true
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: release-sdist-0.6.89.5
+          path: release-dist
+      - name: Validate aggregate release
+        run: |
+          python -m pip install --upgrade "twine>=6,<7"
+          python tools/qualification/check_pypi_cross_platform_release_bundle_0_6_89_5.py \
+            --release-dir release-dist \
+            --checksums release-SHA256SUMS.txt
+          python -m twine check release-dist/*
+          echo "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_RELEASE_FILES=$(find release-dist -maxdepth 1 -type f | wc -l)"
+          echo "PYPI_CROSS_PLATFORM_RELEASE_CLOSURE_06895_GITHUB_RESULT=ACCEPT"
+      - name: Upload publication-ready release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: xstar-tools-0.6.89.5-pypi-release
+          path: |
+            release-dist/*
+            release-SHA256SUMS.txt
+          if-no-files-found: error
