@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.89.5 - PYPI_CROSS_PLATFORM_RELEASE_CLOSURE - 2026-09-06
+
+- Unifies the formally accepted Linux, macOS, and Windows native-wheel publication paths under one release version, `0.6.89.5`, without changing the frozen science revision or public ABIs.
+- Adds `.github/workflows/pypi-cross-platform-release.yml`, which builds 6 `manylinux_2_28_x86_64` wheels, 12 native macOS wheels (arm64 and x86_64), 6 `win_amd64` wheels, and one sdist on GitHub-hosted runners.
+- Adds platform-specific `0.6.89.5` clean-install smokes and artifact gates while preserving the previously accepted build/repair implementations: auditwheel on Linux, delocate on macOS, and delvewheel with in-wheel XSTAR DLL resolution on Windows.
+- Aggregates exactly 25 publication distributions (24 native wheels plus one sdist), rejects a universal `py3-none-any` control wheel, runs `twine check`, and emits a SHA-256 release manifest.
+- Keeps ordinary PyPI wheels MPI-free, excludes the standalone Python-embedding native plugin, keeps `atdb.fits` external, and retains the `GPL-3.0` project license designation.
+- Publication is intentionally not automatic in this closure: the aggregate artifact is upload-ready for TestPyPI/PyPI after the 24-selector matrix and bundle qualification accept.
+
 ## 0.6.89.4.5 - WINDOWS_PYPI_DELVEWHEEL_EXISTING_DLL_RESOLUTION_CLOSURE - 2026-09-05
 
 - Preserves `0.6.89.4.4` as a historical six-selector Windows PyPI wheel REJECT at the delvewheel repair stage: CFITSIO and XSTAR native compilation succeeded and the unrepaired wheel contained the expected XSTAR DLL payload, but delvewheel could not resolve sibling `libxstar_api.dll` while analyzing `libxstar_backend_cpp.dll`.

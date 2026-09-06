@@ -45,6 +45,21 @@ The `0.6.89.2.1` workflow first installs the declared PEP 517 build-backend requ
 
 The clean installed-wheel test exercises `zone-cpp`, so omission of the embedding plugin does not weaken the Python-to-native production path.
 
+
+### Cross-platform PyPI release closure (`0.6.89.5`)
+
+`0.6.89.5 — PYPI_CROSS_PLATFORM_RELEASE_CLOSURE` does not introduce a new science or native-runtime implementation. It advances package/version metadata and rebuilds the already-qualified `pypi-linux`, `pypi-macos`, and `pypi-windows` profiles under one version. The release workflow uses GitHub-hosted runners and produces exactly 24 native wheels plus one sdist:
+
+- 6 CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels;
+- 6 CPython 3.9–3.14 `macosx_11_0_arm64` wheels;
+- 6 CPython 3.9–3.14 `macosx_11_0_x86_64` wheels;
+- 6 CPython 3.9–3.14 `win_amd64` wheels;
+- 1 `xstar_tools-0.6.89.5.tar.gz` source distribution.
+
+The aggregate gate rejects extra or missing distributions and specifically rejects a `py3-none-any` control wheel from the publication set. Each native wheel is clean-install tested by cibuildwheel on its platform before aggregation. The final aggregate job runs `twine check` and writes SHA-256 checksums. Publication itself remains a separate deliberate action so the same qualified bundle can be sent first to TestPyPI and then to PyPI.
+
+No local Mac or Windows machine is required for release construction: macOS arm64/x86_64 and Windows AMD64 are built and tested on the corresponding GitHub-hosted runners.
+
 ## Wheel contents
 
 Normal wheels include only installed Python modules plus required runtime data:

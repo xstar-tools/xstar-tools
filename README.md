@@ -4,18 +4,46 @@
 
 ## Status
 
-The native release-wheel path is now formally qualified on all three supported desktop/server platforms:
+`0.6.89.5 — PYPI_CROSS_PLATFORM_RELEASE_CLOSURE` is the first unified public PyPI release. The exact release set contains **24 native wheels plus one source distribution** and has been published to both TestPyPI and production PyPI.
 
-| Platform | Qualified wheels | Accepted milestone |
+| Platform | Release wheels | Accepted platform baseline |
 |---|---|---|
 | Linux x86_64 | CPython 3.9–3.14, `manylinux_2_28_x86_64` | `0.6.89.2.2` |
 | macOS arm64 | CPython 3.9–3.14, `macosx_11_0_arm64` | `0.6.89.3` |
 | macOS x86_64 | CPython 3.9–3.14, `macosx_11_0_x86_64` | `0.6.89.3` |
 | Windows AMD64 | CPython 3.9–3.14, `win_amd64` | `0.6.89.4.5` |
 
-`0.6.89.4.5 — WINDOWS_PYPI_DELVEWHEEL_EXISTING_DLL_RESOLUTION_CLOSURE` is formally accepted across all six Windows selectors. The repaired wheels use ordinary `win_amd64` tags, vendor CFITSIO and the required MinGW runtime DLLs, retain XSTAR's own DLLs in-package, exclude the standalone Python-embedding DLL, exclude MPI, and keep `atdb.fits` external.
+Project links:
+
+- GitHub: <https://github.com/xstar-tools/xstar-tools>
+- PyPI: <https://pypi.org/project/xstar-tools/>
+- TestPyPI: <https://test.pypi.org/project/xstar-tools/>
 
 The accepted cross-platform source-build contract is non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/macOS/HPC build.
+
+## Install from PyPI
+
+Python **3.9 or newer** is supported. For a normal installation, use:
+
+```bash
+pip install xstar-tools
+```
+
+Equivalent explicit-Python form:
+
+```bash
+python -m pip install xstar-tools
+```
+
+Verify the installed native tools with:
+
+```bash
+xstar-cpp --version
+xstar-xspec --version
+xstar-tools doctor --require zone-cpp --json
+```
+
+The release wheels include the native XSTAR runtime and its repaired platform dependencies. `atdb.fits` remains external by design, so scientific runs should provide the XSTAR atomic-data directory explicitly, for example with `--data-dir /path/to/xstar/data`, or through the documented discovery environment.
 
 ## Quick start
 
@@ -73,6 +101,26 @@ The release-wheel profiles are deliberately narrower than a full source build:
 - CFITSIO is vendored into repaired release wheels.
 
 The detailed qualification history is in `docs/developer/packaging.md` and the platform-specific milestone documents under `docs/developer/`.
+
+The complete cross-platform release is built by:
+
+```text
+.github/workflows/pypi-cross-platform-release.yml
+```
+
+Its final `xstar-tools-0.6.89.5-pypi-release` artifact contains only the 24 native wheels, the sdist, and a checksum manifest. A Python-only `py3-none-any` control wheel is explicitly excluded from the publication set.
+
+For maintainers preparing a future release, validate the aggregate bundle and publish the **same native-wheel + sdist set** first to TestPyPI and then to PyPI:
+
+```bash
+python -m pip install --upgrade twine
+python -m twine check release-dist/*
+python -m twine upload --repository testpypi release-dist/*
+# after installation testing from TestPyPI:
+python -m twine upload release-dist/*
+```
+
+Do not upload the local `py3-none-any` control wheel; it is only a packaging qualification artifact.
 
 ## Native build by platform
 

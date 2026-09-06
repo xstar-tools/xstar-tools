@@ -2,9 +2,9 @@
 
 `pyproject.toml` is the authoritative Python package metadata/build configuration. The small `setup.py` file exists only to register the native setuptools build hook.
 
-`0.6.89.2.2 — PYPI_LINUX_PROFILE_BUILD_TARGET_CLOSURE` is formally accepted for CPython 3.9–3.14 `manylinux_2_28_x86_64` wheels. `0.6.89.3 — PYPI_NATIVE_WHEEL_MACOS` is the current macOS release-wheel candidate, producing native arm64 and x86_64 wheels rather than `universal2`. The frozen science revision and public ABIs are unchanged.
+The accepted native-wheel baselines cover CPython 3.9–3.14 on Linux x86_64 (`manylinux_2_28_x86_64`), macOS arm64 and x86_64 (`macosx_11_0_*`), and Windows AMD64 (`win_amd64`). `0.6.89.5 — PYPI_CROSS_PLATFORM_RELEASE_CLOSURE` rebuilds those accepted profiles under one release version so PyPI can select the appropriate wheel automatically for `pip install xstar-tools`. The frozen science revision and public ABIs are unchanged.
 
-The PyPI Linux and macOS binary profiles deliberately omit only the optional standalone Python-embedding plugin (`libxstar_backend_python.so` / `.dylib`) so distributable wheels do not acquire a Python-runtime library dependency. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present. MPI remains opt-in and `atdb.fits` remains external. Starting with 0.6.89.3, package metadata uses the project license designation `GPL-3.0` and ships the GNU GPL Version 3 `LICENSE` file.
+The PyPI Linux, macOS, and Windows binary profiles omit the optional standalone Python-embedding plugin so distributable wheels do not acquire a Python-runtime library dependency. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present. MPI remains opt-in and `atdb.fits` remains external. Package metadata uses the project license designation `GPL-3.0` and ships the GNU GPL Version 3 `LICENSE` file. Native macOS and Windows release wheels are built/tested on GitHub-hosted runners; local access to those operating systems is not required.
 
 ## Python package installation
 
