@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.90 - CONDA_PACKAGING_REFRESH - 2026-09-07
+
+- Replaces the historical conda-build v0 `meta.yaml` seed with a conda v1 `recipe.yaml` source-controlled under `conda/recipe/`, using the official versioned PyPI sdist plus an exact SHA-256.
+- Adds the dedicated `XSTAR_TOOLS_NATIVE_PROFILE=conda` / `make conda` packaging boundary for native `linux-64`, `osx-64`, and `osx-arm64` packages; Windows conda is intentionally deferred because the accepted Windows native toolchain is MSYS2 UCRT64 / MinGW-w64 while conda-forge's ordinary native Windows toolchain is MSVC.
+- Keeps CFITSIO external as a conda host/runtime dependency, excludes the optional standalone Python-embedding plugin, keeps MPI out of the ordinary package, and keeps `atdb.fits` external.
+- Promotes the staged-recipes Linux link workaround into the upstream Makefile: the public `xstar-cpp` frontend now repeats `$(CFITSIO_LIBS) $(CFITSIO_RPATH)` while linking against `libxstar_production_zone`, removing the feedstock-only GNU `-rpath-link` workaround required by the immutable `0.6.89.5` source archive.
+- Updates active project and conda metadata from the deprecated SPDX identifier `GPL-3.0` to `GPL-3.0-only`; the GNU GPL Version 3 `LICENSE` text is unchanged, and historical `0.6.89.x` markers remain available for qualification replay.
+- Updates the conda runtime recipe to use unconstrained `python` requirements (letting conda-forge own the Python matrix), removes the redundant `python_min` override, and uses `astropy-base` in the conda runtime dependency set.
+- Adds a deterministic offline conda science smoke, a local-sdist recipe rewrite helper for CI, three-host Linux/macOS `rattler-build` CI, and `0.6.90` source qualification.
+- Documents the post-staged-recipes feedstock lifecycle: conda-forge creates `xstar-tools-feedstock`, `regro-cf-autotick-bot` detects later PyPI releases and opens version/hash update PRs, and feedstock bot-automerge can be enabled separately after feedstock creation.
+- Preserves science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABI `60486`, XSPEC-table ABI `1`, scientific arithmetic/order, controller decisions, publication semantics, and the accepted PyPI/source-build platform contracts.
+
+# CHANGELOG
+
 ## 0.6.89.5 - PYPI_CROSS_PLATFORM_RELEASE_CLOSURE - 2026-09-06
 
 - Unifies the formally accepted Linux, macOS, and Windows native-wheel publication paths under one release version, `0.6.89.5`, without changing the frozen science revision or public ABIs.

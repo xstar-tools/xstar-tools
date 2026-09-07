@@ -4,7 +4,17 @@
 
 The accepted native-wheel baselines cover CPython 3.9–3.14 on Linux x86_64 (`manylinux_2_28_x86_64`), macOS arm64 and x86_64 (`macosx_11_0_*`), and Windows AMD64 (`win_amd64`). `0.6.89.5 — PYPI_CROSS_PLATFORM_RELEASE_CLOSURE` rebuilds those accepted profiles under one release version so PyPI can select the appropriate wheel automatically for `pip install xstar-tools`. The frozen science revision and public ABIs are unchanged.
 
-The PyPI Linux, macOS, and Windows binary profiles omit the optional standalone Python-embedding plugin so distributable wheels do not acquire a Python-runtime library dependency. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present. MPI remains opt-in and `atdb.fits` remains external. Package metadata uses the project license designation `GPL-3.0` and ships the GNU GPL Version 3 `LICENSE` file. Native macOS and Windows release wheels are built/tested on GitHub-hosted runners; local access to those operating systems is not required.
+The PyPI Linux, macOS, and Windows binary profiles omit the optional standalone Python-embedding plugin so distributable wheels do not acquire a Python-runtime library dependency. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present. MPI remains opt-in and `atdb.fits` remains external. Package metadata uses the SPDX expression `GPL-3.0-only` and ships the GNU GPL Version 3 `LICENSE` file. Native macOS and Windows release wheels are built/tested on GitHub-hosted runners; local access to those operating systems is not required.
+
+## Conda installation
+
+The `0.6.90` conda recipe builds the native non-MPI runtime on Linux and macOS and takes CFITSIO from the conda environment rather than vendoring it. After the conda-forge feedstock is published:
+
+```bash
+conda install -c conda-forge xstar-tools
+```
+
+Windows conda packaging is deferred; the accepted Windows PyPI/source-build paths remain available. `atdb.fits` remains external.
 
 ## Python package installation
 

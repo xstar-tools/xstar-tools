@@ -222,7 +222,8 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.89.5
+PACKAGE_VERSION ?= 0.6.90
+# Historical package-version marker: PACKAGE_VERSION ?= 0.6.89.5
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.2.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1
@@ -283,13 +284,19 @@ PYPI_MACOS_TARGETS := $(PHYSICS_TARGETS) $(PYPI_MACOS_STANDALONE_TARGETS)
 # acquire a CPython runtime DLL dependency.
 PYPI_WINDOWS_STANDALONE_TARGETS := $(filter-out $(PYTHON_BACKEND_TARGET),$(STANDALONE_TARGETS))
 PYPI_WINDOWS_TARGETS := $(PHYSICS_TARGETS) $(PYPI_WINDOWS_STANDALONE_TARGETS)
+# Conda-forge Linux/macOS packages use the same non-MPI public runtime boundary
+# as release wheels, but link against CFITSIO supplied by the conda environment.
+# The optional standalone Python-embedding plugin is excluded so the package
+# remains independent of a libpython shared-library embedding contract.
+CONDA_STANDALONE_TARGETS := $(filter-out $(PYTHON_BACKEND_TARGET),$(STANDALONE_TARGETS))
+CONDA_TARGETS := $(PHYSICS_TARGETS) $(CONDA_STANDALONE_TARGETS)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 MPI_TARGETS := $(XSPEC_MPI_EXECUTABLE)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h xstar_xspec_table.h
 INTERNAL_HEADERS := xstar_path_compat.hpp xstar_standalone_internal.hpp xstar_local_zone_internal.hpp xstar_element_engine_internal.hpp xstar_backend_common.hpp xstar_platform.hpp xstar_dynamic_library.hpp xstar_process.hpp compact_arrays.hpp error_codes.hpp source_real_energy_grid.hpp
 
-.PHONY: all pypi-linux pypi-macos pypi-windows physics standalone mpi test clean install print-config
+.PHONY: all pypi-linux pypi-macos pypi-windows conda physics standalone mpi test clean install print-config
 
 all: $(TARGETS)
 # Packaging-only manylinux target. It deliberately does not build
@@ -301,6 +308,10 @@ pypi-macos: $(PYPI_MACOS_TARGETS)
 # Packaging-only Windows target. Keep the accepted MinGW/UCRT64 public runtime
 # while excluding only the standalone Python-embedding plugin.
 pypi-windows: $(PYPI_WINDOWS_TARGETS)
+# Packaging-only conda-forge target for Linux/macOS. CFITSIO is external and
+# supplied by the host environment; MPI and the Python-embedding plugin remain
+# outside the ordinary package.
+conda: $(CONDA_TARGETS)
 physics: $(PHYSICS_TARGETS)
 standalone: $(STANDALONE_TARGETS)
 
@@ -403,7 +414,7 @@ $(EXECUTABLE_TARGET): $(EXECUTABLE_OBJECTS) $(API_TARGET) $(LOCAL_ZONE_TARGET) $
 
 $(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(API_TARGET) $(PRODUCTION_ZONE_TARGET) $(PUBLIC_EXECUTABLE_SOURCE) xstar_process.hpp xstar_platform.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_TOOLS_PACKAGE_VERSION=\"$(PACKAGE_VERSION)\" -o $@ $(PUBLIC_EXECUTABLE_SOURCE) \
-		-L. -lxstar_api -lxstar_production_zone $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+		-L. -lxstar_api -lxstar_production_zone $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 print-config:
 	@echo PLATFORM=$(PLATFORM)

@@ -1,86 +1,124 @@
 # Conda and conda-forge packaging
 
-Milestone 9 adds a conda-forge-ready single-package recipe without changing the
-scientific implementation or the retained native compiler semantics.
+`0.6.90 — CONDA_PACKAGING_REFRESH` modernizes the historical conda packaging
+layer without changing scientific arithmetic, controller behavior, public ABIs,
+or the external atomic-data contract.
 
-## Format decision
+## Current format and source
 
-The repository uses the mature conda-build `meta.yaml` recipe format. The newer
-v1 `recipe.yaml` format is intentionally deferred because the current
-productization priority is a conservative packaging layer around already
-qualified native code.
-
-The feedstock seed lives in:
+The upstream seed is:
 
 ```text
 conda/
   README.md
-  conda-forge.yml
   recipe/
-    meta.yaml
+    recipe.yaml
     build.sh
-    bld.bat
     tests/offline_science_smoke.py
 ```
 
-`conda/` is not included in the PyPI sdist. The committed recipe points to the
-PyPI source archive and pins its SHA-256, which avoids a checksum self-reference
-between the recipe and its own source archive.
+The recipe uses the conda v1 `recipe.yaml` format. Its source is the official,
+versioned PyPI sdist:
 
-## Build policy
+```text
+https://pypi.org/packages/source/x/xstar-tools/xstar_tools-${version}.tar.gz
+```
 
-Linux conda packages set `XSTAR_TOOLS_NATIVE=required` and reuse the retained
-qualified Makefile through the same setuptools build hook as native pip wheels.
-The recipe declares the conda-forge C++ compiler/stdlib activation, `make`,
-`pkg-config`, and CFITSIO.
+with an exact SHA-256. The `conda/` directory is deliberately excluded from the
+PyPI sdist, so the recipe can pin that sdist hash without a checksum
+self-reference.
 
-macOS and Windows use `XSTAR_TOOLS_NATIVE=off` and expose the same explicit
-Python-only capability behavior as Milestone 8. Native portability on those
-platforms remains a separate qualification project.
+## Native build policy
 
-## Dependencies
+Linux `linux-64`, macOS `osx-64`, and macOS `osx-arm64` build the native runtime
+with:
 
-Hard runtime dependencies are:
+```text
+XSTAR_TOOLS_NATIVE=required
+XSTAR_TOOLS_NATIVE_PROFILE=conda
+```
 
-- Python >= 3.11;
-- NumPy >= 1.24;
-- Astropy >= 7.2;
-- CFITSIO on Linux native builds.
+The `conda` profile maps to `make conda`. It preserves the normal public C API,
+Python-to-C++ backend, scientific/runtime libraries, `xstar-cpp`, and serial
+XSTAR2XSPEC programs while excluding:
 
-Optional Python features remain optional:
+- the optional standalone Python-embedding plugin;
+- `xstar-xspec-mpi` from the ordinary package.
 
-- `h5py >= 3` (`hdf5` extra);
-- `scipy >= 1.8` (`sparse` extra).
+Windows conda packaging is intentionally deferred. The accepted native Windows
+source/PyPI contract uses MSYS2 UCRT64 / MinGW-w64 GCC, while conda-forge's normal
+native Windows toolchain contract is MSVC. The existing accepted Windows source
+and PyPI support are unchanged.
 
-The recipe expresses those optional compatibility ranges through
-`run_constrained`; it does not install them for every user.
+## CFITSIO and linking
 
-## Offline test
+CFITSIO is a conda `host`/`run` dependency and is not vendored into the conda
+package. `0.6.90` also carries the upstream link correction discovered during
+the initial staged-recipes qualification: the public `xstar-cpp` frontend link
+now repeats `$(CFITSIO_LIBS) $(CFITSIO_RPATH)` when linking against
+`libxstar_production_zone`. This removes the feedstock-only GNU `-rpath-link`
+workaround that was required for the immutable `0.6.89.5` PyPI source archive.
 
-Conda tests include imports, `pip check`, public CLI/version/doctor checks, Linux
-native ABI checks, and `offline_science_smoke.py`. The smoke executes the
-source-faithful XSTAR `bremem.f90` bremsstrahlung leaf against pinned numerical
-results without requiring `atdb.fits` or network access.
+## Python dependency policy
 
-## Atomic data and package splitting
+Because this is a platform-specific native package, conda-forge owns the Python
+build matrix. The recipe therefore uses an unconstrained `python` host/run
+requirement and does not redefine `python_min`. Runtime numerical dependencies
+retain the upstream Python-version split:
 
-`atdb.fits` remains external and is not a conda package payload. Do not create a
-separate `xstar-data` package until licensing, size, update cadence, and XSTAR
-data-version policy are explicit.
+- Python < 3.11: NumPy `>=1.23,<2.4`, Astropy base `>=5.0`;
+- Python >= 3.11: NumPy `>=1.24`, Astropy base `>=7.2`.
 
-Likewise, `xstar-cpp` remains part of `xstar-tools`: it uses the same release,
-science revision, C API, production-zone ABI, and native core. Splitting it now
-would add dependency/version coupling without an independent lifecycle.
+The conda package uses `astropy-base`, following conda-forge packaging guidance,
+while upstream PyPI metadata continues to depend on `astropy`.
 
-## Staged-recipes / feedstock workflow
+## License
 
-1. Publish the exact `xstar_tools-<version>.tar.gz` sdist whose SHA-256 is pinned
-   in `conda/recipe/meta.yaml`.
-2. Copy `conda/recipe/` into a new `recipes/xstar-tools/` directory in
-   `conda-forge/staged-recipes` and submit the PR.
-3. After acceptance, use the generated feedstock and copy the seed
-   `conda/conda-forge.yml` settings as appropriate before rerendering.
-4. Let conda-smithy own generated CI files thereafter.
+The active project and conda recipe SPDX expression is `GPL-3.0-only`. The
+project ships the GNU General Public License Version 3 text in top-level
+`LICENSE`. A commented historical `GPL-3.0` marker remains in `pyproject.toml`
+only so qualification for the already-published 0.6.89.x artifacts can be
+replayed accurately.
 
-Project CI tests the same recipe before PyPI publication by replacing only the
-source URL/SHA in a temporary recipe copy with the exact locally built sdist.
+## Atomic data and science smoke
+
+`atdb.fits` remains external. It is neither embedded in the Python package nor
+the conda package. The conda test suite includes a deterministic offline
+`bremem` bremsstrahlung smoke that requires no atomic database or network
+access, plus installed import/CLI/ABI/doctor checks.
+
+## Local qualification
+
+Repository CI builds the exact local sdist and rewrites only the source URL and
+SHA in a temporary recipe copy:
+
+```bash
+python -m build --sdist
+python tools/packaging/prepare_local_conda_recipe.py \
+  --recipe conda/recipe \
+  --sdist dist/xstar_tools-0.6.90.tar.gz \
+  --out run_conda_recipe
+rattler-build build --recipe-dir run_conda_recipe
+```
+
+The checked-in recipe itself always remains pointed at PyPI.
+
+## staged-recipes, feedstock, and automatic updates
+
+The initial recipe is submitted under `recipes/xstar-tools/` in
+`conda-forge/staged-recipes`. After acceptance, conda-forge automatically
+creates `conda-forge/xstar-tools-feedstock`; generated CI files are then owned by
+conda-smithy and should not be copied back into the upstream repository.
+
+The versioned PyPI source URL is intentionally bot-discoverable. When a new
+`xstar-tools` version is released to PyPI, `regro-cf-autotick-bot` detects the
+release and opens a feedstock PR updating the version/source hash. If fully
+automatic merging of passing bot PRs is desired, request conda-forge bot
+automerge in the generated feedstock with:
+
+```text
+@conda-forge-admin, please add bot automerge
+```
+
+That automerge setting belongs to the conda-forge feedstock, not this upstream
+source tree.

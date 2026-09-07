@@ -1475,3 +1475,15 @@ include .github/workflows/pypi-cross-platform-release.yml
 include tools/qualification/replay_pypi_cross_platform_release_closure_0_6_89_5.py
 include xstar_tools-0.6.89.5_local_validation.md
 include xstar_tools_conversation_summary_through_0.6.89.5_candidate.md
+
+# 0.6.90 conda packaging refresh and current PyPI release support.
+include tools/qualification/check_conda_packaging_refresh_0_6_90.py
+include qualification/conda_packaging_refresh_0_6_90.json
+include tools/qualification/check_pypi_cross_platform_release_0_6_90.py
+include tools/qualification/check_pypi_cross_platform_release_linux_artifacts_0_6_90.py
+include tools/qualification/check_pypi_cross_platform_release_macos_artifacts_0_6_90.py
+include tools/qualification/check_pypi_cross_platform_release_windows_artifacts_0_6_90.py
+include tools/qualification/check_pypi_cross_platform_release_bundle_0_6_90.py
+include tools/packaging/pypi_cross_platform_release_linux_smoke_0_6_90.py
+include tools/packaging/pypi_cross_platform_release_macos_smoke_0_6_90.py
+include tools/packaging/pypi_cross_platform_release_windows_smoke_0_6_90.py

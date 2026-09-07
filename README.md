@@ -35,6 +35,12 @@ Equivalent explicit-Python form:
 python -m pip install xstar-tools
 ```
 
+Once the conda-forge feedstock is published, the equivalent conda installation is:
+
+```bash
+conda install -c conda-forge xstar-tools
+```
+
 Verify the installed native tools with:
 
 ```bash
@@ -413,4 +419,4 @@ Use the narrowest qualification gate that covers the changed boundary. Packaging
 
 ## License
 
-Starting with `0.6.89.3`, `xstar-tools` uses the project license designation **GPL-3.0**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). Historical release notes that mention the former MIT declaration remain historical records.
+Starting with `0.6.90`, the active SPDX license expression is **GPL-3.0-only**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). `0.6.89.x` historical qualification records retain the earlier deprecated `GPL-3.0` identifier as historical evidence; that does not change the GPLv3 license text.
