@@ -1485,4 +1485,14 @@ include qualification/conda_native_host_qualification_0_6_90_1.json
 include tests/test_conda_native_host_qualification_0_6_90_1.py
 include docs/developer/conda_native_host_qualification_0_6_90_1.md
 include conda_native_host_qualification_0_6_90_1.md
+# 0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE
+include .github/workflows/conda-forge-release-closure.yml
+include tools/qualification/check_conda_forge_release_closure_0_6_90_2.py
+include tools/qualification/run_conda_forge_release_closure_host_0_6_90_2.py
+include qualification/conda_forge_release_closure_0_6_90_2.json
+include tests/test_conda_forge_release_closure_0_6_90_2.py
+include docs/developer/conda_forge_release_closure_0_6_90_2.md
+include conda_forge_release_closure_0_6_90_2.md
+include xstar_tools-0.6.90.2_local_validation.md
+
 prune conda

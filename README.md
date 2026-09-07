@@ -4,7 +4,7 @@
 
 ## Status
 
-`0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` is accepted on Linux x86_64, macOS arm64, and macOS Intel x86_64 while preserving the `0.6.89.5` public PyPI/conda-forge baseline. The conda profile uses external CFITSIO, excludes MPI and the optional Python-embedding plugin, and keeps `atdb.fits` external. Windows conda-native remains deferred.
+`0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` is accepted on Linux x86_64, macOS arm64, and macOS Intel x86_64. `0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE` is the current closure candidate: it verifies the public conda-forge `0.6.89.5` package directly while preserving external CFITSIO, external `atdb.fits`, MPI exclusion from the ordinary conda package, and all frozen science/ABI contracts. Windows conda packages are not supported. Windows native support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64 path; there is no planned MSVC or Windows MPI implementation.
 
 | Platform | Release wheels | Accepted platform baseline |
 |---|---|---|
@@ -18,13 +18,12 @@ Project links:
 - GitHub: <https://github.com/xstar-tools/xstar-tools>
 - PyPI: <https://pypi.org/project/xstar-tools/>
 - Conda-forge: <https://anaconda.org/conda-forge/xstar-tools>
-- Feedstock: <https://github.com/conda-forge/xstar-tools-feedstock>
 
 The accepted cross-platform source-build contract is non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/macOS/HPC build.
 
 ## Install with conda-forge
 
-The public package is available from conda-forge. Install it with:
+The public package is available from conda-forge on Linux and macOS. Windows conda packages are not supported; Windows users should use the accepted PyPI/MSYS2 UCRT64/MinGW-w64 path. Install conda-forge builds with:
 
 ```bash
 conda install -c conda-forge xstar-tools
@@ -38,7 +37,7 @@ xstar-xspec --version
 xstar-tools doctor --require zone-cpp --json
 ```
 
-The conda-forge package currently tracks the published PyPI `0.6.89.5` source. The `0.6.90.1` qualification reproduces that exact accepted v1 recipe on `linux-64`, `osx-arm64`, and `osx-64`.
+The conda-forge package currently tracks the published PyPI `0.6.89.5` source. `0.6.90.1` qualified that exact accepted v1 recipe on `linux-64`, `osx-arm64`, and `osx-64`; `0.6.90.2` verifies clean installation and native runtime behavior from the public conda-forge channel on the same three hosts.
 
 ## Install from PyPI
 
@@ -369,7 +368,7 @@ mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
   --output-dir /shared/run_mpi
 ```
 
-MPI concurrency comes from the communicator size. There is no local `--processes` option in `xstar-xspec-mpi`. The current file-backed MPI path requires shared visibility of executables, work/output directories, atomic data, and external model files. **Windows MPI is deferred.**
+MPI concurrency comes from the communicator size. There is no local `--processes` option in `xstar-xspec-mpi`. The current file-backed MPI path requires shared visibility of executables, work/output directories, atomic data, and external model files. **Windows MPI is not planned.** Windows native parallel execution remains the non-MPI `xstar-xspec --processes N` path built with MSYS2 UCRT64/MinGW-w64.
 
 ## Outputs
 
@@ -442,3 +441,11 @@ qualification-tooling milestone, not a claim that an unpublished `0.6.90.1`
 PyPI artifact already exists. Standalone `rattler-build` runs supply explicit
 compiler/C-stdlib variants matching conda-forge pinning; the feedstock itself
 receives those variants from conda-forge infrastructure.
+
+### Conda-forge release closure
+
+`0.6.90.2` verifies the already-published `xstar-tools 0.6.89.5` package by
+installing it directly from the public conda-forge channel on `linux-64`,
+`osx-arm64`, and `osx-64`. The closure checks native CLI/ABI readiness,
+external CFITSIO, external `atdb.fits`, MPI/plugin exclusion, GPL-3.0-only
+metadata, and the pinned offline science smoke.

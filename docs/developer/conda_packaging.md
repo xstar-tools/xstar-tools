@@ -1,6 +1,6 @@
 # Conda and conda-forge packaging
 
-The current packaging line is `0.6.90 — CONDA_PACKAGING_REFRESH`, followed by `0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION`. It uses the conda-forge v1 `recipe.yaml` format and `rattler-build`.
+The current packaging line is `0.6.90 — CONDA_PACKAGING_REFRESH`, `0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION`, and `0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE`. The released recipe uses the conda-forge v1 `recipe.yaml` format; `.90.1` qualified native builds with `rattler-build`, while `.90.2` verifies clean installation from the public conda-forge channel.
 
 ## Current public package
 
@@ -52,4 +52,8 @@ The exact released recipe tests:
 
 Source-side `.90.1` qualification separately freezes science revision `0.6.48.12.3.45.3.3.8` and the accepted public ABIs.
 
-After three-host acceptance, the next packaging milestone is `0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE`.
+## 0.6.90.2 public release closure
+
+`.github/workflows/conda-forge-release-closure.yml` installs the already-published `xstar-tools 0.6.89.5` package directly from the public conda-forge channel on the same three POSIX hosts. It verifies the live feedstock recipe/build script against the accepted released copies, checks conda package provenance and external CFITSIO, replays native CLI/ABI/doctor checks, confirms the ordinary package remains MPI-free and without the Python-embedding plugin or `atdb.fits`, validates GPL-3.0-only installed metadata, and runs the pinned offline science smoke.
+
+After all three hosts return `CONDA_FORGE_RELEASE_CLOSURE_06902_HOST_RESULT=ACCEPT`, the conda packaging campaign is closed.

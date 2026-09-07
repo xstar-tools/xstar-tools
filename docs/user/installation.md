@@ -40,7 +40,7 @@ The wheel/packaging policy is separate from the direct native source-build quali
 
 ## Conda packaging
 
-`0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` qualifies the refreshed conda-forge v1 recipe natively on Linux x86_64, macOS arm64, and macOS Intel x86_64. CFITSIO is resolved from the conda environment rather than vendored. MPI, the standalone Python-embedding plugin, and `atdb.fits` are not part of the ordinary conda package. Windows conda-native remains deferred; Windows native PyPI support is unchanged.
+`0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` qualifies the refreshed conda-forge v1 recipe natively on Linux x86_64, macOS arm64, and macOS Intel x86_64. CFITSIO is resolved from the conda environment rather than vendored. MPI, the standalone Python-embedding plugin, and `atdb.fits` are not part of the ordinary conda package. Windows conda packages are not supported. Windows native support remains on the accepted PyPI/MSYS2 UCRT64/MinGW-w64 path; MSVC and Windows MPI are not planned.
 
 The public conda-forge package is available now. Install with:
 

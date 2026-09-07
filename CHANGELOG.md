@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.6.90.2 - CONDA_FORGE_RELEASE_CLOSURE - 2026-09-07
+
+- Synchronize the embedded conda recipe to the live conda-forge build-1 recipe, including the published package summary/description, and compare canonical YAML content rather than raw transport bytes; tolerate only newline convention, trailing whitespace, and blank separator differences, and emit a unified diff plus raw SHA-256 diagnostics on any real mismatch.
+- Define the Windows policy explicitly: conda packages are unsupported on Windows; MSVC and Windows MPI are not planned; the accepted Windows native path remains PyPI/MSYS2 UCRT64/MinGW-w64.
+- Update the project metadata description to `Python/C++ tools for XSTAR atomic data and high-performance runtimes`.
+- Close the conda packaging campaign against the live conda-forge `xstar-tools 0.6.89.5` distribution rather than an unpublished qualification version.
+- Verify the live feedstock recipe/build script against the accepted released recipe and confirm the exact PyPI source SHA-256 `961b66b0ce0b3bc966a6322a3bef05e65879e1f09d50e8d4b9527030ad7a91b2`.
+- Clean-install the public conda-forge package on `linux-64`, `osx-arm64`, and `osx-64`, then require native CLI/version/ABI readiness, zone-cpp doctor readiness, conda-provided external CFITSIO, no MPI executable, no Python-embedding plugin, external `atdb.fits`, GPL-3.0-only package metadata, and the pinned offline bremsstrahlung science smoke.
+- Record Windows conda as unsupported and MSVC/Windows MPI as not planned; preserve the accepted PyPI/MSYS2 UCRT64/MinGW-w64 Windows path, frozen science revision, and all public ABIs.
+- Document conda-forge installation in the main README and keep Project links user-facing (GitHub, PyPI, conda-forge only).
+- Correct release-closure metadata parsing for current micromamba JSON (`packages` array plus `platform` field), require conda build number 1 for the public closure rebuild, and exclude the temporary clean-install environment from uploaded CI evidence.
+- Retain the accepted `0.6.89.5` PyPI source and SHA while embedding the exact live conda-forge build-1 recipe, including the published summary/description; release closure requires the public Linux, macOS Intel, and macOS arm64 artifacts.
+
 ## 0.6.90.1 - CONDA_NATIVE_HOST_QUALIFICATION - 2026-09-07
 - Qualify the exact released conda-forge recipe for published PyPI `xstar-tools 0.6.89.5`; `0.6.90.1` is the qualification-tooling milestone and is not treated as an already-published conda/PyPI artifact.
 - Preserve the accepted `0.6.89.5` recipe/build.sh compatibility fallback (`pypi-linux` / `pypi-macos`) because that is the build contract used by the live feedstock.

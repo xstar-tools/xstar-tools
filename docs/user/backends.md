@@ -23,4 +23,4 @@ A public mode name is intentionally stronger than a convenience alias: `zone-cpp
 
 ## Native platform scope
 
-The native non-MPI path is qualified on Linux GCC x86_64, macOS Apple Clang arm64/x86_64, and Windows MSYS2 UCRT64/AMD64. `xstar-xspec --processes N` is the accepted local parallel table path on all of those hosts. True MPI is an explicit Linux/HPC-oriented build and Windows MPI is deferred.
+The native non-MPI path is qualified on Linux GCC x86_64, macOS Apple Clang arm64/x86_64, and Windows MSYS2 UCRT64/AMD64. `xstar-xspec --processes N` is the accepted local parallel table path on all of those hosts. True MPI is an explicit Linux/HPC-oriented build and Windows MPI is not planned; Windows native parallel execution uses the accepted non-MPI local-process path.

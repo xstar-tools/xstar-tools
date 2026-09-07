@@ -83,4 +83,4 @@ True MPI is explicit:
 make -C src/xstar_tools/xstar/cpp mpi
 ```
 
-The accepted MPI implementation is primarily a Linux/HPC path. Windows MPI is deferred because the current project requirement is native Windows standalone/local-process support, while production HPC deployment uses Linux.
+The accepted MPI implementation is a Linux/macOS/HPC path. Windows MPI is not planned; Windows native support remains the standalone/local-process MinGW path, while production HPC deployment uses POSIX platforms.
