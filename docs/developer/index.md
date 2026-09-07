@@ -42,6 +42,7 @@ pypi_native_wheel_windows_0_6_89_4
 windows_pypi_cfitsio_metadata_propagation_closure_0_6_89_4_3
 packaging
 conda_packaging
+conda_native_host_qualification_0_6_90_1
 documentation_policy
 ```
 

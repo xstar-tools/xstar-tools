@@ -38,19 +38,28 @@ def test_offline_science_smoke_executes_without_atdb():
 
 
 def test_recipe_is_single_package_and_platform_policy_is_explicit():
-    recipe = ROOT / "conda/recipe/meta.yaml"
-    if not recipe.is_file():
-        manifest = json.loads((ROOT / "qualification/conda_packaging_0_6_72.json").read_text())
-        assert manifest["package_outputs"] == ["xstar-tools"]
-        assert manifest["atdb_bundled"] is False
+    recipe_v1 = ROOT / "conda/recipe/recipe.yaml"
+    recipe_v0 = ROOT / "conda/recipe/meta.yaml"
+    if recipe_v1.is_file():
+        text = recipe_v1.read_text(encoding="utf-8")
+        assert text.startswith("schema_version: 1\n")
+        assert "outputs:" not in text
+        assert "compiler('cxx')" in text
+        assert "cfitsio" in text
+        assert "skip: win" in text
+        assert "astropy-base" in text
+        assert "python_min" not in text
+        assert "- atdb.fits" not in text and "path: atdb.fits" not in text
         return
-    text = recipe.read_text(encoding="utf-8")
-    assert "outputs:" not in text
-    assert "compiler('cxx')" in text
-    assert "cfitsio" in text
-    assert "# [linux]" in text
-    assert "h5py >=3" in text and "scipy >=1.8" in text
-    assert "atdb.fits" not in text
+    if recipe_v0.is_file():
+        text = recipe_v0.read_text(encoding="utf-8")
+        assert "outputs:" not in text
+        assert "compiler('cxx')" in text
+        assert "cfitsio" in text
+        return
+    manifest = json.loads((ROOT / "qualification/conda_packaging_0_6_72.json").read_text())
+    assert manifest["package_outputs"] == ["xstar-tools"]
+    assert manifest["atdb_bundled"] is False
 
 
 def test_legacy_xstar_python_port_is_historical_only():

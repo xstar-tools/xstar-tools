@@ -30,7 +30,7 @@ The build hook:
 2. evaluates `XSTAR_TOOLS_NATIVE`;
 3. validates platform-native build prerequisites;
 4. copies the self-contained `src/xstar_tools/xstar/cpp/` tree to a temporary staging directory;
-5. runs `make clean` and then the profile-selected retained Makefile target there;
+5. runs `make clean` and then the retained `make all` there;
 6. verifies every required runtime artifact exists;
 7. copies only runtime binaries/libraries to the wheel build tree;
 8. writes `native_build.json` with package/science/ABI/build provenance.
@@ -125,7 +125,7 @@ stage.
 
 ## Conda packaging
 
-`0.6.90` adds `XSTAR_TOOLS_NATIVE_PROFILE=conda`, mapped to `make conda`, for native Linux/macOS conda packages. CFITSIO is supplied by conda rather than vendored, Windows conda is deferred, MPI remains opt-in/outside the ordinary package, and `atdb.fits` remains external. The recipe uses the v1 `recipe.yaml` format and a versioned PyPI sdist URL so conda-forge's update bot can follow upstream releases. See [Conda and conda-forge packaging](conda_packaging.md).
+The conda-forge recipe reuses this same build hook and native capability policy; see [Conda and conda-forge packaging](conda_packaging.md).
 
 ### Windows delvewheel in-wheel dependency resolution
 

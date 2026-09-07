@@ -6,16 +6,6 @@ The accepted native-wheel baselines cover CPython 3.9–3.14 on Linux x86_64 (`m
 
 The PyPI Linux, macOS, and Windows binary profiles omit the optional standalone Python-embedding plugin so distributable wheels do not acquire a Python-runtime library dependency. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present. MPI remains opt-in and `atdb.fits` remains external. Package metadata uses the SPDX expression `GPL-3.0-only` and ships the GNU GPL Version 3 `LICENSE` file. Native macOS and Windows release wheels are built/tested on GitHub-hosted runners; local access to those operating systems is not required.
 
-## Conda installation
-
-The `0.6.90` conda recipe builds the native non-MPI runtime on Linux and macOS and takes CFITSIO from the conda environment rather than vendoring it. After the conda-forge feedstock is published:
-
-```bash
-conda install -c conda-forge xstar-tools
-```
-
-Windows conda packaging is deferred; the accepted Windows PyPI/source-build paths remain available. `atdb.fits` remains external.
-
 ## Python package installation
 
 For a released package:
@@ -47,6 +37,18 @@ The native packaging hook stages `xstar-cpp`, `xstar-xspec-initable`, `xstar-xsp
 `XSTAR_TOOLS_NATIVE_JOBS=N` controls Make parallelism used by the Python build hook.
 
 The wheel/packaging policy is separate from the direct native source-build qualification described below; do not infer source-build support from an older wheel-policy milestone.
+
+## Conda packaging
+
+`0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` qualifies the refreshed conda-forge v1 recipe natively on Linux x86_64, macOS arm64, and macOS Intel x86_64. CFITSIO is resolved from the conda environment rather than vendored. MPI, the standalone Python-embedding plugin, and `atdb.fits` are not part of the ordinary conda package. Windows conda-native remains deferred; Windows native PyPI support is unchanged.
+
+The public conda-forge package is available now. Install with:
+
+```bash
+conda install -c conda-forge xstar-tools
+```
+
+The current feedstock release is based on the published PyPI `0.6.89.5` source; `0.6.90.1` is the host-qualification/source milestone and is not assumed to exist on PyPI.
 
 ## Native source builds
 

@@ -4,8 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.90"
-# Historical package-version marker: version = "0.6.89.5"
+version = "0.6.90.1"
 # Historical qualification compatibility marker: version = "0.6.89.1.2"
 # Historical qualification compatibility marker: version = "0.6.89.1"
 # Historical qualification compatibility marker: version = "0.6.88.6.1.2.1"
@@ -25,8 +24,8 @@ version = "0.6.90"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
+# Historical license compatibility marker: license = "GPL-3.0"
 license = "GPL-3.0-only"
-# Historical package-license marker: license = "GPL-3.0"
 license-files = ["LICENSE"]
 authors = [
   {name = "Ashkbiz Danehkar"}
@@ -113,7 +112,7 @@ norecursedirs = ["historical"]
 build = "cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
 skip = "cp3??t-*"
 build-verbosity = 1
-test-command = "python {package}/tools/packaging/pypi_cross_platform_release_linux_smoke_0_6_90.py"
+test-command = "python {package}/tools/packaging/pypi_cross_platform_release_linux_smoke_0_6_89_5.py"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64"]
@@ -129,10 +128,10 @@ repair-wheel-command = "auditwheel repair --wheel-dir {dest_dir} {wheel}"
 before-all = "bash {package}/tools/packaging/build_macos_cfitsio.sh"
 environment = { XSTAR_TOOLS_NATIVE="required", XSTAR_TOOLS_NATIVE_PROFILE="pypi-macos", XSTAR_TOOLS_NATIVE_JOBS="2", XSTAR_TOOLS_CFITSIO_PREFIX="/tmp/xstar-cfitsio", XSTAR_TOOLS_CFITSIO_JOBS="2", PKG_CONFIG_PATH="/tmp/xstar-cfitsio/lib/pkgconfig", REPAIR_LIBRARY_PATH="/tmp/xstar-cfitsio/lib", MACOSX_DEPLOYMENT_TARGET="11.0" }
 repair-wheel-command = "DYLD_LIBRARY_PATH=$REPAIR_LIBRARY_PATH delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
-test-command = "python {package}/tools/packaging/pypi_cross_platform_release_macos_smoke_0_6_90.py"
+test-command = "python {package}/tools/packaging/pypi_cross_platform_release_macos_smoke_0_6_89_5.py"
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
 environment = { XSTAR_TOOLS_NATIVE="required", XSTAR_TOOLS_NATIVE_PROFILE="pypi-windows", XSTAR_TOOLS_NATIVE_JOBS="2" }
 repair-wheel-command = "delvewheel repair --ignore-existing --analyze-existing --analyze-existing-exes --add-path %XSTAR_TOOLS_WINDOWS_DLL_PATH% -w {dest_dir} -v {wheel}"
-test-command = "python {package}/tools/packaging/pypi_cross_platform_release_windows_smoke_0_6_90.py"
+test-command = "python {package}/tools/packaging/pypi_cross_platform_release_windows_smoke_0_6_89_5.py"

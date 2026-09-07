@@ -4,7 +4,7 @@
 
 ## Status
 
-`0.6.89.5 — PYPI_CROSS_PLATFORM_RELEASE_CLOSURE` is the first unified public PyPI release. The exact release set contains **24 native wheels plus one source distribution** and has been published to both TestPyPI and production PyPI.
+`0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` is accepted on Linux x86_64, macOS arm64, and macOS Intel x86_64 while preserving the `0.6.89.5` public PyPI/conda-forge baseline. The conda profile uses external CFITSIO, excludes MPI and the optional Python-embedding plugin, and keeps `atdb.fits` external. Windows conda-native remains deferred.
 
 | Platform | Release wheels | Accepted platform baseline |
 |---|---|---|
@@ -17,9 +17,28 @@ Project links:
 
 - GitHub: <https://github.com/xstar-tools/xstar-tools>
 - PyPI: <https://pypi.org/project/xstar-tools/>
-- TestPyPI: <https://test.pypi.org/project/xstar-tools/>
+- Conda-forge: <https://anaconda.org/conda-forge/xstar-tools>
+- Feedstock: <https://github.com/conda-forge/xstar-tools-feedstock>
 
 The accepted cross-platform source-build contract is non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/macOS/HPC build.
+
+## Install with conda-forge
+
+The public package is available from conda-forge. Install it with:
+
+```bash
+conda install -c conda-forge xstar-tools
+```
+
+Then verify the native runtime:
+
+```bash
+xstar-cpp --version
+xstar-xspec --version
+xstar-tools doctor --require zone-cpp --json
+```
+
+The conda-forge package currently tracks the published PyPI `0.6.89.5` source. The `0.6.90.1` qualification reproduces that exact accepted v1 recipe on `linux-64`, `osx-arm64`, and `osx-64`.
 
 ## Install from PyPI
 
@@ -33,12 +52,6 @@ Equivalent explicit-Python form:
 
 ```bash
 python -m pip install xstar-tools
-```
-
-Once the conda-forge feedstock is published, the equivalent conda installation is:
-
-```bash
-conda install -c conda-forge xstar-tools
 ```
 
 Verify the installed native tools with:
@@ -419,4 +432,13 @@ Use the narrowest qualification gate that covers the changed boundary. Packaging
 
 ## License
 
-Starting with `0.6.90`, the active SPDX license expression is **GPL-3.0-only**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). `0.6.89.x` historical qualification records retain the earlier deprecated `GPL-3.0` identifier as historical evidence; that does not change the GPLv3 license text.
+The active package metadata uses the non-deprecated SPDX expression **GPL-3.0-only**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). Historical `0.6.89.x` qualification notes retain their original `GPL-3.0` designation as historical records.
+
+### Conda native host qualification baseline
+
+`0.6.90.1` host qualification intentionally tests the published `0.6.89.5`
+PyPI/conda-forge source and the exact accepted feedstock recipe. `0.6.90.1` is a
+qualification-tooling milestone, not a claim that an unpublished `0.6.90.1`
+PyPI artifact already exists. Standalone `rattler-build` runs supply explicit
+compiler/C-stdlib variants matching conda-forge pinning; the feedstock itself
+receives those variants from conda-forge infrastructure.

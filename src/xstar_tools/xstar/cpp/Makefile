@@ -222,8 +222,7 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.90
-# Historical package-version marker: PACKAGE_VERSION ?= 0.6.89.5
+PACKAGE_VERSION ?= 0.6.90.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.2.1
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1.2
 # Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1
@@ -284,10 +283,10 @@ PYPI_MACOS_TARGETS := $(PHYSICS_TARGETS) $(PYPI_MACOS_STANDALONE_TARGETS)
 # acquire a CPython runtime DLL dependency.
 PYPI_WINDOWS_STANDALONE_TARGETS := $(filter-out $(PYTHON_BACKEND_TARGET),$(STANDALONE_TARGETS))
 PYPI_WINDOWS_TARGETS := $(PHYSICS_TARGETS) $(PYPI_WINDOWS_STANDALONE_TARGETS)
-# Conda-forge Linux/macOS packages use the same non-MPI public runtime boundary
-# as release wheels, but link against CFITSIO supplied by the conda environment.
-# The optional standalone Python-embedding plugin is excluded so the package
-# remains independent of a libpython shared-library embedding contract.
+
+# Conda Linux/macOS package profile.  CFITSIO is supplied by the conda host
+# environment and remains a runtime dependency rather than being vendored.
+# As with release wheels, exclude only the optional Python-embedding plugin.
 CONDA_STANDALONE_TARGETS := $(filter-out $(PYTHON_BACKEND_TARGET),$(STANDALONE_TARGETS))
 CONDA_TARGETS := $(PHYSICS_TARGETS) $(CONDA_STANDALONE_TARGETS)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
@@ -308,9 +307,7 @@ pypi-macos: $(PYPI_MACOS_TARGETS)
 # Packaging-only Windows target. Keep the accepted MinGW/UCRT64 public runtime
 # while excluding only the standalone Python-embedding plugin.
 pypi-windows: $(PYPI_WINDOWS_TARGETS)
-# Packaging-only conda-forge target for Linux/macOS. CFITSIO is external and
-# supplied by the host environment; MPI and the Python-embedding plugin remain
-# outside the ordinary package.
+# Packaging-only conda target for Linux/macOS.
 conda: $(CONDA_TARGETS)
 physics: $(PHYSICS_TARGETS)
 standalone: $(STANDALONE_TARGETS)

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.90.1 - CONDA_NATIVE_HOST_QUALIFICATION - 2026-09-07
+- Qualify the exact released conda-forge recipe for published PyPI `xstar-tools 0.6.89.5`; `0.6.90.1` is the qualification-tooling milestone and is not treated as an already-published conda/PyPI artifact.
+- Preserve the accepted `0.6.89.5` recipe/build.sh compatibility fallback (`pypi-linux` / `pypi-macos`) because that is the build contract used by the live feedstock.
+- Supply explicit standalone rattler-build compiler/C-stdlib variants matching conda-forge pinning so `${{ stdlib('c') }}` renders outside feedstock infrastructure.
+- Keep source-only qualification independent of NumPy; runtime/native tests are exercised by the built conda package in clean rattler-build test environments.
+
+- Qualify the dedicated native conda packaging profile on Linux x86_64, macOS arm64, and macOS Intel x86_64 using rattler-build.
+- Build from the exact candidate source distribution through a local-source rewrite of the canonical PyPI recipe; the canonical recipe itself remains PyPI-tarball based.
+- Re-test the built `.conda` artifact in a fresh rattler-build test environment.
+- Require native CLI/version/ABI readiness, `zone-cpp` doctor readiness, conda-provided external CFITSIO, no vendored CFITSIO, no MPI executable, no Python-embedding plugin, external `atdb.fits`, GPL-3.0-only metadata, and the pinned offline bremsstrahlung science smoke.
+- Preserve the frozen XSTAR science revision and public ABIs; this milestone is packaging/qualification only.
+
 ## 0.6.90 - CONDA_PACKAGING_REFRESH - 2026-09-07
 
 - Replaces the historical conda-build v0 `meta.yaml` seed with a conda v1 `recipe.yaml` source-controlled under `conda/recipe/`, using the official versioned PyPI sdist plus an exact SHA-256.

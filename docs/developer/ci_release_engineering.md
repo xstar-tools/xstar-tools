@@ -109,17 +109,19 @@ A single global runtime average is explicitly **not** a release gate.
 
 ## Packaging CI
 
-Packaging remains independent from scientific benchmark tiers. PyPI release
-CI builds the accepted native Linux, macOS arm64/x86_64, and Windows AMD64 wheel
-matrices plus the source distribution. Conda remains a separate release surface.
+Packaging remains independent from scientific benchmark tiers. The packaging
+workflow has separate jobs for:
 
-`0.6.90` modernizes `.github/workflows/conda.yml` around the v1 `recipe.yaml`
-format and `rattler-build`. It builds an exact local sdist, rewrites only the
-source URL/SHA in a temporary recipe, and tests native `linux-64`, `osx-64`, and
-`osx-arm64` packages. Windows conda remains intentionally deferred.
+- source distribution;
+- Python-only wheel;
+- clean wheel installation without a source checkout;
+- editable installation;
+- native Linux wheels;
+- Python-only macOS/Windows wheels.
 
-Documentation remains a separate workflow, with Sphinx warnings-as-errors and
-linkcheck independent of package qualification.
+Conda and documentation remain separate workflows (`conda.yml` and `docs.yml`),
+with the conda recipe build/test and Sphinx warnings-as-errors/linkcheck kept as
+independent release surfaces.
 
 ## Performance CI
 
