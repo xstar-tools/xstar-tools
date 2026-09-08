@@ -337,7 +337,7 @@ xstar-xspec \
   rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
 ```
 
-The `N` local-process is launched with `--processes N`; `--workers N` and `-j N` remain compatibility aliases. `-np` is reserved for MPI launchers.
+The `N` local processes are launched using `--processes N`; `--workers N` and `-j N` remain compatibility aliases. `-np` is reserved for MPI launchers.
 
 Restart a local grid with:
 
