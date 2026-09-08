@@ -1,10 +1,12 @@
 # xstar-tools
 
-`xstar-tools` is a Python/C++ implementation of XSTAR photoionization calculations. The scientific oracle remains [**FORTRAN XSTAR 2.59g**](https://heasarc.gsfc.nasa.gov/docs/software/xstar/xstar.html).
+Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 [![PyPI](https://img.shields.io/pypi/v/xstar-tools.svg)](https://pypi.org/project/xstar-tools/)
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
 [![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
+
+`xstar-tools` is a Python/C++ implementation of X-ray photoionization calculations using the [XSTAR atomic database](https://ui.adsabs.harvard.edu/abs/2001ApJS..134..139B/abstract). It provides Python/C++ tools for XSTAR atomic data, and the native XSTAR runtime. The scientific oracle remains the official [XSTAR](https://heasarc.gsfc.nasa.gov/docs/software/xstar/xstar.html) FORTRAN program (version 2.59g) originally developed by Timothy Kallman and distributed through the [HEASoft](https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/) software package by NASA's High Energy Astrophysics Science Archive Research Center ([HEASARC](https://heasarc.gsfc.nasa.gov)). The XSTAR atomic database (`atdb.fits`) is not bundled with the package; it remains external and is discovered through the documented data-path contract.
 
 ## Status
 
