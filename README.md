@@ -67,7 +67,7 @@ xstar-xspec --version
 xstar-tools doctor --require zone-cpp --json
 ```
 
-The release wheels include the native XSTAR runtime and its repaired platform dependencies. `atdb.fits` remains external by design, so runs should provide the [XSTAR atomic-data](https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/)) path explicitly, for example with `--data-dir /path/to/xstar/data`, or through the documented discovery environment.
+The release wheels include the native XSTAR runtime and its repaired platform dependencies. `atdb.fits` remains external by design, so runs should provide the [XSTAR atomic-data](https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/) path explicitly, for example with `--data-dir /path/to/xstar/data`, or through the documented discovery environment.
 
 ## Quick start
 
