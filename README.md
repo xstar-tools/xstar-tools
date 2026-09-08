@@ -6,11 +6,11 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
 [![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
 
-`xstar-tools` is a Python/C++ implementation of X-ray photoionization calculations using the [XSTAR atomic database](https://ui.adsabs.harvard.edu/abs/2001ApJS..134..139B/abstract). It provides Python/C++ tools for XSTAR atomic data, and the native XSTAR runtime. The scientific oracle remains the official [XSTAR](https://heasarc.gsfc.nasa.gov/docs/software/xstar/xstar.html) FORTRAN program (version 2.59g) originally developed by Timothy Kallman and distributed through the [HEASoft](https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/) software package by NASA's High Energy Astrophysics Science Archive Research Center ([HEASARC](https://heasarc.gsfc.nasa.gov)). The XSTAR atomic database (`atdb.fits`) is not bundled with the package; it remains external and is discovered through the documented data-path contract.
+**xstar-tools** is a Python/C++ implementation of X-ray photoionization calculations using the [XSTAR atomic database](https://ui.adsabs.harvard.edu/abs/2001ApJS..134..139B/abstract). It provides Python/C++ tools for XSTAR atomic data, and the native XSTAR runtime. The scientific oracle remains the official [XSTAR](https://heasarc.gsfc.nasa.gov/docs/software/xstar/xstar.html) FORTRAN program (version 2.59g) originally developed by Timothy Kallman and distributed through the [HEASoft](https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/) software package by NASA's High Energy Astrophysics Science Archive Research Center ([HEASARC](https://heasarc.gsfc.nasa.gov)). The XSTAR atomic database ([`atdb.fits`](https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/)) is not bundled with the package; it remains external and is discovered through the documented data-path contract.
 
 ## Status
 
-The `0.6.90 — CONDA_PACKAGING_REFRESH` is **accepted and closed**. It qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed build, platform, external-CFITSIO, ABI, and offline-science checks. Windows conda packages are not supported. Windows support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64.
+The `0.6.90 — CONDA_PACKAGING_REFRESH` is accepted and closed. It qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed build, platform, external-CFITSIO, ABI, and offline-science checks. Windows conda packages are not supported. Windows support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64.
 
 | Platform | Release wheels | Conda-forge | Accepted platform baseline |
 |---|---|---|---|
@@ -96,7 +96,7 @@ src/xstar_tools/xstar/cpp/xstar-xspec \
   --processes 2
 ```
 
-`--processes 2` means **two independent `xstar-cpp` processes**. It does not mean two threads or two MPI ranks.
+`--processes 2` means 2 independent `xstar-cpp` processes. It does not mean two threads or two MPI ranks.
 
 ## Python / wheel builds
 
@@ -174,7 +174,7 @@ The qualified Darwin build uses `.dylib` libraries, `@rpath` install names, and 
 
 ### Windows
 
-Use an **MSYS2 UCRT64** terminal, not the plain MSYS shell. A normal source build can use the packaged MSYS2 CFITSIO development package:
+Use an MSYS2 UCRT64 terminal, not the plain MSYS shell. A normal source build can use the packaged MSYS2 CFITSIO development package:
 
 ```bash
 pacman -S --needed \
@@ -437,5 +437,5 @@ Use the narrowest qualification gate that covers the changed boundary. Packaging
 
 ## License
 
-The active package metadata uses the non-deprecated SPDX expression **GPL-3.0-only**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3).
+The active package metadata uses the non-deprecated SPDX expression *GPL-3.0-only*. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3).
 
