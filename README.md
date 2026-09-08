@@ -234,7 +234,7 @@ xstar-tools doctor
 
 ## Atomic data
 
-Native execution requires `atdb.fits` and `coheat.dat`. These files are not silently downloaded, and `atdb.fits` remains external to ordinary wheels.
+Native execution requires `atdb.fits` and `coheat.dat`, which are distributed by the oracle XSTAR FORTRAN program through the HEASoft software package (see [XSTAR atomic data](https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/). These files are not silently downloaded, and `atdb.fits` remains external to ordinary wheels.
 
 The clearest setup is:
 
