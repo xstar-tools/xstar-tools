@@ -437,5 +437,5 @@ Use the narrowest qualification gate that covers the changed boundary. Packaging
 
 ## License
 
-The active package metadata uses the non-deprecated SPDX expression *GPL-3.0-only*. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3).
+The active package metadata uses the non-deprecated SPDX expression `GPL-3.0-only`. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3).
 
