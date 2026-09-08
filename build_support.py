@@ -89,12 +89,14 @@ def _native_platform_key(system: str | None = None) -> str:
 
 def _native_profile() -> str:
     value = os.environ.get("XSTAR_TOOLS_NATIVE_PROFILE", "full").strip().lower()
-    valid = {"full", "pypi-linux", "pypi-macos", "pypi-windows"}
+    valid = {"full", "pypi-linux", "pypi-macos", "pypi-windows", "conda"}
     if value not in valid:
         raise RuntimeError(
-            "XSTAR_TOOLS_NATIVE_PROFILE must be one of full, pypi-linux, pypi-macos, or pypi-windows"
+            "XSTAR_TOOLS_NATIVE_PROFILE must be one of full, pypi-linux, pypi-macos, pypi-windows, or conda"
         )
     required_system = {"pypi-linux": "Linux", "pypi-macos": "Darwin", "pypi-windows": "Windows"}.get(value)
+    if value == "conda" and _native_system() not in {"Linux", "Darwin"}:
+        raise RuntimeError("XSTAR_TOOLS_NATIVE_PROFILE=conda requires Linux or Darwin")
     if required_system is not None and _native_system() != required_system:
         raise RuntimeError(
             f"XSTAR_TOOLS_NATIVE_PROFILE={value} requires {required_system}"
@@ -110,17 +112,19 @@ def _native_artifacts(
         raise RuntimeError(
             f"unsupported native platform {value!r}; expected Linux, Darwin, or Windows"
         )
-    valid_profiles = {"full", "pypi-linux", "pypi-macos", "pypi-windows"}
+    valid_profiles = {"full", "pypi-linux", "pypi-macos", "pypi-windows", "conda"}
     if profile not in valid_profiles:
         raise RuntimeError(f"unsupported native artifact profile {profile!r}")
     required_system = {"pypi-linux": "Linux", "pypi-macos": "Darwin", "pypi-windows": "Windows"}.get(profile)
+    if profile == "conda" and value not in {"Linux", "Darwin"}:
+        raise RuntimeError("conda native artifact profile requires Linux or Darwin")
     if required_system is not None and value != required_system:
         raise RuntimeError(
             f"{profile} native artifact profile requires {required_system}"
         )
     lib_suffix = _LIBRARY_SUFFIXES[value]
     library_stems = _NATIVE_LIBRARY_STEMS
-    if profile in {"pypi-linux", "pypi-macos", "pypi-windows"}:
+    if profile in {"pypi-linux", "pypi-macos", "pypi-windows", "conda"}:
         # Release wheels must not rely on or vendor a Python runtime library.
         # The standalone Python-embedding plugin links libpython by design, so
         # PyPI binary profiles omit only that optional plugin.  The ordinary
@@ -153,6 +157,11 @@ def _native_make_target(profile: str) -> str:
         # The remaining DLL/executable runtime is Python-version-independent
         # and is repaired with delvewheel for ordinary win_amd64 CPython.
         return "pypi-windows"
+    if profile == "conda":
+        # Conda packages use the native non-MPI runtime on Linux/macOS and
+        # resolve CFITSIO from the conda environment. The optional standalone
+        # Python-embedding plugin remains outside the ordinary package.
+        return "conda"
     raise RuntimeError(f"unsupported native build profile {profile!r}")
 
 

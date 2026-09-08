@@ -4,14 +4,14 @@
 
 ## Status
 
-`0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` is accepted on Linux x86_64, macOS arm64, and macOS Intel x86_64. `0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE` is the current closure candidate: it verifies the public conda-forge `0.6.89.5` package directly while preserving external CFITSIO, external `atdb.fits`, MPI exclusion from the ordinary conda package, and all frozen science/ABI contracts. Windows conda packages are not supported. Windows native support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64 path; there is no planned MSVC or Windows MPI implementation.
+The `0.6.90 — CONDA_PACKAGING_REFRESH` campaign is **formally accepted and closed**. `0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and `0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE` verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed feedstock, version/build, platform/channel, external-CFITSIO, ABI, doctor, license, and offline-science checks. Windows conda packages are not supported. Windows native support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64 path; there is no planned MSVC or Windows MPI implementation.
 
-| Platform | Release wheels | Accepted platform baseline |
-|---|---|---|
-| Linux x86_64 | CPython 3.9–3.14, `manylinux_2_28_x86_64` | `0.6.89.2.2` |
-| macOS arm64 | CPython 3.9–3.14, `macosx_11_0_arm64` | `0.6.89.3` |
-| macOS x86_64 | CPython 3.9–3.14, `macosx_11_0_x86_64` | `0.6.89.3` |
-| Windows AMD64 | CPython 3.9–3.14, `win_amd64` | `0.6.89.4.5` |
+| Platform | Release wheels | Conda-forge | Accepted platform baseline |
+|---|---|---|---|
+| Linux x86_64 | CPython 3.9–3.14, `manylinux_2_28_x86_64` | `linux-64` — accepted | `0.6.89.2.2` |
+| macOS arm64 | CPython 3.9–3.14, `macosx_11_0_arm64` | `osx-arm64` — accepted | `0.6.89.3` |
+| macOS x86_64 | CPython 3.9–3.14, `macosx_11_0_x86_64` | `osx-64` — accepted | `0.6.89.3` |
+| Windows AMD64 | CPython 3.9–3.14, `win_amd64` | not supported | `0.6.89.4.5` |
 
 Project links:
 
@@ -37,7 +37,7 @@ xstar-xspec --version
 xstar-tools doctor --require zone-cpp --json
 ```
 
-The conda-forge package currently tracks the published PyPI `0.6.89.5` source. `0.6.90.1` qualified that exact accepted v1 recipe on `linux-64`, `osx-arm64`, and `osx-64`; `0.6.90.2` verifies clean installation and native runtime behavior from the public conda-forge channel on the same three hosts.
+The conda-forge package currently tracks the published PyPI `0.6.89.5` source. The accepted conda-forge build is build number `1`. `0.6.90.1` qualified the native conda build contract, and the formally accepted `0.6.90.2` closure verified clean public installation and native runtime behavior on `linux-64`, `osx-arm64`, and `osx-64`.
 
 ## Install from PyPI
 
@@ -444,8 +444,10 @@ receives those variants from conda-forge infrastructure.
 
 ### Conda-forge release closure
 
-`0.6.90.2` verifies the already-published `xstar-tools 0.6.89.5` package by
-installing it directly from the public conda-forge channel on `linux-64`,
-`osx-arm64`, and `osx-64`. The closure checks native CLI/ABI readiness,
-external CFITSIO, external `atdb.fits`, MPI/plugin exclusion, GPL-3.0-only
-metadata, and the pinned offline science smoke.
+`0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE` is **formally accepted**. The public
+`xstar-tools 0.6.89.5` build-1 packages were clean-installed from conda-forge
+on `linux-64`, `osx-arm64`, and `osx-64`. All three hosts accepted live
+feedstock consistency, package version/build/platform/channel provenance,
+external CFITSIO, external `atdb.fits`, native CLI/ABI/doctor readiness,
+MPI/plugin exclusion, GPL-3.0-only metadata, and the pinned offline science
+smoke. This closes the `0.6.90` conda packaging campaign.
