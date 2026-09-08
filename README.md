@@ -1,10 +1,14 @@
 # xstar-tools
 
-`xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. The scientific oracle remains **FORTRAN XSTAR 2.59g**. Packaging, portability, orchestration, interface, and performance work are qualified without silently changing that scientific boundary.
+`xstar-tools` is a Python/C++ implementation of XSTAR photoionization calculations. The scientific oracle remains [**FORTRAN XSTAR 2.59g**](https://heasarc.gsfc.nasa.gov/docs/software/xstar/xstar.html).
+
+[![PyPI](https://img.shields.io/pypi/v/xstar-tools.svg)](https://pypi.org/project/xstar-tools/)
+[![Conda Version](https://img.shields.io/conda/vn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
+[![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
 
 ## Status
 
-The `0.6.90 — CONDA_PACKAGING_REFRESH` campaign is **formally accepted and closed**. `0.6.90.1 — CONDA_NATIVE_HOST_QUALIFICATION` qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and `0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE` verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed feedstock, version/build, platform/channel, external-CFITSIO, ABI, doctor, license, and offline-science checks. Windows conda packages are not supported. Windows native support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64 path; there is no planned MSVC or Windows MPI implementation.
+The `0.6.90 — CONDA_PACKAGING_REFRESH` is **accepted and closed**. It qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed build, platform, external-CFITSIO, ABI, and offline-science checks. Windows conda packages are not supported. Windows support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64.
 
 | Platform | Release wheels | Conda-forge | Accepted platform baseline |
 |---|---|---|---|
@@ -19,11 +23,11 @@ Project links:
 - PyPI: <https://pypi.org/project/xstar-tools/>
 - Conda-forge: <https://anaconda.org/conda-forge/xstar-tools>
 
-The accepted cross-platform source-build contract is non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/macOS/HPC build.
+The accepted cross-platform source-build is non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/macOS/HPC build.
 
 ## Install with conda-forge
 
-The public package is available from conda-forge on Linux and macOS. Windows conda packages are not supported; Windows users should use the accepted PyPI/MSYS2 UCRT64/MinGW-w64 path. Install conda-forge builds with:
+The package is available from conda-forge on Linux and macOS. Windows conda packages are not supported; Windows users should use the PyPI/MSYS2 UCRT64/MinGW-w64 path. Install conda-forge builds with:
 
 ```bash
 conda install -c conda-forge xstar-tools
@@ -37,7 +41,7 @@ xstar-xspec --version
 xstar-tools doctor --require zone-cpp --json
 ```
 
-The conda-forge package currently tracks the published PyPI `0.6.89.5` source. The accepted conda-forge build is build number `1`. `0.6.90.1` qualified the native conda build contract, and the formally accepted `0.6.90.2` closure verified clean public installation and native runtime behavior on `linux-64`, `osx-arm64`, and `osx-64`.
+The conda-forge package currently tracks the published PyPI `0.6.89.5` source. `0.6.90.1` qualified the conda build, and `0.6.90.2` verified clean public installation and native runtime behavior on `linux-64`, `osx-arm64`, and `osx-64`.
 
 ## Install from PyPI
 
@@ -61,11 +65,11 @@ xstar-xspec --version
 xstar-tools doctor --require zone-cpp --json
 ```
 
-The release wheels include the native XSTAR runtime and its repaired platform dependencies. `atdb.fits` remains external by design, so scientific runs should provide the XSTAR atomic-data directory explicitly, for example with `--data-dir /path/to/xstar/data`, or through the documented discovery environment.
+The release wheels include the native XSTAR runtime and its repaired platform dependencies. `atdb.fits` remains external by design, so runs should provide the XSTAR atomic-data path explicitly, for example with `--data-dir /path/to/xstar/data`, or through the documented discovery environment.
 
 ## Quick start
 
-A normal native source build does not require MPI:
+A normal source build does not require MPI:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp -j4
@@ -90,7 +94,7 @@ src/xstar_tools/xstar/cpp/xstar-xspec \
   --processes 2
 ```
 
-`--processes 2` means **two independent `xstar-cpp` operating-system processes**. It does not mean two threads or two MPI ranks.
+`--processes 2` means **two independent `xstar-cpp` processes**. It does not mean two threads or two MPI ranks.
 
 ## Python / wheel builds
 
@@ -126,7 +130,7 @@ The complete cross-platform release is built by:
 .github/workflows/pypi-cross-platform-release.yml
 ```
 
-Its final `xstar-tools-0.6.89.5-pypi-release` artifact contains only the 24 native wheels, the sdist, and a checksum manifest. A Python-only `py3-none-any` control wheel is explicitly excluded from the publication set.
+The final `xstar-tools-0.6.89.5-pypi-release` contains the native wheels, the sdist, and a checksum manifest. A Python-only `py3-none-any` control wheel is explicitly excluded from the publication set.
 
 For maintainers preparing a future release, validate the aggregate bundle and publish the **same native-wheel + sdist set** first to TestPyPI and then to PyPI:
 
@@ -187,7 +191,7 @@ Then build:
 make -C src/xstar_tools/xstar/cpp -j4 PLATFORM=windows
 ```
 
-Windows produces `.dll`, `.dll.a`, and `.exe` artifacts. The accepted source-runtime backend uses native Win32 process creation. See `docs/user/windows_installation_and_usage.md` for the complete setup and troubleshooting guide.
+Windows produces `.dll`, `.dll.a`, and `.exe` artifacts. The source-runtime backend uses native Win32 process creation. See `docs/user/windows_installation_and_usage.md` for the complete setup and troubleshooting guide.
 
 ### Inspect the resolved build contract
 
@@ -228,9 +232,9 @@ xstar-tools doctor
 
 ## Atomic data
 
-Native scientific execution requires `atdb.fits` and `coheat.dat`. These files are not silently downloaded, and `atdb.fits` remains external to ordinary wheels.
+Native execution requires `atdb.fits` and `coheat.dat`. These files are not silently downloaded, and `atdb.fits` remains external to ordinary wheels.
 
-The clearest reproducible setup is:
+The clearest setup is:
 
 ```bash
 xstar-cpp \
@@ -249,7 +253,7 @@ xstar-cpp \
   --output-dir run_xstar
 ```
 
-When explicit paths are omitted, discovery includes parameter/envelope paths, `XSTAR_ATOMIC_DB` / `XSTAR_ATDB_FITS`, `XSTAR_COHEAT`, `XSTAR_DATA`, `$HEADAS/refdata`, `XSTAR_HOME/data`, executable/package-relative fallbacks, and finally the current directory. See `docs/user/atomic_data.md` for the exact precedence.
+When explicit paths are omitted, discovery includes parameter paths, `XSTAR_ATOMIC_DB` / `XSTAR_ATDB_FITS`, `XSTAR_COHEAT`, `XSTAR_DATA`, `$HEADAS/refdata`, `XSTAR_HOME/data`, executable/package-relative fallbacks, and finally the current directory. See `docs/user/atomic_data.md` for the exact precedence.
 
 ## `xstar-cpp`
 
@@ -331,7 +335,7 @@ xstar-xspec \
   rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
 ```
 
-The canonical spelling is `--processes N`; `--workers N` and `-j N` remain compatibility aliases. `-np` is reserved for MPI launchers.
+The `N` local-process is launched with `--processes N`; `--workers N` and `-j N` remain compatibility aliases. `-np` is reserved for MPI launchers.
 
 Restart a local grid with:
 
@@ -343,7 +347,7 @@ xstar-xspec \
   --restart
 ```
 
-A job is reusable only when its required scientific products and `xstar-cpp.success` marker are present. Partial or failed products are retained for inspection rather than deleted merely because unrelated files coexist in the job directory.
+A job is reusable only when its required products and `xstar-cpp.success` marker are present. Partial or failed products are retained for inspection rather than deleted.
 
 ## True MPI XSTAR2XSPEC
 
@@ -368,7 +372,7 @@ mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
   --output-dir /shared/run_mpi
 ```
 
-MPI concurrency comes from the communicator size. There is no local `--processes` option in `xstar-xspec-mpi`. The current file-backed MPI path requires shared visibility of executables, work/output directories, atomic data, and external model files. **Windows MPI is not planned.** Windows native parallel execution remains the non-MPI `xstar-xspec --processes N` path built with MSYS2 UCRT64/MinGW-w64.
+MPI concurrency comes from the communicator size. There is no local `--processes` option in `xstar-xspec-mpi`. The current file-backed MPI path requires shared visibility of executables, output directories, atomic data, and external model files. Windows MPI is not supported. Windows native parallel execution remains the non-MPI `xstar-xspec --processes N` built with MSYS2 UCRT64/MinGW-w64.
 
 ## Outputs
 
@@ -408,7 +412,7 @@ fixed-state program ABI  60486
 XSPEC table ABI           1
 ```
 
-Cross-platform qualification preserves scientific arithmetic/order, controller decisions, traversal/contribution order, cutoffs, publication semantics, output schema, and public ABIs unless a later explicitly qualified scientific change says otherwise.
+Cross-platform qualification preserves scientific arithmetic/order, controller decisions, traversal/contribution order, publication semantics, output schema, and public ABIs unless a later explicitly qualified scientific change says otherwise.
 
 ## Documentation
 
@@ -431,23 +435,5 @@ Use the narrowest qualification gate that covers the changed boundary. Packaging
 
 ## License
 
-The active package metadata uses the non-deprecated SPDX expression **GPL-3.0-only**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3, 29 June 2007). Historical `0.6.89.x` qualification notes retain their original `GPL-3.0` designation as historical records.
+The active package metadata uses the non-deprecated SPDX expression **GPL-3.0-only**. The authoritative license text is the top-level `LICENSE` file (GNU General Public License, Version 3).
 
-### Conda native host qualification baseline
-
-`0.6.90.1` host qualification intentionally tests the published `0.6.89.5`
-PyPI/conda-forge source and the exact accepted feedstock recipe. `0.6.90.1` is a
-qualification-tooling milestone, not a claim that an unpublished `0.6.90.1`
-PyPI artifact already exists. Standalone `rattler-build` runs supply explicit
-compiler/C-stdlib variants matching conda-forge pinning; the feedstock itself
-receives those variants from conda-forge infrastructure.
-
-### Conda-forge release closure
-
-`0.6.90.2 — CONDA_FORGE_RELEASE_CLOSURE` is **formally accepted**. The public
-`xstar-tools 0.6.89.5` build-1 packages were clean-installed from conda-forge
-on `linux-64`, `osx-arm64`, and `osx-64`. All three hosts accepted live
-feedstock consistency, package version/build/platform/channel provenance,
-external CFITSIO, external `atdb.fits`, native CLI/ABI/doctor readiness,
-MPI/plugin exclusion, GPL-3.0-only metadata, and the pinned offline science
-smoke. This closes the `0.6.90` conda packaging campaign.
