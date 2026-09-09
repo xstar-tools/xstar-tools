@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP - 2026-09-09
+
+- Removed closed conversation handoffs, one-off host-validation reports, generated Python caches, and obsolete milestone replay machinery from the active release tree.
+- Consolidated the scientific boundary into a compact parity-freeze policy plus exact SHA-256 hashes for all active science-critical source files inherited byte-for-byte from `0.6.90.2`.
+- Preserved science revision `0.6.48.12.3.45.3.3.8`, C API ABI `60487`, production-zone ABI `6048110`, fixed-state ABIs `60486`/`60488`, XSPEC-table ABI `1`, compiler floating-point policy, external `atdb.fits`, and frozen comparator assets.
+- Reduced active qualification/test/release machinery to current behavioral/regression gates and replaced stale version-specific release checks/workflows with generic current equivalents.
+- Simplified `MANIFEST.in`, packaging smoke utilities, and current reference-policy metadata.
+
 ## 0.6.90.2 - CONDA_FORGE_RELEASE_CLOSURE - 2026-09-07
 
 - Synchronize the embedded conda recipe to the live conda-forge build-1 recipe, including the published package summary/description, and compare canonical YAML content rather than raw transport bytes; tolerate only newline convention, trailing whitespace, and blank separator differences, and emit a unified diff plus raw SHA-256 diagnostics on any real mismatch.

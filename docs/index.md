@@ -2,7 +2,7 @@
 
 `xstar-tools` provides Python, CLI, shared-C++, and native interfaces around a source-faithful XSTAR implementation whose accepted scientific behavior is frozen independently from package/API and portability evolution.
 
-**Current formally accepted native portability baseline:** `0.6.88.6.1.2.1`, accepted on Linux GCC x86_64, macOS arm64, macOS Intel x86_64, and Windows MSYS2 UCRT64/AMD64. Windows MPI remains out of scope.
+**Current formally accepted native portability baseline:** `0.6.88.6.1.2.1`, accepted on Linux GCC x86_64, macOS arm64, macOS Intel x86_64, and Windows MSYS2 UCRT64/AMD64. Windows native support remains non-MPI; MSVC and Windows MPI are not planned.
 
 ```{toctree}
 :maxdepth: 2

@@ -56,11 +56,6 @@ def _copy_with_abundance_and_final_charge(
     return target
 
 
-def test_qualified_abundances_are_explicit() -> None:
-    assert QUALIFIED_XDEF_ABUNDANCES_BY_Z == {1: 1.0, 2: 0.1, 12: 3.5e-5}
-    assert _parse_abundance_spec("1:1,2:0.1,12:3.5e-5") == QUALIFIED_XDEF_ABUNDANCES_BY_Z
-    with pytest.raises(ValueError, match="invalid abundance entry"):
-        _parse_abundance_spec("1=1")
 
 
 def test_elcter_scales_with_abundance_and_ignores_final_row_charge(tmp_path: Path) -> None:

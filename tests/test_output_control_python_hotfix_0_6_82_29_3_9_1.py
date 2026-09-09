@@ -20,9 +20,6 @@ def _function_source(path: Path, name: str) -> str:
     raise AssertionError(name)
 
 
-def test_version_is_068229391():
-    assert 'version = "0.6.82.29.3.9.1"' in (ROOT / "pyproject.toml").read_text()
-    assert "PACKAGE_VERSION ?= 0.6.82.29.3.9.1" in (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
 
 
 def test_final_verbose_recompute_retains_record_results_only_for_publication():
@@ -104,10 +101,3 @@ def test_options29_and30_consume_retained_final_record_results():
     assert '_source_ucalc_publication_endpoints' in o30
 
 
-def test_single_lprint6_host_runner_covers_every_verbose_option():
-    path = ROOT / "tools/qualification/run_output_control_python_lprint6_host_smoke_0_6_82_29_3_9_1.py"
-    text = path.read_text()
-    assert 'CASE = "lprint_6"' in text
-    assert 'EXPECTED_OPTIONS = (14, 21, 7, 10, 4, 6, 18, 29, 30)' in text
-    assert '"--mode", "pure-python"' in text
-    assert "OUTPUT_CONTROL_068229391_LPRINT6_PYTHON_RESULT" in text

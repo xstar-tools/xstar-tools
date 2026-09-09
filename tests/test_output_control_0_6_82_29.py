@@ -120,7 +120,3 @@ def test_no_output_controls_in_core_rate_solver_science():
             assert f'["{needle}"]' not in text
 
 
-def test_contract_documented():
-    text=(ROOT/"output_control_0_6_82_29.md").read_text()
-    for phrase in ("lwrite=-1","lprint=-1..6","lstep","modelname","loopcontrol","mode"):
-        assert phrase in text

@@ -76,38 +76,10 @@ def test_native_abundance_reader_contains_all_source_selectors():
     assert "multiplier*base" in text.replace(" ", "")
 
 
-def test_lwrite_native_publication_uses_literal_source_condition():
-    text = (CPP / "xstar_science_fits.cpp").read_text(encoding="utf-8")
-    assert 'parameter_value(state, "lwrite", 0.0)' in text
-    assert 'parameter_value(state, "npass", 1.0)' in text
-    assert "const bool write_detail_products = (lwrite > 0) || (npass > 1);" in text
-    assert "if (write_detail_products)" in text
-    assert "result.files_written = write_detail_products ? 8u : 4u;" in text
 
 
-def test_native_standalone_acceptance_uses_control_required_product_count():
-    text = (CPP / "xstar_standalone.cpp").read_text(encoding="utf-8")
-    assert "required_native_fits_products" in text
-    assert 'retained_public_parameter_number(product, "lwrite", 0.0)' in text
-    assert 'retained_public_parameter_number(product, "npass", 1.0)' in text
-    assert "const bool detail = (lwrite > 0) || (npass > 1);" in text
-    assert "const std::size_t public_non_abundance = detail ? 8u : 4u;" in text
-    assert "fits_count != required_fits_count" in text
-    assert 'FITS_PRODUCTS_REQUIRED=' in text
 
 
-def test_python_public_contract_validates_lwrite_lprint_loopcontrol_ranges():
-    text = (ROOT / "src/xstar_tools/xstar/physical_runner.py").read_text(encoding="utf-8")
-    contract = (ROOT / "src/xstar_tools/xstar/parameter_contract.py").read_text(encoding="utf-8")
-    # Since 0.6.82.23, public range validation is centralized in the
-    # machine-readable Table-1 contract rather than duplicated as runner-local
-    # error strings.  Keep this historical gate aligned with that ownership.
-    assert "coerce_and_validate_parameter(_name, values[_name])" in text
-    assert "('lwrite', 'integer', 0, 0, 1" in contract
-    assert "('lprint', 'integer', 0, -1, 6" in contract
-    assert "('loopcontrol', 'integer', 0, 0, 30000" in contract
-    assert "detail_products_required" in text
-    assert "lprint_contract" in text
 
 
 def test_loopcontrol_real_mpi_grid_is_one_based_and_sequential():

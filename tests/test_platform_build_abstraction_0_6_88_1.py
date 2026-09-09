@@ -21,15 +21,6 @@ def _config(platform: str | None = None, env: dict[str, str] | None = None) -> d
     return out
 
 
-def test_version_and_nomenclature_present() -> None:
-    assert 'version = "0.6.88.1"' in (ROOT / "pyproject.toml").read_text()
-    text = (CPP / "Makefile").read_text()
-    assert "PACKAGE_VERSION ?= 0.6.88.1" in text
-    for name in (
-        "PLATFORM", "SHLIB_EXT", "EXEEXT", "SHLIB_LDFLAGS", "PIC_FLAGS",
-        "DL_LIBS", "THREAD_LIBS", "RPATH_ORIGIN", "FILESYSTEM_LIBS",
-    ):
-        assert name in text
 
 
 def test_linux_contract() -> None:

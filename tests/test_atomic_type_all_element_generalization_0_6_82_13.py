@@ -5,18 +5,6 @@ import sys
 from xstar_tools.xstar import native_fixed_program as native
 
 
-def test_atomic_type_all_element_generalization_gate():
-    root = Path(__file__).resolve().parents[1]
-    p = subprocess.run(
-        [sys.executable, str(root / 'tools/qualification/check_atomic_type_all_element_generalization_0_6_82_13.py')],
-        cwd=root,
-        text=True,
-        capture_output=True,
-    )
-    assert p.returncode == 0, p.stdout + p.stderr
-    assert 'ATOMIC_TYPE_ALL_ELEMENT_GENERALIZATION_068213_RESULT=ACCEPT' in p.stdout
-    assert 'ATOMIC_TYPE_ALL_ELEMENT_GENERALIZATION_068213_PYTHON_LOWERER=78_OF_78_PHYSICAL_Z1_Z30' in p.stdout
-    assert 'ATOMIC_TYPE_ALL_ELEMENT_GENERALIZATION_068213_CPP_GENERIC_OPCODE200=44_OF_44' in p.stdout
 
 
 def test_python_native_lowerer_has_complete_physical_catalog_and_z1_z30_tables():

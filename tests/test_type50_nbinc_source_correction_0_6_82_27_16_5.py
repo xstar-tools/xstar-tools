@@ -5,13 +5,6 @@ import sys
 import pytest
 
 
-def test_type50_nbinc_source_correction_scope_gate():
-    root = Path(__file__).resolve().parents[1]
-    gate = root / 'tools/qualification/check_type50_nbinc_source_correction_0_6_82_27_16_5.py'
-    p = subprocess.run([sys.executable, str(gate)], cwd=root, capture_output=True, text=True)
-    assert p.returncode == 0, p.stdout + p.stderr
-    assert 'TYPE50_NBINC_068227165_RESULT=ACCEPT' in p.stdout
-    assert 'TYPE50_NBINC_068227165_CHANGED_NUMERICAL_FILES=2' in p.stdout
 
 
 def test_type50_production_paths_no_longer_use_lower_bracket():

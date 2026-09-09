@@ -1,7 +1,11 @@
-# Historical qualification archive
+# Project history
 
-The active documentation describes the current supported product. Long parity-campaign reports, attribution probes, old launchers, retired examples/tests, and performance archaeology are preserved separately under the repository-level `historical/` tree.
+The active source tree intentionally carries current documentation and the small
+set of frozen artifacts needed to enforce accepted scientific behavior. Closed
+version-by-version qualification reports, forensic scripts, conversation
+handoffs, and predecessor replay checkers are retained by version-control
+history and release tags rather than copied into every new package.
 
-The history-preserving source archive retains that tree. Lean release sdists may intentionally omit the top-level historical archive when no active runtime/test requires it; machine-readable qualification manifests preserve the pinned evidence identities needed by current gates.
+Current structural-cleanup record:
 
-Historical material is evidence and attribution context, not a user-facing API contract.
+- [0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP](repository_history_and_qualification_cleanup_0_6_90_3.md)

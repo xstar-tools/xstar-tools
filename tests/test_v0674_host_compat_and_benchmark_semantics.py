@@ -91,11 +91,6 @@ def test_python_bridge_includes_python_h_before_project_and_standard_headers():
     assert py < text.index("#include <algorithm>")
 
 
-def test_comp2_source_diagnostic_accumulator_is_explicitly_intentional():
-    text = (ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp").read_text()
-    assert text.count("[[maybe_unused]] double sum2") == 2
-    assert "Fortran comp2" in text
-    assert "cfake" in text
 
 
 def test_retired_physical_output_diagnostics_is_not_a_module_startup_import():

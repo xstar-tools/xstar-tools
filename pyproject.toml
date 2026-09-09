@@ -4,27 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.90.2"
-# Historical qualification compatibility marker: version = "0.6.89.1.2"
-# Historical qualification compatibility marker: version = "0.6.89.1"
-# Historical qualification compatibility marker: version = "0.6.88.6.1.2.1"
-# Historical qualification compatibility marker: version = "0.6.88.3.2"
-# Historical qualification compatibility marker: version = "0.6.88.3.1"
-# Historical qualification compatibility marker: version = "0.6.88.3"
-# Historical qualification compatibility marker: version = "0.6.88.2.2"
-# Historical qualification compatibility marker: version = "0.6.88.1"
-# Historical qualification compatibility marker: version = "0.6.84"
-# Historical qualification compatibility marker: version = "0.6.83.2"
-# Historical qualification compatibility marker: version = "0.6.82.27.16.5"
-# Historical qualification compatibility marker: version = "0.6.82.27.16.4.1"
-# Historical qualification compatibility marker: version = "0.6.82.27.16.4"
-# Historical qualification compatibility marker: version = "0.6.82.27.16.2"
-# Historical qualification compatibility marker: version = "0.6.82.27.16.1"
-# Historical qualification compatibility marker: version = "0.6.82.27.16"
+version = "0.6.90.3"
 description = "Python/C++ tools for XSTAR atomic data and high-performance runtimes"
 readme = "README.md"
 requires-python = ">=3.9"
-# Historical license compatibility marker: license = "GPL-3.0"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [
@@ -103,16 +86,13 @@ where = ["src"]
 testpaths = ["tests"]
 norecursedirs = ["historical"]
 
-# Historical package-version markers retained for predecessor qualification replay.
 # version = "0.6.89.1.1"
-# Historical package-version marker: version = "0.6.89.1"
-# Historical package-version marker: version = "0.6.89"
 
 [tool.cibuildwheel]
 build = "cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
 skip = "cp3??t-*"
 build-verbosity = 1
-test-command = "python {package}/tools/packaging/pypi_cross_platform_release_linux_smoke_0_6_89_5.py"
+test-command = "python {package}/tools/packaging/pypi_release_linux_smoke.py"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64"]
@@ -128,10 +108,10 @@ repair-wheel-command = "auditwheel repair --wheel-dir {dest_dir} {wheel}"
 before-all = "bash {package}/tools/packaging/build_macos_cfitsio.sh"
 environment = { XSTAR_TOOLS_NATIVE="required", XSTAR_TOOLS_NATIVE_PROFILE="pypi-macos", XSTAR_TOOLS_NATIVE_JOBS="2", XSTAR_TOOLS_CFITSIO_PREFIX="/tmp/xstar-cfitsio", XSTAR_TOOLS_CFITSIO_JOBS="2", PKG_CONFIG_PATH="/tmp/xstar-cfitsio/lib/pkgconfig", REPAIR_LIBRARY_PATH="/tmp/xstar-cfitsio/lib", MACOSX_DEPLOYMENT_TARGET="11.0" }
 repair-wheel-command = "DYLD_LIBRARY_PATH=$REPAIR_LIBRARY_PATH delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
-test-command = "python {package}/tools/packaging/pypi_cross_platform_release_macos_smoke_0_6_89_5.py"
+test-command = "python {package}/tools/packaging/pypi_release_macos_smoke.py"
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
 environment = { XSTAR_TOOLS_NATIVE="required", XSTAR_TOOLS_NATIVE_PROFILE="pypi-windows", XSTAR_TOOLS_NATIVE_JOBS="2" }
 repair-wheel-command = "delvewheel repair --ignore-existing --analyze-existing --analyze-existing-exes --add-path %XSTAR_TOOLS_WINDOWS_DLL_PATH% -w {dest_dir} -v {wheel}"
-test-command = "python {package}/tools/packaging/pypi_cross_platform_release_windows_smoke_0_6_89_5.py"
+test-command = "python {package}/tools/packaging/pypi_release_windows_smoke.py"

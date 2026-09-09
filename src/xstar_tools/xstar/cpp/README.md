@@ -397,8 +397,4 @@ Windows UCRT64      canonical FITS; text differs only by CRLF serialization
 macOS arm64         same-host deterministic; max observed 4.56e-15 relative / 39 ULP
 ```
 
-For current platform status and historical closure records, see:
-
-- `../../../../docs/developer/cross_platform_portability_status.md`;
-- `../../../../docs/developer/windows_git_preflight_shell_closure_0_6_88_6_1_2_1.md`;
-- `../../../../CHANGELOG.md`.
+For current platform status, see `../../../../docs/developer/cross_platform_portability_status.md`. Closed version-specific qualification records are retained in repository history/tags and summarized chronologically in `../../../../CHANGELOG.md`.

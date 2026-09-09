@@ -105,7 +105,7 @@ Exact legacy combinations are identified with their stable public mode in proven
 
 ## Refactor gate
 
-`qualification/public_execution_modes_0_6_60.json` is the mode-mapping contract. `tools/qualification/check_public_execution_modes.py` and `tests/test_public_execution_modes.py` prove that public names select the same internal paths as the frozen aliases. A future backend refactor must update characterization first and must not change a public mapping silently.
+`tests/test_public_execution_modes.py` is the current executable characterization of the public mode mapping. Closed version-specific mode-contract manifests/checkers are retained in repository history rather than active release trees. A future backend refactor must update characterization first and must not change a public mapping silently.
 
 
 ## Native XSTAR2XSPEC process and MPI modes

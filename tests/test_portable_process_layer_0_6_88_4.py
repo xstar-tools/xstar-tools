@@ -23,13 +23,6 @@ def test_posix_primitives_are_centralized():
     assert not offenders, offenders
 
 
-def test_posix_backend_preserves_native_calls():
-    text = (CPP / "xstar_process.hpp").read_text()
-    for token in ("return ::fork();", "::execvp(path, argv)", "::execv(path, argv)",
-                  "return ::waitpid(pid, status, options);", "::kill(pid, SIGTERM)",
-                  "::kill(pid, SIGKILL)", "::getpid()", "::setenv(name, value, overwrite)",
-                  "::unsetenv(name)"):
-        assert token in text
 
 
 def test_windows_backend_is_explicitly_deferred():

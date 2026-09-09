@@ -1,10 +1,9 @@
 # Developer guide
 
-
-Packaging development after the portability closure is documented in {doc}`pip_packaging_refresh_0_6_89`, its host-runner closure {doc}`pip_packaging_refresh_host_runner_closure_0_6_89_1`, the Windows Python-config discovery closure {doc}`windows_pip_python_config_discovery_closure_0_6_89_1_1`, the macOS path-equivalence closure {doc}`pip_python_config_path_equivalence_closure_0_6_89_1_2`, the Windows source-line-ending closure {doc}`pip_source_line_ending_equivalence_closure_0_6_89_1_3`, and the PyPI release-wheel milestones including {doc}`pypi_native_wheel_macos_0_6_89_3` and {doc}`pypi_native_wheel_windows_0_6_89_4`.
-The developer documentation is organized around the frozen scientific boundary, the Fortran/Python/C++ source concordance, native execution ownership, qualification, and release portability.
-
-For the current platform matrix and the accepted `0.6.88.6.1.2.1` closure, start with {doc}`cross_platform_portability_status`.
+The active developer documentation is organized by current architectural and
+release concerns rather than by every historical milestone. Closed milestone
+notes and one-off qualification narratives are preserved in version-control
+history and release tags.
 
 ```{toctree}
 :maxdepth: 2
@@ -17,35 +16,23 @@ performance_rules
 versioning_and_freeze
 fortran_source_map
 python_cpp_fortran_concordance
+python_fortran_source_comments
+cpp_fortran_source_comments
 function_commenting
 public_python_api
 unified_cli
 xstar_cpp
 c_abi
 adding_atomic_data
-true_mpi_xstar2xspec_0_6_86
-cross_platform_qualification_0_6_88_6
-cross_platform_fixed_state_equivalence_closure_0_6_88_6_1
-cross_platform_workflow_discovery_closure_0_6_88_6_1_1
-windows_reference_payload_line_ending_closure_0_6_88_6_1_2
-windows_git_preflight_shell_closure_0_6_88_6_1_2_1
-pip_packaging_refresh_0_6_89
-pip_packaging_refresh_host_runner_closure_0_6_89_1
-windows_pip_python_config_discovery_closure_0_6_89_1_1
-pip_python_config_path_equivalence_closure_0_6_89_1_2
-pip_source_line_ending_equivalence_closure_0_6_89_1_3
-pypi_native_wheel_linux_0_6_89_2
-pypi_native_wheel_linux_preflight_dependency_closure_0_6_89_2_1
-pypi_linux_profile_build_target_closure_0_6_89_2_2
-pypi_native_wheel_macos_0_6_89_3
-pypi_native_wheel_windows_0_6_89_4
-windows_pypi_cfitsio_metadata_propagation_closure_0_6_89_4_3
+source_name_hygiene
+python_production_diagnostics
+xstar2xspec_source_concordance
+reference_data_and_release_candidate
+ci_release_engineering
 packaging
 conda_packaging
-conda_native_host_qualification_0_6_90_1
 documentation_policy
 ```
 
-Historical milestone notes remain available in this directory even when they are not all listed in the primary navigation. Their original ACCEPT/REJECT status is preserved rather than rewritten by later closures.
-
-windows_pypi_pkg_config_qualification_launcher_closure_0_6_89_4_4
+The formal repository-cleanup record is under
+{doc}`../history/repository_history_and_qualification_cleanup_0_6_90_3`.

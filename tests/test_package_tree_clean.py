@@ -1,23 +1,25 @@
+from __future__ import annotations
+
 from pathlib import Path
 
-
-def test_generated_density_grid_output_not_bundled_as_files():
-    root = Path(__file__).resolve().parents[1]
-    generated = root / "o7_solver_source_fit_density_xstar_grid"
-    # This is generated output from the retired O VII density-grid example, not
-    # a package input.  It must not exist in a source or distribution tree.
-    assert not generated.exists()
+ROOT = Path(__file__).resolve().parents[1]
+ALLOWED_ROOT_MD = {"README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AUTHORS.md", "PARITY_FREEZE.md"}
 
 
-def test_compact_o7_density_inputs_bundled_under_xstar_test_run():
-    root = Path(__file__).resolve().parents[1]
-    expected = [
-        "o7_ne1",
-        "o7_ne1e4",
-        "o7_ne1e8",
-        "o7_ne1e10",
-        "o7_ne1e12",
-    ]
-    for dirname in expected:
-        assert (root / "xstar_test_run" / dirname / "xstar_o7_triplet_lines.csv").exists()
-    assert (root / "xstar_test_run" / "xstar_o7_density_grid_references.csv").exists()
+def test_root_has_only_current_markdown_documents() -> None:
+    assert {p.name for p in ROOT.glob("*.md")} == ALLOWED_ROOT_MD
+
+
+def test_generated_python_caches_are_absent() -> None:
+    assert not list(ROOT.rglob("__pycache__"))
+    assert not list(ROOT.rglob("*.pyc"))
+
+
+def test_historical_conversation_reports_are_not_shipped() -> None:
+    names = [p.name for p in ROOT.iterdir()]
+    assert not any(name.startswith("xstar_tools_conversation_") for name in names)
+    assert not any(name.endswith("_local_validation.md") for name in names)
+
+
+def test_atomic_database_remains_external() -> None:
+    assert not list((ROOT / "src/xstar_tools").rglob("atdb.fits"))

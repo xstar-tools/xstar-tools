@@ -73,7 +73,7 @@ Appendix A documents the important current families such as Types 49/53 (partial
 ## Verification
 
 ```bash
-python tools/qualification/check_python_source_comments.py
+python tools/qualification/check_source_concordance.py
 python tools/qualification/check_parity_freeze.py
 python tools/qualification/check_source_concordance.py
 ```
@@ -89,3 +89,6 @@ context without first opening the manual/papers. The older overlay checker
 strips this newer layer before validating its original hashes; the dedicated
 `check_source_function_comments.py` gate independently proves the new layer is
 comment-only. See `function_commenting.md`.
+
+
+> Since `0.6.90.3`, exact science-critical source bytes are enforced by `tools/qualification/check_parity_freeze.py`; closed comment-overlay replay manifests are retained by repository history rather than shipped in active releases.

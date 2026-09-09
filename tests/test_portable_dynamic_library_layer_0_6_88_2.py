@@ -14,13 +14,6 @@ CALLERS = [
 ]
 
 
-def test_version_and_new_files_present() -> None:
-    assert 'version = "0.6.88.2"' in (ROOT / "pyproject.toml").read_text()
-    makefile = (CPP / "Makefile").read_text()
-    assert "PACKAGE_VERSION ?= 0.6.88.2" in makefile
-    assert (CPP / "xstar_platform.hpp").is_file()
-    assert (CPP / "xstar_dynamic_library.hpp").is_file()
-    assert (CPP / "xstar_dynamic_library.cpp").is_file()
 
 
 def test_platform_filename_and_path_separator_contract() -> None:

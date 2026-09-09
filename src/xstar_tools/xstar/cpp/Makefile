@@ -222,24 +222,7 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.90.2
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.2.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1.2
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.89.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.6.1.2.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.2
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.3
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.2
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.2
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.88.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.84
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.28
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16.5
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16.1
-# Historical qualification compatibility marker: PACKAGE_VERSION ?= 0.6.82.27.16
+PACKAGE_VERSION ?= 0.6.90.3
 
 SOLVER_TARGET := libxstar_solver$(SHLIB_EXT)
 RATES_TARGET := libxstar_rates$(SHLIB_EXT)
@@ -488,6 +471,3 @@ install: all
 clean:
 	rm -f $(TARGETS) $(MPI_TARGETS) *.o *.dll.a
 
-# Historical predecessor marker: PACKAGE_VERSION ?= 0.6.89.1.1
-# Historical predecessor marker: PACKAGE_VERSION ?= 0.6.89.1
-# Historical predecessor marker: PACKAGE_VERSION ?= 0.6.89

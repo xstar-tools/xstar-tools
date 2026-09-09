@@ -12,12 +12,6 @@ def test_native_xstinitable_sources_and_fixture_present():
     assert (fixture / "xstinitable.fits").is_file()
 
 
-def test_native_xstinitable_version_and_make_target():
-    root = Path(__file__).resolve().parents[1]
-    assert 'version = "0.6.83.2"' in (root / "pyproject.toml").read_text()
-    makefile = (root / "src/xstar_tools/xstar/cpp/Makefile").read_text()
-    assert "XSPEC_INITABLE_EXECUTABLE := xstar-xspec-initable" in makefile
-    assert "xstar_xspec_initable.cpp" in makefile
 
 
 def test_xstinitable_python_cli_is_no_longer_placeholder():

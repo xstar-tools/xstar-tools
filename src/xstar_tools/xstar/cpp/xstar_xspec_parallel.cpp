@@ -39,13 +39,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.6.1.2.1"
-constexpr const char *kPackageVersion = "0.6.90.2";
-// Historical qualification compatibility marker: kPackageVersion = "0.6.89.1.2"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.89.1"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"
+constexpr const char *kPackageVersion = "0.6.90.3";
 
 struct Options {
     fs::path input_file;
@@ -490,4 +484,3 @@ int main(int argc, char **argv) {
     }
 }
 
-// Historical predecessor marker: kPackageVersion = "0.6.89.1.1"

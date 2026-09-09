@@ -146,17 +146,6 @@ def test_type63_python_paths_apply_same_source_gate():
 
 
 
-def test_type63_kernel_suppresses_all_16_fortran_zero_cv_records(type63_kernel):
-    fixture = json.loads((
-        ROOT
-        / "qualification/type63_source_cutoff_0_6_82_7/fortran_zero_cpp_nonzero_records_xi1p2.json"
-    ).read_text(encoding="utf-8"))
-    assert fixture["count"] == 16
-    for row in fixture["records"]:
-        delta_e = float(row["delta_e_ev"])
-        cutoff, delt = PY_TYPE63_CUTOFF(1.351e4, 0.0, delta_e)
-        assert cutoff, (row["record"], delt)
-        assert _evaluate(type63_kernel, 1.351e4, delta_e) == (0.0,) * 6
 
 def test_type63_cpp_source_keeps_literal_fortran_gate_order():
     text = (CPP / "xstar_engine.cpp").read_text(encoding="utf-8")

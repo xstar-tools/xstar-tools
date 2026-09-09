@@ -12,18 +12,6 @@ def contract_module():
     spec.loader.exec_module(mod)
     return mod
 
-def test_ledger_and_python_rules_are_complete():
-    m=contract_module(); ledger=json.loads((ROOT/'qualification/table1_parameter_contract_0_6_82_23.json').read_text())
-    assert len(m.PARAMETER_RULES)==59
-    assert set(m.PARAMETER_RULES)=={row['name'] for row in ledger['parameters']}
-    assert m.XSTAR_PAR_DEFAULTS['density']==1e4
-    assert m.XSTAR_PAR_DEFAULTS['rlrad38']==1e-6
-    assert m.XSTAR_PAR_DEFAULTS['nsteps']==3
-    assert m.XSTAR_PAR_DEFAULTS['niter']==0
-    assert m.XSTAR_PAR_DEFAULTS['critf']==1e-7
-    assert m.XSTAR_PAR_DEFAULTS['vturbi']==1.0
-    assert m.XSTAR_PAR_DEFAULTS['cfrac']==0.0
-    assert m.XSTAR_PAR_DEFAULTS['naabund']==1.0
 
 def test_exact_xpi_range_boundaries():
     m=contract_module()
@@ -46,15 +34,6 @@ def test_active_parameter_changes_are_not_default_overwritten():
     values=m.normalize_public_parameter_values({'density':3.25e7,'cfrac':0.37,'emult':0.25,'critf':2e-8,'vturbi':77,'nsteps':7,'ncn2':12001,'cabund':2.5})
     for k,v in {'density':3.25e7,'cfrac':0.37,'emult':0.25,'critf':2e-8,'vturbi':77.0,'nsteps':7,'ncn2':12001,'cabund':2.5}.items(): assert values[k]==v
 
-def test_metadata_classification_and_known_manual_conflicts():
-    ledger=json.loads((ROOT/'qualification/table1_parameter_contract_0_6_82_23.json').read_text())
-    by={r['name']:r for r in ledger['parameters']}
-    assert by['modelname']['classification']=='metadata/interface'
-    assert by['mode']['classification']=='metadata/interface'
-    assert 'table1_vs_xstar_par_default' in by['cfrac']['conflicts']
-    assert 'detailed_manual_vs_xstar_par_default' in by['column']['conflicts']
-    assert not by['naabund']['table1_present']
-    assert not by['lstep']['table1_present']
 
 def test_cpp_header_accepts_and_rejects_contract(tmp_path):
     src=tmp_path/'probe.cpp'; exe=tmp_path/'probe'

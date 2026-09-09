@@ -4,14 +4,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CPP = ROOT / "src/xstar_tools/xstar/cpp"
 
 
-def test_parallel_native_sources_present_and_versioned():
-    text = (ROOT / "pyproject.toml").read_text()
-    assert 'version = "0.6.87"' in text
-    assert (CPP / "xstar_xspec_parallel.cpp").is_file()
-    make = (CPP / "Makefile").read_text()
-    assert "XSPEC_GRID_EXECUTABLE := $(XSPEC_SERIAL_EXECUTABLE)" in make
-    assert "PACKAGE_VERSION ?= 0.6.87" in make
-    assert "xstar_xspec_parallel.cpp" in make
 
 
 def test_parallel_driver_preserves_deterministic_loopcontrol_placement():
@@ -25,12 +17,6 @@ def test_parallel_driver_preserves_deterministic_loopcontrol_placement():
     assert 'concatenate_step_logs(steps' in text
 
 
-def test_parallel_driver_is_bounded_local_process_pool_not_mpi_linkage():
-    text = (CPP / "xstar_xspec_parallel.cpp").read_text()
-    assert '#include <mpi.h>' not in text
-    assert 'spawn_job' in text
-    assert 'active.size() < effective_processes' in text
-    assert 'waitpid(-1' in text
 
 
 def test_python_xstar2xspec_and_mpixstar_wrappers_expose_processes_with_legacy_aliases():

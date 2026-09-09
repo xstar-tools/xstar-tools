@@ -4,15 +4,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CPP = ROOT / "src/xstar_tools/xstar/cpp"
 
 
-def test_0687_version_and_local_process_cli_contract():
-    assert 'version = "0.6.87"' in (ROOT / "pyproject.toml").read_text()
-    assert "PACKAGE_VERSION ?= 0.6.87" in (CPP / "Makefile").read_text()
-    text = (CPP / "xstar_xspec_parallel.cpp").read_text()
-    assert '"--processes"' in text
-    assert '"--workers"' in text
-    assert '"-j"' in text
-    assert "std::size_t processes = 1;" in text
-    assert "effective_processes" in text
 
 
 def test_0687_mpi_keeps_np_semantics_separate():
@@ -31,13 +22,3 @@ def test_0687_python_api_and_cli_use_processes_canonically():
     assert 'parser.add_argument("--processes", "--workers", "-j"' in cli
 
 
-def test_0687_readmes_contain_realistic_direct_examples_and_data_discovery():
-    root_readme = (ROOT / "README.md").read_text()
-    cpp_readme = (CPP / "README.md").read_text()
-    for text in (root_readme, cpp_readme):
-        assert "modelname='xstar_pg1211'" in text
-        assert "columnnst=9" in text
-        assert "rlogxinst=6" in text
-        assert "--processes 2" in text
-        assert "$HEADAS/refdata" in text
-        assert "$XSTAR_DATA" in text

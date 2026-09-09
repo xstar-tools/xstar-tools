@@ -50,11 +50,3 @@ def test_dry_run_plans_all_full_mode_cases(tmp_path: Path):
     assert 'zone-cpp' in manifest
 
 
-def test_contract_does_not_bundle_reference_archives():
-    root=Path(__file__).resolve().parents[1]
-    names={p.name for p in root.rglob('*.tar.gz')}
-    assert 'original_xstar_benchmark_run.tar.gz' not in names
-    assert 'original_xstar.tar.gz' not in names
-    assert 'v064812344_all62_three_mode.tar.gz' not in names
-    contract=json.loads((root/'qualification/public_benchmark_suite_0_6_61.json').read_text())
-    assert contract['references_bundled'] is False

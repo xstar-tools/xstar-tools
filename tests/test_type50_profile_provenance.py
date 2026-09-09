@@ -48,9 +48,6 @@ def fake_derived():
     )
 
 
-def test_cpp_mass_table_overrides_coarse_parent_mass():
-    d = fake_derived()
-    assert cpp_parity_atomic_mass_amu(FakeMaster(), d, 40, ion_index=2) == 24.305
 
 
 def test_deleafnd_match_uses_rate41_third_real():

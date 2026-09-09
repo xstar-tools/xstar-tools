@@ -6,11 +6,6 @@ import sys
 import pytest
 
 
-def test_source_ownership_gate():
-    root = Path(__file__).resolve().parents[1]
-    p = subprocess.run([sys.executable, str(root/'tools/qualification/check_type50_cfrac_source_ownership_0_6_82_20.py')], cwd=root, capture_output=True, text=True)
-    assert p.returncode == 0, p.stdout + p.stderr
-    assert 'TYPE50_CFRAC_SOURCE_OWNERSHIP_068220_RESULT=ACCEPT' in p.stdout
 
 
 def test_type50_cfrac_changes_but_emult_is_not_a_science_argument():
@@ -64,49 +59,7 @@ def test_thomson_and_heatt_contract_are_cfrac_not_emult():
         assert max(0.0, 1.0 - 0.4) == th04
     assert max(0.0, 1.0 - 1.0) != th04
 
-def test_first_host_gate_is_locked_to_cfrac04_xim3():
-    root = Path(__file__).resolve().parents[1]
-    path = root/'tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py'
-    text = path.read_text()
-    assert 'EXPECTED_CPP_VERSION = "0.6.82.20"' in text
-    assert 'DEFAULT_XIS = ("-3",)' in text
-    assert 'DEFAULT_CFRACS = ("0.4",)' in text
-    assert '0.6.82.20 first host gate is locked to cfrac=0.4, rlogxi=-3' in text
 
 
-def test_first_host_gate_defaults_execute_as_cfrac04_xim3(tmp_path):
-    root = Path(__file__).resolve().parents[1]
-    runner = root/'tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py'
-    out = tmp_path/'prepared'
-    p = subprocess.run(
-        [
-            sys.executable, str(runner), 'prepare',
-            '--package', str(root),
-            '--output-root', str(out),
-            '--replace',
-        ],
-        cwd=root, capture_output=True, text=True,
-    )
-    assert p.returncode == 0, p.stdout + p.stderr
-    manifest = (out/'qualification_manifest.json').read_text()
-    assert '"cfrac": [\n    0.4\n  ]' in manifest
-    assert '"rlogxi": [\n    -3.0\n  ]' in manifest
-    assert 'C5_CFRAC04_XIM3_068220_PREPARED=' in p.stdout
 
 
-def test_first_host_gate_rejects_nonlocked_values(tmp_path):
-    root = Path(__file__).resolve().parents[1]
-    runner = root/'tools/qualification/run_c5_cfrac04_xim3_host_smoke_0_6_82_20.py'
-    out = tmp_path/'bad'
-    p = subprocess.run(
-        [
-            sys.executable, str(runner), 'prepare',
-            '--package', str(root),
-            '--output-root', str(out),
-            '--cfrac', '1.0',
-            '--rlogxi', '-3',
-        ],
-        cwd=root, capture_output=True, text=True,
-    )
-    assert p.returncode == 2
-    assert 'first host gate is locked to cfrac=0.4, rlogxi=-3' in p.stderr

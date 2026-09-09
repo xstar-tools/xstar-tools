@@ -10,6 +10,8 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 ## Status
 
+`0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP` consolidates closed milestone machinery without changing XSTAR science, scientific source bytes, or public ABI contracts. Historical one-off reports and replay scripts are preserved by repository history/tags rather than shipped in every release tree.
+
 The `0.6.90 — CONDA_PACKAGING_REFRESH` is accepted and closed. It qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed build, platform, external-CFITSIO, ABI, and offline-science checks. Windows conda packages are not supported. Windows support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64.
 
 | Platform | Release wheels | Conda-forge | Accepted platform baseline |
@@ -129,7 +131,7 @@ The detailed qualification history is in `docs/developer/packaging.md` and the p
 The complete cross-platform release is built by:
 
 ```text
-.github/workflows/pypi-cross-platform-release.yml
+.github/workflows/pypi-release.yml
 ```
 
 The final `xstar-tools-0.6.89.5-pypi-release` contains the native wheels, the sdist, and a checksum manifest. A Python-only `py3-none-any` control wheel is explicitly excluded from the publication set.

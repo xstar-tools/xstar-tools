@@ -16,9 +16,6 @@ def _support():
     return module
 
 
-def test_version_metadata() -> None:
-    assert 'version = "0.6.89.1.1"' in (ROOT / "pyproject.toml").read_text()
-    assert "PACKAGE_VERSION ?= 0.6.89.1.1" in (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
 
 
 def test_extensionless_python_config_sibling(tmp_path: Path) -> None:

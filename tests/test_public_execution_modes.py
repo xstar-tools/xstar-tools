@@ -243,8 +243,3 @@ def test_unified_cli_backends_and_doctor_json():
     assert doctor_data["mode_ready"] is True
     assert doctor_data["ready"] is True
 
-def test_public_contract_checker_passes():
-    root = Path(__file__).resolve().parents[1]
-    proc = subprocess.run(["python", str(root / "tools/qualification/check_public_execution_modes.py")], cwd=root, text=True, capture_output=True)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "PUBLIC_EXECUTION_MODES_RESULT=ACCEPT" in proc.stdout

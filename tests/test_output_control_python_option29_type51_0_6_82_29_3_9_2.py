@@ -33,9 +33,6 @@ def _import_helper():
     return _source_ucalc_publication_endpoints
 
 
-def test_version_is_068229392():
-    assert 'version = "0.6.82.29.3.9.2"' in (ROOT / "pyproject.toml").read_text()
-    assert "PACKAGE_VERSION ?= 0.6.82.29.3.9.2" in (ROOT / "src/xstar_tools/xstar/cpp/Makefile").read_text()
 
 
 def test_type51_publication_is_upper_energy_first():
@@ -74,9 +71,3 @@ def test_option29_still_uses_source_endpoint_helper_and_raw_rates():
     assert "compact_start" in text
 
 
-def test_single_lprint6_runner_still_covers_all_options():
-    path = ROOT / "tools/qualification/run_output_control_python_lprint6_host_smoke_0_6_82_29_3_9_2.py"
-    text = path.read_text()
-    assert 'CASE = "lprint_6"' in text
-    assert 'EXPECTED_OPTIONS = (14, 21, 7, 10, 4, 6, 18, 29, 30)' in text
-    assert 'OUTPUT_CONTROL_068229392_LPRINT6_PYTHON_RESULT' in text

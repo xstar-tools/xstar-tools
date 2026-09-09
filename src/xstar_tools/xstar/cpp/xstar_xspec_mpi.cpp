@@ -37,13 +37,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.6.1.2.1"
-constexpr const char *kPackageVersion = "0.6.90.2";
-// Historical qualification compatibility marker: kPackageVersion = "0.6.89.1.2"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.89.1"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.2"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3.1"
-// Historical qualification compatibility marker: kPackageVersion = "0.6.88.3"
+constexpr const char *kPackageVersion = "0.6.90.3";
 constexpr int kQueueNextSlot = 0;
 constexpr int kQueueFailed = 1;
 constexpr int kQueueInts = 2;
@@ -722,4 +716,3 @@ int main(int argc, char **argv) {
     return final_rc;
 }
 
-// Historical predecessor marker: kPackageVersion = "0.6.89.1.1"

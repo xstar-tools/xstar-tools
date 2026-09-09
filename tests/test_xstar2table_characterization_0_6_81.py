@@ -55,7 +55,3 @@ def test_concordance_document_covers_legacy_limitations():
     assert "0.6.82" in text and "0.6.83" in text
 
 
-def test_native_wheel_stages_xspec_table_runtime():
-    text = (ROOT / "build_support.py").read_text(encoding="utf-8")
-    assert '"libxstar_xspec_table.so"' in text
-    assert '"xstar-xspec-table"' in text

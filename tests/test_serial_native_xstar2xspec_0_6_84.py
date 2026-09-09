@@ -4,12 +4,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CPP = ROOT / "src/xstar_tools/xstar/cpp"
 
 
-def test_serial_native_sources_present_and_versioned():
-    assert 'version = "0.6.84"' in (ROOT / "pyproject.toml").read_text()
-    assert (CPP / "xstar_xspec_serial.cpp").is_file()
-    make = (CPP / "Makefile").read_text()
-    assert "XSPEC_SERIAL_EXECUTABLE := xstar-xspec" in make
-    assert "PACKAGE_VERSION ?= 0.6.84" in make
 
 
 def test_serial_driver_uses_cpp_and_direct_initable_contract():

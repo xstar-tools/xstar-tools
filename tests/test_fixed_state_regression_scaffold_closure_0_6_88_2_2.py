@@ -35,15 +35,6 @@ def make_config() -> dict[str, str]:
     return out
 
 
-def test_version_and_closure_files_present() -> None:
-    assert 'version = "0.6.88.2.2"' in (ROOT / "pyproject.toml").read_text()
-    makefile = (CPP / "Makefile").read_text()
-    assert "PACKAGE_VERSION ?= 0.6.88.2.2" in makefile
-    assert (ROOT / "fixed_state_regression_scaffold_closure_0_6_88_2_2.md").is_file()
-    assert (ROOT / "portable_dynamic_library_layer_qualification_closure_0_6_88_2_1_host_rejection.md").is_file()
-    assert SCAFFOLD.is_dir()
-    assert HISTORICAL_60485.is_dir()
-    assert not INVALID_60486.exists()
 
 
 def test_dynamic_library_contract_remains_present() -> None:

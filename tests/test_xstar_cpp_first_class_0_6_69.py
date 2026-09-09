@@ -46,13 +46,6 @@ def _build_stub_frontend(tmp_path:Path, zone_abi:int=ZONE_ABI_VERSION)->Path:
     return exe
 
 
-def test_milestone6_manifest_checker_accepts():
-    proc=subprocess.run([sys.executable,str(ROOT/'tools/qualification/check_xstar_cpp_first_class.py')],cwd=ROOT,text=True,capture_output=True)
-    assert proc.returncode==0,proc.stdout+proc.stderr
-    assert 'XSTAR_CPP_FIRST_CLASS_RESULT=ACCEPT' in proc.stdout
-    assert 'XSTAR_CPP_FIRST_CLASS_CORE_FILES=130' in proc.stdout
-    assert 'XSTAR_CPP_FIRST_CLASS_FROZEN_FITS_PAIRS=186/186' in proc.stdout
-    assert 'XSTAR_CPP_FIRST_CLASS_FROZEN_STEP_PAIRS=186/186' in proc.stdout
 
 
 def test_frontend_accepts_par_data_output_and_structured_extensions(tmp_path):
