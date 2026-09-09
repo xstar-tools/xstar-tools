@@ -14,6 +14,8 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 `0.6.90.4 — DOCUMENTATION_COVERAGE_CLOSURE` completes native/Python documentation coverage, integrates Sphinx branding assets, and makes the warning-as-error documentation build clean without changing accepted science or ABI contracts.
 
+`0.6.90.5 — DOCUMENTATION_BUILD_OUTPUTS` adds explicit Sphinx `latex` and `latexpdf` targets, predictable `xstar-tools.tex` / `xstar-tools.pdf` output names, and documentation for the optional host LaTeX toolchain. The normal documentation release target remains HTML plus link checking.
+
 The `0.6.90 — CONDA_PACKAGING_REFRESH` is accepted and closed. It qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed build, platform, external-CFITSIO, ABI, and offline-science checks. Windows conda packages are not supported. Windows support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64.
 
 | Platform | Release wheels | Conda-forge | Accepted platform baseline |

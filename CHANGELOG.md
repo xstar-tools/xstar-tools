@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.90.5 — DOCUMENTATION_BUILD_OUTPUTS - 2026-09-09
+
+- Add explicit `latex` and `latexpdf` targets to `docs/sphinx/Makefile` and matching commands to `docs/sphinx/make.bat`.
+- Configure Sphinx LaTeX output explicitly as `xstar-tools.tex` / `xstar-tools.pdf`, with letter paper, 10-point text, and standard figure placement.
+- Document HTML, LaTeX-source, PDF, link-check, and release documentation workflows plus the optional external `latexmk`/LaTeX requirement.
+- Keep the normal `release` target limited to HTML plus link checking so documentation validation does not require a system TeX installation.
+- Add a compact documentation-build-output qualification gate and history record.
+- Preserve science revision `0.6.48.12.3.45.3.3.8`, science-critical source hashes, and all public ABI contracts; only package-version metadata and documentation/build tooling change.
+
 ## 0.6.90.4 — DOCUMENTATION_COVERAGE_CLOSURE - 2026-09-09
 
 - Documentation closure follow-up: removed duplicate Sphinx `automodule :members:` registrations from the atomic-data, output-reader, and XSTAR2XSPEC API pages and corrected the XSTAR2XSPEC title underline so `sphinx-build -W` does not fail on those warnings.

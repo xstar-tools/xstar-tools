@@ -32,6 +32,7 @@ ci_release_engineering
 packaging
 conda_packaging
 documentation_policy
+documentation_builds
 ```
 
 Release-history records are indexed under {doc}`../history/index`.

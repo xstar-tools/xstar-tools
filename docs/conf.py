@@ -46,6 +46,22 @@ html_favicon = "_static/favicon.ico"
 html_css_files = ["custom.css"]
 html_js_files = ["custom.js"]
 
+latex_documents = [
+    (
+        "index",
+        "xstar-tools.tex",
+        f"xstar-tools {release} Documentation",
+        author,
+        "manual",
+    ),
+]
+
+latex_elements = {
+    "papersize": "letterpaper",
+    "pointsize": "10pt",
+    "figure_align": "htbp",
+}
+
 exclude_patterns = [
     "_build",
     "sphinx",
