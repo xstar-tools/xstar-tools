@@ -39,7 +39,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.90.3";
+constexpr const char *kPackageVersion = "0.6.90.4";
 
 struct Options {
     fs::path input_file;

@@ -9,7 +9,7 @@ Current release candidates use a compact reference boundary.
 - `atdb.fits` remains external and must not be bundled.
 
 Closed milestone reports, forensic scripts, and predecessor replay manifests are
-not release inputs after `0.6.90.3`; version-control history and tags preserve
+are not active release inputs after the repository cleanup; version-control history and tags preserve
 those records.
 
 Before producing a release candidate run:

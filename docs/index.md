@@ -1,8 +1,8 @@
 # xstar-tools documentation
 
-`xstar-tools` provides Python, CLI, shared-C++, and native interfaces around a source-faithful XSTAR implementation whose accepted scientific behavior is frozen independently from package/API and portability evolution.
+`xstar-tools` provides Python, command-line, shared-C++, and native interfaces for XSTAR atomic data and source-faithful XSTAR execution. Distribution/productization versions evolve independently from the accepted scientific revision.
 
-**Current formally accepted native portability baseline:** `0.6.88.6.1.2.1`, accepted on Linux GCC x86_64, macOS arm64, macOS Intel x86_64, and Windows MSYS2 UCRT64/AMD64. Windows native support remains non-MPI; MSVC and Windows MPI are not planned.
+**Accepted native non-MPI portability baseline:** Linux GCC x86_64, macOS arm64/x86_64 with Apple Clang, and Windows MSYS2 UCRT64/MinGW-w64. Windows conda packages are not supported; MSVC and Windows MPI are not planned. Local Windows parallelism is available through `xstar-xspec --processes N`.
 
 ```{toctree}
 :maxdepth: 2
@@ -13,10 +13,16 @@ user/index
 
 ```{toctree}
 :maxdepth: 2
+:caption: Python guide
+
+python/index
+```
+
+```{toctree}
+:maxdepth: 2
 :caption: Python API
 
 api/index
-api/public_api
 ```
 
 ```{toctree}
@@ -49,9 +55,9 @@ history/index
 
 Useful starting points:
 
-- {doc}`user/installation` — installation and source-build prerequisites;
-- {doc}`user/windows_installation_and_usage` — accepted MSYS2 UCRT64 Windows path;
+- {doc}`user/installation` — installation and native source-build prerequisites;
+- {doc}`user/cli` — current command-line entry points and compatibility commands;
 - {doc}`user/atomic_data` — `atdb.fits` / `coheat.dat` discovery and setup;
-- {doc}`cpp/index` — native CLI reference;
-- {doc}`developer/cross_platform_portability_status` — current platform matrix and portability closure;
-- {doc}`developer/qualification` — qualification policy and frozen-boundary rules.
+- {doc}`python/index` — Python execution, atomic-data, output, and XSPEC-table workflows;
+- {doc}`cpp/index` — complete native executable reference;
+- {doc}`developer/qualification` — current compact qualification/freeze policy.

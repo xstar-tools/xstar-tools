@@ -1,6 +1,6 @@
 # `xstar-xspec-mpi`
 
-`xstar-xspec-mpi` is the formally accepted `0.6.86` true-MPI XSTAR2XSPEC executable. It is separate from the local-process `xstar-xspec` path. The accepted production use case is Linux/HPC; Windows MPI is intentionally out of scope and deferred.
+`xstar-xspec-mpi` is the accepted true-MPI XSTAR2XSPEC executable. It is separate from local-process `xstar-xspec`. The production use case is Linux/HPC; **Windows MPI is not planned**.
 
 ## Build
 
@@ -10,9 +10,7 @@ MPI is not part of the default build:
 make -C src/xstar_tools/xstar/cpp
 ```
 
-does not require `mpic++` or MPI libraries.
-
-Build the MPI executable explicitly:
+Build it explicitly:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi
@@ -24,7 +22,7 @@ or:
 make -C src/xstar_tools/xstar/cpp xstar-xspec-mpi
 ```
 
-Override the compiler wrapper if needed:
+Override the MPI compiler wrapper when needed:
 
 ```bash
 make -C src/xstar_tools/xstar/cpp mpi MPICXX=/path/to/mpic++
@@ -33,58 +31,32 @@ make -C src/xstar_tools/xstar/cpp mpi MPICXX=/path/to/mpic++
 ## Run
 
 ```bash
-mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
+mpirun -np 4 xstar-xspec-mpi \
   --input xstinitable.par \
   --data-dir /shared/xstar/data \
   --output-dir /shared/run_mpi
 ```
 
-Direct `key=value` input is also supported:
+Direct `key=value` grid input is also accepted.
 
-```bash
-mpirun -np 4 src/xstar_tools/xstar/cpp/xstar-xspec-mpi \
-  --data-dir /shared/xstar/data \
-  --output-dir /shared/run_mpi \
-  column=1e21 columntyp=2 columnsof=1e20 columnnst=2 columnint=1 \
-  rlogxi=2 rlogxityp=2 rlogxisof=1 rlogxinst=2 rlogxiint=0
-```
+## Options
+
+`xstar-xspec-mpi` accepts `--input`, `--data-dir`, `--output-dir`/`--output`, `--save`, `--cleanup-work`, `--restart`, `--verbose`, `--initable-bin`, `--xstar-cpp`, `--table-bin`, `--version`, and `--help` with the same meanings as the corresponding local-process driver.
+
+There is deliberately **no** `--processes`, `--workers`, or `-j` process-count option. Concurrency is selected by `mpirun`/`mpiexec -np N`; attempts to use local process-count options are rejected.
 
 ## Rank model
 
-There is no local `--processes` option. The MPI launcher defines concurrency:
+Every rank, including rank 0, participates in XSTAR job execution. Jobs are claimed dynamically through an MPI-3 RMA queue, with at most one `xstar-cpp` child per rank.
 
-```text
-mpirun -np 2 -> up to two concurrent xstar-cpp processes
-mpirun -np 4 -> up to four concurrent xstar-cpp processes
-```
-
-Every rank, including rank 0, participates in XSTAR job execution. Jobs are claimed dynamically through an MPI-3 RMA queue. Each rank runs no more than one `xstar-cpp` child at a time.
-
-Rank 0 additionally owns:
-
-1. `xstar-xspec-initable` planning;
-2. the final success check;
-3. canonical STEP concatenation;
-4. canonical spectrum ordering;
-5. the final `xstar-xspec-table` invocation.
-
-Rank identity and completion order never determine science placement; `loopcontrol` does.
+Rank 0 additionally owns planning, final success checking, canonical STEP concatenation, loopcontrol-ordered spectrum gathering, and the final `xstar-xspec-table` invocation. Rank identity/completion order never determines scientific placement; `loopcontrol` does.
 
 ## Filesystem requirement
 
-The first implementation uses job directories as the inter-stage scientific product boundary, so all ranks must see the same:
+The current MPI implementation uses job directories as the inter-stage scientific boundary, so all ranks must see the same executables, output directory, atomic-data directory, and any referenced spectrum/density input files. A shared filesystem and an explicit shared `--data-dir` are recommended for multi-node use.
 
-- `xstar-xspec-mpi`, `xstar-cpp`, `xstar-xspec-initable`, and `xstar-xspec-table` installation;
-- output directory;
-- atomic-data directory;
-- any spectrum/density input files referenced by jobs.
+## Failure and restart
 
-A shared filesystem is therefore required. An explicit shared `--data-dir` is recommended for multi-node runs.
+A failing rank marks the distributed queue failed; other ranks stop claiming work and active children are terminated when peer failure is observed. Final XSPEC tables are not published for a failed MPI run, while partial products remain for inspection.
 
-## Failure behavior
-
-A failing rank marks the distributed queue failed. Other ranks poll that state while their child runs; active children are terminated when a peer failure is observed, and no new jobs are claimed. Final XSPEC tables are not published for the failed MPI run. Existing/partial XSTAR products remain on disk for inspection.
-
-## Restart
-
-`--restart` preserves the accepted `.85.1` success-marker rule: a job is reusable only when `xout_spect1.fits`, `xout_step.log`, and `xstar-cpp.success` all exist.
+`--restart` reuses a job only when `xout_spect1.fits`, `xout_step.log`, and `xstar-cpp.success` all exist.

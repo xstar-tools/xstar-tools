@@ -2,15 +2,14 @@
 
 `xstar_tools` separates **private implementation names** from **exported ABI symbol names**.
 
-Private Python/C++ helpers should use stable semantic names. Development-version labels such as `_v0648...` or `_patch...` must not be introduced into private function definitions. If a historical helper is unreachable, remove it instead of preserving its campaign-era name.
+Private Python/C++ helpers should use stable semantic names. Development-version labels such as `_v0648...` or `_patch...` should not be introduced into private function definitions. If a historical helper is unreachable, remove it rather than preserving a campaign-era name indefinitely.
 
-Exported C-linkage symbols are different: their spelling is part of the ABI. Existing `_v1` and production-zone `_v0648110` exports remain versioned in 0.6.76 because already-built binaries, plugins, `ctypes`, or `dlsym` clients may bind those exact names. Renaming both the implementation and in-repository callers would still break external clients.
+Exported C-linkage symbols are different: their spelling is part of the ABI. Existing `_v1` and production-zone `_v0648110` exports remain versioned because external binaries, plugins, `ctypes`, or dynamic-library clients may bind those exact names. Renaming internal callers does not make an ABI rename safe.
 
-If a cleaner semantic C API is introduced later, add new semantic wrapper/alias symbols while retaining the old exports for a documented deprecation/ABI transition cycle. Remove old exported names only as an intentional ABI revision with qualification.
+If a cleaner semantic C API is introduced later, add wrapper/alias symbols while retaining the old exports for a documented ABI transition. Remove old exported names only under an intentional ABI revision with qualification.
 
-The 0.6.76 boundary is enforced by `qualification/source_name_hygiene_0_6_76.json` and `tools/qualification/check_source_name_hygiene_0_6_76.py`. Historical qualification manifests are not rewritten; compatibility checkers accept only exact source hashes pinned by the 0.6.76 hygiene manifest.
+## Warning-only annotations
 
-### 0.6.77 warning-only overlay
+Compiler-warning cleanup may use local standard-language annotations such as `[[maybe_unused]]` where appropriate. Do not hide broad warning classes with global `-Wno-*` flags simply to make a release appear clean.
 
-The subsequent 0.6.77 compiler-hygiene boundary does not rename or retire additional symbols. It marks twelve intentionally retained translation-unit-local helpers `[[maybe_unused]]` so the real Makefile build is warning-clean. The dedicated 0.6.77 checker requires that removing only those attributes reconstructs the exact 0.6.76 C++ source bytes and forbids `-Wno-*` suppression.
-
+Current science-critical naming/ABI changes are governed by the compact parity-freeze and source-concordance gates rather than by closed version-specific source-name manifests.

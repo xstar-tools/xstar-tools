@@ -147,12 +147,12 @@ The current characterization anchor is `tests/test_source_characterization_curre
 
 All 47 `.cpp`, `.h`, and `.hpp` files under `src/xstar_tools/xstar/cpp/` now begin with a concise marked block containing: Fortran authority, C++ role, implementation relation, concordance IDs, and qualification boundary. Files that are C++ infrastructure or historical oracle data explicitly say that they have **no direct Fortran routine**, while identifying the scientific boundary or source behavior they support.
 
-The comments do not redefine the scientific baseline. `qualification/cpp_source_comment_overlay.json` pins the current annotated and top-comment-normalized bytes. `qualification/cpp_non_science_refactor_0_6_54.json` separately proves that, after comment/whitespace removal and reversal of only the approved stable-name/include relocations, all 47 C++/header files retain the same canonical non-comment content as 0.6.53. The frozen C++44 production manifest remains untouched.
+The comments do not redefine the scientific baseline. Current exact science-critical source bytes are protected by `tools/qualification/check_parity_freeze.py`, while routine/ownership relationships are checked by `tools/qualification/check_source_concordance.py`. Closed overlay/refactor manifests remain available through version-control history and release tags.
 
 
 ## 0.6.55 Python source-comment overlay
 
-The production Python source now carries marked Fortran/source-correspondence comments parallel to the C++ comments. The comments also document the atomic-database distinction between **data type** (record formula/interpretation in `ucalc`) and **rate type** (downstream use of the returned rates). The overlay is comment-only: removing the marked leading block from every annotated module must reproduce its exact `0.6.54` bytes. See `python_fortran_source_comments.md` and `qualification/python_source_comment_overlay.json`.
+The production Python source carries Fortran/source-correspondence comments parallel to the C++ comments. The comments also document the atomic-database distinction between **data type** (record formula/interpretation in `ucalc`) and **rate type** (downstream use of returned rates). Current freeze enforcement uses the compact parity/source-concordance gates; see `python_fortran_source_comments.md`.
 
 
 ## 0.6.56 active-namespace note

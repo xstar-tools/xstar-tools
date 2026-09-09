@@ -1,21 +1,30 @@
 # Documentation authoring and build policy
 
-Milestone 7 standardizes on **MyST Markdown** for authored user/developer/science guides and **reStructuredText only where Sphinx autodoc/autosummary is clearer**, primarily generated API reference pages.
+Authored user/developer/science guides use **MyST Markdown**. reStructuredText is reserved mainly for Sphinx autodoc/autosummary API reference pages.
 
-Rationale:
+Sphinx provides cross-references, autodoc/autosummary, intersphinx, HTML generation, and link checking. The Read the Docs theme uses repository-owned branding assets under `docs/_static/`.
 
-- the project, roadmap, handoffs, and source-concordance documents are already Markdown;
-- MyST keeps user-facing documentation easy to review outside Sphinx;
-- Sphinx remains the build engine for cross-references, autodoc/autosummary, intersphinx, HTML, and link checking;
-- generated API pages can use concise RST `automodule` directives without forcing all authored prose into RST.
+## Release documentation gates
 
-Release documentation policy:
+From `docs/sphinx/`:
+
+```bash
+make clean
+make html
+make linkcheck
+```
+
+Equivalent direct commands are:
 
 ```bash
 sphinx-build -W --keep-going -b html docs docs/_build/html
 sphinx-build -W --keep-going -b linkcheck docs docs/_build/linkcheck
 ```
 
-Warnings are errors for release builds. The CI documentation workflow performs both builds. GitHub Pages deployment is configured for successful `main` builds; forks can run the build/check jobs without deployment permissions.
+Warnings are errors for release documentation. Every authored history page must be reachable from a toctree; API pages should be included exactly once; internal links must resolve.
 
-Historical parity/attribution reports are not included in the user toctree. They remain under the top-level `historical/` archive in history-preserving source releases.
+## Current versus historical documentation
+
+Active documentation describes current behavior and current qualification commands. Closed milestone narratives, forensic reports, and removed checkers are preserved by Git history/release tags rather than referenced as if they were still shipped directories.
+
+A productization/documentation-only release must not change the accepted science revision, ABI contracts, or frozen science-critical source bytes.

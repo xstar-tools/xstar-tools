@@ -1,4 +1,4 @@
-"""Sphinx configuration for the productized xstar-tools documentation."""
+"""Sphinx configuration for the xstar-tools documentation."""
 from __future__ import annotations
 
 import re
@@ -41,7 +41,11 @@ myst_enable_extensions = ["colon_fence", "deflist", "fieldlist"]
 html_theme = "sphinx_rtd_theme"
 html_title = f"xstar-tools {release}"
 html_static_path = ["_static"]
-templates_path = ["_templates"]
+html_logo = "_static/xstar-tools-logo.png"
+html_favicon = "_static/favicon.ico"
+html_css_files = ["custom.css"]
+html_js_files = ["custom.js"]
+
 exclude_patterns = [
     "_build",
     "sphinx",

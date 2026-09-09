@@ -12,4 +12,4 @@ Rules:
 - do not reopen frozen Type50, trajectory, matrix, or transport semantics merely for speed;
 - after a behavior-affecting optimization, qualify one fast model before broadening coverage.
 
-Historical performance reports are preserved under `historical/documentation/performance/` and remain useful attribution evidence, but are not current user-facing performance guarantees.
+Historical performance reports remain available through version-control history and release tags. They are useful attribution evidence, not current user-facing performance guarantees.

@@ -73,7 +73,7 @@ Normal wheels include only installed Python modules plus required runtime data:
 
 They exclude:
 
-- top-level `historical/`;
+- generated/history-only material that is not part of the active release contract;
 - documentation source;
 - tests and qualification reports;
 - C++ implementation `.cpp` files and Makefile;

@@ -81,11 +81,11 @@ separate identifiers.  A productization release does not change science or ABI.
 
 ## Qualification
 
-Milestone 6 is recorded in
-`qualification/xstar_cpp_first_class_0_6_69.json` and checked by
-`tools/qualification/check_xstar_cpp_first_class.py`.
+The first-class native frontend was established during the earlier productization campaign. Current releases no longer ship its closed milestone checker; the active release boundary uses the compact parity-freeze/source-concordance gates plus the retained behavioral regression tests.
 
-The scientific cross-mode authority remains the accepted 0.6.48.12.3.44 all-62
-campaign: 186/186 FITS data-payload bit-exact model pairs, 186/186 normalized
-STEP exact model pairs, and maximum pairwise material NL1 of zero among
-`cpp-zone`, `cpp-all`, and standalone C++.
+```bash
+python tools/qualification/check_parity_freeze.py
+python tools/qualification/check_source_concordance.py
+```
+
+The scientific cross-mode authority remains the accepted frozen qualification campaign; productization-only changes must not silently alter the standalone/production-zone scientific implementation.

@@ -134,16 +134,9 @@ All production C++ science remains pinned to the accepted C++44 baseline. Starti
 
 ![Backend dispatch](diagrams/backend_dispatch.svg)
 
-## Backend interpretation before the public-mode refactor
+## Public execution envelopes
 
-The current tree exposes several historical/internal backend flags. Conceptually they map to four execution envelopes that Milestone 3 will name publicly:
-
-- Python controller + Python scientific kernels;
-- Python controller + modular qualified C++ kernels;
-- Python controller + shared production-zone C++ evaluator;
-- standalone C++ controller + the same frozen production science.
-
-Milestone 2 documents this relationship only; it does not introduce the public backend enum or change dispatch behavior.
+The stable public execution modes are `pure-python`, `zone-python`, `zone-cpp`, `zone-all`, and `xstar-cpp`. They expose progressively more native execution while preserving the accepted source-faithful science contract. See {doc}`execution_modes` for the current mapping.
 
 ## Scientific invariants that architecture work must preserve
 
@@ -170,15 +163,6 @@ Before merging a refactor that touches scientific behavior or a module listed by
 
 See `fortran_source_map.md` for the routine-level map and `python_cpp_fortran_concordance.md` for the implementation/qualification matrix.
 
-
-## 0.6.55 Python source-comment overlay
-
-The production Python source now carries marked Fortran/source-correspondence comments parallel to the C++ comments. The comments also document the atomic-database distinction between **data type** (record formula/interpretation in `ucalc`) and **rate type** (downstream use of the returned rates). The overlay is comment-only: removing the marked leading block from every annotated module must reproduce its exact `0.6.54` bytes. See `python_fortran_source_comments.md` and `qualification/python_source_comment_overlay.json`.
-
-
-## 0.6.56 active Python namespace cleanup
-
-The active `xstar_tools.xstar` namespace contains runtime/scientific modules plus only those diagnostics that still have live callers. One-off parity-campaign audits, attribution scripts, closure/replay tools, and their dedicated tests live under `historical/python/xstar_parity_campaign/` and are excluded from normal distributions. Active `src/`, `tests/`, and `tools/` must not import those archived modules; this is enforced by `tools/qualification/check_python_history_cleanup.py`.
 
 ## Stable public execution modes
 

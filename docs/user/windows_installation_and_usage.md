@@ -68,8 +68,8 @@ Windows drive `C:` is visible in MSYS2 as `/c`. For example, if the source archi
 
 ```bash
 cd /c/Users/you/Downloads
-tar -xzf xstar_tools-0.6.88.6.1.2.1.tar.gz
-cd xstar_tools-0.6.88.6.1.2.1/src/xstar_tools/xstar/cpp
+tar -xzf xstar_tools-<version>.tar.gz
+cd xstar_tools-<version>/src/xstar_tools/xstar/cpp
 ```
 
 For a Git checkout, enter the same `src/xstar_tools/xstar/cpp` directory.
@@ -295,21 +295,14 @@ The accepted Windows embedder registers the initialized Python runtime DLL direc
 
 Inside MSYS2 commands, prefer POSIX-style paths such as `/c/xstar/data`. The native code contains explicit Windows path-boundary handling for existing narrow CFITSIO/XSTAR C APIs, but shell commands are easier to reproduce when written in MSYS2 form.
 
-## 12. Windows qualification command
+## 12. Current qualification checks
 
-The current accepted `0.6.88.6.1.2.1` host runner can be executed directly from an MSYS2 UCRT64 checkout:
+The historical `0.6.88.6.1.2.1` host runner established the accepted Windows portability baseline, but that closed milestone runner is no longer shipped in the lean release tree. Current source releases keep compact active gates instead:
 
 ```bash
-python tools/qualification/run_windows_git_preflight_shell_closure_host_0_6_88_6_1_2_1.py \
-  --package "$PWD" \
-  --output-root "$PWD/run_windows_git_preflight_shell_closure_06886121_windows" \
-  --jobs 4
+python tools/qualification/check_parity_freeze.py
+python tools/qualification/check_source_concordance.py
+python tools/release/check_release_candidate.py
 ```
 
-It checks the Windows native build, warnings, PE/import/export contract, runtime discovery, process abstraction, local XSTAR2XSPEC process pool, same-host fixed-state determinism, cross-platform fixed-state reference equivalence, embedded Python backend, Python bridge, and regression suite. The GitHub Actions workflow additionally performs the canonical fixture Git-attribute preflight under native PowerShell before entering MSYS2. Windows MPI is not required.
-
-The formal Windows acceptance marker is:
-
-```text
-WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE_06886121_HOST_RESULT=ACCEPT
-```
+Run the ordinary pytest suite in the same UCRT64 environment for platform/runtime regression coverage. The accepted policy remains: Windows native support uses MSYS2 UCRT64/MinGW-w64; Windows conda packages are unsupported; MSVC and Windows MPI are not planned. Local parallel XSTAR2XSPEC execution remains available through `xstar-xspec --processes N`.

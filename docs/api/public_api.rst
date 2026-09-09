@@ -1,8 +1,8 @@
-Stable Python API
-=================
+Stable execution API
+====================
 
-The public application interface is generated from the stable type hints and
-source docstrings.
+The stable application execution interface is generated from source type hints
+and docstrings.
 
 .. currentmodule:: xstar_tools
 
@@ -11,13 +11,14 @@ source docstrings.
    :nosignatures:
 
    BackendMode
+   ExecutionMode
    XStarConfig
    XStarData
    XStarProducts
    XStarResult
    run_xstar
-   xstar_tools.backends.available
-   xstar_tools.backends.describe
+   backends.available
+   backends.describe
 
 Public module documentation
 ---------------------------

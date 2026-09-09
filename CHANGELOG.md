@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.90.4 — DOCUMENTATION_COVERAGE_CLOSURE - 2026-09-09
+
+- Documentation closure follow-up: removed duplicate Sphinx `automodule :members:` registrations from the atomic-data, output-reader, and XSTAR2XSPEC API pages and corrected the XSTAR2XSPEC title underline so `sphinx-build -W` does not fail on those warnings.
+
+- Documentation/productization-only closure on the accepted `0.6.90.3` repository cleanup baseline; XSTAR science revision and public ABI contracts are unchanged.
+- Integrated `docs/_static/` branding assets (`xstar-tools-logo.png`, favicon set, `custom.css`, and xstar-tools-specific `custom.js`) and configured Sphinx to use them.
+- Closed the Sphinx warnings reproduced from `0.6.90.3`: missing `_static`, autosummary import cycles, non-consecutive heading levels, history pages outside a toctree, and duplicate API toctree inclusion.
+- Added task-oriented Python documentation for stable execution, `XSTARAtomic`, XSTAR FITS output readers, and Python XSTAR2XSPEC wrappers, with expanded generated API references.
+- Added a unified CLI reference covering all 30 installed console scripts and dedicated native reference pages for `xstar-xspec-initable` and `xstar-xspec-table`.
+- Expanded `xstar-cpp`, `xstar-xspec`, and `xstar-xspec-mpi` option/reference documentation.
+- Updated Windows documentation to be version-neutral and to use the compact current qualification gates instead of retired milestone runners.
+- Removed active-documentation references to historical directories/checkers that are no longer shipped after `0.6.90.3`.
+- Added a compact documentation-coverage gate; parity-freeze and source-concordance gates remain mandatory.
+
 ## 0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP - 2026-09-09
 
 - Removed closed conversation handoffs, one-off host-validation reports, generated Python caches, and obsolete milestone replay machinery from the active release tree.

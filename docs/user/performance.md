@@ -11,7 +11,7 @@ General guidance:
 
 For reproducible performance work, record the mode, compiler/native build, CPU features, thread count, science revision, atomic-data hashes, and input model. Scientific acceptance and performance are separate gates.
 
-Historical optimization measurements are preserved under `historical/documentation/performance/`; they are development evidence, not performance guarantees for arbitrary systems.
+Historical optimization measurements remain available through version-control history and release tags; they are development evidence, not performance guarantees for arbitrary systems.
 
 
 ## XSTAR2XSPEC concurrency

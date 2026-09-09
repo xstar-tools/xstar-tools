@@ -34,5 +34,4 @@ conda_packaging
 documentation_policy
 ```
 
-The formal repository-cleanup record is under
-{doc}`../history/repository_history_and_qualification_cleanup_0_6_90_3`.
+Release-history records are indexed under {doc}`../history/index`.

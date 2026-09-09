@@ -1,6 +1,6 @@
 # Current xstar-tools examples
 
-This directory contains only examples for the current `xstar_tools` public API and stable execution modes. The former numbered pre-productization/parity-campaign examples were preserved under `historical/examples/legacy_pre_productization/` and are intentionally excluded from lean distributions.
+This directory contains only examples for the current `xstar_tools` public API and stable execution modes. Closed pre-productization/parity-campaign examples remain available through version-control history and release tags rather than the lean release archive.
 
 Run examples from an unpacked source checkout without installing the package:
 

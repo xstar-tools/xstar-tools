@@ -24,6 +24,7 @@ include qualification/parity_freeze.json
 include qualification/parity_freeze_science_hashes.json
 include qualification/parity_freeze_current_source_hashes.json
 include qualification/source_concordance.json
+include qualification/documentation_coverage_closure_0_6_90_4.json
 include qualification/zone_cpp_0667_vs_cpp44_0_6_74.csv
 include qualification/zone_cpp_0667_vs_cpp44_0_6_74.json
 include qualification/zone_cpp_0667_reanalysis_0_6_74.csv
