@@ -14,6 +14,8 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 `0.6.90.4 — DOCUMENTATION_COVERAGE_CLOSURE` completes native/Python documentation coverage, integrates Sphinx branding assets, and makes the warning-as-error documentation build clean without changing accepted science or ABI contracts.
 
+`0.6.90.5.2 — LATEX_DVI_PS_PDF_PIPELINE_CLOSURE` normalizes generated EPS references to conventional `image.eps` spelling and makes `latexpdf` use the explicit two-pass `latex` → `dvips` → `ps2pdf` pipeline instead of Sphinx make-mode/`latexmk`, while HTML/Read the Docs continue to use SVG.
+
 `0.6.90.5.1 — LATEXPDF_MAKE_MODE_EPS_GRAPHICS_AND_READTHEDOCS_CLOSURE` fixes the Sphinx `-M latexpdf` option ordering, converts architecture SVG diagrams to EPS3 for LaTeX/PDF builds while HTML continues to use SVG, and makes Read the Docs install the explicit documentation dependency set required by MyST, the RTD theme, and autodoc imports.
 
 `0.6.90.5 — DOCUMENTATION_BUILD_OUTPUTS` adds explicit Sphinx `latex` and `latexpdf` targets, predictable `xstar-tools.tex` / `xstar-tools.pdf` output names, and documentation for the optional host LaTeX toolchain. The normal documentation release target remains HTML plus link checking.

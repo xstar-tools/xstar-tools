@@ -10,9 +10,7 @@ From the repository root, install the documentation extra into the Python enviro
 python -m pip install -e ".[docs]"
 ```
 
-The HTML and LaTeX-source builders require only the Python/Sphinx documentation dependencies. Building a PDF additionally requires a host LaTeX distribution with `latexmk` and the packages required by Sphinx's LaTeX output.
-
-For reproducible hosted builds, `docs/requirements.txt` pins the warning-clean Sphinx/MyST toolchain used by the accepted documentation closure and includes the RTD theme plus NumPy/Astropy needed by autodoc imports. The top-level `.readthedocs.yaml` explicitly installs that requirements file. Read the Docs must not rely on its default bare-Sphinx environment because `conf.py` loads `myst_parser` and `sphinx_rtd_theme`, and the generated API pages import modules that depend on NumPy/Astropy.
+For reproducible Read the Docs hosted builds, `docs/requirements.txt` pins the warning-clean Sphinx/MyST toolchain used by the accepted documentation closure and includes the RTD theme plus NumPy/Astropy needed by autodoc imports. The top-level `.readthedocs.yaml` explicitly installs that requirements file.
 
 A hosted build therefore uses the equivalent dependency step:
 
@@ -24,18 +22,26 @@ python:
 
 The current hosted documentation toolchain is Sphinx 8.2.3, MyST Parser 5.1.0, and `sphinx-rtd-theme` 3.1.0 on Python 3.13.
 
-Check the external PDF/image toolchain with:
+## External tools for LaTeX/PDF
+
+The HTML builder needs only the Python/Sphinx documentation environment. The LaTeX builder additionally needs ImageMagick for SVG-to-EPS3 conversion. The PDF target uses the classic DVI/PostScript pipeline and therefore requires `latex`, `dvips`, and `ps2pdf`.
+
+Check the external tools with:
 
 ```bash
 convert --version
-latexmk --version
-pdflatex --version
-epstopdf --version
+latex --version
+dvips --version
+ps2pdf --version
 ```
 
-The LaTeX builder prefers the ImageMagick 7 `magick` launcher and falls back to the ImageMagick 6 `convert` command on POSIX systems. The four architecture SVG diagrams are converted with the ImageMagick EPS3 coder; this is equivalent to `convert input.svg eps3:output.eps`. The HTML builder continues to use the original SVG files.
+The SVG converter prefers the ImageMagick 7 `magick` launcher and falls back to the ImageMagick 6 `convert` command on POSIX systems. The four architecture SVG diagrams are converted with the ImageMagick EPS3 coder, equivalent to:
 
-A full TeX Live installation on Linux, MacTeX on macOS, or an equivalent LaTeX distribution is suitable. The project does not vendor a TeX distribution.
+```bash
+convert input.svg eps3:output.eps
+```
+
+HTML continues to use the original SVG files.
 
 ## HTML
 
@@ -55,7 +61,7 @@ The HTML target uses `-W --keep-going`, so Sphinx warnings fail the target after
 
 ## LaTeX source
 
-Generate the complete Sphinx LaTeX document without compiling a PDF:
+Generate the Sphinx LaTeX document without compiling a PDF:
 
 ```bash
 cd docs/sphinx
@@ -68,44 +74,76 @@ The primary output is:
 docs/_build/latex/xstar-tools.tex
 ```
 
-During this target Sphinx converts each SVG architecture diagram to EPS3 using the equivalent of `convert input.svg eps3:output.eps`. The generated `xstar-tools.tex` therefore references `.eps` images rather than `.svg`; HTML remains unchanged and continues to use SVG.
+During this target Sphinx converts each architecture SVG to EPS3. Sphinx normally emits references such as:
 
-The converted build assets include `backend_dispatch.eps`, `local_zone_solve.eps`, `controller_radial_flow.eps`, and `publication_ownership.eps`.
+```latex
+\sphinxincludegraphics{{backend_dispatch}.eps}
+```
 
-This target is useful when the TeX source must be inspected, archived, or compiled with a site-specific LaTeX workflow.
+The project then normalizes that generated spelling to the conventional filename form:
 
-## PDF
+```latex
+\sphinxincludegraphics{backend_dispatch.eps}
+```
 
-Generate the LaTeX source and compile the PDF through Sphinx make-mode. Sphinx requires `-M` to appear before the source/output directories and before normal warning options; the project Makefile uses that ordering:
+The same normalization applies to `local_zone_solve.eps`, `controller_radial_flow.eps`, and `publication_ownership.eps`. Only generated LaTeX is changed; HTML continues to use SVG.
+
+The converted EPS assets are copied into `docs/_build/latex/` beside `xstar-tools.tex`.
+
+## PDF: LaTeX -> DVI -> PostScript -> PDF
+
+The project intentionally uses the classic EPS-aware pipeline rather than Sphinx `-M latexpdf`/`latexmk`:
+
+```text
+SVG -> ImageMagick EPS3 -> LaTeX/DVI -> dvips -> PostScript -> ps2pdf -> PDF
+```
+
+Run:
 
 ```bash
 cd docs/sphinx
 make latexpdf
 ```
 
-The expected PDF is:
+The target is equivalent to:
+
+```bash
+make latex
+cd ../_build/latex
+latex -interaction=nonstopmode -halt-on-error xstar-tools.tex
+latex -interaction=nonstopmode -halt-on-error xstar-tools.tex
+dvips -o xstar-tools.ps xstar-tools.dvi
+ps2pdf xstar-tools.ps xstar-tools.pdf
+```
+
+Two LaTeX passes are used so the table of contents, references, and page numbers can settle before the DVI is converted to PostScript.
+
+The expected outputs are:
 
 ```text
+docs/_build/latex/xstar-tools.tex
+docs/_build/latex/xstar-tools.dvi
+docs/_build/latex/xstar-tools.ps
 docs/_build/latex/xstar-tools.pdf
 ```
 
-If `make latex` succeeds but `make latexpdf` fails, first verify the external LaTeX installation. Missing TeX packages, `latexmk`, `epstopdf`, or ImageMagick are host-toolchain issues rather than failures of the Python documentation dependencies. The generated TeX intentionally retains `.eps` references; `epstopdf` provides the PDFLaTeX bridge when the PDF is compiled.
+The LaTeX configuration does not load `epstopdf`; EPS is consumed natively by the `latex`/`dvips` path.
 
 ## Link checking and release documentation
 
-The existing link checker remains:
+The link checker remains:
 
 ```bash
 make linkcheck
 ```
 
-The normal documentation release target intentionally remains:
+The normal documentation release target remains:
 
 ```bash
 make release
 ```
 
-and builds HTML plus link checking only. PDF generation is explicit because a complete LaTeX distribution is a substantially larger optional system dependency.
+and builds HTML plus link checking only. PDF generation stays explicit because ImageMagick, TeX, dvips, and Ghostscript are optional host tools.
 
 ## Windows helper
 
@@ -118,4 +156,4 @@ make.bat latex
 make.bat latexpdf
 ```
 
-The same distinction applies: `latex` generates TeX source, while `latexpdf` requires a working Windows LaTeX installation.
+The Windows `latexpdf` command uses the same two-pass `latex` -> `dvips` -> `ps2pdf` pipeline when those programs are available on `PATH`.

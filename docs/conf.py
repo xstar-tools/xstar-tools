@@ -63,7 +63,6 @@ latex_elements = {
     "papersize": "letterpaper",
     "pointsize": "10pt",
     "figure_align": "htbp",
-    "preamble": r"\usepackage{epstopdf}",
 }
 
 exclude_patterns = [

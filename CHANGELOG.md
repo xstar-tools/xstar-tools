@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.90.5.2 — LATEX_DVI_PS_PDF_PIPELINE_CLOSURE - 2026-09-10
+
+- Normalize Sphinx-generated EPS references from `{{image}.eps}` to conventional `{image.eps}` / `image.eps` filename spelling in `xstar-tools.tex` after `make latex`.
+- Keep HTML on the original SVG assets while converting the four architecture diagrams to EPS3 for LaTeX with ImageMagick.
+- Replace Sphinx `-M latexpdf` / `latexmk` with the explicit EPS-aware pipeline: two `latex` passes, `dvips`, then `ps2pdf`.
+- Remove the unnecessary `epstopdf` LaTeX preamble and document `latex`, `dvips`, and `ps2pdf` as the PDF toolchain.
+- Keep Read the Docs on the accepted pinned HTML toolchain from 0.6.90.5.1.
+- Documentation/build-only closure: science revision, science-critical source hashes, public ABIs, and production behavior are unchanged.
+
 ## 0.6.90.5.1 — LATEXPDF_MAKE_MODE_EPS_GRAPHICS_AND_READTHEDOCS_CLOSURE - 2026-09-10
 
 - Fixed `docs/sphinx/Makefile` and `make.bat` so Sphinx make-mode is invoked as `sphinx-build -M latexpdf SOURCEDIR BUILDDIR -W --keep-going`; Sphinx only recognizes `-M` in the leading make-mode position.

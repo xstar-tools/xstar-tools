@@ -2,7 +2,7 @@
 
 HTML keeps using the original SVG assets.  The LaTeX builder is extended with
 PostScript support and each SVG is converted with ImageMagick using the
-``eps3:`` coder so the generated TeX references ``.eps`` files.
+``eps3:`` coder so the generated LaTeX path uses ``.eps`` files.
 """
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def setup(app):
     app.connect("builder-inited", _enable_latex_eps)
     app.add_post_transform(SvgToEpsConverter)
     return {
-        "version": "0.6.90.5.1",
+        "version": "0.6.90.5.2",
         "parallel_read_safe": True,
         "parallel_write_safe": True,
     }
