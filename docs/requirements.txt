@@ -1,0 +1,10 @@
+# Reproducible Read the Docs / local documentation toolchain.
+# Sphinx 8.2.3 + MyST 5.1.0 is the host-qualified warning-clean combination.
+sphinx==8.2.3
+myst-parser==5.1.0
+sphinx-rtd-theme==3.1.0
+
+# Autodoc imports xstar_tools.api -> hierarchy, which imports NumPy/Astropy.
+# Keep these aligned with the Python >=3.11 runtime dependency policy.
+numpy>=1.24
+astropy>=7.2
