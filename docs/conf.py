@@ -7,7 +7,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
+DOCS_EXT = Path(__file__).resolve().parent / "_ext"
 sys.path.insert(0, str(SRC))
+sys.path.insert(0, str(DOCS_EXT))
 
 project = "xstar-tools"
 author = "Ashkbiz Danehkar"
@@ -24,6 +26,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
+    "svg_to_eps",
 ]
 
 autosummary_generate = True
@@ -60,6 +63,7 @@ latex_elements = {
     "papersize": "letterpaper",
     "pointsize": "10pt",
     "figure_align": "htbp",
+    "preamble": r"\usepackage{epstopdf}",
 }
 
 exclude_patterns = [

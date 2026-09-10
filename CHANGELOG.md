@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.90.5.1 — LATEXPDF_MAKE_MODE_EPS_GRAPHICS_AND_READTHEDOCS_CLOSURE - 2026-09-10
+
+- Fixed `docs/sphinx/Makefile` and `make.bat` so Sphinx make-mode is invoked as `sphinx-build -M latexpdf SOURCEDIR BUILDDIR -W --keep-going`; Sphinx only recognizes `-M` in the leading make-mode position.
+- Added a local Sphinx SVG-to-EPS3 converter for the LaTeX builder. The HTML builder continues to use SVG.
+- LaTeX output now references EPS versions of `backend_dispatch`, `local_zone_solve`, `controller_radial_flow`, and `publication_ownership`.
+- Added the `epstopdf` LaTeX package bridge for PDFLaTeX compilation of EPS-referenced figures.
+- Added `docs/requirements.txt` and activated `.readthedocs.yaml` `python.install` so Read the Docs installs MyST Parser, the RTD theme, and NumPy/Astropy required by autodoc instead of relying on a bare latest-Sphinx environment.
+- Pin the hosted warning-clean documentation stack to Sphinx 8.2.3, MyST Parser 5.1.0, and `sphinx-rtd-theme` 3.1.0 on Python 3.13.
+- Updated documentation-build qualification, history, and developer instructions.
+- Documentation/build-only closure: no science, ABI, or production behavior changes.
+
 ## 0.6.90.5 — DOCUMENTATION_BUILD_OUTPUTS - 2026-09-09
 
 - Add explicit `latex` and `latexpdf` targets to `docs/sphinx/Makefile` and matching commands to `docs/sphinx/make.bat`.
