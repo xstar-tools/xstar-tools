@@ -5,7 +5,7 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 [![PyPI](https://img.shields.io/pypi/v/xstar-tools.svg)](https://pypi.org/project/xstar-tools/)
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
 [![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/xstar-tools.svg)](https://anaconda.org/conda-forge/xstar-tools)
-[![Documentation Status](https://readthedocs.org/projects/xstar-tools/badge/?version=latest)](https://xstar-tools.readthedocs.io/en/latest/?badge=latest)
+[![Documentation](https://readthedocs.org/projects/xstar-tools/badge/)](https://xstar-tools.readthedocs.io/)
 
 [Documentation](https://xstar-tools.readthedocs.io/) · [Download PDF](https://xstar-tools.readthedocs.io/_/downloads/en/latest/pdf/)
 
