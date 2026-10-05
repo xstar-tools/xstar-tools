@@ -62,6 +62,8 @@ With the default `--progress text`, `xstar-cpp` prints the FORTRAN-style pass he
 
 Use `--debug` to restore the full diagnostic stream, or set `XSTAR_CPP_DEBUG=1` when invoking either `xstar-cpp` or the low-level `xstar_cpp run-production` executable. `--progress json` is an explicit machine-readable frontend mode and continues to emit JSON lifecycle events.
 
+Normal mode also hides legacy first-evaluation and profiling output such as `V0648117_...`, `V064896_TYPE50_MODE`, `DETAIL_*_SECONDS`, and `PUBLIC_*_SECONDS`. These remain available with `--debug` or `XSTAR_CPP_DEBUG=1`.
+
 ## Atomic-data discovery
 
 Explicit paths have priority. If omitted, native discovery considers direct parameter/envelope paths, `XSTAR_ATOMIC_DB`/`XSTAR_ATDB_FITS`, `XSTAR_COHEAT`, `XSTAR_DATA`, `$HEADAS/refdata`, `$XSTAR_HOME/data`, executable/package-relative fallbacks, and the current directory as documented in {doc}`../user/atomic_data`.

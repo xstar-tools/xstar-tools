@@ -319,6 +319,8 @@ For the complete parameter and output contract, see `src/xstar_tools/xstar/cpp/R
 
 Normal `xstar-cpp` terminal output is intentionally close to FORTRAN XSTAR: pass/zone progress, final publication messages, and total runtime are shown, while internal `V...` qualification diagnostics are hidden. Use `xstar-cpp --debug ...` (or `XSTAR_CPP_DEBUG=1`) when those diagnostics are needed.
 
+Normal mode also hides legacy first-evaluation and profiling output such as `V0648117_...`, `V064896_TYPE50_MODE`, `DETAIL_*_SECONDS`, and `PUBLIC_*_SECONDS`. These remain available with `--debug` or `XSTAR_CPP_DEBUG=1`.
+
 ## `xstar-xspec`
 
 `xstar-xspec` owns the complete local XSTAR2XSPEC pipeline:

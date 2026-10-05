@@ -183,6 +183,8 @@ To restore the complete development/qualification diagnostic stream for troubles
 
 or set `XSTAR_CPP_DEBUG=1`. Explicit `--progress json` remains available for machine-readable frontend progress.
 
+Normal mode also hides legacy first-evaluation and profiling output such as `V0648117_...`, `V064896_TYPE50_MODE`, `DETAIL_*_SECONDS`, and `PUBLIC_*_SECONDS`. These remain available with `--debug` or `XSTAR_CPP_DEBUG=1`.
+
 ## Atomic data used by `xstar-cpp`
 
 A production model requires `atdb.fits` and `coheat.dat`. Prefer an explicit directory when reproducibility matters:

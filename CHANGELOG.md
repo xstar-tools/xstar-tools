@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.90.5.7 — QUIET_TERMINAL_DIAGNOSTICS_COMPLETION - 2026-10-05
+
+- Complete the normal-terminal quieting started in 0.6.90.5.6: first-evaluation `V0648117_...` ntotit/charge diagnostics written to `stderr`, the C-stdio `V064896_TYPE50_MODE` line, and unprefixed `DETAIL_*_SECONDS` / `PUBLIC_*_SECONDS` profiling summaries are no longer printed during ordinary `xstar-cpp` production.
+- Preserve all of those diagnostics for `xstar-cpp --debug` or `XSTAR_CPP_DEBUG=1`; optional timing diagnostic artifacts remain available for profiling and no counters or scientific calculations are removed.
+- Keep FORTRAN-style pass/zone progress, `final print`, spectral-write messages, errors, and total runtime visible in normal mode.
+- The Mn/Type-49 source-skip change introduced in 0.6.90.5.5 changes native science coverage. The previously accepted science revision remains `0.6.48.12.3.45.3.3.8` until that change is explicitly requalified and re-frozen; it should not be described as science-neutral.
+
 ## 0.6.90.5.6 — QUIET_TERMINAL_DIAGNOSTICS_CLOSURE - 2026-10-05
 
 - Make ordinary `xstar-cpp` standalone execution present the FORTRAN-style live science progress by default instead of the internal version-tagged qualification transcript.

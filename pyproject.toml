@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.90.5.6"
+version = "0.6.90.5.7"
 description = "Python/C++ tools for XSTAR atomic data and high-performance runtimes"
 readme = "README.md"
 requires-python = ">=3.9"

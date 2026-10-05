@@ -121,7 +121,7 @@ bool verbose_controller_diagnostics() {
     return value && std::string(value) == "1";
 }
 
-// 0.6.90.5.6: normal standalone execution should resemble FORTRAN XSTAR
+// 0.6.90.5.7: normal standalone execution should resemble FORTRAN XSTAR
 // rather than a qualification transcript. Version-tagged V0... terminal
 // lines remain available for development and qualification when debugging is
 // explicitly enabled. Artifact files and in-memory counters are unchanged.
@@ -14145,7 +14145,8 @@ void fill_standalone_input(
         input.hydrogen_density_cm3 * hydrogen_ground * hydrogen_abundance;
     input.ionized_h_density_cm3 =
         input.hydrogen_density_cm3 * (1.0 - hydrogen_ground) * hydrogen_abundance;
-    if (data.call_index == 1u && data.evaluation_index == 1u) {
+    if (terminal_diagnostics_enabled_v069056() &&
+        data.call_index == 1u && data.evaluation_index == 1u) {
         std::cerr << std::setprecision(17)
                   << "V0648117_CPP_ZONE_CALL1_EVAL1_H_ABUNDANCE=" << hydrogen_abundance << "\n"
                   << "V0648117_CPP_ZONE_CALL1_EVAL1_H_GROUND=" << hydrogen_ground << "\n"
@@ -17434,7 +17435,8 @@ int standalone_iteration_evaluator(
                 }
             }
         }
-        if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
+        if (terminal_diagnostics_enabled_v069056() &&
+            snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
             std::cerr << std::setprecision(17)
                       << "V0648117_CPP_ZONE_CALL1_EVAL1_T4=" << snapshot.temperature_t4 << "\n"
                       << "V0648117_CPP_ZONE_CALL1_EVAL1_XEE_IN=" << snapshot.electron_fraction_input << "\n"
@@ -24829,7 +24831,7 @@ void emit_controller_performance_instrumentation(
             << "V064890_PERF_TOP_LEVEL_COVERAGE_PERCENT=" << coverage_percent << "\n"
             << "V064890_PERF_TOTAL_SECONDS=" << total_seconds << "\n";
     };
-    write(std::cout);
+    if (terminal_diagnostics_enabled_v069056()) write(std::cout);
     if (write_file) {
         const auto dir = output / "standalone_diagnostics" / "timing";
         std::filesystem::create_directories(dir);
@@ -25250,7 +25252,7 @@ void emit_spectral_performance_instrumentation(
             << "V064812332_TYPE50_TMPE_PREP_BLOCKS="<<type50_tmpe_blocks_v064812332<<"\n"
             << "V064812332_TYPE50_TMPE_PREP_POINTS="<<type50_tmpe_points_v064812332<<"\n";
     };
-    write(std::cout);
+    if (terminal_diagnostics_enabled_v069056()) write(std::cout);
     if (write_file) {
         const auto dir=output/"standalone_diagnostics"/"timing";
         std::filesystem::create_directories(dir);
@@ -25266,6 +25268,17 @@ void emit_spectral_performance_instrumentation(
 int command_run_standalone_production(const Options& options, const std::filesystem::path& executable_path) {
     const bool quiet_version_diagnostics_v069056 = !terminal_diagnostics_enabled_v069056();
     ScopedVersionDiagnosticFilterV069056 version_filter_v069056(quiet_version_diagnostics_v069056);
+    // 0.6.90.5.7: some historical diagnostics bypass std::cout: Type-50
+    // mode reporting uses C stdio and the first-evaluation ntotit/charge
+    // audit uses std::cerr. Keep those console-only diagnostics quiet during
+    // ordinary production; --debug / XSTAR_CPP_DEBUG restores them.
+    if (quiet_version_diagnostics_v069056) {
+        xstar_process::set_environment(
+            "XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS", "1", 1);
+    } else {
+        xstar_process::unset_environment(
+            "XSTAR_SUPPRESS_LEGACY_CONSOLE_DIAGNOSTICS");
+    }
     const auto production_started_v06488 = std::chrono::steady_clock::now();
     const std::string prefix = "V048746255172582_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
