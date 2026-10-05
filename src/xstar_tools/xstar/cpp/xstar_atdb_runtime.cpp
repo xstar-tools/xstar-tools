@@ -1148,6 +1148,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     const int ion=p->second; const auto& b=block_for(l,ion); const int stage=d.ion_stage[ion];
     LoweredRecord out; out.reals=rr; out.ints=ii;
     int lower=0,upper=0; double energy=0.0; bool matrix=true; double width=0.0;
+    int opcode_override=0;
     auto need=[&](bool ok,const std::string& why){ if(!ok) throw std::runtime_error("Type-"+std::to_string(dt)+" record "+std::to_string(rec)+" "+why); };
     if (dt==1) { need(rr.size()>=2,"short payload"); out.reals.assign(rr.begin(),rr.begin()+2); out.ints.clear(); matrix=false; }
     else if (dt==2) { need(rr.size()>=4,"short payload"); lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
@@ -1238,8 +1239,42 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     // resonance-averaged TOPbase form; both carry bound and residual-ion level
     // identities, so threshold and destination ownership are part of lowering.
     else if (dt==49 || dt==53) {
-        need(ii.size()>=4&&rr.size()>=4,"short payload");int id1=ii[ii.size()-2],off=std::max<int>(0,ii[ii.size()-4]),id2=b.nlev+off-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);
-        const auto* bound=find_level(l,ion,id1);const auto* partition=find_snapshot(l,ion,b.nlev);need(bound&&partition,"lacks literal bound/partition level");double base=bound->ionpot-bound->energy;double pweight=partition->weight;need(pweight>0,"invalid Milne partition weight");double destination_weight=pweight,excited_e=0.0,excited_w=pweight;
+        // Type 49 has source-side early exits before the photoionization curve
+        // is consumed.  In ucalc.f90 label 49, idest1 is decoded first and
+        // records with idest1<=0, idest1>=nlevp, or nrdt<=0 jump directly to
+        // label 9000.  The previous native lowerer instead required four real
+        // values up front, so legitimate source-inactive records (exposed by
+        // Mn when mnabund=1) failed ATDB lowering with "short payload".
+        //
+        // Preserve those records in source order as explicit no-ops.  Type 53
+        // retains its historical lowering contract; only Type 49 has the nrdt
+        // early-exit in the authoritative source.
+        need(ii.size()>=4,"short integer payload (nint="+std::to_string(ii.size())+")");
+        const int id1=ii[ii.size()-2];
+        const int off=std::max<int>(0,ii[ii.size()-4]);
+        const int id2=b.nlev+off-1;
+        const bool source_type49_skip = dt==49 &&
+            (id1<=0 || id1>=b.nlev || h.nreal<=0);
+        if(source_type49_skip){
+            lower=upper=0;
+            matrix=false;
+            energy=0.0;
+            opcode_override=XSTAR_FIXED_OPCODE_SOURCE_SKIPPED;
+            // Keep the literal integer metadata for provenance/diagnostics;
+            // no real curve is needed because source UCalc returns immediately.
+            out.reals.clear();
+            out.ints=ii;
+        } else {
+            if(rr.size()<4){
+                throw std::runtime_error(
+                    "Type-"+std::to_string(dt)+" record "+std::to_string(rec)+
+                    " short photoionization payload (nreal="+std::to_string(rr.size())+
+                    ", nint="+std::to_string(ii.size())+
+                    ", idest1="+std::to_string(id1)+
+                    ", nlev="+std::to_string(b.nlev)+")");
+            }
+            lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);
+            const auto* bound=find_level(l,ion,id1);const auto* partition=find_snapshot(l,ion,b.nlev);need(bound&&partition,"lacks literal bound/partition level");double base=bound->ionpot-bound->energy;double pweight=partition->weight;need(pweight>0,"invalid Milne partition weight");double destination_weight=pweight,excited_e=0.0,excited_w=pweight;
         if(id2<=b.nlev){const auto* dest=find_level(l,ion,id2);need(dest,"lacks destination level");destination_weight=dest->weight;}else{auto bit=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_index==ion;});need(bit!=l.blocks.end()&&std::next(bit)!=l.blocks.end(),"has no next-ion destination");int local2=id2-b.nlev+1;const auto* ex=find_level(l,std::next(bit)->ion_index,local2);need(ex,"lacks next-ion destination level");excited_e=ex->energy;excited_w=ex->weight;destination_weight=excited_w;}
         double corrected=base;if(dt==53&&id2>b.nlev)corrected+=excited_e;if(dt==53)corrected=std::max(0.0,corrected);
         out.reals.clear();for(std::size_t k=0;k<rr.size();++k)out.reals.push_back(k%2?rr[k]*1.0e-18:rr[k]);const auto* destsnap=find_snapshot(l,ion,id2);
@@ -1264,6 +1299,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         out.ints.push_back(static_cast<std::int64_t>(candidate_mask));
         out.ints.push_back(dt==49?kType49LayoutMagicZ1Z30V06481231:kType53LayoutMagicZ1Z30V06481231);
         energy=corrected;
+        }
     }
     else if (!kLegacyActiveTypes.count(dt) && dt != 52 && dt != 91) {
         // v0.6.48.12.1: source-generic lowering for physical UCalc labels that
@@ -1492,7 +1528,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         energy=threshold;
     }
     out.record.source_position=0; out.record.record=rec; out.record.next_index=-1; out.record.element_index=element_index;
-    out.record.opcode=(dt==91?XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE:(dt==52?XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE:(kLegacyActiveTypes.count(dt)?dt:XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC))); out.record.data_type=dt; out.record.rate_type=rt; out.record.ion_index=b.ion_counter; out.record.ion_stage=stage;
+    out.record.opcode=opcode_override?opcode_override:(dt==91?XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE:(dt==52?XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE:(kLegacyActiveTypes.count(dt)?dt:XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC))); out.record.data_type=dt; out.record.rate_type=rt; out.record.ion_index=b.ion_counter; out.record.ion_stage=stage;
     out.record.lower_row=lower; out.record.upper_row=upper; out.record.density_scale=1.0; out.record.line_energy_ev=energy;
     out.record.atomic_mass_amu=source_atomic_mass_for_ion(db,d,ion,b.element_z); out.record.natural_width_ev=width;
     out.record.line_index_one_based=d.nplini[rec]; out.record.continuum_index_one_based=d.npconi2[rec]; out.record.matrix_enabled=matrix?1u:0u;

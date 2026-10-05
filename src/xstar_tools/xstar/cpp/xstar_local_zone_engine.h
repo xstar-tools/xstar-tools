@@ -68,7 +68,11 @@ typedef enum xstar_fixed_opcode_v1 {
     /* v0.6.48.12.1: source-faithful generic dispatcher for physical UCalc
      * labels that were not part of the original H/He/Mg native opcode set.
      * Existing opcodes 1..99 retain their qualified semantics unchanged. */
-    XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC = 200
+    XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC = 200,
+    /* v0.6.90.5.5: source UCalc early-exit record.  The ATDB record is
+     * retained for source ordering/provenance but contributes no matrix or
+     * spectral rate, matching a source branch that jumps directly to 9000. */
+    XSTAR_FIXED_OPCODE_SOURCE_SKIPPED = 201
 } xstar_fixed_opcode_v1;
 
 typedef enum xstar_fixed_state_status_flags_v1 {

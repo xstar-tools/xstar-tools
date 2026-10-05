@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.90.5.5 — MN_TYPE49_SOURCE_SKIP_CLOSURE - 2026-10-05
+
+- Preserve the XSTAR Manual Table-1 parameter contract, including `mnabund=1.0` by default; no abundance is silently disabled to avoid ATDB coverage.
+- Make native Type-49 ATDB lowering honor the FORTRAN `ucalc` early-exit contract before requiring an energy/cross-section curve: Type-49 records with `idest1 <= 0`, `idest1 >= nlevp`, or `nrdt <= 0` are retained in source order as zero-contribution records instead of failing with `short payload`.
+- Add the internal `XSTAR_FIXED_OPCODE_SOURCE_SKIPPED` execution class for source records that jump directly to the FORTRAN UCalc return path; it contributes no matrix term or spectral product while preserving record provenance.
+- Improve the remaining Type-49/53 short-payload diagnostic with `nreal`, `nint`, `idest1`, and `nlev` so any genuinely malformed non-skipped record can be identified precisely.
+- Add a focused regression test that protects the Manual abundance defaults and verifies that the Type-49 source skip is applied before the native curve-length requirement.
+- This supersedes the unaccepted 0.6.90.5.4 abundance-default workaround; 0.6.90.5.4 is not part of this source lineage.
+
 ## 0.6.90.5.3 — HEASOFT_CFITSIO_DISCOVERY - 2026-10-05
 
 - Prefer the CFITSIO installation bundled with an initialized HEASoft environment when `$HEADAS/include/fitsio.h` and `$HEADAS/lib/libcfitsio.*` are both present.

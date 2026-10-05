@@ -8528,6 +8528,15 @@ EvaluatedRecord evaluate_record(
     out.natural_width_ev = execution_v0682375.natural_width_ev;
 
     switch (execution_v0682375.opcode) {
+        case XSTAR_FIXED_OPCODE_SOURCE_SKIPPED: {
+            // Source-faithful UCalc early exit: retain record identity and
+            // ordering but publish no rate, matrix term, or spectral product.
+            out.matrix_enabled = false;
+            c.density_scale = 1.0;
+            c.lower_row = 0;
+            c.upper_row = 0;
+            break;
+        }
         case XSTAR_FIXED_OPCODE_SIMPLE_UCALC: {
             if (!r || execution_v0682375.real_count < 1) throw std::runtime_error("simple ucalc payload too short");
             if (execution_v0682375.data_type == 1) {
