@@ -171,6 +171,18 @@ Direct XSTAR-style `name=value` input is supported. A realistic example is:
 
 The public frontend preserves values as strings until the accepted native parameter reader interprets them.
 
+### Terminal output and debugging
+
+Normal `xstar-cpp` execution prints the compact FORTRAN-style pass header, radial-zone progress, final-print/publication messages, and total runtime. Internal version-tagged qualification diagnostics such as `V064895_...` are hidden from the terminal by default.
+
+To restore the complete development/qualification diagnostic stream for troubleshooting, use:
+
+```bash
+./xstar-cpp --debug --output-dir run_debug name=value ...
+```
+
+or set `XSTAR_CPP_DEBUG=1`. Explicit `--progress json` remains available for machine-readable frontend progress.
+
 ## Atomic data used by `xstar-cpp`
 
 A production model requires `atdb.fits` and `coheat.dat`. Prefer an explicit directory when reproducibility matters:

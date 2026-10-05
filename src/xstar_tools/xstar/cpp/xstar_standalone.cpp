@@ -54,6 +54,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <optional>
@@ -119,6 +120,93 @@ bool verbose_controller_diagnostics() {
     const char* value = std::getenv("XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS");
     return value && std::string(value) == "1";
 }
+
+// 0.6.90.5.6: normal standalone execution should resemble FORTRAN XSTAR
+// rather than a qualification transcript. Version-tagged V0... terminal
+// lines remain available for development and qualification when debugging is
+// explicitly enabled. Artifact files and in-memory counters are unchanged.
+bool terminal_diagnostics_enabled_v069056() {
+    const auto enabled = [](const char* name) {
+        const char* value = std::getenv(name);
+        return value && std::string(value) == "1";
+    };
+    return enabled("XSTAR_CPP_DEBUG") ||
+        enabled("XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS");
+}
+
+class VersionDiagnosticFilterBufferV069056 final : public std::streambuf {
+public:
+    explicit VersionDiagnosticFilterBufferV069056(std::streambuf* destination)
+        : destination_(destination) {}
+
+    ~VersionDiagnosticFilterBufferV069056() override { flush_pending(); }
+
+protected:
+    int overflow(int ch) override {
+        if (traits_type::eq_int_type(ch, traits_type::eof())) {
+            flush_pending();
+            return traits_type::not_eof(ch);
+        }
+        const char c = traits_type::to_char_type(ch);
+        pending_.push_back(c);
+        if (c == '\n') flush_pending();
+        return ch;
+    }
+
+    int sync() override {
+        flush_pending();
+        return destination_ ? destination_->pubsync() : 0;
+    }
+
+private:
+    static bool version_diagnostic_line(const std::string& line) {
+        std::size_t i = 0u;
+        while (i < line.size() &&
+               (line[i] == ' ' || line[i] == '\t' || line[i] == '\r')) ++i;
+        return i + 1u < line.size() && line[i] == 'V' &&
+            line[i + 1u] >= '0' && line[i + 1u] <= '9';
+    }
+
+    void flush_pending() {
+        if (pending_.empty()) return;
+        if (!version_diagnostic_line(pending_) && destination_) {
+            destination_->sputn(
+                pending_.data(), static_cast<std::streamsize>(pending_.size()));
+        }
+        pending_.clear();
+    }
+
+    std::streambuf* destination_ = nullptr;
+    std::string pending_;
+};
+
+class ScopedVersionDiagnosticFilterV069056 final {
+public:
+    explicit ScopedVersionDiagnosticFilterV069056(bool enabled) : enabled_(enabled) {
+        if (enabled_) {
+            old_ = std::cout.rdbuf();
+            filter_ = std::make_unique<VersionDiagnosticFilterBufferV069056>(old_);
+            std::cout.rdbuf(filter_.get());
+        }
+    }
+
+    ~ScopedVersionDiagnosticFilterV069056() {
+        if (!enabled_) return;
+        std::cout.flush();
+        std::cout.rdbuf(old_);
+        filter_.reset();
+    }
+
+    ScopedVersionDiagnosticFilterV069056(
+        const ScopedVersionDiagnosticFilterV069056&) = delete;
+    ScopedVersionDiagnosticFilterV069056& operator=(
+        const ScopedVersionDiagnosticFilterV069056&) = delete;
+
+private:
+    bool enabled_ = false;
+    std::streambuf* old_ = nullptr;
+    std::unique_ptr<VersionDiagnosticFilterBufferV069056> filter_;
+};
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement compact step diagnostics in the standalone controller/front-end workflow without duplicating the scientific kernels.
@@ -25176,6 +25264,8 @@ void emit_spectral_performance_instrumentation(
 // Reference context: XSTAR Manual ch14 (theory of operation) and ch5 (outputs); this is shared by standalone xstar-cpp and the qualified production-zone paths.
 // XSTAR-FUNCTION-COMMENT-END
 int command_run_standalone_production(const Options& options, const std::filesystem::path& executable_path) {
+    const bool quiet_version_diagnostics_v069056 = !terminal_diagnostics_enabled_v069056();
+    ScopedVersionDiagnosticFilterV069056 version_filter_v069056(quiet_version_diagnostics_v069056);
     const auto production_started_v06488 = std::chrono::steady_clock::now();
     const std::string prefix = "V048746255172582_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";

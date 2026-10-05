@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.90.5.6 — QUIET_TERMINAL_DIAGNOSTICS_CLOSURE - 2026-10-05
+
+- Make ordinary `xstar-cpp` standalone execution present the FORTRAN-style live science progress by default instead of the internal version-tagged qualification transcript.
+- Suppress terminal-only diagnostic/status lines whose first non-space characters are `V<digits>...` during normal `run-production`; diagnostic counters and optional diagnostic artifact files remain available and scientific state is unchanged.
+- Add the public `--debug` switch and `XSTAR_CPP_DEBUG=1` environment opt-in to restore the complete version-tagged terminal diagnostic stream when investigating a problem.
+- Keep explicit `--progress json` behavior unchanged; in normal text mode frontend `xstar-cpp: run_started` / `run_completed` lifecycle chatter is hidden so the terminal resembles FORTRAN XSTAR.
+- Retain error messages, FORTRAN-style pass/zone rows, `final print`, spectral-publication messages, and total runtime in normal terminal output.
+- Preserve the 0.6.90.5.5 Mn/Type-49 source-skip closure, XSTAR Manual parameter defaults, frozen science revision, and public ABIs.
+
 ## 0.6.90.5.5 — MN_TYPE49_SOURCE_SKIP_CLOSURE - 2026-10-05
 
 - Preserve the XSTAR Manual Table-1 parameter contract, including `mnabund=1.0` by default; no abundance is silently disabled to avoid ATDB coverage.

@@ -240,6 +240,7 @@ void usage(std::ostream& out) {
         "  --json-summary FILE    write machine-readable run summary\n"
         "  --provenance FILE      write provenance JSON to an additional path\n"
         "  --progress MODE        none, text, or json (default: text)\n"
+        "  --debug                show version-tagged development/qualification diagnostics\n"
         "  --threads N            set OMP_NUM_THREADS for this native run\n"
         "  --profile FILE         write frontend wall-time/profile JSON\n"
         "  --deterministic        record reproducible-run intent in provenance\n"
@@ -343,6 +344,7 @@ struct FrontendInput {
     int threads=0;
     int print_option=-1;
     bool deterministic=false;
+    bool debug=false;
     std::vector<std::pair<std::string,std::string>> parameters;
 };
 
@@ -382,6 +384,7 @@ bool parse_frontend(int argc, char** argv, int start, FrontendInput& input, std:
             const char* v=value_after("--print-option"); if(!v) return false;
             if(!parse_int(v,0,input.print_option)) { error="--print-option must be a non-negative integer"; return false; }
         } else if(arg=="--deterministic") input.deterministic=true;
+        else if(arg=="--debug") input.debug=true;
         else if(arg=="--") continue;
         else if(arg.rfind("--",0)==0) { error="unknown xstar-cpp option: "+arg; return false; }
         else {
@@ -508,8 +511,22 @@ int run_native_wait(const std::filesystem::path& native,const std::vector<std::s
 #endif
 }
 
+bool frontend_debug_enabled_v069056(const FrontendInput& input) {
+    if (input.debug) return true;
+    const auto enabled = [](const char* name) {
+        const char* value = std::getenv(name);
+        return value && std::string(value) == "1";
+    };
+    return enabled("XSTAR_CPP_DEBUG") ||
+        enabled("XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS");
+}
+
 void progress_event(const FrontendInput& input,const std::string& event,const std::string& detail="") {
     if(input.progress=="none") return;
+    // Normal text mode is reserved for the FORTRAN-style live science output.
+    // Frontend lifecycle events are development diagnostics and are shown only
+    // under --debug. Explicit JSON progress remains machine-readable opt-in.
+    if(input.progress=="text" && !frontend_debug_enabled_v069056(input)) return;
     if(input.progress=="json") {
         std::cout << "{\"schema\":\"xstar-cpp-progress-v1\",\"event\":\"" << json_escape(event) << "\"";
         if(!detail.empty()) std::cout << ",\"detail\":\"" << json_escape(detail) << "\"";
@@ -624,6 +641,10 @@ int run_frontend(const std::filesystem::path& native,FrontendInput& input) {
     if(!verify_runtime_abi(std::cerr,&abi)) return kAbiMismatchExit;
     if(input.threads>0) xstar_process::set_environment("OMP_NUM_THREADS",std::to_string(input.threads).c_str(),1);
     if(input.deterministic) xstar_process::set_environment("XSTAR_TOOLS_REPRODUCIBLE","1",1);
+    if(input.debug) {
+        xstar_process::set_environment("XSTAR_CPP_DEBUG","1",1);
+        xstar_process::set_environment("XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS","1",1);
+    }
     // 0.6.82.3: propagate the public progress mode to the native production
     // process.  The standalone controller uses this only for live textual
     // zone observability; no scientific state consumes the variable.

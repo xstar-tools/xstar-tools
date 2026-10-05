@@ -317,6 +317,8 @@ xstar-cpp \
 
 For the complete parameter and output contract, see `src/xstar_tools/xstar/cpp/README.md` and `docs/cpp/xstar_cpp.md`.
 
+Normal `xstar-cpp` terminal output is intentionally close to FORTRAN XSTAR: pass/zone progress, final publication messages, and total runtime are shown, while internal `V...` qualification diagnostics are hidden. Use `xstar-cpp --debug ...` (or `XSTAR_CPP_DEBUG=1`) when those diagnostics are needed.
+
 ## `xstar-xspec`
 
 `xstar-xspec` owns the complete local XSTAR2XSPEC pipeline:
