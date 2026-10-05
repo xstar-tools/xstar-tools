@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.90.5.3 — HEASOFT_CFITSIO_DISCOVERY - 2026-10-05
+
+- Prefer the CFITSIO installation bundled with an initialized HEASoft environment when `$HEADAS/include/fitsio.h` and `$HEADAS/lib/libcfitsio.*` are both present.
+- Fall back to the existing standalone CFITSIO discovery chain (`pkg-config`, Homebrew on macOS, then linker-default `-lcfitsio`) when HEASoft is absent or incomplete.
+- Preserve explicit caller-provided `CFITSIO_*` build settings.
+
 ## 0.6.90.5.2 — LATEX_DVI_PS_PDF_PIPELINE_CLOSURE - 2026-09-10
 
 - Normalize Sphinx-generated EPS references from `{{image}.eps}` to conventional `{image.eps}` / `image.eps` filename spelling in `xstar-tools.tex` after `make latex`.

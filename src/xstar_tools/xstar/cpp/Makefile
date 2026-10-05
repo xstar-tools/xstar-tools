@@ -177,27 +177,57 @@ endif
 
 # CFITSIO discovery order:
 #   1. caller-provided CFITSIO_* values;
-#   2. pkg-config (all platforms);
-#   3. `brew --prefix cfitsio` on macOS;
-#   4. the historical linker-default -lcfitsio fallback.
-CFITSIO_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags cfitsio 2>/dev/null)
-CFITSIO_LIBDIR ?= $(shell $(PKG_CONFIG) --variable=libdir cfitsio 2>/dev/null)
-CFITSIO_LIBS ?= $(shell $(PKG_CONFIG) --libs cfitsio 2>/dev/null)
-CFITSIO_DISCOVERY := pkg-config
+#   2. CFITSIO bundled with an initialized HEASoft installation ($HEADAS);
+#   3. pkg-config (all platforms);
+#   4. `brew --prefix cfitsio` on macOS;
+#   5. the historical linker-default -lcfitsio fallback.
+#
+# HEASoft is selected only when both $HEADAS/include/fitsio.h and a
+# $HEADAS/lib/libcfitsio.* library are present.  This avoids a stale or
+# incomplete HEADAS value masking a usable standalone CFITSIO installation.
+CFITSIO_HEADAS_PREFIX :=
 CFITSIO_BREW_PREFIX :=
-ifeq ($(strip $(CFITSIO_LIBS)),)
-  ifeq ($(PLATFORM),macos)
-    CFITSIO_BREW_PREFIX := $(shell $(BREW) --prefix cfitsio 2>/dev/null)
+
+ifeq ($(origin CFITSIO_LIBS),undefined)
+  ifneq ($(strip $(HEADAS)),)
+    ifneq ($(wildcard $(HEADAS)/include/fitsio.h),)
+      ifneq ($(wildcard $(HEADAS)/lib/libcfitsio.*),)
+        CFITSIO_HEADAS_PREFIX := $(HEADAS)
+        CFITSIO_CFLAGS := -I$(CFITSIO_HEADAS_PREFIX)/include
+        CFITSIO_LIBDIR := $(CFITSIO_HEADAS_PREFIX)/lib
+        CFITSIO_LIBS := -L$(CFITSIO_LIBDIR) -lcfitsio
+        CFITSIO_DISCOVERY := heasoft
+      endif
+    endif
   endif
-  ifneq ($(strip $(CFITSIO_BREW_PREFIX)),)
-    CFITSIO_CFLAGS := -I$(CFITSIO_BREW_PREFIX)/include
-    CFITSIO_LIBDIR := $(CFITSIO_BREW_PREFIX)/lib
-    CFITSIO_LIBS := -L$(CFITSIO_LIBDIR) -lcfitsio
-    CFITSIO_DISCOVERY := homebrew
-  else
-    CFITSIO_LIBS := -lcfitsio
-    CFITSIO_DISCOVERY := linker-default
+
+  ifeq ($(strip $(CFITSIO_LIBS)),)
+    CFITSIO_CFLAGS := $(shell $(PKG_CONFIG) --cflags cfitsio 2>/dev/null)
+    CFITSIO_LIBDIR := $(shell $(PKG_CONFIG) --variable=libdir cfitsio 2>/dev/null)
+    CFITSIO_LIBS := $(shell $(PKG_CONFIG) --libs cfitsio 2>/dev/null)
+    CFITSIO_DISCOVERY := pkg-config
   endif
+
+  ifeq ($(strip $(CFITSIO_LIBS)),)
+    ifeq ($(PLATFORM),macos)
+      CFITSIO_BREW_PREFIX := $(shell $(BREW) --prefix cfitsio 2>/dev/null)
+    endif
+    ifneq ($(strip $(CFITSIO_BREW_PREFIX)),)
+      CFITSIO_CFLAGS := -I$(CFITSIO_BREW_PREFIX)/include
+      CFITSIO_LIBDIR := $(CFITSIO_BREW_PREFIX)/lib
+      CFITSIO_LIBS := -L$(CFITSIO_LIBDIR) -lcfitsio
+      CFITSIO_DISCOVERY := homebrew
+    else
+      CFITSIO_CFLAGS :=
+      CFITSIO_LIBDIR :=
+      CFITSIO_LIBS := -lcfitsio
+      CFITSIO_DISCOVERY := linker-default
+    endif
+  endif
+else
+  CFITSIO_CFLAGS ?=
+  CFITSIO_LIBDIR ?=
+  CFITSIO_DISCOVERY := caller
 endif
 CFITSIO_RPATH :=
 ifneq ($(PLATFORM),windows)
@@ -222,7 +252,7 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.90.5.2
+PACKAGE_VERSION ?= 0.6.90.5.3
 
 SOLVER_TARGET := libxstar_solver$(SHLIB_EXT)
 RATES_TARGET := libxstar_rates$(SHLIB_EXT)
@@ -414,6 +444,7 @@ print-config:
 	@echo PKG_CONFIG=$(PKG_CONFIG)
 	@echo BREW=$(BREW)
 	@echo CFITSIO_DISCOVERY=$(CFITSIO_DISCOVERY)
+	@echo CFITSIO_HEADAS_PREFIX=$(CFITSIO_HEADAS_PREFIX)
 	@echo CFITSIO_BREW_PREFIX=$(CFITSIO_BREW_PREFIX)
 	@echo CFITSIO_CFLAGS=$(CFITSIO_CFLAGS)
 	@echo CFITSIO_LIBDIR=$(CFITSIO_LIBDIR)
