@@ -7,7 +7,7 @@ qualify and debug the source-faithful Python implementation.
 
 The scientific boundary is unchanged:
 
-- accepted Python science revision: `0.6.48.12.3.45.3.3.8`;
+- accepted Python science revision: `0.6.90.5.5`;
 - frozen C++ baseline: `0.6.48.12.3.44`;
 - C API ABI: `60487`;
 - production-zone ABI: `6048110`.

@@ -423,7 +423,7 @@ Important accepted identities are:
 
 ```text
 canonical oracle         FORTRAN XSTAR 2.59g
-accepted science freeze  0.6.48.12.3.45.3.3.8
+accepted science freeze  0.6.90.5.5
 public C API ABI          60487
 production-zone ABI      6048110
 fixed-state program ABI  60486

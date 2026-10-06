@@ -28,7 +28,7 @@ from .native_runtime import (
     prepare_native_library_search,
 )
 
-SCIENCE_REVISION = "0.6.48.12.3.45.3.3.8"
+SCIENCE_REVISION = "0.6.90.5.5"
 ZONE_ABI_VERSION = 6048110
 C_API_ABI_VERSION = 60487
 

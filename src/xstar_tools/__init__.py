@@ -6,7 +6,7 @@ Top-level imports are intentionally lightweight.  Use subpackages such as
 
 from __future__ import annotations
 
-__version__ = "0.6.48.12.3.45.3.3.8"
+__version__ = "0.6.90.5.5"
 __science_revision__ = __version__
 
 # Stable execution-mode API is imported lazily enough to keep top-level startup light.

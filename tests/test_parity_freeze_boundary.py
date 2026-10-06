@@ -20,7 +20,7 @@ def test_compact_parity_freeze_gate_accepts() -> None:
 def test_cleanup_preserves_frozen_science_revision_and_abis() -> None:
     data = json.loads((ROOT / "qualification/parity_freeze.json").read_text())
     assert data["schema"] == "xstar-tools-parity-freeze-v2"
-    assert data["science_revision"] == "0.6.48.12.3.45.3.3.8"
+    assert data["science_revision"] == "0.6.90.5.5"
     assert data["abis"] == {
         "c_api": 60487,
         "production_zone": 6048110,
@@ -30,8 +30,8 @@ def test_cleanup_preserves_frozen_science_revision_and_abis() -> None:
     }
 
 
-def test_current_science_source_hash_manifest_is_predecessor_snapshot() -> None:
+def test_current_science_source_hash_manifest_is_refrozen_snapshot() -> None:
     data = json.loads((ROOT / "qualification/parity_freeze_current_source_hashes.json").read_text())
-    assert data["captured_from_distribution"] == "0.6.90.2"
-    assert data["science_revision"] == "0.6.48.12.3.45.3.3.8"
+    assert data["captured_from_distribution"] == "0.6.90.5.8"
+    assert data["science_revision"] == "0.6.90.5.5"
     assert len(data["files"]) >= 50

@@ -70,7 +70,7 @@ runtime identity queries.  Before a scientific run it requires:
 ```text
 C API ABI             60487
 production-zone ABI   6048110
-science revision      0.6.48.12.3.45.3.3.8
+science revision      0.6.90.5.5
 ```
 
 A mismatch fails before science with exit status `70` and a diagnostic naming

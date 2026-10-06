@@ -2,7 +2,7 @@
 
 This document assigns stable **concordance IDs** to scientific ownership boundaries. Refactors should cite these IDs rather than relying on historical version names alone.
 
-**Science revision:** `0.6.48.12.3.45.3.3.8`  
+**Science revision:** `0.6.90.5.5`  
 **C++ baseline:** `0.6.48.12.3.44`  
 **Production-zone ABI:** `6048110`
 

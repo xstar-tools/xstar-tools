@@ -169,7 +169,7 @@ def test_version_reports_package_science_and_abis(capsys):
     assert cli_main_module.main(["version", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["package_version"] == xstar_tools.__package_version__
-    assert data["science_revision"] == "0.6.48.12.3.45.3.3.8"
+    assert data["science_revision"] == "0.6.90.5.5"
     assert data["c_api_abi"] == 60487
     assert data["production_zone_abi"] == 6048110
 

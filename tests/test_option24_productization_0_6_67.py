@@ -15,10 +15,10 @@ def test_public_benchmark_uses_current_option24_overlay():
 
 def test_product_and_science_versions_are_labeled_separately(capsys):
     assert tuple(map(int, package_version().split("."))) >= (0, 6, 69)
-    assert SCIENCE_REVISION == "0.6.48.12.3.45.3.3.8"
+    assert SCIENCE_REVISION == "0.6.90.5.5"
     progress = _make_progress_printer()
     progress("output_writer_start", {})
     out = capsys.readouterr().out
     assert f"xstar_tools package version {package_version()}" in out
-    assert "xstar_tools science revision 0.6.48.12.3.45.3.3.8" in out
-    assert "xstar_tools version 0.6.48.12.3.45.3.3.8" not in out
+    assert "xstar_tools science revision 0.6.90.5.5" in out
+    assert "xstar_tools version 0.6.90.5.5" not in out

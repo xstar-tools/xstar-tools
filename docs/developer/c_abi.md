@@ -12,7 +12,7 @@ Current ABI:
 
 ```text
 XSTAR_API_ABI_VERSION = 60487
-XSTAR_API_VERSION_STRING = 0.6.48.12.3.45.3.3.8
+XSTAR_API_VERSION_STRING = 0.6.90.5.5
 ```
 
 Runtime identity functions:
@@ -60,6 +60,6 @@ implementation used by standalone `xstar_cpp run-production`.
    layouts or semantics.
 3. The runtime ABI query must agree with the frontend's compiled expectation
    before `xstar-cpp` starts science.
-4. Science revision `0.6.48.12.3.45.3.3.8` remains separately reported.
+4. Science revision `0.6.90.5.5` remains separately reported.
 5. Historical exported identifiers containing version suffixes are preserved
    for compatibility; source-architecture naming changes do not rewrite them.

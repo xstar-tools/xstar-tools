@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.90.5.8 — MN_TYPE49_SCIENCE_REFREEZE - 2026-10-05
+
+- Explicitly requalify and re-freeze the science change introduced in `0.6.90.5.5 — MN_TYPE49_SOURCE_SKIP_CLOSURE`; the accepted science revision is now `0.6.90.5.5`, matching the real milestone where scientific behavior changed.
+- Keep package version and science revision separate: package `0.6.90.5.8` reports science revision `0.6.90.5.5`; diagnostic-only `0.6.90.5.6` and `0.6.90.5.7` do not advance science.
+- Qualify the Mn/Type-49 correction against FORTRAN XSTAR 2.59g with an all-elements `mnabund=1` standalone run. The STEP trajectory including `ntotit` is exact; Mn ionic fractions stay within `4.60e-3` normalized L1; Mn heating/cooling are below `9e-4`; public spectrum/continuum/RRC/common-line material differences are all well inside the established 1% normalized-L1 envelope.
+- Record first-zone detailed-product inventory differences as structural diagnostics rather than material-science failures; later-zone row inventories match.
+- Rebaseline `qualification/parity_freeze_current_source_hashes.json` to the accepted 0.6.90.5.8 tree, bind the requalification evidence in `qualification/mn_type49_science_refreeze_0_6_90_5_8.json`, and keep C API / production-zone / fixed-state / XSPEC-table ABIs unchanged.
+
 ## 0.6.90.5.7 — QUIET_TERMINAL_DIAGNOSTICS_COMPLETION - 2026-10-05
 
 - Complete the normal-terminal quieting started in 0.6.90.5.6: first-evaluation `V0648117_...` ntotit/charge diagnostics written to `stderr`, the C-stdio `V064896_TYPE50_MODE` line, and unprefixed `DETAIL_*_SECONDS` / `PUBLIC_*_SECONDS` profiling summaries are no longer printed during ordinary `xstar-cpp` production.

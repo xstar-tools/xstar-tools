@@ -147,6 +147,6 @@ def test_all_three_native_modes_share_one_scientific_production_operator():
 
 def test_package_version_is_productization_only():
     assert tuple(map(int,package_version().split('.'))) >= (0,6,69)
-    assert SCIENCE_REVISION=='0.6.48.12.3.45.3.3.8'
+    assert SCIENCE_REVISION=='0.6.90.5.5'
     assert C_API_ABI_VERSION==60487
     assert ZONE_ABI_VERSION==6048110

@@ -1,7 +1,7 @@
 # XSTAR tools architecture at the parity-freeze boundary
 
 **Productization version:** 0.6.56  
-**Qualified science revision:** `0.6.48.12.3.45.3.3.8`  
+**Qualified science revision:** `0.6.90.5.5`  
 **Canonical executable authority:** XSTAR Fortran 2.59g  
 **Frozen C++ production baseline:** `0.6.48.12.3.44`  
 **Frozen production-zone ABI:** `6048110`
