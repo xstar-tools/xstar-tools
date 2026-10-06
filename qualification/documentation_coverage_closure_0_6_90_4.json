@@ -1,0 +1,18 @@
+{
+  "schema": "xstar-tools-documentation-coverage-v1",
+  "version": "0.6.90.4",
+  "scope": "documentation/productization only",
+  "science_revision": "0.6.48.12.3.45.3.3.8",
+  "c_api_abi": 60487,
+  "production_zone_abi": 6048110,
+  "requirements": [
+    "repository-owned docs/_static branding is configured",
+    "warning-as-error Sphinx structure is clean",
+    "stable Python execution API is documented",
+    "XSTARAtomic atomic-data API is documented",
+    "XSTAR output-reader and Python XSTAR2XSPEC APIs are documented",
+    "all installed console scripts are classified",
+    "all primary native XSTAR/XSTAR2XSPEC executables have reference pages",
+    "active documentation does not refer to removed historical directories/checkers"
+  ]
+}

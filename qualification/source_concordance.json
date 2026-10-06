@@ -1,0 +1,772 @@
+{
+  "archived_cpp_source_comment_files": [],
+  "archived_python_source_comment_files": [],
+  "authority_order": [
+    "accepted qualification evidence",
+    "canonical XSTAR 2.59g executable semantics",
+    "papers/manuals for explanation and scientific context"
+  ],
+  "canonical_fortran": {
+    "source_archive": "xstar_source.tar.gz",
+    "source_archive_sha256": "f64c8c394e05f5a056206f1143259a8830f58ddf950c1efc15a03a00572db37a",
+    "version": "2.59g"
+  },
+  "characterization_policy": "Each active concordance entry names at least one current runnable characterization/regression test. Closed milestone-specific replay tests are retained in repository history rather than the release tree.",
+  "cpp_source_comment_files": [
+    "src/xstar_tools/xstar/cpp/canonical_thermal_term.hpp",
+    "src/xstar_tools/xstar/cpp/coheat_table.h",
+    "src/xstar_tools/xstar/cpp/compact_arrays.hpp",
+    "src/xstar_tools/xstar/cpp/compiled_case.cpp",
+    "src/xstar_tools/xstar/cpp/element_engine.cpp",
+    "src/xstar_tools/xstar/cpp/error_codes.hpp",
+    "src/xstar_tools/xstar/cpp/final_recompute_bridge.cpp",
+    "src/xstar_tools/xstar/cpp/local_zone_engine.cpp",
+    "src/xstar_tools/xstar/cpp/level_population.cpp",
+    "src/xstar_tools/xstar/cpp/line_emissivity.cpp",
+    "src/xstar_tools/xstar/cpp/matrix_kernels.cpp",
+    "src/xstar_tools/xstar/cpp/opacity_kernels.cpp",
+    "src/xstar_tools/xstar/cpp/rate_kernels.cpp",
+    "src/xstar_tools/xstar/cpp/source_order_thermal_reducer.hpp",
+    "src/xstar_tools/xstar/cpp/source_real_energy_grid.hpp",
+    "src/xstar_tools/xstar/cpp/thermal_kernels.cpp",
+    "src/xstar_tools/xstar/cpp/type50_dsec_runtime_oracle.h",
+    "src/xstar_tools/xstar/cpp/type50_manifold_oracle.h",
+    "src/xstar_tools/xstar/cpp/type53_row46_dsec_runtime_oracle.h",
+    "src/xstar_tools/xstar/cpp/xstar_api.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_api.h",
+    "src/xstar_tools/xstar/cpp/xstar_api.hpp",
+    "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.hpp",
+    "src/xstar_tools/xstar/cpp/xstar_backend_common.hpp",
+    "src/xstar_tools/xstar/cpp/xstar_backend_cpp.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_backend_plugin.h",
+    "src/xstar_tools/xstar/cpp/xstar_backend_python.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_constants.h",
+    "src/xstar_tools/xstar/cpp/xstar_element_engine.h",
+    "src/xstar_tools/xstar/cpp/xstar_engine.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_final_recompute_bridge.h",
+    "src/xstar_tools/xstar/cpp/xstar_local_zone_engine.h",
+    "src/xstar_tools/xstar/cpp/xstar_production_zone_bridge.h",
+    "src/xstar_tools/xstar/cpp/xstar_python_bridge.h",
+    "src/xstar_tools/xstar/cpp/xstar_run_state.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_run_state.hpp",
+    "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_science_fits.hpp",
+    "src/xstar_tools/xstar/cpp/xstar_spectral_engine.h",
+    "src/xstar_tools/xstar/cpp/xstar_standalone.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_standalone_internal.hpp",
+    "src/xstar_tools/xstar/cpp/xstar_step_log.cpp",
+    "src/xstar_tools/xstar/cpp/xstar_step_log.hpp",
+    "src/xstar_tools/xstar/cpp/xstar_thermal_engine.h"
+  ],
+  "diagrams": [
+    "docs/developer/diagrams/controller_radial_flow.svg",
+    "docs/developer/diagrams/local_zone_solve.svg",
+    "docs/developer/diagrams/publication_ownership.svg",
+    "docs/developer/diagrams/backend_dispatch.svg"
+  ],
+  "documentation": [
+    "docs/developer/architecture.md",
+    "docs/developer/fortran_source_map.md",
+    "docs/developer/python_cpp_fortran_concordance.md",
+    "docs/science/xstar_references.md",
+    "docs/developer/cpp_fortran_source_comments.md",
+    "docs/developer/python_fortran_source_comments.md"
+  ],
+  "entries": [
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py",
+        "tests/test_public_execution_modes.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_engine.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_standalone.cpp"
+      ],
+      "fortran": [
+        "src/xstar/xstar.f90",
+        "xstarlib/src/xstarcalc.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0463_complete_xstarcalc.py",
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0464_radial_transfer.py",
+        "historical/tests/parity_artifact_legacy/test_v06487462173_controller_runtime_workspace_transport.py"
+      ],
+      "id": "ARCH-001",
+      "implementation_relation": "source-exact orchestration contract with equivalent storage",
+      "python": [
+        "src/xstar_tools/xstar/driver.py",
+        "src/xstar_tools/xstar/physical_runner.py",
+        "src/xstar_tools/xstar/radial_transfer.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.42 all-62 STEP",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "top-level controller and one-zone orchestration"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/rread1.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0472_physical_runner_api.py"
+      ],
+      "id": "INPUT-001",
+      "implementation_relation": "source-exact where floating-point kinds are observable",
+      "python": [
+        "src/xstar_tools/xstar/physical_runner.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.36 exact Fortran rread1 radius literal repair"
+      ],
+      "role": "parameter/default-kind and initial-radius semantics"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/readtbl.f90",
+        "xstarlib/src/setptrs.f90",
+        "xstarlib/src/xstarsetup.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_atomic_database_v041.py"
+      ],
+      "id": "DB-001",
+      "implementation_relation": "source-exact record and pointer identity with optimized storage",
+      "python": [
+        "src/xstar_tools/xstar/atomic_database.py"
+      ],
+      "qualification": [
+        "all-element source-port qualification",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "packed atomic database loading and derived pointer topology"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py",
+        "tests/test_v064853_preliminary_ion_balance.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/local_zone_engine.cpp",
+        "src/xstar_tools/xstar/cpp/element_engine.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/calc_ion_rates.f90",
+        "xstarlib/src/istruc.f90",
+        "xstarlib/src/ioneqm.f90",
+        "xstarlib/src/calc_hmc_element.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_pre_matrix_v0424.py"
+      ],
+      "id": "ION-001",
+      "implementation_relation": "source-exact selection logic",
+      "python": [
+        "src/xstar_tools/xstar/ion_balance.py"
+      ],
+      "qualification": [
+        "all-62 STEP/FITS qualification"
+      ],
+      "role": "pre-matrix total-rate ion balance and active-stage selection"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/level_population.cpp",
+        "src/xstar_tools/xstar/cpp/local_zone_engine.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/levwkelement.f90",
+        "xstarlib/src/levwk.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_element_equilibrium_v043.py",
+        "historical/tests/superseded_regressions/test_v06485_active_family_phase2.py"
+      ],
+      "id": "LEVEL-001",
+      "implementation_relation": "mathematically equivalent representation preserving source topology",
+      "python": [
+        "src/xstar_tools/xstar/element_equilibrium.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.25 all-element terminal clamp"
+      ],
+      "role": "compact level/LTE topology"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/local_zone_engine.cpp",
+        "src/xstar_tools/xstar/cpp/matrix_kernels.cpp",
+        "src/xstar_tools/xstar/cpp/element_engine.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/calc_hmc_ion.f90",
+        "xstarlib/src/calc_hmc_element.f90",
+        "xstarlib/src/msolvelucy.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_element_equilibrium_v043.py",
+        "historical/tests/xstar_atomic_legacy/test_xstar_matrix_parity.py",
+        "historical/tests/parity_artifact_legacy/test_v064874612_runner_local_matrix_rebase.py",
+        "historical/tests/parity_artifact_legacy/test_v064874621_independent_thermal_parity.py"
+      ],
+      "id": "MATRIX-001",
+      "implementation_relation": "source-equivalent operator and solve",
+      "python": [
+        "src/xstar_tools/xstar/element_equilibrium.py",
+        "src/xstar_tools/xstar/linear_algebra.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.25 Ca XVIII/Ca XVII matrix closure",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "statistical-equilibrium matrix assembly and Lucy solve"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/thermal_kernels.cpp",
+        "src/xstar_tools/xstar/cpp/local_zone_engine.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/calc_hmc_all.f90",
+        "xstarlib/src/comp2.f90",
+        "xstarlib/src/freef.f90",
+        "xstarlib/src/bremem.f90",
+        "xstarlib/src/heatf.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0443_complete_local_zone.py",
+        "historical/tests/parity_artifact_legacy/test_v064874621_independent_thermal_parity.py"
+      ],
+      "id": "THERM-001",
+      "implementation_relation": "source-equivalent with qualified optimized reductions",
+      "python": [
+        "src/xstar_tools/xstar/local_zone.py",
+        "src/xstar_tools/xstar/compton.py",
+        "src/xstar_tools/xstar/free_free.py",
+        "src/xstar_tools/xstar/bremsstrahlung.py",
+        "src/xstar_tools/xstar/thermal_balance.py"
+      ],
+      "qualification": [
+        "thermal parity campaign",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "fixed-state heating/cooling and continuum thermal leaves"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/local_zone_engine.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_standalone.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/dsec.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0445_dsec.py",
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0452_dsec_state_ownership.py",
+        "historical/tests/parity_artifact_legacy/test_v06487462173_controller_runtime_workspace_transport.py"
+      ],
+      "id": "DSEC-001",
+      "implementation_relation": "source-exact branch/order and state-ownership contract",
+      "python": [
+        "src/xstar_tools/xstar/dsec.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.42 all-62 STEP"
+      ],
+      "role": "thermal/charge nonlinear controller"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/line_emissivity.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/calc_emisab_all.f90",
+        "xstarlib/src/calc_emisab_element.f90",
+        "xstarlib/src/calc_emisab_ion.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0461_calc_emisab.py",
+        "historical/tests/parity_artifact_legacy/test_v064810_binemis_cpp_promotion.py"
+      ],
+      "id": "EMISAB-001",
+      "implementation_relation": "source-exact producer order with separately qualified publication lifetime",
+      "python": [
+        "src/xstar_tools/xstar/emissivity.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.43 final FITS",
+        "0.6.48.12.3.45.3.3.8 publication parity"
+      ],
+      "role": "integrated/reduced-grid line and RRC emissivity/opacity"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/line_emissivity.cpp",
+        "src/xstar_tools/xstar/cpp/opacity_kernels.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/calc_emis_all.f90",
+        "xstarlib/src/calc_emis_element.f90",
+        "xstarlib/src/calc_emis_ion.f90",
+        "xstarlib/src/rlbin.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0462_calc_emis.py",
+        "historical/tests/superseded_regressions/test_v0646_native_spectral_engine.py"
+      ],
+      "id": "EMIS-001",
+      "implementation_relation": "source-equivalent; optimized-equivalent where explicitly qualified",
+      "python": [
+        "src/xstar_tools/xstar/emergent_emissivity.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.43.3 all-62 FITS",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "full-grid emissivity/opacity construction"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py",
+        "tests/test_type50_profile_provenance.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/opacity_kernels.cpp",
+        "src/xstar_tools/xstar/cpp/local_zone_engine.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/linopac.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_type50_line_escape.py",
+        "historical/tests/superseded_regressions/test_v064874696_mg_type50_endpoint_orientation.py"
+      ],
+      "id": "TYPE50-001",
+      "implementation_relation": "optimized-equivalent",
+      "python": [
+        "src/xstar_tools/xstar/emergent_emissivity.py",
+        "src/xstar_tools/xstar/type50_profile_provenance.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.31 Type50 cursor promotion/decomposition",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "line profile/opacity accumulation"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_engine.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_standalone.cpp"
+      ],
+      "fortran": [
+        "src/xstar/xstar.f90",
+        "xstarlib/src/step.f90",
+        "xstarlib/src/trnfrc.f90",
+        "xstarlib/src/stpcut.f90",
+        "xstarlib/src/trnfrn.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0464_radial_transfer.py",
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0468_radial_density_pass_control.py",
+        "historical/tests/parity_artifact_legacy/test_v06487462173_controller_runtime_workspace_transport.py",
+        "historical/tests/parity_artifact_legacy/test_v064874621731_controller_prefix_divergence.py"
+      ],
+      "id": "RADIAL-001",
+      "implementation_relation": "source-exact control predicates with equivalent storage",
+      "python": [
+        "src/xstar_tools/xstar/radial_transfer.py",
+        "src/xstar_tools/xstar/radial_control.py"
+      ],
+      "qualification": [
+        "O VII terminal-state repair lineage",
+        "0.6.48.12.3.42 all-62 STEP"
+      ],
+      "role": "radial stepping, transfer, termination, and pass control"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_run_state.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/savd.f90",
+        "xstarlib/src/unsavd.f90",
+        "xstarlib/src/rstepr.f90",
+        "xstarlib/src/rstepr2.f90",
+        "xstarlib/src/rstepr3.f90",
+        "xstarlib/src/rstepr4.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0467_unsavd_multipass.py",
+        "historical/tests/superseded_regressions/test_v06487251_secant_single_commit_hotfix.py"
+      ],
+      "id": "STATE-001",
+      "implementation_relation": "source-exact persistence/lifetime intent",
+      "python": [
+        "src/xstar_tools/xstar/saved_radial_state.py",
+        "src/xstar_tools/xstar/radial_transfer.py"
+      ],
+      "qualification": [
+        "detail/terminal publication qualification through 45.3.3.8"
+      ],
+      "role": "saved shell/pass state lifetime"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/fstepr.f90",
+        "xstarlib/src/fstepr2.f90",
+        "xstarlib/src/fstepr3.f90",
+        "xstarlib/src/fstepr4.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0469_output_writers.py",
+        "historical/tests/parity_artifact_legacy/test_v0648746253_native_public_products.py"
+      ],
+      "id": "DETAIL-001",
+      "implementation_relation": "source-equivalent publication with accepted structural exceptions",
+      "python": [
+        "src/xstar_tools/xstar/output_writers.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.43.3 all-62 FITS",
+        "0.6.48.12.3.45.3.3.7 C5 terminal replay",
+        "0.6.48.12.3.45.3.3.8 full detail3 publication"
+      ],
+      "role": "per-shell detail FITS publication"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py",
+        "tests/test_option15_material_surface.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_step_log.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/pprint.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0470_pprint_physical_output.py"
+      ],
+      "id": "STEP-001",
+      "implementation_relation": "source-exact formatting/rank behavior where qualified",
+      "python": [
+        "src/xstar_tools/xstar/pprint_legacy.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.34 comparator repair",
+        "0.6.48.12.3.36.1 material comparator",
+        "0.6.48.12.3.42 all-62 STEP"
+      ],
+      "role": "STEP print options and abundance/log publication"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp"
+      ],
+      "fortran": [
+        "xstarlib/src/writespectra.f90",
+        "xstarlib/src/writespectra2.f90",
+        "xstarlib/src/writespectra3.f90",
+        "xstarlib/src/writespectra4.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0469_output_writers.py",
+        "historical/tests/parity_artifact_legacy/test_v0648746254_native_public_products.py"
+      ],
+      "id": "FINAL-001",
+      "implementation_relation": "source-equivalent final publication",
+      "python": [
+        "src/xstar_tools/xstar/output_writers.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.43.3 all-62 FITS",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "final spectrum/line/continuum/RRC FITS products"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py",
+        "tests/test_public_execution_modes.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_api.h",
+        "src/xstar_tools/xstar/cpp/xstar_api.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_backend_cpp.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_engine.cpp"
+      ],
+      "fortran": [
+        "src/xstar/xstar.f90",
+        "xstarlib/src/xstarcalc.f90"
+      ],
+      "historical_characterization_tests": [
+        "tests/test_parity_freeze_boundary.py"
+      ],
+      "id": "BACKEND-001",
+      "implementation_relation": "productization dispatch layer over qualified science",
+      "python": [
+        "src/xstar_tools/xstar/cpp_backend_production_zone.py",
+        "src/xstar_tools/xstar/driver.py"
+      ],
+      "qualification": [
+        "production-zone ABI 6048110",
+        "0.6.48.12.3.44 three-mode parity"
+      ],
+      "role": "qualified backend dispatch and production-zone boundary"
+    },
+    {
+      "characterization_tests": [
+        "tests/test_source_characterization_current.py",
+        "tests/test_parity_freeze_boundary.py"
+      ],
+      "cpp": [
+        "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp",
+        "src/xstar_tools/xstar/cpp/xstar_run_state.cpp"
+      ],
+      "fortran": [
+        "src/xstar/xstar.f90",
+        "xstarlib/src/savd.f90",
+        "xstarlib/src/fstepr3.f90",
+        "xstarlib/src/writespectra4.f90"
+      ],
+      "historical_characterization_tests": [
+        "historical/tests/xstar_atomic_legacy/test_source_port_v0469_output_writers.py",
+        "historical/tests/superseded_regressions/test_v82_patch520148_tau_dependency_and_emission_stability.py"
+      ],
+      "id": "TERMINAL-001",
+      "implementation_relation": "source-equivalent lifetime with output-only publication bridge",
+      "python": [
+        "src/xstar_tools/xstar/output_writers.py",
+        "src/xstar_tools/xstar/emissivity.py",
+        "src/xstar_tools/xstar/element_equilibrium.py"
+      ],
+      "qualification": [
+        "0.6.48.12.3.45.3.3.7 C5 terminal detail3 replay",
+        "0.6.48.12.3.45.3.3.8 accepted science"
+      ],
+      "role": "terminal/final scientific state and publication lifetime"
+    }
+  ],
+  "pinned_source_policy": {
+    "baseline_science_hash_manifest": "qualification/parity_freeze_science_hashes.json",
+    "rule": "Source-concordance comments and documentation must not alter science-critical source bytes. Exact active-source hashes are enforced by the parity-freeze gate; retired comment-overlay replay manifests are no longer carried in release trees.",
+    "science_hash_manifest": "qualification/parity_freeze_current_source_hashes.json"
+  },
+  "productization_version": "0.6.59",
+  "python_source_comment_files": [
+    "src/xstar_tools/xstar/active_subsets.py",
+    "src/xstar_tools/xstar/atomic_database.py",
+    "src/xstar_tools/xstar/bremsstrahlung.py",
+    "src/xstar_tools/xstar/compact_active_atdb.py",
+    "src/xstar_tools/xstar/compton.py",
+    "src/xstar_tools/xstar/constants.py",
+    "src/xstar_tools/xstar/cpp_backend_element.py",
+    "src/xstar_tools/xstar/cpp_backend_emissivity.py",
+    "src/xstar_tools/xstar/cpp_backend_extra.py",
+    "src/xstar_tools/xstar/cpp_backend_final_recompute.py",
+    "src/xstar_tools/xstar/cpp_backend_matrix.py",
+    "src/xstar_tools/xstar/cpp_backend_production_zone.py",
+    "src/xstar_tools/xstar/cpp_backend_rates.py",
+    "src/xstar_tools/xstar/cpp_backend_spectral.py",
+    "src/xstar_tools/xstar/cpp_backend_thermal.py",
+    "src/xstar_tools/xstar/driver.py",
+    "src/xstar_tools/xstar/dsec.py",
+    "src/xstar_tools/xstar/element_equilibrium.py",
+    "src/xstar_tools/xstar/emergent_emissivity.py",
+    "src/xstar_tools/xstar/emissivity.py",
+    "src/xstar_tools/xstar/free_free.py",
+    "src/xstar_tools/xstar/gsmooth.py",
+    "src/xstar_tools/xstar/heatt.py",
+    "src/xstar_tools/xstar/ion_balance.py",
+    "src/xstar_tools/xstar/ionization.py",
+    "src/xstar_tools/xstar/linear_algebra.py",
+    "src/xstar_tools/xstar/local_zone.py",
+    "src/xstar_tools/xstar/native_fixed_program.py",
+    "src/xstar_tools/xstar/output_writers.py",
+    "src/xstar_tools/xstar/physical_runner.py",
+    "src/xstar_tools/xstar/pprint_legacy.py",
+    "src/xstar_tools/xstar/radial_control.py",
+    "src/xstar_tools/xstar/radial_transfer.py",
+    "src/xstar_tools/xstar/radiation.py",
+    "src/xstar_tools/xstar/saved_radial_state.py",
+    "src/xstar_tools/xstar/source_real_energy_grid.py",
+    "src/xstar_tools/xstar/state.py",
+    "src/xstar_tools/xstar/thermal_balance.py",
+    "src/xstar_tools/xstar/type50_profile_provenance.py",
+    "src/xstar_tools/xstar/ucalc.py",
+    "src/xstar_tools/xstar/ucalc_dispatch.py",
+    "src/xstar_tools/xstar/ucalc_inventory.py",
+    "src/xstar_tools/xstar/ucalc_leaves.py",
+    "src/xstar_tools/xstar/xstarcalc.py"
+  ],
+  "refactor_gate": {
+    "path_rules": [
+      {
+        "concordance_ids": [
+          "BACKEND-001",
+          "MATRIX-001",
+          "THERM-001",
+          "EMIS-001",
+          "TYPE50-001",
+          "RADIAL-001",
+          "DETAIL-001",
+          "STEP-001",
+          "FINAL-001"
+        ],
+        "glob": "src/xstar_tools/xstar/cpp/*"
+      },
+      {
+        "concordance_ids": [
+          "BACKEND-001"
+        ],
+        "glob": "src/xstar_tools/xstar/cpp_backend_production_zone.py"
+      },
+      {
+        "concordance_ids": [
+          "ARCH-001",
+          "BACKEND-001"
+        ],
+        "glob": "src/xstar_tools/xstar/driver.py"
+      },
+      {
+        "concordance_ids": [
+          "ARCH-001",
+          "INPUT-001",
+          "BACKEND-001"
+        ],
+        "glob": "src/xstar_tools/xstar/physical_runner.py"
+      },
+      {
+        "concordance_ids": [
+          "LEVEL-001",
+          "MATRIX-001",
+          "TERMINAL-001"
+        ],
+        "glob": "src/xstar_tools/xstar/element_equilibrium.py"
+      },
+      {
+        "concordance_ids": [
+          "EMISAB-001",
+          "DETAIL-001",
+          "TERMINAL-001"
+        ],
+        "glob": "src/xstar_tools/xstar/emissivity.py"
+      },
+      {
+        "concordance_ids": [
+          "DETAIL-001",
+          "FINAL-001",
+          "TERMINAL-001"
+        ],
+        "glob": "src/xstar_tools/xstar/output_writers.py"
+      },
+      {
+        "concordance_ids": [
+          "STEP-001"
+        ],
+        "glob": "src/xstar_tools/xstar/pprint_legacy.py"
+      }
+    ],
+    "rule": "Any scientific refactor must cite the matching concordance ID(s), establish and run at least one current runnable characterization test for each affected behavior, preserve the listed qualification lineage, and pass the parity-freeze and source-concordance gates."
+  },
+  "reference_bundle": {
+    "archive": "xstar_references.tar.gz",
+    "sha256": "a66718cf3b3d831906ed640c3bb9a2d8e81ac3bcdbfd4878d09fc680e6616e84"
+  },
+  "schema": "xstar-tools-source-concordance-v1",
+  "science_revision": "0.6.90.5.5",
+  "source_comment_files": [
+    "src/xstar_tools/xstar/active_subsets.py",
+    "src/xstar_tools/xstar/atomic_database.py",
+    "src/xstar_tools/xstar/bremsstrahlung.py",
+    "src/xstar_tools/xstar/compact_active_atdb.py",
+    "src/xstar_tools/xstar/compton.py",
+    "src/xstar_tools/xstar/constants.py",
+    "src/xstar_tools/xstar/cpp_backend_element.py",
+    "src/xstar_tools/xstar/cpp_backend_emissivity.py",
+    "src/xstar_tools/xstar/cpp_backend_extra.py",
+    "src/xstar_tools/xstar/cpp_backend_final_recompute.py",
+    "src/xstar_tools/xstar/cpp_backend_matrix.py",
+    "src/xstar_tools/xstar/cpp_backend_production_zone.py",
+    "src/xstar_tools/xstar/cpp_backend_rates.py",
+    "src/xstar_tools/xstar/cpp_backend_spectral.py",
+    "src/xstar_tools/xstar/cpp_backend_thermal.py",
+    "src/xstar_tools/xstar/driver.py",
+    "src/xstar_tools/xstar/dsec.py",
+    "src/xstar_tools/xstar/element_equilibrium.py",
+    "src/xstar_tools/xstar/emergent_emissivity.py",
+    "src/xstar_tools/xstar/emissivity.py",
+    "src/xstar_tools/xstar/free_free.py",
+    "src/xstar_tools/xstar/gsmooth.py",
+    "src/xstar_tools/xstar/heatt.py",
+    "src/xstar_tools/xstar/ion_balance.py",
+    "src/xstar_tools/xstar/ionization.py",
+    "src/xstar_tools/xstar/linear_algebra.py",
+    "src/xstar_tools/xstar/local_zone.py",
+    "src/xstar_tools/xstar/native_fixed_program.py",
+    "src/xstar_tools/xstar/output_writers.py",
+    "src/xstar_tools/xstar/physical_runner.py",
+    "src/xstar_tools/xstar/pprint_legacy.py",
+    "src/xstar_tools/xstar/radial_control.py",
+    "src/xstar_tools/xstar/radial_transfer.py",
+    "src/xstar_tools/xstar/radiation.py",
+    "src/xstar_tools/xstar/saved_radial_state.py",
+    "src/xstar_tools/xstar/source_real_energy_grid.py",
+    "src/xstar_tools/xstar/state.py",
+    "src/xstar_tools/xstar/thermal_balance.py",
+    "src/xstar_tools/xstar/type50_profile_provenance.py",
+    "src/xstar_tools/xstar/ucalc.py",
+    "src/xstar_tools/xstar/ucalc_dispatch.py",
+    "src/xstar_tools/xstar/ucalc_inventory.py",
+    "src/xstar_tools/xstar/ucalc_leaves.py",
+    "src/xstar_tools/xstar/xstarcalc.py"
+  ]
+}

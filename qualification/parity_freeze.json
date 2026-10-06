@@ -1,0 +1,133 @@
+{
+  "abis": {
+    "c_api": 60487,
+    "fixed_state_engine": 60488,
+    "fixed_state_program": 60486,
+    "production_zone": 6048110,
+    "xspec_table": 1
+  },
+  "accepted_c5": {
+    "accepted_behavior_revision": "0.6.48.12.3.45.3.3.7/8",
+    "detail3_identities": [
+      709,
+      762
+    ],
+    "model": "helike_type69/c5_ne1e10",
+    "routine_rerun": false,
+    "rule": "Do not change the accepted 709/762 machinery or use C5 as a routine productization smoke prerequisite.",
+    "status": "frozen-accepted"
+  },
+  "accepted_structural_exceptions": [
+    {
+      "attachment_mismatches": 0,
+      "candidate_only_continuum_identities": [
+        22608,
+        23076
+      ],
+      "candidate_only_count": 2,
+      "detail3_normalized_l1": 1.03665e-06,
+      "kind": "publication-inventory",
+      "model": "helike_type69/ca19_xi2_ne1",
+      "model_max_surface_normalized_l1": 1.38887e-05,
+      "order_mismatches": 0,
+      "product": "xo01_detal3.fits",
+      "reference_only_count": 0,
+      "status": "scientifically accepted; structural exception documented"
+    },
+    {
+      "attachment_mismatches": 0,
+      "candidate_only_count": 0,
+      "detail3_normalized_l1": 1.45128e-08,
+      "detail_hdus": 5,
+      "kind": "publication-inventory",
+      "model": "helike_type69/o7_ne1e10",
+      "model_max_surface_normalized_l1": 2.49027e-05,
+      "order_mismatches": 0,
+      "product": "xo01_detal3.fits",
+      "reference_only_distinct_identities": 45,
+      "reference_only_occurrences": 225,
+      "status": "scientifically accepted; structural exception documented"
+    }
+  ],
+  "authority_policy": "The canonical scientific oracle remains FORTRAN XSTAR 2.59g; accepted prior qualification governs closed port behavior.",
+  "canonical_authority": "FORTRAN XSTAR 2.59g",
+  "change_control": {
+    "rule": "Packaging, documentation, diagnostics, CI, and repository-layout changes may advance the package version without changing the science revision only when the parity-freeze gate remains exact. The current refreeze accepts the 0.6.90.5.5 Type-49 source-skip behavior.",
+    "science_change_requirement": "Any further intentional science change requires a new explicit FORTRAN-concordance qualification record and a new refreeze; do not silently edit this baseline."
+  },
+  "cleanup_version": "0.6.90.3",
+  "comparator_revision": {
+    "option15_material": "0.6.48.12.3.36.1",
+    "option23_policy": "0.6.48.12.3.45.3.3.2",
+    "policy": "Separate numerical/material science from structural inventory/order/attachment. Option 15 material gate uses normalized L1 < 0.01; Options 1/23 numerical arrays are judged independently of identity/order diagnostics; Ca/O accepted structural detail3 inventory exceptions do not alter the numerical threshold.",
+    "step_repair": "0.6.48.12.3.34"
+  },
+  "compiler_policy": {
+    "forbid": [
+      "-ffast-math",
+      "-Ofast"
+    ],
+    "preferred_compiler": "GCC where applicable",
+    "require": [
+      "-ffp-contract=off"
+    ]
+  },
+  "data_policy": {
+    "atdb_fits": "external; must not be bundled",
+    "coheat_dat": "native runtime input retained in package data"
+  },
+  "freeze_date": "2026-10-06",
+  "frozen_behaviors": [
+    "corrected sparse DSEC/controller trajectory semantics",
+    "exact Fortran rread1/default-REAL radius literal behavior",
+    "Ca XVIII/Ca XVII fixed-state matrix/rate compact-row clamp repair",
+    "accepted thermal/rate/matrix/transport behavior",
+    "accepted Type50/linopac production science and cursor/AVX2 path",
+    "STEP comparator semantics and Option 23 numerical-vs-rank policy",
+    "C++ all-62 three-mode scientific parity behavior",
+    "C5 709/762 detail3 publication behavior",
+    "FORTRAN-faithful Type-49 source-inactive early-exit handling, including Mn coverage"
+  ],
+  "frozen_cpp_revision": "0.6.90.5.5",
+  "references": {
+    "current_source_hashes": {
+      "path": "qualification/parity_freeze_current_source_hashes.json",
+      "sha256": "669f2f5db5d48b3d4aa0dfdb846c0e90bfaff201ee506a3c6ad58efe8c3e401d"
+    },
+    "frozen_cpp44_manifest": {
+      "path": "qualification/frozen/cpp44/production_source_hashes_44.json",
+      "sha256": "973422c415264718f9acfe65171dfe097cb9519a4cb0073d7c7caa0c25b02c9f"
+    },
+    "mn_type49_science_refreeze": {
+      "path": "qualification/mn_type49_science_refreeze_0_6_90_5_8.json",
+      "sha256": "8814fe38feb9ac4d049d409ff8c5f8cd81bf7a899ca441fa1bd00e07c6d18982"
+    },
+    "option15_comparator": {
+      "path": "qualification/frozen/option15/compare_step_log_science.py",
+      "sha256": "3973eacb4e772e7a528611fa538b799afcd5d7ab44ba8d708d3835206b59eabe"
+    },
+    "option23_comparator": {
+      "path": "qualification/frozen/option23/compare_step_log_science.py",
+      "sha256": "9cb905c12691c0749f9e6ebc42f5bf1d70207cfb4931deba669a1d8dc9f19f05"
+    },
+    "option23_selftest": {
+      "path": "qualification/frozen/option23/selftest_option23_comparator.py",
+      "sha256": "b45a1b0f66f1c31ae3d8145f567c8ee411d51d6642f0b9692851da04148d29ad"
+    },
+    "original_science_hashes": {
+      "path": "qualification/parity_freeze_science_hashes.json",
+      "sha256": "7034d812dcd5ac516d807ea595c5ab4f2cfab415aa9375cd8f9ae0e4a934f685"
+    }
+  },
+  "refreeze_package_version": "0.6.90.5.8",
+  "rejected_experiment": "0.6.48.12.3.45.3.3.9",
+  "schema": "xstar-tools-parity-freeze-v2",
+  "science_change_origin": "0.6.90.5.5 \u2014 MN_TYPE49_SOURCE_SKIP_CLOSURE",
+  "science_revision": "0.6.90.5.5",
+  "thresholds": {
+    "cross_cpp_mode_inventory": "exact under qualified product semantics",
+    "material_normalized_l1_max_exclusive": 0.01,
+    "material_percent_max_exclusive": 1.0,
+    "step": "frozen qualified comparator semantics"
+  }
+}

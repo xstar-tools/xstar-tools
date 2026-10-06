@@ -1,0 +1,271 @@
+{
+  "captured_from_distribution": "0.6.90.5.8",
+  "files": {
+    "src/xstar_tools/xstar/cpp/canonical_thermal_term.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/canonical_thermal_term.hpp",
+      "frozen_origin_sha256": "4502e4223e4f3fd21598269b831e4b54c37e0c964b4b5730dbad2b8b631c9e5f",
+      "sha256": "b85f5e53ffd7bdbe1030eaa7c5d978204fff966b26ea62db70149a33c067af22"
+    },
+    "src/xstar_tools/xstar/cpp/coheat_table.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/coheat_table.h",
+      "frozen_origin_sha256": "041e96e20fecf48553f7b02691ee3380f043efbd10ded85c25d71aa6648bdc6d",
+      "sha256": "23a3748c92a1d0c7f697710ccfdbcfca67389fb2c3a01d15b382492c2e6ef411"
+    },
+    "src/xstar_tools/xstar/cpp/compact_arrays.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/compact_arrays.hpp",
+      "frozen_origin_sha256": "3b64182b54fc388498c4602eb5d252dfc6ab4fd61f3b7d23ce6663bc2f79fbe2",
+      "sha256": "ff1e479c54c72380e1ee02d64a62035b664fca20b6e6066a1d81d213f5d77477"
+    },
+    "src/xstar_tools/xstar/cpp/compiled_case.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/compiled_case.cpp",
+      "frozen_origin_sha256": "29d9dbb02df906c334846d735c9a20eb8dd64eba71a4eb58ae9b4fc89b545afd",
+      "sha256": "c1f505980ba9ec99a8436394aa849fef670f09b9f02b8a6e5b93a9455e0b870c"
+    },
+    "src/xstar_tools/xstar/cpp/element_engine.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/element_engine.cpp",
+      "frozen_origin_sha256": "a8b7276dad9437afa3ae36bdde3aad270d0aaba85f08d05873c9cfd7ad597c27",
+      "sha256": "24431843c1d194ac6edfab8d61fa78439df014ab0bc14ea180aab7c7c41c521b"
+    },
+    "src/xstar_tools/xstar/cpp/error_codes.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/error_codes.hpp",
+      "frozen_origin_sha256": "891c24be47e25073ca79293c10660311e8058134abbff5eaa801b5da0579d32f",
+      "sha256": "33d14b7d1d1d4f43214e4042f1bb72499dfc62cab6b431f466078973e7a01d73"
+    },
+    "src/xstar_tools/xstar/cpp/final_recompute_bridge.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/final_recompute_bridge.cpp",
+      "frozen_origin_sha256": "e44493e59123f9ca815bcaa9bcd3f43d2a0b59cb02c2d5b7f846a15a515d51a7",
+      "sha256": "ae90d8891383879577c5ff138cdcad55f56a3dd57b7e74cbc5a30151ae314476"
+    },
+    "src/xstar_tools/xstar/cpp/level_population.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/level_population.cpp",
+      "frozen_origin_sha256": "d07aee48216bfe43684b63752ea2366450cc879b341dc2db6aaa95aed68bb9ff",
+      "sha256": "08b47d0fac86ee767c6ba83c93ec81af989de4f56cfa450880ad0a3bcd527999"
+    },
+    "src/xstar_tools/xstar/cpp/line_emissivity.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/line_emissivity.cpp",
+      "frozen_origin_sha256": "3aa6a79f8a337eedbe511229ac48d2c8ec5c3c8eb4ef0587a7d82eff0066626b",
+      "sha256": "e6607d5bef5edf561243321885c90ab4e9596a9925c9ee7e763e625b655f4483"
+    },
+    "src/xstar_tools/xstar/cpp/local_zone_engine.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp",
+      "frozen_origin_sha256": "f427194090b21bc08a1e741b1145ebf7b09348a705f634958f83b776ff419f11",
+      "sha256": "baedfd061855e944734953fa291ad1d1a6b3507e0aa05a356d634e233be3a92a"
+    },
+    "src/xstar_tools/xstar/cpp/matrix_kernels.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/matrix_kernels.cpp",
+      "frozen_origin_sha256": "51e66e31f42cdca40ba3e4bd26370b88504743f2af9d5b4d59d9c756f23c2bcd",
+      "sha256": "999baae465522db95e68470f90345ea1ba7f088d8eb80b3bbdb4554b64b82784"
+    },
+    "src/xstar_tools/xstar/cpp/opacity_kernels.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/opacity_kernels.cpp",
+      "frozen_origin_sha256": "5b5a24fa235c5f6074b26a6c8f8e73d2baadf2deb6f2a38bb30375cd86c20ecc",
+      "sha256": "e2d8ea2bb468dcbf4fa5160ad51ba3f162016136a784ddac821ebf45b2e173db"
+    },
+    "src/xstar_tools/xstar/cpp/rate_kernels.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/rate_kernels.cpp",
+      "frozen_origin_sha256": "d01beea9a86cf74d971ac6df09bf234302032433bb67c99d1405b66e4cc529bb",
+      "sha256": "94110ec1bb917fcfd87f67d0abff438b893ef904ba5f1b11b4f813835839056a"
+    },
+    "src/xstar_tools/xstar/cpp/source_order_thermal_reducer.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/source_order_thermal_reducer.hpp",
+      "frozen_origin_sha256": "5204a66c9ce52f3036f891de4c18bb543d850465c6acb8d5e548477c4dacaeb2",
+      "sha256": "38ea01ebcce28f1470fd4142a77160525746d2924bf9bc82b8680503f94b1ecb"
+    },
+    "src/xstar_tools/xstar/cpp/source_real_energy_grid.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/source_real_energy_grid.hpp",
+      "frozen_origin_sha256": "94da3d6639e20e2bf1a2c363753cb7d081d352cbbcb2a49895885919ec11728c",
+      "sha256": "db285e42db08db628762f60a5a36d692bfd9c8cd075eeb6fc06660532df2fcb6"
+    },
+    "src/xstar_tools/xstar/cpp/thermal_kernels.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/thermal_kernels.cpp",
+      "frozen_origin_sha256": "306640aa4f60928dc9a4a6a591af5f54fc74d204631790730a75be7a93ef2d0c",
+      "sha256": "7bd27d21707f5753aa8555145fa549e2a26eee26295c83ee95f570c6fc04ac72"
+    },
+    "src/xstar_tools/xstar/cpp/type50_dsec_runtime_oracle.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/type50_dsec_runtime_oracle.h",
+      "frozen_origin_sha256": "c7932fc9d40503b92d0d0719cb5c2faddef817d718da787e83ceb831acb98581",
+      "sha256": "7fbbf0e302b038e784487e5480b1d0ce12d648978e0784c15e6482da12c6c91b"
+    },
+    "src/xstar_tools/xstar/cpp/type50_manifold_oracle.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/type50_manifold_oracle.h",
+      "frozen_origin_sha256": "c8d300ad28353a6c97367561d11f1276aeb1b1e3e44df7f837de579afde30bdb",
+      "sha256": "54fe1967a33b54ad3be3b2f5464355cdc5f9b9a0b32f2f07f8469fe4d92c20f0"
+    },
+    "src/xstar_tools/xstar/cpp/type53_row46_dsec_runtime_oracle.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/type53_row46_dsec_runtime_oracle.h",
+      "frozen_origin_sha256": "4acd523949145ffea1c18249119b7d48a43eca936c1d1e0042d48c9f1b66d549",
+      "sha256": "52ed0ee8609f2071a733a45440e31e8bc7fb8a451f9a63176d733b6b576ef3f9"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_api.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_api.cpp",
+      "frozen_origin_sha256": "488c310cd411c8572f02e28ec76fa9bab33b1caf293aa65a36a5f3e97e20b1dd",
+      "sha256": "f760e284b4ccaea21597e6acb5f0daef61acc73f1b0d709987f5ab74727cec58"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_api.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_api.hpp",
+      "frozen_origin_sha256": "3726623ae71acda4edba73d660ef33490f0ecbab112da48cb19a40508a2a8cca",
+      "sha256": "e1c0280ff40fa1da74c68b741927698f22a2e85d93e4a103aa47f4517e3d8919"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp",
+      "frozen_origin_sha256": "90f256921ab67b9466f38760be172396957ae01814dcc98b13b25a1a89bb4416",
+      "sha256": "c4d380682d4293afb06b3e4f6696cb1a5095ecc3ba508b2c7523b3c86c192565"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_atdb_runtime.hpp",
+      "frozen_origin_sha256": "a44c25a599c870e7ceba898eccfc9e7a23ed54ac00c2366447c2b8ea30e11711",
+      "sha256": "0d115769b667b9ecffb59c885a2667921bd2da06239b5b6d9208802390229c3b"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_backend_common.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_backend_common.hpp",
+      "frozen_origin_sha256": "98c021372fa0d14ba2bf7423311b2721fa77910534c2f99a5d4bdb1d53ba7067",
+      "sha256": "415e8cb14e9fd87792bf665a963dc52aec77921a93e2f3f66c0213bb892cf4e5"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_backend_cpp.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_backend_cpp.cpp",
+      "frozen_origin_sha256": "62a9f5dcc8c4d6a47fab7780fc80eb5548106df7c4f7bb59ff2dd562298879ad",
+      "sha256": "4b2af48030af2eb2e68b3e3ebb7436de45d8812409c719bf3c71d5b52f1977d5"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_backend_plugin.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_backend_plugin.h",
+      "frozen_origin_sha256": "5a037389e7f4a471361bfa2bb17642569350ec23d360eaceeec10ce59eb1cdf4",
+      "sha256": "59af075c41acd80ea0af1706680797db8c45572db41eb30c11766444bc5e5024"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_backend_python.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_backend_python.cpp",
+      "frozen_origin_sha256": "24aec4193536be92a67fb8551da0888b30d85cec66396b748457fcacb499f678",
+      "sha256": "5953866296d8bd75220bba7d105281ce568aab5c2118dc63be17cba91859fe23"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_constants.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_constants.h",
+      "frozen_origin_sha256": "007831eb239b32bf7a6dfd90f9c40da92dfc4fcb78522d1f88109bcb3968ab74",
+      "sha256": "e34b7b97be24b5c4a4b0de6c420f8e7dbd0eede39c6678cde5908dffe574ab1c"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_element_engine.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_element_engine.h",
+      "frozen_origin_sha256": "f9713ed408a280b3a7a2afde20a76c4056526c6ce7c47c304bc10d5e5a371c5a",
+      "sha256": "357780e36e01937b1d205100ef79b525555db99b173e67eb3bfa0f167af02224"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_engine.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_engine.cpp",
+      "frozen_origin_sha256": "63baca22fee9e10787408c13c6f7473322734bef74b97d938b2a5ebb837b6db2",
+      "sha256": "b218576b8373094165e9dc3aca300274bbab048c9bdabf3fe73caaac84d7f6f8"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_final_recompute_bridge.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_final_recompute_bridge.h",
+      "frozen_origin_sha256": "4e4f7222cc8ed6c5ce40e07c8f04c5561699ece189a05098f3d7acc3a0016df5",
+      "sha256": "333bf96d6ff0e3029192e1826bfee9c3c600ddce4386a665bbdbb0f651c7117d"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_local_zone_engine.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_fixed_state_engine.h",
+      "frozen_origin_sha256": "32405e40741d498db7644241151324039cb9f8eb02a01655f1f7a95ce0e38e49",
+      "sha256": "bfc79a62f5b0b2b1793e8650c46ef07fcf528db8219217465babed7a057f7857"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_production_zone_bridge.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_production_zone_bridge.h",
+      "frozen_origin_sha256": "db47865b7c07e1065b73e25e109cdc97cbd3c151e8b83d6fab9ff6f64ea0d27f",
+      "sha256": "fc491f51884e6110150783d9cb2f2c340f174fb388729a7510e52f59dcd77e73"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_python_bridge.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_python_bridge.h",
+      "frozen_origin_sha256": "d87befca9ea463bfb51fada9268183c4e074d6a892933d17c7e89bf0554f68d0",
+      "sha256": "bfeb3e1b2f1bbd307b0bc8574909fffc6fec98b49fa157d7ca2ddce9b37ce222"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_run_state.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_run_state.cpp",
+      "frozen_origin_sha256": "73bf665dc34492d8ad98e2a185ed8502d3418d55c9c4bf6c7ea0882918a2f1e6",
+      "sha256": "9a2bff24d7842824a6005386513b4e7f6e6083ba7241cfff6c12af9d1bb74b17"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_run_state.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_run_state.hpp",
+      "frozen_origin_sha256": "6cd329dcbfdc59707d6b27007d5887bd14230f4a2864bbc86ccc76d13dd675e4",
+      "sha256": "376a57a28949949cb0e3c8a34497c6070aa85c9c4955dfadd53735ee0e5cfe35"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_science_fits.cpp",
+      "frozen_origin_sha256": "aa9cbfdcdb93147b97b9f45bd15816ca7f809efbcd7da9e60b97e72478998d5c",
+      "sha256": "efc1b8066dfb91c206bc2960604adc8b1931c64f5a8ac9f018c5a9f4bf69223e"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_science_fits.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_science_fits.hpp",
+      "frozen_origin_sha256": "907429252976e49a661f60172dca0fc7b36779cd50fc551e33c3fbf8b3f21ee5",
+      "sha256": "b7de6d96d7515c51007ccc3902ff71f892b8ad15b0b639fe5f61488520df2b5f"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_spectral_engine.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_spectral_engine.h",
+      "frozen_origin_sha256": "0b7970c99146a51114aea6cf5e0e7229efc003d110bf0145e559f7f59cf3e20d",
+      "sha256": "91de45b62ceb20934fc8a7923e54488d8b9b8885a659a6db1939a429d59bd4cc"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_standalone.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_standalone.cpp",
+      "frozen_origin_sha256": "4795401e112efe168cba33dddc6eb0398d1470e870567bd5ebb9326c1048fbcf",
+      "sha256": "89bf23d0d42addb6596107ca183b88f180f99d994120a42ebb0241112d2a9754"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_standalone_internal.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_standalone_internal.hpp",
+      "frozen_origin_sha256": "7735019eebd9bd5d8ab7c2e0198b89ac6a70e53ece1391a376baf6c649843364",
+      "sha256": "2002d8603733fe6945305e0b95fadcf3aa574ae2476c48e042279ced1c302402"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_step_log.cpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_step_log.cpp",
+      "frozen_origin_sha256": "0d219c0cac7087d7d37ab3038ceb283305c9400282a28e665a31ef3094c1a9c5",
+      "sha256": "1190cb109279d0d69a5a06d42eba90c0f0d23fab1ad874acf9c43fb4a26d2424"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_step_log.hpp": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_step_log.hpp",
+      "frozen_origin_sha256": "71f4393caac36b8df0ae11394d69b0594a5d4c031fb122de9790d36e00f2bb4e",
+      "sha256": "5f72d0bcbd8286dcec31582de56cbafaa10af11ab042396f842513661c52be18"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_thermal_engine.h": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp/xstar_thermal_engine.h",
+      "frozen_origin_sha256": "75f3af0b7efbfad913b3548d1b41d406fcd513e42cd198135b4a24a7dbba0638",
+      "sha256": "4d801c31ed4a324b0d4d9e1b662df45ec56cdbbccc95553b406a315a6a846a2a"
+    },
+    "src/xstar_tools/xstar/cpp_backend_production_zone.py": {
+      "frozen_origin_path": "src/xstar_tools/xstar/cpp_backend_production_zone.py",
+      "frozen_origin_sha256": "195fef69d803c3e48e064b2dcbd7b50cd655bcb586dabcc18ba1712e7c37f7c4",
+      "sha256": "11473b6b6dfedf84cf6ed8f083553220f05182aaae28939f44f964d4da848aac"
+    },
+    "src/xstar_tools/xstar/driver.py": {
+      "frozen_origin_path": "src/xstar_tools/xstar/driver.py",
+      "frozen_origin_sha256": "e6e98f86a6193f34a68321c0f204eb4a364a38b4c1aba6ad803e29b556bb08b2",
+      "sha256": "c7b1155f8bb34874fb6f784f44ff2309bf62d1fc697864891269f6491cd6932b"
+    },
+    "src/xstar_tools/xstar/element_equilibrium.py": {
+      "frozen_origin_path": "src/xstar_tools/xstar/element_equilibrium.py",
+      "frozen_origin_sha256": "af06e8c2d8b7e712c18316f7e5f59ef2ad40365343f770c892c0e4a59b5caf4b",
+      "sha256": "04e0d9ede43571e49cf3de33c6d5ede3d018cca93956ba86f0c91f3e65483749"
+    },
+    "src/xstar_tools/xstar/emissivity.py": {
+      "frozen_origin_path": "src/xstar_tools/xstar/emissivity.py",
+      "frozen_origin_sha256": "dacb96d616aa32cc3402cb3c06d539cddaa69baf5c8324c70a9b90c8e90aa977",
+      "sha256": "5e97bd228fab7ebc07431bec4322dc7a183021bf4bcc5c3edcccd0932a2d42df"
+    },
+    "src/xstar_tools/xstar/output_writers.py": {
+      "frozen_origin_path": "src/xstar_tools/xstar/output_writers.py",
+      "frozen_origin_sha256": "f2f0c152b05df876def860d63e1e415156b7f27bd2c3cdff4f951a075009934d",
+      "sha256": "ffc15f8be45e7d38da790d809b4d84e9cea6339467a00e26893eb7593d86171c"
+    },
+    "src/xstar_tools/xstar/physical_runner.py": {
+      "frozen_origin_path": "src/xstar_tools/xstar/physical_runner.py",
+      "frozen_origin_sha256": "4cad85408fb89689183dccae3feeae8087949433712aa5dda865ac64cda30b5e",
+      "sha256": "eb1b3f2fb8891ca9c93a1b98e82343f21c56375e75d4d9099e1425b776d70865"
+    },
+    "src/xstar_tools/xstar/pprint_legacy.py": {
+      "frozen_origin_path": "src/xstar_tools/xstar/pprint_legacy.py",
+      "frozen_origin_sha256": "d935887e3e0266498b9907b2e3f43d389e10044741bfc27f610c6a88acb1f765",
+      "sha256": "eb15e2b83c4900780dc6ba72e5ea1e4a561bec2193bccec663c2d6b40ddb16e4"
+    }
+  },
+  "policy": "Exact raw hashes of active science-critical source files in the accepted 0.6.90.5.8 refreeze. Scientific behavior changed at 0.6.90.5.5 only: FORTRAN-faithful Type-49 source early-exit handling for source-inactive records; 0.6.90.5.6 and 0.6.90.5.7 are terminal-diagnostic-only follow-ups.",
+  "retired_frozen_paths": {
+    "src/xstar_tools/xstar/cpp/opacity_type50_experiments.cpp": {
+      "reason": "not active in predecessor 0.6.90.2 source tree"
+    },
+    "src/xstar_tools/xstar/cpp/xstar_backend_common.cpp": {
+      "reason": "not active in predecessor 0.6.90.2 source tree"
+    }
+  },
+  "schema": "xstar-tools-current-science-source-hashes-v1",
+  "science_revision": "0.6.90.5.5"
+}

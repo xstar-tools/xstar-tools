@@ -1,0 +1,43 @@
+{
+  "c_api_abi": 60487,
+  "latex_eps_reference_style": "filename.ext",
+  "latex_svg_to_eps": "eps3",
+  "latexpdf_pipeline": [
+    "latex",
+    "latex",
+    "dvips",
+    "ps2pdf"
+  ],
+  "outputs": {
+    "html": "docs/_build/html/",
+    "latex": "docs/_build/latex/xstar-tools.tex",
+    "dvi": "docs/_build/latex/xstar-tools.dvi",
+    "postscript": "docs/_build/latex/xstar-tools.ps",
+    "latexpdf": "docs/_build/latex/xstar-tools.pdf"
+  },
+  "production_zone_abi": 6048110,
+  "readthedocs": {
+    "config": ".readthedocs.yaml",
+    "myst_parser": "5.1.0",
+    "python": "3.13",
+    "requirements": "docs/requirements.txt",
+    "sphinx": "8.2.3",
+    "theme": "sphinx-rtd-theme==3.1.0"
+  },
+  "requirements": [
+    "POSIX Sphinx Makefile exposes html, latex, latexpdf, linkcheck, release, and clean targets",
+    "Windows make.bat exposes matching html, latex, latexpdf, linkcheck, release, and clean commands",
+    "LaTeX document output is explicitly named xstar-tools.tex",
+    "LaTeX converts the four architecture SVG diagrams to EPS3 while HTML keeps SVG",
+    "Generated Sphinx EPS references are normalized from {name}.eps spelling to name.eps spelling",
+    "latexpdf explicitly runs two latex passes followed by dvips and ps2pdf",
+    "latexpdf does not require Sphinx make-mode, latexmk, pdflatex, or epstopdf",
+    "PDF generation remains optional and is not added to the normal release target",
+    "Read the Docs installs the pinned documentation dependency set",
+    "science-critical source hashes and public ABIs remain frozen"
+  ],
+  "schema": "xstar-tools-documentation-build-outputs-v3",
+  "science_revision": "0.6.48.12.3.45.3.3.8",
+  "scope": "documentation build targets, EPS reference normalization, DVI/PostScript/PDF pipeline, Read the Docs dependencies, and package-version metadata only",
+  "version": "0.6.90.5.2"
+}

@@ -1,0 +1,404 @@
+name: PyPI cross-platform release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Validate release source
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Read package version
+        id: meta
+        shell: bash
+        run: |
+          version="$(python - <<'PY'
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              print(tomllib.load(f)['project']['version'])
+          PY
+          )"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE_VERSION=$version"
+
+      - name: Require release tag to match pyproject version
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${{ steps.meta.outputs.version }}"
+          tag="${RELEASE_TAG#v}"
+          if [ "$tag" != "$version" ]; then
+            echo "release tag '$RELEASE_TAG' does not match pyproject version '$version'" >&2
+            exit 1
+          fi
+
+      - name: Release-candidate qualification
+        run: python tools/release/check_release_candidate.py
+
+  linux:
+    name: Linux x86_64 wheels
+    needs: metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build and repair Linux wheels
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: >-
+            cp39-manylinux_x86_64
+            cp310-manylinux_x86_64
+            cp311-manylinux_x86_64
+            cp312-manylinux_x86_64
+            cp313-manylinux_x86_64
+            cp314-manylinux_x86_64
+          CIBW_ARCHS_LINUX: x86_64
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+
+      - name: Validate Linux wheels
+        shell: bash
+        run: |
+          python -m pip install --upgrade "twine>=6,<7"
+          test -n "$(find wheelhouse -maxdepth 1 -name '*.whl' -print -quit)"
+          for whl in wheelhouse/*.whl; do
+            case "$(basename "$whl")" in
+              *-${{ needs.metadata.outputs.version }}-*) ;;
+              *) echo "wrong wheel version: $whl" >&2; exit 1 ;;
+            esac
+          done
+          python -m twine check wheelhouse/*.whl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-linux-${{ needs.metadata.outputs.version }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  macos-arm64:
+    name: macOS arm64 wheels
+    needs: metadata
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build and repair macOS arm64 wheels
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: >-
+            cp39-macosx_arm64
+            cp310-macosx_arm64
+            cp311-macosx_arm64
+            cp312-macosx_arm64
+            cp313-macosx_arm64
+            cp314-macosx_arm64
+          CIBW_ARCHS_MACOS: arm64
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+
+      - name: Validate macOS arm64 wheels
+        shell: bash
+        run: |
+          python -m pip install --upgrade "twine>=6,<7"
+          test -n "$(find wheelhouse -maxdepth 1 -name '*.whl' -print -quit)"
+          for whl in wheelhouse/*.whl; do
+            case "$(basename "$whl")" in
+              *-${{ needs.metadata.outputs.version }}-*) ;;
+              *) echo "wrong wheel version: $whl" >&2; exit 1 ;;
+            esac
+          done
+          python -m twine check wheelhouse/*.whl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-macos-arm64-${{ needs.metadata.outputs.version }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  macos-x86_64:
+    name: macOS x86_64 wheels
+    needs: metadata
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build and repair macOS x86_64 wheels
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: >-
+            cp39-macosx_x86_64
+            cp310-macosx_x86_64
+            cp311-macosx_x86_64
+            cp312-macosx_x86_64
+            cp313-macosx_x86_64
+            cp314-macosx_x86_64
+          CIBW_ARCHS_MACOS: x86_64
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+
+      - name: Validate macOS x86_64 wheels
+        shell: bash
+        run: |
+          python -m pip install --upgrade "twine>=6,<7"
+          test -n "$(find wheelhouse -maxdepth 1 -name '*.whl' -print -quit)"
+          for whl in wheelhouse/*.whl; do
+            case "$(basename "$whl")" in
+              *-${{ needs.metadata.outputs.version }}-*) ;;
+              *) echo "wrong wheel version: $whl" >&2; exit 1 ;;
+            esac
+          done
+          python -m twine check wheelhouse/*.whl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-macos-x86_64-${{ needs.metadata.outputs.version }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  windows:
+    name: Windows AMD64 wheels
+    needs: metadata
+    runs-on: windows-2025
+    timeout-minutes: 180
+    steps:
+      - name: Preserve LF source checkout
+        shell: pwsh
+        run: git config --global core.autocrlf input
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up MSYS2 UCRT64 toolchain
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make
+            curl
+            diffutils
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-zlib
+
+      - name: Build wheel-local CFITSIO
+        shell: msys2 {0}
+        run: |
+          export XSTAR_TOOLS_CFITSIO_PREFIX="$PWD/.xstar-cfitsio"
+          export XSTAR_TOOLS_CFITSIO_JOBS=2
+          set -o pipefail
+          bash tools/packaging/build_windows_cfitsio.sh 2>&1 | tee cfitsio-build.log
+
+      - name: Expose UCRT64 build and repair paths
+        shell: pwsh
+        run: |
+          $root = "${{ steps.msys2.outputs.msys2-location }}"
+          $prefix = Join-Path $env:GITHUB_WORKSPACE ".xstar-cfitsio"
+          $ucrtBin = Join-Path $root "ucrt64\bin"
+          $usrBin = Join-Path $root "usr\bin"
+          $pc = Get-ChildItem -Path $prefix -Recurse -Filter "cfitsio.pc" | Select-Object -First 1
+          if (-not $pc) { throw "cfitsio.pc not found under $prefix" }
+          $cfitsioDll = Get-ChildItem -Path $prefix -Recurse -Filter "*cfitsio*.dll" | Select-Object -First 1
+          if (-not $cfitsioDll) { throw "CFITSIO DLL not found under $prefix" }
+          $cfitsioBin = $cfitsioDll.Directory.FullName
+          $pkgconfig = $pc.Directory.FullName
+          $ucrtBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $usrBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $cfitsioBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "MSYSTEM=UCRT64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PKG_CONFIG_PATH=$pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "XSTAR_TOOLS_WINDOWS_DLL_PATH=$cfitsioBin;$ucrtBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build and repair Windows wheels
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: >-
+            cp39-win_amd64
+            cp310-win_amd64
+            cp311-win_amd64
+            cp312-win_amd64
+            cp313-win_amd64
+            cp314-win_amd64
+          CIBW_ARCHS_WINDOWS: AMD64
+          XSTAR_TOOLS_NATIVE: required
+          XSTAR_TOOLS_NATIVE_PROFILE: pypi-windows
+          XSTAR_TOOLS_NATIVE_JOBS: "2"
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+
+      - name: Validate Windows wheels
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade "twine>=6,<7"
+          $wheels = Get-ChildItem wheelhouse -Filter "*.whl"
+          if (-not $wheels) { throw "no Windows wheels were built" }
+          $version = "${{ needs.metadata.outputs.version }}"
+          foreach ($wheel in $wheels) {
+            if ($wheel.Name -notlike "*-$version-*") {
+              throw "wrong wheel version: $($wheel.Name)"
+            }
+            python -m twine check $wheel.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-windows-${{ needs.metadata.outputs.version }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+      - name: Upload Windows CFITSIO build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-cfitsio-log-${{ needs.metadata.outputs.version }}
+          path: cfitsio-build.log
+          if-no-files-found: warn
+
+  sdist:
+    name: Source distribution
+    needs: metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build and validate sdist
+        shell: bash
+        run: |
+          python -m pip install --upgrade build "twine>=6,<7"
+          python -m build --sdist --outdir sdist
+          test -n "$(find sdist -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          case "$(basename sdist/*.tar.gz)" in
+            *-${{ needs.metadata.outputs.version }}.tar.gz) ;;
+            *) echo "wrong sdist version" >&2; exit 1 ;;
+          esac
+          python -m twine check sdist/*.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sdist-${{ needs.metadata.outputs.version }}
+          path: sdist/*.tar.gz
+          if-no-files-found: error
+
+  aggregate:
+    name: Aggregate release bundle
+    needs: [metadata, linux, macos-arm64, macos-x86_64, windows, sdist]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-wheel-*-${{ needs.metadata.outputs.version }}
+          path: release-dist
+          merge-multiple: true
+
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: release-sdist-${{ needs.metadata.outputs.version }}
+          path: release-dist
+
+      - name: Validate aggregate bundle
+        shell: bash
+        run: |
+          python -m pip install --upgrade "twine>=6,<7"
+          python -m twine check release-dist/*
+
+          version="${{ needs.metadata.outputs.version }}"
+          test -n "$(find release-dist -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$(find release-dist -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          test -n "$(find release-dist -maxdepth 1 -name '*manylinux*x86_64.whl' -print -quit)"
+          test -n "$(find release-dist -maxdepth 1 -name '*macosx*arm64.whl' -print -quit)"
+          test -n "$(find release-dist -maxdepth 1 -name '*macosx*x86_64.whl' -print -quit)"
+          test -n "$(find release-dist -maxdepth 1 -name '*win_amd64.whl' -print -quit)"
+
+          for file in release-dist/*; do
+            case "$(basename "$file")" in
+              *-$version-*|*-$version.tar.gz) ;;
+              *) echo "release file has wrong version: $file" >&2; exit 1 ;;
+            esac
+          done
+
+          (cd release-dist && sha256sum * | sort -k2) > release-SHA256SUMS.txt
+          echo "RELEASE_VERSION=$version"
+          echo "RELEASE_FILES=$(find release-dist -maxdepth 1 -type f | wc -l)"
+          cat release-SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xstar-tools-${{ needs.metadata.outputs.version }}-pypi-release
+          path: |
+            release-dist/*
+            release-SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    if: github.event_name == 'release'
+    needs: [metadata, aggregate]
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download validated release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: xstar-tools-${{ needs.metadata.outputs.version }}-pypi-release
+          path: dist
+
+      - name: Remove checksum manifest from upload directory
+        shell: bash
+        run: rm -f dist/release-SHA256SUMS.txt
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
