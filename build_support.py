@@ -341,7 +341,7 @@ class XStarBuildPy(_build_py):
         metadata: dict[str, object] = {
             "schema": "xstar-tools-native-build-v2",
             "package_version": self.distribution.metadata.version,
-            "science_revision": "0.6.48.12.3.45.3.3.8",
+            "science_revision": "0.6.90.5.5",
             "c_api_abi": 60487,
             "production_zone_abi": 6048110,
             "policy": policy,
