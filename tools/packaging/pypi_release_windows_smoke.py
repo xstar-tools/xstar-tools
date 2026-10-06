@@ -12,6 +12,12 @@ import platform
 import subprocess
 import sys
 
+ROOT = Path(__file__).resolve().parents[2]
+POLICY = json.loads((ROOT / "qualification" / "parity_freeze.json").read_text(encoding="utf-8"))
+EXPECTED_SCIENCE_REVISION = str(POLICY["science_revision"])
+EXPECTED_C_API_ABI = int(POLICY["abis"]["c_api"])
+
+
 VERSION = importlib_metadata.version("xstar-tools")
 PREFIX = "PYPI_RELEASE_WINDOWS"
 
@@ -31,10 +37,10 @@ if platform.system() != "Windows" or platform.machine().lower() not in {"amd64",
 run(sys.executable, "-m", "pip", "check")
 
 version = run("xstar-cpp", "--version").stdout
-if VERSION not in version or "0.6.90.5.5" not in version:
+if VERSION not in version or EXPECTED_SCIENCE_REVISION not in version:
     raise SystemExit(f"unexpected xstar-cpp --version output: {version!r}")
 abi = run("xstar-cpp", "--abi").stdout
-if "60487" not in abi:
+if str(EXPECTED_C_API_ABI) not in abi:
     raise SystemExit(f"unexpected xstar-cpp --abi output: {abi!r}")
 run("xstar-xspec", "--version")
 
@@ -50,7 +56,7 @@ prepare_native_library_search(api_path)
 lib = ctypes.CDLL(str(api_path))
 lib.xstar_api_abi_version.argtypes = []
 lib.xstar_api_abi_version.restype = ctypes.c_uint32
-if int(lib.xstar_api_abi_version()) != 60487:
+if int(lib.xstar_api_abi_version()) != EXPECTED_C_API_ABI:
     raise SystemExit("installed libxstar_api ABI mismatch")
 
 cpp_dir = api_path.parent
