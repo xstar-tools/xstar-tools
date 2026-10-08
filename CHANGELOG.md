@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.91.1 — LINUX_ARM64_BUILD - 2026-10-08
+
+- Add a strict **native Linux aarch64** GitHub Actions source build/link qualification (`ubuntu-24.04-arm`) and a standalone host runner that never accepts x86 emulation or cross compilation as native ARM64 evidence.
+- Compile the existing full non-MPI native target (`make PLATFORM=linux all`) with the existing portable GCC `-O3`/strict-FP policy; verify all native ELF64/AArch64 shared objects/executables, dynamic dependencies and essential CLI/backend loading, recording logs and JSON evidence outside the release tree.
+- Enforce the complete accepted 0.6.90.5.5 science freeze via source SHA-256 manifests and existing policy/metadata gates. Preserve C API `60487`, production-zone `6048110`, fixed-state ABIs, the XSPEC-table ABI, and all scientific implementation files byte-for-byte.
+- Keep ARM32/piwheels, ARM64 scientific equivalence, PyPI ARM64 wheels, and all packaging/release-matrix changes out of scope (0.6.91.2–0.6.91.4). **Host acceptance is pending a real native ARM64 workflow result**; local x86 scaffolding checks do not imply ARM64 success.
+
 ## 0.6.90.5.8 — MN_TYPE49_SCIENCE_REFREEZE - 2026-10-05
 
 - Explicitly requalify and re-freeze the science change introduced in `0.6.90.5.5 — MN_TYPE49_SOURCE_SKIP_CLOSURE`; the accepted science revision is now `0.6.90.5.5`, matching the real milestone where scientific behavior changed.

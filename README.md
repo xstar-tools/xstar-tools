@@ -12,6 +12,9 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 ## Status
 
+`0.6.91.1 — LINUX_ARM64_BUILD` is an **ARM64 native-build qualification candidate**, not yet an accepted Linux ARM64 science or wheel release. It adds a native `ubuntu-24.04-arm` GitHub Actions build/link/runtime-loader job and independent exact source-hash freeze checks, while leaving all scientific implementation sources and ABI values unchanged. ARM64 host acceptance depends on the GitHub Actions job returning `LINUX_ARM64_BUILD_06911_HOST_RESULT=ACCEPT`. Python ARM64 wheels and cross-architecture numerical parity are reserved for later milestones. See [Linux ARM64 build qualification](docs/developer/linux_arm64_build_0_6_91_1.md).
+
+
 `0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP` consolidates closed milestone machinery without changing XSTAR science, scientific source bytes, or public ABI contracts. Historical one-off reports and replay scripts are preserved by repository history/tags rather than shipped in every release tree.
 
 `0.6.90.4 — DOCUMENTATION_COVERAGE_CLOSURE` completes native/Python documentation coverage, integrates Sphinx branding assets, and makes the warning-as-error documentation build clean without changing accepted science or ABI contracts.

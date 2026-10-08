@@ -2,6 +2,10 @@
 
 This page summarizes the **current accepted native portability contract**. Detailed milestone investigations and historical host rejections remain in the individual `0.6.88.*` developer notes and in `CHANGELOG.md`.
 
+## Linux ARM64 candidate
+
+`0.6.91.1 — LINUX_ARM64_BUILD` adds an independent native build/link/loader qualification job on `ubuntu-24.04-arm`. This is **not** a change to the accepted platform table below until the actual ARM64 runner reports ACCEPT. No science-critical source or frozen ABI changes are authorized. ARM32 (`armhf`)/piwheels is out of scope. See {doc}`linux_arm64_build_0_6_91_1`.
+
 ## Current accepted release
 
 `0.6.88.6.1.2.1 — WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE` is formally accepted across the full four-host GitHub Actions matrix.

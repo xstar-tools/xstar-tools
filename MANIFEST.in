@@ -44,6 +44,7 @@ recursive-include references/current *.json *.csv *.md
 recursive-include references/xstinitable_0_6_83 *
 recursive-include references/xstinitable_0_6_83_1 *
 
+include .github/workflows/linux-arm64-build.yml
 include .github/workflows/ci.yml
 include .github/workflows/parity-freeze.yml
 include .github/workflows/pypi-release.yml
