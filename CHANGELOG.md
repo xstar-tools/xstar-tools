@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.91.3 — LINUX_ARM64_PACKAGING - 2026-10-08
+
+- Add native `manylinux_2_28_aarch64` PyPI wheel construction/repair on `ubuntu-24.04-arm` using the existing retained `pypi-linux` non-MPI profile, pinned CFITSIO 4.6.2 source build, auditwheel repair, and clean-install smoke. Do not modify any frozen scientific source files or ABIs.
+- Add a standalone ARM64 packaging workflow (CPython 3.11 and 3.13 qualification) and extend the existing release wheel matrix/aggregate with ARM64 CPython 3.9–3.14. Every released ARM64 wheel must pass an isolated installed-native smoke and the new strict wheel-content/ELF/metadata qualification. No ARM32/piwheels support or bundled `atdb.fits`.
+- Enforce `manylinux_2_28_aarch64` tags, fully native AArch64 ELF artifacts, bundled wheel-local CFITSIO, no embedded `libpython` plugin, no optional MPI, exact accepted science revision `0.6.90.5.5`, and ABI 60487/6048110; retain evidence, release checksums and fail-closed behavior.
+- Status: **packaging implementation candidate / GitHub ARM64 wheel qualification pending**. The separate 0.6.91.2 full real-model science qualification remains `NOT_RUN` until external authenticated frozen references are supplied; packaging smoke alone does not substitute for that milestone.
+
 ## 0.6.91.2.1 — CI_TEST_HARNESS_CLOSURE - 2026-10-08
 
 - Repair the comparator unit test to construct its own small, strided FITS table instead of requiring a historical `xout_cont1.fits` that is not shipped in the reference snapshot. Synthetic FITS data are used **only** in the comparator unit test, never as a scientific acceptance oracle.

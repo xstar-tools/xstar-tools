@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.91.2.1"
+version = "0.6.91.3"
 description = "Python/C++ tools for XSTAR atomic data and high-performance runtimes"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -97,6 +97,7 @@ test-command = "python {package}/tools/packaging/pypi_release_linux_smoke.py"
 [tool.cibuildwheel.linux]
 archs = ["x86_64"]
 manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
 before-all = [
   "dnf install -y zlib-devel pkgconf-pkg-config",
   "bash {package}/tools/packaging/build_manylinux_cfitsio.sh",

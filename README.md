@@ -14,7 +14,7 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 `0.6.91.1 — LINUX_ARM64_BUILD` is **formally accepted** (native `ubuntu-24.04-arm` host: `LINUX_ARM64_BUILD_06911_HOST_RESULT=ACCEPT`, 2026-10-08). All 14 native shared libraries, 5 executables and frozen source-hash checks passed. This was build/link/loader acceptance only, not yet scientific validation. See [Linux ARM64 build qualification](docs/developer/linux_arm64_build_0_6_91_1.md).
 
-`0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` passed its native physics and retained fixed-state reference checks on Linux ARM64, but full science acceptance remains **NOT_RUN** until independently accepted, SHA-256-pinned real-model reference products and `atdb.fits` are supplied. `0.6.91.2.1 — CI_TEST_HARNESS_CLOSURE` repairs three separate CI test setup problems without changing any frozen science files, accepted ABIs, or the requirement for full-model reference verification. See [Linux ARM64 science qualification](docs/developer/linux_arm64_science_0_6_91_2.md). Linux ARM64 PyPI wheels remain deferred to 0.6.91.3.
+`0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` passed its native physics and retained fixed-state reference checks on Linux ARM64, but full science acceptance remains **NOT_RUN** until independently accepted, SHA-256-pinned real-model reference products and `atdb.fits` are supplied. `0.6.91.2.1 — CI_TEST_HARNESS_CLOSURE` repairs three separate CI test setup problems without changing any frozen science files, accepted ABIs, or the requirement for full-model reference verification. See [Linux ARM64 science qualification](docs/developer/linux_arm64_science_0_6_91_2.md). The `0.6.91.3 — LINUX_ARM64_PACKAGING` candidate adds native `manylinux_2_28_aarch64` wheel building and installed-wheel testing. Packaging host acceptance remains pending native GitHub Actions results, independent of the outstanding 0.6.91.2 real-model science qualification. See [Linux ARM64 packaging](docs/developer/linux_arm64_packaging_0_6_91_3.md).
 
 
 `0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP` consolidates closed milestone machinery without changing XSTAR science, scientific source bytes, or public ABI contracts. Historical one-off reports and replay scripts are preserved by repository history/tags rather than shipped in every release tree.
@@ -32,6 +32,7 @@ The `0.6.90 — CONDA_PACKAGING_REFRESH` is accepted and closed. It qualified th
 | Platform | Release wheels | Conda-forge | Accepted platform baseline |
 |---|---|---|---|
 | Linux x86_64 | CPython 3.9–3.14, `manylinux_2_28_x86_64` | `linux-64` — accepted | `0.6.89.2.2` |
+| Linux ARM64 (`aarch64`) | `manylinux_2_28_aarch64` (0.6.91.3 candidate; native wheel qualification pending) | not yet qualified | Build 0.6.91.1 ACCEPT; science 0.6.91.2 pending |
 | macOS arm64 | CPython 3.9–3.14, `macosx_11_0_arm64` | `osx-arm64` — accepted | `0.6.89.3` |
 | macOS x86_64 | CPython 3.9–3.14, `macosx_11_0_x86_64` | `osx-64` — accepted | `0.6.89.3` |
 | Windows AMD64 | CPython 3.9–3.14, `win_amd64` | not supported | `0.6.89.4.5` |
