@@ -117,3 +117,43 @@ LINUX_ARM64_SCIENCE_06912_HOST_RESULT=NOT_RUN
 Full acceptance requires the last two labels to be `ACCEPT`, together with
 unchanged science hashes and checked external reference provenance. Logs and
 `result.json` are uploaded even on rejected GitHub Actions runs.
+
+## 0.6.91.2.1 — CI test harness closure (2026-10-08)
+
+The native ARM64 0.6.91.2 evidence established `FREEZE=ACCEPT`,
+`NATIVE_BUILD=ACCEPT`, `FIXED_STATE_REFERENCE=ACCEPT`, and
+`NATIVE_PHYSICS_TESTS=ACCEPT`. Because neither `ARM64_SCIENCE_ASSET_URL` nor
+`ARM64_SCIENCE_ASSET_SHA256` was configured, `REAL_MODEL_REFERENCE=NOT_RUN`
+and `HOST_RESULT=NOT_RUN` are **correct**. The full-science acceptance gate
+is intentionally still mandatory.
+
+Independently, Python CI raised test-only failures that are repaired in
+0.6.91.2.1:
+
+1. `test_generated_python_caches_are_absent` now checks tracked files using
+   `git ls-files`; `pytest` itself may create untracked cache directories.
+   In a source archive without a `.git` index, this particular tracked-file
+   test is skipped (source cleanliness is enforced during packaging).
+2. The IEEE FITS comparator unit test now constructs a tiny strided FITS
+   binary table rather than reading `xout_cont1.fits` from a historical
+   reference directory that contains only CSV/JSON scientific products.
+   This synthetic table tests the comparator only; it is **not** a science
+   baseline, cannot contribute to the `REAL_MODEL_REFERENCE` gate, and never
+   changes an accepted reference.
+3. `setuptools>=77` is explicitly installed in development and CI environments
+   because Python 3.13 does not guarantee it is preinstalled in the test
+   interpreter. The existing `build_support.py` still imports it normally.
+
+To run the tests locally, ensure the development dependencies are installed
+and disable unnecessary Python bytecode output:
+
+```bash
+python -m pip install -e '.[dev]'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=./src python -m pytest -p no:cacheprovider -q
+```
+
+The repository can only complete ARM64 scientific host acceptance after a
+real-model reference bundle with checked provenance is supplied. No source
+modification, pytest skip, or new synthetic reference can replace that
+requirement. The two GitHub Actions secrets must be configured together and
+must identify an accessible immutable archive and its SHA-256 digest.

@@ -17,6 +17,30 @@ ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = ROOT / "tests/fixtures/historical/v06486_qualification_reference_v0472"
 
 
+def make_synthetic_fits_reference(directory: Path) -> Path:
+    """A self-contained comparator test, NOT a frozen scientific reference.
+
+    The historical v0.6.47.2 reference contains CSV/JSON results but does not
+    include ``xout_cont1.fits``.  Use a tiny two-row, mixed-type FITS table to
+    exercise IEEE comparisons on genuinely strided float column views.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "xout_cont1.fits"
+    columns = fits.ColDefs([
+        fits.Column(name="ION", format="J", array=np.array([1, 2], dtype=np.int32)),
+        fits.Column(name="TEMPERATURE", format="D", array=np.array([1.25e5, 2.5e5])),
+        fits.Column(name="FRACTION", format="E", array=np.array([0.125, 0.25], dtype=np.float32)),
+    ])
+    fits.HDUList([
+        fits.PrimaryHDU(), fits.BinTableHDU.from_columns(columns, name="SCIENCE_TEST"),
+    ]).writeto(path)
+    with fits.open(path, memmap=False) as hdul:
+        field = np.asarray(hdul[1].data["TEMPERATURE"])
+        assert field.ndim == 1 and field.size == 2
+        assert not field.flags.c_contiguous, "FITS test must exercise strided float fields"
+    return path
+
+
 def mutate_first_float_cell(path: Path) -> tuple[int, str, tuple[int, ...]]:
     patch: tuple[int, str, int, bytes] | None = None
     with fits.open(path, memmap=False) as hdul:
@@ -50,11 +74,13 @@ def mutate_first_float_cell(path: Path) -> tuple[int, str, tuple[int, ...]]:
 
 
 def test_ieee_fits_comparison_handles_noncontiguous_fields_and_finds_one_cell(tmp_path: Path) -> None:
+    reference = tmp_path / "reference"
+    make_synthetic_fits_reference(reference)
     candidate = tmp_path / "candidate"
-    shutil.copytree(REFERENCE, candidate)
+    shutil.copytree(reference, candidate)
     hdu_index, field, index = mutate_first_float_cell(candidate / "xout_cont1.fits")
 
-    result = compare_directories(REFERENCE, candidate, mode="ieee", profile="science-products")
+    result = compare_directories(reference, candidate, mode="ieee", profile="science-products")
 
     assert result["result"] == "REJECT"
     assert Path(result["reference_directory"]).is_absolute()
@@ -98,8 +124,10 @@ def test_cli_removes_stale_json_when_comparison_raises(tmp_path: Path) -> None:
 
 
 def test_cli_resolves_report_and_directory_paths_to_absolute(tmp_path: Path) -> None:
+    reference = tmp_path / "reference"
+    make_synthetic_fits_reference(reference)
     candidate = tmp_path / "candidate"
-    shutil.copytree(REFERENCE, candidate)
+    shutil.copytree(reference, candidate)
     report = tmp_path / "nested" / "report.json"
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT / "src") + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -110,7 +138,7 @@ def test_cli_resolves_report_and_directory_paths_to_absolute(tmp_path: Path) -> 
             "-m",
             "xstar_tools.xstar.qualification",
             "compare",
-            os.path.relpath(REFERENCE, ROOT),
+            os.path.relpath(reference, ROOT),
             os.path.relpath(candidate, ROOT),
             "--mode",
             "ieee",
@@ -133,3 +161,4 @@ def test_cli_resolves_report_and_directory_paths_to_absolute(tmp_path: Path) -> 
     assert report.resolve().is_file()
     assert payload["output_json"] == str(report.resolve())
     assert payload["result"] == "ACCEPT"
+    assert payload["files_compared"] == 1  # Not a vacuous directory comparison.

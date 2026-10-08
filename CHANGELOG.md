@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.91.2.1 — CI_TEST_HARNESS_CLOSURE - 2026-10-08
+
+- Repair the comparator unit test to construct its own small, strided FITS table instead of requiring a historical `xout_cont1.fits` that is not shipped in the reference snapshot. Synthetic FITS data are used **only** in the comparator unit test, never as a scientific acceptance oracle.
+- Check tracked Python cache artifacts in Git rather than temporary `__pycache__`/`.pyc` files created by test execution; skip this VCS-only assertion when running from an extracted tarball. Existing CI source-clean policy remains unchanged.
+- Make `setuptools>=77` an explicit development dependency and install it in `ci.yml`, eliminating the Python 3.13 `build_support.py` import failures.
+- Retain the native ARM64 science runner and strict full-science acceptance policy: `HOST_RESULT=NOT_RUN` when the external hashed `atdb.fits`/real-model reference suite is not supplied. No science-source changes, frozen hashes, or ABI changes. The accepted science revision remains `0.6.90.5.5`.
+
 ## 0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION - 2026-10-08
 
 - Add native Linux ARM64 scientific qualification over the accepted 0.6.91.1 build. Exercise spectral, thermal, convergence, construction/evaluation and fixed-state routines; compare a native fixed-state replay to the retained cross-platform STEP, visitation and FITS golden outputs.

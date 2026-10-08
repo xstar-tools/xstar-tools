@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.91.2"
+version = "0.6.91.2.1"
 description = "Python/C++ tools for XSTAR atomic data and high-performance runtimes"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "build>=1.0", "twine>=5"]
+dev = ["pytest>=7", "build>=1.0", "twine>=5", "setuptools>=77"]
 docs = ["sphinx==8.2.3", "sphinx-rtd-theme==3.1.0", "myst-parser==5.1.0"]
 hdf5 = ["h5py>=3"]
 sparse = ["scipy>=1.8"]
