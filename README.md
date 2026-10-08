@@ -12,7 +12,9 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 ## Status
 
-`0.6.91.1 — LINUX_ARM64_BUILD` is an **ARM64 native-build qualification candidate**, not yet an accepted Linux ARM64 science or wheel release. It adds a native `ubuntu-24.04-arm` GitHub Actions build/link/runtime-loader job and independent exact source-hash freeze checks, while leaving all scientific implementation sources and ABI values unchanged. ARM64 host acceptance depends on the GitHub Actions job returning `LINUX_ARM64_BUILD_06911_HOST_RESULT=ACCEPT`. Python ARM64 wheels and cross-architecture numerical parity are reserved for later milestones. See [Linux ARM64 build qualification](docs/developer/linux_arm64_build_0_6_91_1.md).
+`0.6.91.1 — LINUX_ARM64_BUILD` is **formally accepted** (native `ubuntu-24.04-arm` host: `LINUX_ARM64_BUILD_06911_HOST_RESULT=ACCEPT`, 2026-10-08). All 14 native shared libraries, 5 executables and frozen source-hash checks passed. This was build/link/loader acceptance only, not yet scientific validation. See [Linux ARM64 build qualification](docs/developer/linux_arm64_build_0_6_91_1.md).
+
+`0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` is a **science-qualification candidate**. It adds native physics and frozen fixed-state reference checks, plus strict full-model reference comparison when external SHA-256-pinned `atdb.fits` and accepted reference products are supplied. It never claims complete host science ACCEPT from the small synthetic scaffold alone. No scientific source or ABI changes are permitted. See [Linux ARM64 science qualification](docs/developer/linux_arm64_science_0_6_91_2.md). Linux ARM64 PyPI wheels remain deferred to 0.6.91.3.
 
 
 `0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP` consolidates closed milestone machinery without changing XSTAR science, scientific source bytes, or public ABI contracts. Historical one-off reports and replay scripts are preserved by repository history/tags rather than shipped in every release tree.

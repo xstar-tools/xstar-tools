@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION - 2026-10-08
+
+- Add native Linux ARM64 scientific qualification over the accepted 0.6.91.1 build. Exercise spectral, thermal, convergence, construction/evaluation and fixed-state routines; compare a native fixed-state replay to the retained cross-platform STEP, visitation and FITS golden outputs.
+- Require a separate, explicitly pinned real science reference suite (single-element + multi-element with `mnabund=1`), external `atdb.fits`/`coheat.dat` and preexisting FORTRAN/accepted C++ output hashes before full host acceptance. Apply the unchanged frozen STEP comparator and fixed FITS normalized-L1 policy; absent inputs yield `HOST_RESULT=NOT_RUN`, never a false `ACCEPT`.
+- Record independent per-test diagnostic logs, provenance and a machine-readable result report; provide manual Linux ARM64 GitHub Actions workflow and regression tests for tampering, numeric changes and missing assets.
+- Keep all frozen source files byte-identical; accepted science revision `0.6.90.5.5`, ABI `60487` / `6048110`, no ARM32, MPI, solver changes or ARM64 wheel production. **Native full-science host acceptance pending user-supplied reference inputs and an ARM64 run.**
+
 ## 0.6.91.1 — LINUX_ARM64_BUILD - 2026-10-08
 
 - Add a strict **native Linux aarch64** GitHub Actions source build/link qualification (`ubuntu-24.04-arm`) and a standalone host runner that never accepts x86 emulation or cross compilation as native ARM64 evidence.
