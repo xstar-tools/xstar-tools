@@ -96,6 +96,66 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
 
+  linux-arm64:
+    name: Linux aarch64 wheels
+    needs: metadata
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Verify science freeze before ARM64 wheel creation
+        run: |
+          python -B tools/release/validate_linux_arm64_wheels.py \
+            --package "$PWD" --preflight-only
+
+      - name: Build, repair and smoke-test Linux ARM64 wheels
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: >-
+            cp39-manylinux_aarch64
+            cp310-manylinux_aarch64
+            cp311-manylinux_aarch64
+            cp312-manylinux_aarch64
+            cp313-manylinux_aarch64
+            cp314-manylinux_aarch64
+          CIBW_ARCHS_LINUX: aarch64
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+
+      - name: Qualify repaired ARM64 release wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade "twine>=6,<7"
+          python -m twine check wheelhouse/*.whl
+          python -B tools/release/validate_linux_arm64_wheels.py \
+            --package "$PWD" \
+            --wheel-dir "$PWD/wheelhouse" \
+            --output-root "$RUNNER_TEMP/linux_arm64_release_evidence" \
+            --require-builds cp39 cp310 cp311 cp312 cp313 cp314
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-linux-arm64-${{ needs.metadata.outputs.version }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+      - name: Upload ARM64 release qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-arm64-evidence-${{ needs.metadata.outputs.version }}
+          path: ${{ runner.temp }}/linux_arm64_release_evidence/
+          if-no-files-found: warn
+
   macos-arm64:
     name: macOS arm64 wheels
     needs: metadata
@@ -326,7 +386,7 @@ jobs:
 
   aggregate:
     name: Aggregate release bundle
-    needs: [metadata, linux, macos-arm64, macos-x86_64, windows, sdist]
+    needs: [metadata, linux, linux-arm64, macos-arm64, macos-x86_64, windows, sdist]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -357,6 +417,7 @@ jobs:
           test -n "$(find release-dist -maxdepth 1 -name '*.whl' -print -quit)"
           test -n "$(find release-dist -maxdepth 1 -name '*.tar.gz' -print -quit)"
           test -n "$(find release-dist -maxdepth 1 -name '*manylinux*x86_64.whl' -print -quit)"
+          test -n "$(find release-dist -maxdepth 1 -name '*manylinux*aarch64.whl' -print -quit)"
           test -n "$(find release-dist -maxdepth 1 -name '*macosx*arm64.whl' -print -quit)"
           test -n "$(find release-dist -maxdepth 1 -name '*macosx*x86_64.whl' -print -quit)"
           test -n "$(find release-dist -maxdepth 1 -name '*win_amd64.whl' -print -quit)"

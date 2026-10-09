@@ -1,0 +1,38 @@
+name: CI
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install system build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential libcfitsio-dev pkg-config
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install -U pip "setuptools>=77" wheel
+          python -m pip install -e '.[dev]'
+          python -c "import setuptools; print('CI setuptools:', setuptools.__version__)"
+      - name: Repository and metadata policy
+        run: |
+          python tools/ci/check_tree_clean.py
+          python tools/ci/check_package_metadata.py
+          python tools/ci/check_python_contract.py
+          python tools/ci/check_text_policy.py
+      - name: Frozen scientific boundary
+        run: |
+          python tools/qualification/check_parity_freeze.py
+          python tools/qualification/check_source_concordance.py
+          python tools/release/check_release_candidate.py
+      - name: Test suite
+        run: python -m pytest -q

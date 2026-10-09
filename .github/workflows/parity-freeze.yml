@@ -1,0 +1,24 @@
+name: Parity freeze
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  parity-freeze:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate frozen scientific boundary
+        run: python tools/qualification/check_parity_freeze.py
+      - name: Validate source concordance
+        run: python tools/qualification/check_source_concordance.py
+      - name: Validate release-tree boundary
+        run: python tools/release/check_release_candidate.py
