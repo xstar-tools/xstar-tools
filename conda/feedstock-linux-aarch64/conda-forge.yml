@@ -1,0 +1,12 @@
+# Proposal for https://github.com/conda-forge/xstar-tools-feedstock
+# Apply to feedstock root, rerender, and submit PR; NOT an active feedstock config.
+conda_build_tool: rattler-build
+github:
+  branch_name: main
+  tooling_branch_name: main
+conda_build:
+  error_overlinking: true
+  conda_forge_output_validation: true
+provider:
+  osx_arm64: azure
+  linux_aarch64: default
