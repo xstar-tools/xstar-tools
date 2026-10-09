@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07101e">
+  <title>XSTAR Tools — Python &amp; C++ XSTAR Photoionization Modeling</title>
+  <meta name="description" content="xstar-tools brings XSTAR photoionization modeling to Python and native C++, with scientific validation, FITS spectra, XSPEC tables, and parallel workflows.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="author" content="xstar-tools contributors">
+  <link rel="canonical" href="https://xstar-tools.github.io/xstar-tools/">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon-16x16.png">
+  <link rel="shortcut icon" href="./assets/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
+  <link rel="sitemap" type="application/xml" href="./sitemap.xml">
+  <link rel="preload" href="./assets/spectrum.svg" as="image" type="image/svg+xml">
+  <link rel="stylesheet" href="./assets/styles.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="xstar-tools">
+  <meta property="og:title" content="XSTAR Tools — Modern XSTAR Photoionization Modeling">
+  <meta property="og:description" content="Scientifically qualified XSTAR photoionization calculations in Python and native C++. Spectra, XSPEC table models, and parallel workflows.">
+  <meta property="og:url" content="https://xstar-tools.github.io/xstar-tools/">
+  <meta property="og:image" content="https://xstar-tools.github.io/xstar-tools/assets/apple-touch-icon.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="180">
+  <meta property="og:image:height" content="180">
+  <meta property="og:image:alt" content="Official xstar-tools logo">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="XSTAR Tools — Python &amp; C++ Photoionization Modeling">
+  <meta name="twitter:description" content="Native XSTAR modeling, scientific validation, FITS/XSPEC products, and parallel grid execution.">
+  <meta name="twitter:image" content="https://xstar-tools.github.io/xstar-tools/assets/apple-touch-icon.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://xstar-tools.github.io/xstar-tools/#website",
+        "url": "https://xstar-tools.github.io/xstar-tools/",
+        "name": "xstar-tools",
+        "alternateName": ["XSTAR Tools", "XSTAR photoionization tools"],
+        "description": "Python and C++ tools for XSTAR atomic data, photoionization modeling, spectral outputs and XSPEC table models.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": "https://xstar-tools.github.io/xstar-tools/#software",
+        "name": "xstar-tools",
+        "alternateName": "XSTAR Tools",
+        "url": "https://xstar-tools.github.io/xstar-tools/",
+        "codeRepository": "https://github.com/xstar-tools/xstar-tools",
+        "downloadUrl": "https://pypi.org/project/xstar-tools/",
+        "license": "https://github.com/xstar-tools/xstar-tools/blob/main/LICENSE",
+        "programmingLanguage": ["Python", "C++"],
+        "runtimePlatform": "Linux, macOS, Windows",
+        "description": "Open-source Python/C++ implementation of XSTAR photoionization calculations using the XSTAR atomic database, with native runtimes, FITS products, XSPEC table model generation and optional MPI orchestration.",
+        "keywords": "XSTAR, xstar-tools, photoionization, X-ray spectroscopy, astrophysics, spectral modeling, XSPEC, FITS, C++",
+        "softwareHelp": "https://xstar-tools.readthedocs.io/",
+        "isAccessibleForFree": true
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="site-wrap" id="top">
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#top" aria-label="xstar-tools, homepage">
+          <img src="./assets/xstar-tools.webp" width="38" height="38" alt="" aria-hidden="true">
+          <span>xstar<span class="brand-dash">-</span>tools</span>
+        </a>
+        <nav class="desktop-nav" aria-label="Main navigation">
+          <a href="#features">Features</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#install">Install</a>
+          <a href="#science">Science</a>
+          <a href="https://xstar-tools.readthedocs.io/">Documentation <span aria-hidden="true">↗</span></a>
+        </nav>
+        <a class="header-github" href="https://github.com/xstar-tools/xstar-tools" target="_blank" rel="noopener noreferrer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .9A11.1 11.1 0 0 0 8.49 22.52c.55.1.75-.24.75-.54v-2.03c-3.06.67-3.7-1.3-3.7-1.3-.5-1.27-1.22-1.6-1.22-1.6-1-.7.08-.69.08-.69 1.11.08 1.69 1.14 1.69 1.14.99 1.68 2.6 1.2 3.24.92.1-.72.39-1.2.7-1.48-2.44-.27-5.01-1.22-5.01-5.46 0-1.21.43-2.2 1.14-2.98-.11-.28-.49-1.41.11-2.94 0 0 .93-.3 3.05 1.14a10.5 10.5 0 0 1 5.55 0c2.12-1.44 3.05-1.14 3.05-1.14.6 1.53.22 2.66.11 2.94.71.78 1.14 1.77 1.14 2.98 0 4.25-2.57 5.18-5.02 5.45.4.35.75 1.03.75 2.07v3.07c0 .3.2.65.76.54A11.1 11.1 0 0 0 12 .9Z"/></svg>
+          <span>GitHub</span><span aria-hidden="true">↗</span>
+        </a>
+        <details class="mobile-nav">
+          <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
+          <nav aria-label="Mobile navigation">
+            <a href="#features">Features</a>
+            <a href="#workflow">Workflow</a>
+            <a href="#install">Install</a>
+            <a href="#science">Science &amp; validation</a>
+            <a href="https://xstar-tools.readthedocs.io/">Documentation ↗</a>
+            <a href="https://github.com/xstar-tools/xstar-tools">GitHub ↗</a>
+          </nav>
+        </details>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero section" aria-labelledby="hero-title">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow"><span class="signal" aria-hidden="true"></span> OPEN-SOURCE SCIENTIFIC SOFTWARE <span class="eyebrow-split">/</span> ASTROPHYSICS</div>
+            <h1 id="hero-title">XSTAR science.<br><span class="gradient-ink">Modern tools.</span></h1>
+            <p class="hero-lead">X-ray photoionization modeling with <strong>Python and native <span class="nowrap">C++</span></strong>, built around the XSTAR atomic data and carefully compared with the original FORTRAN XSTAR.</p>
+            <p class="hero-sub">Run photoionized plasma models, produce FITS spectra, and build XSPEC table models—from a single calculation to a parallel grid.</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://xstar-tools.readthedocs.io/">Explore documentation <span aria-hidden="true">↗</span></a>
+              <a class="button button-secondary" href="#install">Quick start <span aria-hidden="true">↓</span></a>
+            </div>
+            <div class="hero-doc-links"><span class="small-label">RESOURCES</span><a href="https://xstar-tools.readthedocs.io/">Documentation</a><span aria-hidden="true">·</span><a href="https://xstar-tools.readthedocs.io/_/downloads/en/latest/pdf/">Download PDF <span aria-hidden="true">↗</span></a></div>
+          </div>
+          <div class="hero-art">
+            <div class="spectral-panel">
+              <div class="panel-top"><span class="panel-overline"><span class="panel-pip"></span> COMPUTATIONAL ASTROPHYSICS</span><span class="panel-id">XSTAR / SPECTRUM</span></div>
+              <div class="figure-head"><span>X-ray spectral structure</span><span class="spectrum-chip">λ / E</span></div>
+              <img class="spectrum-image" src="./assets/spectrum.svg" alt="Illustrative X-ray spectrum with emission and absorption features; not a computed XSTAR result" width="720" height="424" fetchpriority="high">
+              <div class="spectrum-foot"><span><span class="legend-dot dot-cyan"></span> emission / continuum</span><span><span class="legend-dot dot-warm"></span> line features</span></div>
+              <div class="panel-caption">Illustrative visualization · Not scientific output</div>
+            </div>
+            <div class="orbital orbital-one" aria-hidden="true"></div>
+            <div class="orbital orbital-two" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="container"><div class="hero-divider" aria-hidden="true"></div></div>
+      </section>
+
+      <section class="capability-strip" aria-label="At a glance">
+        <div class="container capability-inner">
+          <span>PYTHON INTERFACES</span><i aria-hidden="true"></i>
+          <span>NATIVE C++ ENGINE</span><i aria-hidden="true"></i>
+          <span>FITS / XSPEC OUTPUTS</span><i aria-hidden="true"></i>
+          <span>PARALLEL GRID EXECUTION</span>
+        </div>
+      </section>
+
+      <section class="section features-section" id="features" aria-labelledby="features-heading">
+        <div class="container">
+          <div class="section-heading split-heading"><div><div class="kicker">01 / CAPABILITIES</div><h2 id="features-heading">From atomic data<br>to <span class="muted-heading">scientific insight.</span></h2></div><p>Tools for building, running, and validating XSTAR-based workflows without leaving the Python and C++ ecosystem.</p></div>
+          <div class="feature-grid">
+            <article class="feature-card feature-card-accent"><div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M3 24h6l4-15 6 18 4-10h6M3 8h4M24 7h5"/></svg></div><span class="card-number">01</span><h3>Native photoionization engine</h3><p>Execute XSTAR calculations with a native C++ runtime using the XSTAR atomic database and FORTRAN-referenced numerical behavior.</p><span class="card-tag">xstar-cpp</span></article>
+            <article class="feature-card"><div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="m12 9-7 7 7 7m8-14 7 7-7 7M18 5l-4 22"/></svg></div><span class="card-number">02</span><h3>Python-first workflows</h3><p>Use Python interfaces and command-line utilities to manage models, atomic data, native backends, and results.</p><span class="card-tag">Python API + CLI</span></article>
+            <article class="feature-card"><div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="5" y="5" width="22" height="22" rx="3"/><path d="M5 12h22M12 12v15M19 12v15M9 9h1m4 0h1"/></svg></div><span class="card-number">03</span><h3>FITS &amp; XSPEC products</h3><p>Publish spectra, ion populations, line diagnostics and FITS table models designed for X-ray spectral analysis.</p><span class="card-tag">FITS · XSPEC</span></article>
+            <article class="feature-card"><div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="2" y="12" width="8" height="8" rx="2"/><rect x="22" y="3" width="8" height="8" rx="2"/><rect x="22" y="21" width="8" height="8" rx="2"/><path d="M10 16h5V7h7M15 16v9h7"/></svg></div><span class="card-number">04</span><h3>Parallel model grids</h3><p>Run independent XSTAR jobs through local-process scheduling or opt-in MPI orchestration on supported HPC systems.</p><span class="card-tag">xstar-xspec · MPI</span></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section workflow-section" id="workflow" aria-labelledby="workflow-heading">
+        <div class="container workflow-shell">
+          <div class="workflow-head"><div><div class="kicker">02 / WORKFLOW</div><h2 id="workflow-heading">One pipeline.<br><span class="muted-heading">Multiple scales.</span></h2></div><p>From a single photoionization model to reproducible grids of spectra ready for XSPEC.</p></div>
+          <ol class="pipeline" aria-label="XSTAR model workflow">
+            <li><div class="step-dot">01</div><span class="step-overline">INPUT</span><h3>Configure</h3><p>Model parameters and external XSTAR atomic data</p><code>xstar.par</code></li>
+            <li><div class="step-dot">02</div><span class="step-overline">COMPUTE</span><h3>Solve</h3><p>Native C++ photoionization and thermal calculations</p><code>xstar-cpp</code></li>
+            <li><div class="step-dot">03</div><span class="step-overline">ORCHESTRATE</span><h3>Scale</h3><p>Local process pool or optional true MPI grid</p><code>xstar-xspec</code></li>
+            <li><div class="step-dot">04</div><span class="step-overline">OUTPUT</span><h3>Analyze</h3><p>FITS spectra, diagnostic products and XSPEC tables</p><code>*.fits</code></li>
+          </ol>
+          <div class="workflow-bottom"><span><span class="mini-diamond" aria-hidden="true"></span> Source-faithful scientific arithmetic, with explicit qualification boundaries</span><a href="https://xstar-tools.readthedocs.io/">Explore the full workflow ↗</a></div>
+        </div>
+      </section>
+
+      <section class="section install-section" id="install" aria-labelledby="install-heading">
+        <div class="container">
+          <div class="section-heading split-heading"><div><div class="kicker">03 / GET STARTED</div><h2 id="install-heading">Get to the <span class="muted-heading">science.</span></h2></div><p>Install the package, verify your runtime, and point it to the official XSTAR atomic data.</p></div>
+          <div class="install-grid">
+            <article class="terminal"><div class="terminal-head"><div class="terminal-dots" aria-hidden="true"><b></b><b></b><b></b></div><span>INSTALL / CONDA-FORGE</span><span class="terminal-system">Linux · macOS</span></div><div class="terminal-body"><div class="code-note"># Recommended for Linux and macOS</div><pre><code><span class="prompt">$</span> conda install -c conda-forge xstar-tools</code></pre><button type="button" class="copy-button" data-copy="conda install -c conda-forge xstar-tools" aria-label="Copy conda installation command"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy</span></button></div></article>
+            <article class="terminal"><div class="terminal-head"><div class="terminal-dots" aria-hidden="true"><b></b><b></b><b></b></div><span>INSTALL / PYPI</span><span class="terminal-system">Python 3.9+</span></div><div class="terminal-body"><div class="code-note"># Python package and native tooling</div><pre><code><span class="prompt">$</span> python -m pip install xstar-tools</code></pre><button type="button" class="copy-button" data-copy="python -m pip install xstar-tools" aria-label="Copy pip installation command"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy</span></button></div></article>
+          </div>
+          <div class="run-card">
+            <div class="run-header"><div><span class="tiny-label">YOUR FIRST CALCULATION</span><h3>Run a native XSTAR model</h3></div><span class="run-tag">COMMAND LINE</span></div>
+            <pre class="run-code"><code><span class="cmd">xstar-cpp</span> \
+  --input xstar.par \
+  --data-dir /path/to/xstar/data \
+  --output-dir run_xstar</code></pre>
+            <button type="button" class="copy-button copy-inline" data-copy="xstar-cpp --input xstar.par --data-dir /path/to/xstar/data --output-dir run_xstar" aria-label="Copy XSTAR model command"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Copy command</span></button>
+          </div>
+          <p class="install-note"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg> <span><strong>Atomic data are external.</strong> Models require the official XSTAR <code>atdb.fits</code> and <code>coheat.dat</code> files. Windows native builds use MSYS2 UCRT64; conda-forge does not support Windows. <a href="https://xstar-tools.readthedocs.io/">Read the installation &amp; data guide ↗</a></span></p>
+        </div>
+      </section>
+
+      <section class="section science-section" id="science" aria-labelledby="science-heading">
+        <div class="container science-layout">
+          <div><div class="kicker">04 / SCIENTIFIC FOUNDATION</div><h2 id="science-heading">The physics<br>comes <span class="muted-heading">first.</span></h2><p class="science-lead">xstar-tools is developed against the official FORTRAN XSTAR reference, with numerical regression tests spanning atomic processes, thermal balance, ion populations, and published spectral products.</p><p class="science-detail"><strong>What is XSTAR?</strong> <a href="https://heasarc.gsfc.nasa.gov/docs/software/xstar/xstar.html">XSTAR</a> is the astrophysical software developed to calculate the physical conditions and emission spectra of photoionized gas. The original FORTRAN program is distributed by NASA HEASARC through HEASoft. xstar-tools is an independent open-source Python/C++ implementation and companion toolkit—not the official FORTRAN distribution. The project distinguishes scientific equivalence from platform packaging or installation checks.</p><a class="text-link" href="https://github.com/xstar-tools/xstar-tools/blob/main/PARITY_FREEZE.md">Read the scientific parity policy <span aria-hidden="true">↗</span></a></div>
+          <div class="science-panel"><div class="science-panel-label">SCIENTIFIC PROVENANCE</div><dl><div><dt>REFERENCE ORACLE</dt><dd>FORTRAN XSTAR 2.59g</dd></div><div><dt>ACCEPTED SCIENCE REVISION</dt><dd>0.6.90.5.5</dd></div><div><dt>NUMERICAL QUALIFICATION</dt><dd>Ionization · thermal balance · spectra</dd></div><div><dt>ATOMIC DATABASE</dt><dd>External official XSTAR data</dd></div></dl><a href="https://github.com/xstar-tools/xstar-tools/blob/main/CHANGELOG.md">Review release history <span aria-hidden="true">↗</span></a></div>
+        </div>
+      </section>
+
+      <section class="section platform-section" aria-labelledby="platform-heading">
+        <div class="container platform-inner"><div><div class="kicker">BUILT TO TRAVEL</div><h2 id="platform-heading">Science across <span class="muted-heading">systems.</span></h2><p>Native build and packaging qualification covers Linux x86-64 and ARM64, macOS on Apple Silicon and Intel, and Windows via MinGW/UCRT64. Optional true MPI targets supported HPC environments.</p></div><div class="platform-tags"><span>Linux x86-64</span><span>Linux ARM64</span><span>macOS arm64</span><span>macOS x86-64</span><span>Windows UCRT64</span><span>Optional MPI</span></div></div>
+      </section>
+
+      <section class="section resources-section" id="resources" aria-labelledby="resources-heading">
+        <div class="container"><div class="resources-top"><div class="kicker">05 / LEARN MORE</div><h2 id="resources-heading">Go deeper with XSTAR.</h2><p>Everything you need to understand, use, and contribute to the project.</p></div><div class="resources-grid">
+          <a class="resource-link resource-featured" href="https://xstar-tools.readthedocs.io/"><span class="resource-type">ONLINE MANUAL</span><strong>Documentation</strong><span>Installation, science interfaces, native tools and API references.</span><span class="resource-arrow" aria-hidden="true">↗</span></a>
+          <a class="resource-link" href="https://xstar-tools.readthedocs.io/_/downloads/en/latest/pdf/"><span class="resource-type">OFFLINE REFERENCE</span><strong>Download PDF</strong><span>Keep the complete xstar-tools documentation close at hand.</span><span class="resource-arrow" aria-hidden="true">↗</span></a>
+          <a class="resource-link" href="https://github.com/xstar-tools/xstar-tools"><span class="resource-type">OPEN SOURCE</span><strong>GitHub repository</strong><span>Browse the code, examples, issues, and releases.</span><span class="resource-arrow" aria-hidden="true">↗</span></a>
+        </div></div>
+      </section>
+
+      <section class="bottom-cta" aria-labelledby="bottom-cta-heading"><div class="container bottom-cta-inner"><div><span class="kicker">READY TO EXPLORE?</span><h2 id="bottom-cta-heading">A modern path into<br><span class="gradient-ink">XSTAR modeling.</span></h2></div><a class="button button-primary" href="https://xstar-tools.readthedocs.io/">Get started <span aria-hidden="true">↗</span></a></div></section>
+    </main>
+
+    <footer class="site-footer"><div class="container footer-main"><div><a class="brand" href="#top"><img src="./assets/xstar-tools.webp" width="31" height="31" alt="" aria-hidden="true"><span>xstar<span class="brand-dash">-</span>tools</span></a><p>Open-source Python and C++ tools for XSTAR atomic data and X-ray photoionization modeling.</p></div><div class="footer-links"><div><h2>PROJECT</h2><a href="https://github.com/xstar-tools/xstar-tools">Source code</a><a href="https://github.com/xstar-tools/xstar-tools/blob/main/CHANGELOG.md">Changelog</a><a href="https://pypi.org/project/xstar-tools/">PyPI package</a><a href="https://anaconda.org/conda-forge/xstar-tools">Conda-forge</a></div><div><h2>RESOURCES</h2><a href="https://xstar-tools.readthedocs.io/">Documentation</a><a href="https://xstar-tools.readthedocs.io/_/downloads/en/latest/pdf/">Download PDF</a><a href="https://github.com/xstar-tools/xstar-tools/blob/main/PARITY_FREEZE.md">Science parity</a><a href="https://heasarc.gsfc.nasa.gov/docs/software/xstar/xstar.html">Original XSTAR ↗</a></div></div></div><div class="container footer-bottom"><span>© <span id="year">2026</span> xstar-tools contributors · GPL-3.0-only</span><span>Independent open-source project · Built for scientific reproducibility</span></div></footer>
+  </div>
+  <script src="./assets/main.js" defer></script>
+</body>
+</html>
