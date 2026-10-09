@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.91.4 — CROSS_PLATFORM_CLOSURE - 2026-10-08
+
+- Introduce a dedicated five-host native PyPI wheel regression campaign: Linux x86_64/aarch64, macOS arm64/x86_64, and Windows UCRT64 AMD64. Use a single CPython 3.13 build per host, the existing repaired-wheel isolated smoke and a new fail-closed host-wheel/provenance/ABI/native-architecture/CFITSIO validator. Emit independently inspectable per-host JSON evidence; qualify only after all five host results are ACCEPT.
+- Make the PyPI **release** ARM64 qualification permanently version-independent: dynamically read the package version and separately frozen science/ABI contract from the source tree. Preserve the immutable 0.6.91.3 milestone qualification script. Do not automatically publish packages from the closure workflow.
+- Record prior accepted 0.6.91.3 native ARM64 packaging results for CPython 3.11 and 3.13, without extending this acceptance to untested CPython versions. The full real-model 0.6.91.2 science qualification remains NOT_RUN until authentic SHA-256-pinned external reference data are provided.
+- **Candidate; full five-host GitHub Actions execution pending.** No frozen scientific implementation files, reference tolerances, native scientific ABIs or C++ numerical algorithms were modified. Science revision remains 0.6.90.5.5.
+
 ## 0.6.91.3 — LINUX_ARM64_PACKAGING - 2026-10-08
 
 - Add native `manylinux_2_28_aarch64` PyPI wheel construction/repair on `ubuntu-24.04-arm` using the existing retained `pypi-linux` non-MPI profile, pinned CFITSIO 4.6.2 source build, auditwheel repair, and clean-install smoke. Do not modify any frozen scientific source files or ABIs.

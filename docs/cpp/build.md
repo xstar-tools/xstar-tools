@@ -7,11 +7,12 @@ The accepted native build continues to use the retained GNU Make build rather th
 | Platform | Toolchain | Non-MPI native status |
 |---|---|---|
 | Linux x86_64 | GCC / GNU Make | ACCEPT |
+| Linux aarch64 (ARM64) | GCC / GNU Make | ACCEPT (0.6.91.1 build; 0.6.91.4 wheel/runtime) |
 | macOS arm64 | Apple Clang / GNU Make | ACCEPT |
 | macOS x86_64 | Apple Clang / GNU Make | ACCEPT |
 | Windows x86_64 | MSYS2 UCRT64 / MinGW-w64 GCC / GNU Make | ACCEPT |
 
-Current accepted portability closure: `0.6.88.6.1.2.1`.
+Current five-host CPython 3.13 wheel/installed-runtime closure: `0.6.91.4` (ACCEPT). The historical `0.6.88.6.1.2.1` four-host qualification remains accepted. The ARM64 native physics/fixed-state regression (0.6.91.2 Tier 1) passed under the uniform platform standard; optional full-model comparison (Tier 2) is `NOT_RUN`.
 
 ## Source checkout build
 

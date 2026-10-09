@@ -37,7 +37,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char *kPackageVersion = "0.6.91.3";
+constexpr const char *kPackageVersion = "0.6.91.4";
 constexpr int kQueueNextSlot = 0;
 constexpr int kQueueFailed = 1;
 constexpr int kQueueInts = 2;

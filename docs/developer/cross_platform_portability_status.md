@@ -2,17 +2,18 @@
 
 This page summarizes the **current accepted native portability contract**. Detailed milestone investigations and historical host rejections remain in the individual `0.6.88.*` developer notes and in `CHANGELOG.md`.
 
-## Linux ARM64 candidate
+## Linux ARM64 status
 
-`0.6.91.1 — LINUX_ARM64_BUILD` adds an independent native build/link/loader qualification job on `ubuntu-24.04-arm`. This is **not** a change to the accepted platform table below until the actual ARM64 runner reports ACCEPT. No science-critical source or frozen ABI changes are authorized. ARM32 (`armhf`)/piwheels is out of scope. See {doc}`linux_arm64_build_0_6_91_1`.
+`0.6.91.1 — LINUX_ARM64_BUILD` is formally **ACCEPT** on native `ubuntu-24.04-arm`: compile, link, ELF loader and frozen-science/source checks passed. `0.6.91.3 — LINUX_ARM64_PACKAGING` is **ACCEPT** for repaired CPython 3.11 and 3.13 Linux ARM64 wheels. The `0.6.91.4` cross-platform closure adds Linux ARM64 to the accepted **five-host CPython 3.13** wheel/installed-runtime matrix. ARM64 native physics and fixed-state scientific regression checks (0.6.91.2 Tier 1) are **ACCEPT**, consistent with the tests required for previously accepted macOS and Windows hosts. An optional full-model comparison with external `atdb.fits` (Tier 2) remains **NOT_RUN** pending reference assets; this is not a failing model comparison. ARM32 (`armhf`)/piwheels is out of scope. See {doc}`linux_arm64_build_0_6_91_1`, {doc}`linux_arm64_packaging_0_6_91_3`, and {doc}`linux_arm64_science_0_6_91_2`.
 
 ## Current accepted release
 
-`0.6.88.6.1.2.1 — WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE` is formally accepted across the full four-host GitHub Actions matrix.
+`0.6.91.4 — CROSS_PLATFORM_CLOSURE` is formally **ACCEPTED** (2026-10-08) across five native host environments on CPython 3.13. The prior `0.6.88.6.1.2.1 — WINDOWS_GIT_PREFLIGHT_SHELL_CLOSURE` remains the accepted historical four-host source/fixed-state closure.
 
 | Host | Toolchain | Native non-MPI status |
 |---|---|---|
 | Linux x86_64 | GCC / GNU Make | ACCEPT |
+| Linux aarch64 | GCC / GNU Make | ACCEPT (0.6.91.1 build; 0.6.91.4 wheel/runtime) |
 | macOS arm64 | Apple Clang / GNU Make | ACCEPT |
 | macOS x86_64 | Apple Clang / GNU Make | ACCEPT |
 | Windows x86_64 | MSYS2 UCRT64 / MinGW-w64 GCC / GNU Make | ACCEPT |
@@ -43,6 +44,8 @@ Observed accepted results:
 | macOS x86_64 | canonical fixed-state payloads byte-exact |
 | Windows UCRT64 | FITS byte-exact; text differs only by CRLF serialization and normalizes exactly |
 | macOS arm64 | same-host deterministic; maximum observed relative difference `4.5635339780748665e-15`, maximum `39 ULP` |
+
+Linux aarch64 passed the retained fixed-state reference check in the 0.6.91.2 native physics suite (maximum normalized L1 difference approximately `4.56e-15`). That result supports accepted ARM64 platform-level science regression. It does not establish full-model XSTAR parity, which remains an optional unexecuted test requiring external reference assets.
 
 ## Portability boundaries
 

@@ -21,9 +21,7 @@ algorithms, expand the scientific acceptance envelope, or publish ARM64 wheels.
 - Keep runtime artifacts and logs outside the source tree, and publish a JSON
   result plus per-stage logs even when a build is rejected.
 
-**Acceptance state:** pending real native ARM64 GitHub Actions host run. Only
-`LINUX_ARM64_BUILD_06911_HOST_RESULT=ACCEPT` from the host-build mode is an
-ARM64 build acceptance signal. A preflight-only ACCEPT on x86-64 is not.
+**Acceptance state: ACCEPT (2026-10-08).** The native `ubuntu-24.04-arm` host run reported `LINUX_ARM64_BUILD_06911_FREEZE=ACCEPT`, `COMPILE_LINK=ACCEPT`, `ELF_LOADER=ACCEPT`, and `HOST_RESULT=ACCEPT`. This establishes native build/link/loader compatibility, not full scientific model parity. A preflight-only ACCEPT on x86-64 is not a substitute for the native host result.
 
 ## GitHub Actions
 
@@ -58,9 +56,7 @@ python3 -B tools/qualification/run_linux_arm64_build_host_0_6_91_1.py \
   --package "$PWD" --preflight-only
 ```
 
-This never reports host ACCEPT. The accepted compiler/library policy remains
-Linux x86-64, macOS ARM64/x86-64, and Windows UCRT64 until the ARM64 host build
-is independently qualified.
+This source-policy preflight alone never reports host ACCEPT. The native Linux aarch64 build is now accepted independently, and the later 0.6.91.4 five-host installed-wheel closure also passed.
 
 ## Exclusions and next steps
 

@@ -21,8 +21,22 @@ The generic policy tools are:
 - `tools/release/check_release_candidate.py` — current release-tree boundary.
 
 `.github/workflows/parity-freeze.yml` provides a lightweight standalone frozen
-boundary check. `.github/workflows/pypi-release.yml` is the generic wheel/sdist
-build workflow.
+boundary check. `.github/workflows/pypi-release.yml` builds the configured
+native wheel/sdist release matrix and publishes only for a matching published
+GitHub release tag; manual runs build and validate without publishing. The
+version is read from `pyproject.toml`; Linux ARM64 wheel checks use
+`tools/release/validate_linux_arm64_wheels.py` rather than a version-locked
+historical qualification script.
+
+`.github/workflows/cross-platform-closure.yml` completed an independent five-host
+CPython 3.13 native-wheel and installed-runtime regression in 0.6.91.4
+(`FIVE_HOSTS=5`, `HOST_RESULT=ACCEPT`, 2026-10-08). This result is not a claim
+that every CPython 3.9–3.14 release wheel was published or that a full
+ARM64 real-model calculation was performed. ARM64 native physics and fixed-state
+regression passed under the uniform platform-level standard. The optional
+extra 0.6.91.2 full-model suite remains `REAL_MODEL_REFERENCE=NOT_RUN` pending
+trusted external inputs, matching the fact that such full-model CI runs were
+not required on macOS or Windows.
 
 ## Optional deeper qualification/report helpers
 

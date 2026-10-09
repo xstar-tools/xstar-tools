@@ -9,11 +9,12 @@ The non-MPI native path is formally qualified on:
 | Platform | Toolchain | Status |
 |---|---|---|
 | Linux x86_64 | GCC + GNU Make | ACCEPT |
+| Linux aarch64 (ARM64) | GCC + GNU Make | ACCEPT (0.6.91.1 native build; 0.6.91.4 wheel/runtime) |
 | macOS arm64 | Apple Clang + GNU Make | ACCEPT |
 | macOS x86_64 | Apple Clang + GNU Make | ACCEPT |
 | Windows x86_64 | MSYS2 UCRT64 + MinGW-w64 GCC + GNU Make | ACCEPT |
 
-The current accepted cross-platform closure is `0.6.88.6.1.2.1`. Windows MPI is intentionally out of scope; use the local-process `xstar-xspec --processes N` path on Windows.
+The current five-host non-MPI wheel/installed-runtime closure is **0.6.91.4 — CROSS_PLATFORM_CLOSURE (ACCEPT)**, using CPython 3.13 on each host. The earlier 0.6.88.6.1.2.1 closure remains an accepted historical four-host source/fixed-state qualification. **ARM64 Tier 1 native physics/fixed-state regression is ACCEPT**, consistent with other hosts; the optional Tier 2 full-model ARM64 comparison (0.6.91.2) is `NOT_RUN` pending independently accepted atomic-data/reference assets. Neither wheel success nor Tier 1 alone establishes full-model parity. Windows MPI is intentionally out of scope; use the local-process `xstar-xspec --processes N` path on Windows.
 
 ## Programs
 

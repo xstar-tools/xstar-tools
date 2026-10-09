@@ -60,6 +60,26 @@ The aggregate gate rejects extra or missing distributions and specifically rejec
 
 No local Mac or Windows machine is required for release construction: macOS arm64/x86_64 and Windows AMD64 are built and tested on the corresponding GitHub-hosted runners.
 
+### Linux ARM64 and five-host closure (`0.6.91.3` / `0.6.91.4`)
+
+The `pypi-linux` profile is also qualified for native `aarch64`. The 0.6.91.3
+ARM64 packaging host accepted repaired `manylinux_2_28_aarch64` wheels for
+CPython 3.11 and 3.13, with pinned CFITSIO, clean-installed smoke tests,
+ELF/ABI/provenance checks and no bundled `atdb.fits`. The 0.6.91.4
+cross-platform closure independently accepted CPython 3.13 wheels on Linux
+x86_64/aarch64, macOS arm64/x86_64 and Windows UCRT64 AMD64: all five host
+reports and the aggregate returned `ACCEPT`. See
+{doc}`linux_arm64_packaging_0_6_91_3` and
+{doc}`cross_platform_closure_0_6_91_4`.
+
+The current `.github/workflows/pypi-release.yml` release matrix includes
+Linux ARM64, and its ARM64 wheel validator is version-independent. The
+full CPython 3.9–3.14 release matrix remains a **release-run responsibility**;
+the standalone 0.6.91.4 closure tests CPython 3.13 only. An accepted wheel
+is not proof of publication to PyPI. ARM64 native physics/fixed-state regression is accepted under the same
+platform standard as macOS/Windows; the optional full-model ARM64 comparison
+remains `NOT_RUN` in the historical 0.6.91.2 runner.
+
 ## Wheel contents
 
 Normal wheels include only installed Python modules plus required runtime data:

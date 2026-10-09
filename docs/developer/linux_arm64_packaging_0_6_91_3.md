@@ -8,7 +8,7 @@ remains **0.6.90.5.5** (including the Type-49/Mn scientific correction).
 ## Scope and independent acceptance
 
 - Accepted prerequisite: `0.6.91.1 — LINUX_ARM64_BUILD` (`HOST_RESULT=ACCEPT`).
-- Packaging candidate: `manylinux_2_28_aarch64` repaired wheels, verified on
+- Accepted packaging target: `manylinux_2_28_aarch64` repaired wheels, verified on
   **native** `ubuntu-24.04-arm`, using the existing `pypi-linux` Makefile
   profile and SHA-256-pinned CFITSIO **4.6.2** source.
 - Native packaging qualifier: CPython 3.11 and 3.13; future PyPI release workflow
@@ -27,10 +27,13 @@ remains **0.6.90.5.5** (including the Type-49/Mn scientific correction).
   plugin, `atdb.fits` or compiler-induced scientific algorithm changes.
 
 **IMPORTANT:** The packaging gate is not a production astrophysics test. The
-independent `0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` real-model reference
-suite still requires authentic pinned `atdb.fits`, model inputs and FORTRAN/C++
+optional `0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` full-model reference
+suite requires authentic pinned `atdb.fits`, model inputs and FORTRAN/C++
 outputs. Its current `HOST_RESULT=NOT_RUN` must not be silently promoted to
-`ACCEPT` because a wheel was built or because synthetic fixed-state tests passed.
+`ACCEPT` because a wheel was built. ARM64 physics/fixed-state regression has
+separate passing evidence under the uniform platform qualification standard.
+
+**Acceptance state: ACCEPT (2026-10-08).** The native ARM64 workflow built and smoke-tested CPython 3.11 and 3.13 wheels, both passed Twine and the ELF/CFITSIO/provenance checks, and the host qualifier reported all six `LINUX_ARM64_PACKAGING_06913_*` gates as `ACCEPT`. This is packaging/runtime acceptance, not publication to PyPI or completion of the full real-model science gate. The later 0.6.91.4 five-host CPython 3.13 closure also passed.
 
 ## Run on GitHub Actions
 

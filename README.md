@@ -12,9 +12,11 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 ## Status
 
+`0.6.91.4 — CROSS_PLATFORM_CLOSURE` is **formally ACCEPTED (2026-10-08)**. All five native GitHub Actions CPython 3.13 wheel/installed-runtime jobs passed on Linux x86_64/aarch64, macOS arm64/x86_64, and Windows MinGW UCRT64; the independent aggregate reported `CROSS_PLATFORM_CLOSURE_06914_FIVE_HOSTS=5` and `CROSS_PLATFORM_CLOSURE_06914_HOST_RESULT=ACCEPT`. The release workflow now uses a version-independent ARM64 wheel validator. All 51 frozen science-source files, the accepted science revision (`0.6.90.5.5`), and both native ABIs remain unchanged. These results establish cross-platform packaging/runtime acceptance, **not** an end-to-end XSTAR model comparison or publication of a new PyPI release. The ARM64 platform-level physics and fixed-state regression checks also passed; an optional external-data full-model comparison remains unexecuted, just as full-model runs were not required in the five-host portability closure. See [cross-platform closure](docs/developer/cross_platform_closure_0_6_91_4.md).
+
 `0.6.91.1 — LINUX_ARM64_BUILD` is **formally accepted** (native `ubuntu-24.04-arm` host: `LINUX_ARM64_BUILD_06911_HOST_RESULT=ACCEPT`, 2026-10-08). All 14 native shared libraries, 5 executables and frozen source-hash checks passed. This was build/link/loader acceptance only, not yet scientific validation. See [Linux ARM64 build qualification](docs/developer/linux_arm64_build_0_6_91_1.md).
 
-`0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` passed its native physics and retained fixed-state reference checks on Linux ARM64, but full science acceptance remains **NOT_RUN** until independently accepted, SHA-256-pinned real-model reference products and `atdb.fits` are supplied. `0.6.91.2.1 — CI_TEST_HARNESS_CLOSURE` repairs three separate CI test setup problems without changing any frozen science files, accepted ABIs, or the requirement for full-model reference verification. See [Linux ARM64 science qualification](docs/developer/linux_arm64_science_0_6_91_2.md). The `0.6.91.3 — LINUX_ARM64_PACKAGING` candidate adds native `manylinux_2_28_aarch64` wheel building and installed-wheel testing. Packaging host acceptance remains pending native GitHub Actions results, independent of the outstanding 0.6.91.2 real-model science qualification. See [Linux ARM64 packaging](docs/developer/linux_arm64_packaging_0_6_91_3.md).
+`0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` passed its native physics and retained fixed-state reference checks on Linux ARM64 (**platform scientific regression: ACCEPT**, using the same scope as other accepted hosts). The original optional full-model qualification runner still reports `REAL_MODEL_REFERENCE=NOT_RUN` and `HOST_RESULT=NOT_RUN` because its independent atomic-data/reference bundle was not supplied; this does **not** represent a failed numerical comparison. `0.6.91.2.1 — CI_TEST_HARNESS_CLOSURE` repairs three separate CI test setup problems without changing any frozen science files, accepted ABIs, or the optional full-model reference verification contract. See [Linux ARM64 science qualification](docs/developer/linux_arm64_science_0_6_91_2.md). The `0.6.91.3 — LINUX_ARM64_PACKAGING` milestone is **accepted**: the native ARM64 CPython 3.11 and 3.13 repaired wheels passed isolated smoke tests, ELF/CFITSIO/ABI/provenance verification, and `HOST_RESULT=ACCEPT` on GitHub Actions. The optional full-model ARM64 comparison remains unexecuted; platform-level scientific regression is accepted. See [Linux ARM64 packaging](docs/developer/linux_arm64_packaging_0_6_91_3.md).
 
 
 `0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP` consolidates closed milestone machinery without changing XSTAR science, scientific source bytes, or public ABI contracts. Historical one-off reports and replay scripts are preserved by repository history/tags rather than shipped in every release tree.
@@ -32,7 +34,7 @@ The `0.6.90 — CONDA_PACKAGING_REFRESH` is accepted and closed. It qualified th
 | Platform | Release wheels | Conda-forge | Accepted platform baseline |
 |---|---|---|---|
 | Linux x86_64 | CPython 3.9–3.14, `manylinux_2_28_x86_64` | `linux-64` — accepted | `0.6.89.2.2` |
-| Linux ARM64 (`aarch64`) | `manylinux_2_28_aarch64` (0.6.91.3 candidate; native wheel qualification pending) | not yet qualified | Build 0.6.91.1 ACCEPT; science 0.6.91.2 pending |
+| Linux ARM64 (`aarch64`) | `manylinux_2_28_aarch64` (CPython 3.11/3.13 individually qualified; 3.13 five-host closure ACCEPT; full 3.9–3.14 release matrix not yet verified) | not qualified | Build 0.6.91.1 ACCEPT; packaging 0.6.91.3 ACCEPT; five-host 0.6.91.4 ACCEPT; physics/fixed-state regression ACCEPT; optional full-model NOT_RUN |
 | macOS arm64 | CPython 3.9–3.14, `macosx_11_0_arm64` | `osx-arm64` — accepted | `0.6.89.3` |
 | macOS x86_64 | CPython 3.9–3.14, `macosx_11_0_x86_64` | `osx-64` — accepted | `0.6.89.3` |
 | Windows AMD64 | CPython 3.9–3.14, `win_amd64` | not supported | `0.6.89.4.5` |
@@ -150,7 +152,7 @@ The complete cross-platform release is built by:
 .github/workflows/pypi-release.yml
 ```
 
-The final `xstar-tools-0.6.89.5-pypi-release` contains the native wheels, the sdist, and a checksum manifest. A Python-only `py3-none-any` control wheel is explicitly excluded from the publication set.
+The historical `xstar-tools-0.6.89.5-pypi-release` bundle contains native wheels, an sdist, and a checksum manifest. For newer release tags, `.github/workflows/pypi-release.yml` derives the version from `pyproject.toml`, builds the configured platform/interpreter matrix (including Linux ARM64), validates the aggregate, and publishes only on a matching published GitHub release. Manual `workflow_dispatch` runs build without publishing. A Python-only `py3-none-any` control wheel is excluded from publication. The five CPython 3.13 wheels qualified by 0.6.91.4 are **not** evidence that every release-matrix wheel has been built or uploaded to PyPI.
 
 For maintainers preparing a future release, validate the aggregate bundle and publish the **same native-wheel + sdist set** first to TestPyPI and then to PyPI:
 

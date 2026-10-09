@@ -2,7 +2,7 @@
 
 `pyproject.toml` is the authoritative Python package metadata/build configuration. The small `setup.py` file exists only to register the native setuptools build hook.
 
-The accepted native-wheel baselines cover CPython 3.9–3.14 on Linux x86_64 (`manylinux_2_28_x86_64`), macOS arm64 and x86_64 (`macosx_11_0_*`), and Windows AMD64 (`win_amd64`). `0.6.89.5 — PYPI_CROSS_PLATFORM_RELEASE_CLOSURE` rebuilds those accepted profiles under one release version so PyPI can select the appropriate wheel automatically for `pip install xstar-tools`. The frozen science revision and public ABIs are unchanged.
+The established release-wheel policy targets CPython 3.9–3.14 on Linux x86_64 (`manylinux_2_28_x86_64`), macOS arm64/x86_64 (`macosx_11_0_*`), and Windows AMD64 (`win_amd64`). Linux aarch64 (`manylinux_2_28_aarch64`) was additionally qualified for CPython 3.11/3.13 in 0.6.91.3 and as part of the **five-host CPython 3.13 cross-platform closure (0.6.91.4, ACCEPT)**. The full Linux ARM64 CPython 3.9–3.14 release matrix has not yet been independently confirmed. `0.6.89.5 — PYPI_CROSS_PLATFORM_RELEASE_CLOSURE` is the historical first cross-platform PyPI release baseline. The frozen science revision and public ABIs are unchanged. Qualification of candidate wheels does not establish their publication or availability from PyPI.
 
 The PyPI Linux, macOS, and Windows binary profiles omit the optional standalone Python-embedding plugin so distributable wheels do not acquire a Python-runtime library dependency. The default source/native installation profile remains full. Python-driven `zone-cpp`, the public C API, `xstar-cpp`, and XSTAR2XSPEC executables remain present. MPI remains opt-in and `atdb.fits` remains external. Package metadata uses the SPDX expression `GPL-3.0-only` and ships the GNU GPL Version 3 `LICENSE` file. Native macOS and Windows release wheels are built/tested on GitHub-hosted runners; local access to those operating systems is not required.
 
@@ -52,16 +52,17 @@ The current feedstock release is based on the published PyPI `0.6.89.5` source; 
 
 ## Native source builds
 
-The current accepted source tree is qualified on four non-MPI hosts:
+The current accepted non-MPI source and wheel qualification covers five native architectures (with CPython 3.13 in the five-host wheel closure):
 
 | Platform | Toolchain | Status |
 |---|---|---|
 | Linux x86_64 | GCC / GNU Make | ACCEPT |
+| Linux aarch64 (ARM64) | GCC / GNU Make | ACCEPT: 0.6.91.1 build; 0.6.91.3/0.6.91.4 packaging/runtime |
 | macOS arm64 | Apple Clang / GNU Make | ACCEPT |
 | macOS x86_64 | Apple Clang / GNU Make | ACCEPT |
 | Windows x86_64 | MSYS2 UCRT64 / MinGW-w64 GCC / GNU Make | ACCEPT |
 
-The accepted portability baseline is `0.6.88.6.1.2.1`.
+The latest five-host packaging and installed-runtime closure is `0.6.91.4` (ACCEPT); the earlier `0.6.88.6.1.2.1` four-host source/fixed-state baseline remains accepted. ARM64 platform-level native physics/fixed-state regression is accepted; an optional complete astrophysical real-model comparison (0.6.91.2 Tier 2) remains `NOT_RUN` without external pinned references. ARM32/`armhf` and piwheels are outside the accepted scope.
 
 ### Linux
 

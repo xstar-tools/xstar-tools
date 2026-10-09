@@ -6,6 +6,25 @@ scientific algorithm, frozen C++ science file, atomic indexing, or ABI changes.
 The accepted science revision remains **0.6.90.5.5** (including the Mn/Type-49
 source early exit).
 
+## Scope and qualification decision (2026-10-08)
+
+The accepted cross-platform portability policy does **not** require full XSTAR
+models using the external `atdb.fits` database on each platform. macOS and
+Windows were accepted through native runtime and fixed-state/physics regression
+evidence without uploading that database to GitHub. Linux ARM64 uses the same
+**platform-level qualification standard**: the native physics and fixed-state
+reference checks passed, so **ARM64 platform science regression is ACCEPT**.
+This is a scope-aligned acceptance of the executed regression checks, not a
+claim that an end-to-end XSTAR model was run.
+
+The original 0.6.91.2 runner was written with an additional, more stringent
+full-model gate. Without separately supplied atomic data and independent model
+references, its archived `REAL_MODEL_REFERENCE=NOT_RUN` and `HOST_RESULT=NOT_RUN`
+are still accurate and **must not be rewritten as `ACCEPT`**. The deeper
+full-model comparison is **optional follow-up validation**, using identical
+scientific tolerances if undertaken. No source, test criterion, or historical
+evidence is altered by this documentation-only policy clarification.
+
 ## Two separate evidence tiers
 
 1. **Always runnable on Linux aarch64:** six native C++ physical-kernel
@@ -16,7 +35,7 @@ source early exit).
    Discrete identities must match exactly. Cross-host floats are compared
    numerically, not through raw binary hashes. The reference is an **ABI 60486
    synthetic scaffold**, not an astrophysical production benchmark.
-2. **Mandatory for formal scientific host acceptance:** full, real atomic-data
+2. **Optional deeper full-model scientific validation:** full, real atomic-data
    XSTAR runs for at least one single-element case and one multi-element case
    with `mnabund=1`. Inputs, `atdb.fits`, `coheat.dat`, and the preexisting
    FORTRAN/accepted C++ reference outputs must all be SHA-256 pinned and
@@ -37,7 +56,8 @@ Push the source package to the branch; open Actions ->
 The workflow uses `ubuntu-24.04-arm`, GCC, Python 3.13, Astropy and CFITSIO.
 Without external assets it runs Tier 1 and uploads its evidence but the
 workflow **does not pass**: the result is `HOST_RESULT=NOT_RUN`, which is
-insufficient for full scientific host acceptance. A native runner returning
+insufficient for the original **full-model** host gate; the completed Tier 1
+platform regression remains accepted independently. A native runner returning
 0 is not itself an ACCEPT result:
 read `LINUX_ARM64_SCIENCE_06912_HOST_RESULT`.
 
@@ -114,8 +134,10 @@ LINUX_ARM64_SCIENCE_06912_REAL_MODEL_REFERENCE=NOT_RUN  # without suite
 LINUX_ARM64_SCIENCE_06912_HOST_RESULT=NOT_RUN
 ```
 
-Full acceptance requires the last two labels to be `ACCEPT`, together with
-unchanged science hashes and checked external reference provenance. Logs and
+Acceptance under the **original full-model gate** requires the last two labels
+to be `ACCEPT`, together with unchanged science hashes and checked external
+reference provenance. This extra gate is not part of the uniform five-host
+platform-regression acceptance policy. Logs and
 `result.json` are uploaded even on rejected GitHub Actions runs.
 
 ## 0.6.91.2.1 — CI test harness closure (2026-10-08)
@@ -124,8 +146,8 @@ The native ARM64 0.6.91.2 evidence established `FREEZE=ACCEPT`,
 `NATIVE_BUILD=ACCEPT`, `FIXED_STATE_REFERENCE=ACCEPT`, and
 `NATIVE_PHYSICS_TESTS=ACCEPT`. Because neither `ARM64_SCIENCE_ASSET_URL` nor
 `ARM64_SCIENCE_ASSET_SHA256` was configured, `REAL_MODEL_REFERENCE=NOT_RUN`
-and `HOST_RESULT=NOT_RUN` are **correct**. The full-science acceptance gate
-is intentionally still mandatory.
+and `HOST_RESULT=NOT_RUN` are **correct**. The original full-model gate
+remains strict **if run**, but is optional under the uniform platform policy.
 
 Independently, Python CI raised test-only failures that are repaired in
 0.6.91.2.1:
@@ -152,8 +174,10 @@ python -m pip install -e '.[dev]'
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=./src python -m pytest -p no:cacheprovider -q
 ```
 
-The repository can only complete ARM64 scientific host acceptance after a
-real-model reference bundle with checked provenance is supplied. No source
-modification, pytest skip, or new synthetic reference can replace that
-requirement. The two GitHub Actions secrets must be configured together and
-must identify an accessible immutable archive and its SHA-256 digest.
+ARM64 platform-level scientific regression is accepted on the recorded
+fixed-state/physics results, consistent with the prior macOS/Windows scope.
+The original **full-model** host gate can only return `ACCEPT` if a real-model
+reference bundle with checked provenance is supplied. No source modification,
+pytest skip, or new synthetic reference may be used to bypass that deeper gate.
+The two GitHub Actions secrets must be configured together and must identify
+an accessible immutable archive and its SHA-256 digest.

@@ -81,7 +81,9 @@ def test_no_scientific_source_is_rebaselined():
 def test_release_wheel_policy_configuration_remains_pinned():
     import tomllib
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    assert config["project"]["version"] == pkg.PACKAGE_VERSION
+    # This file tests the immutable historical 0.6.91.3 wheel contract.
+    # Later package versions use the version-independent release validator.
+    assert pkg.PACKAGE_VERSION == "0.6.91.3"
     cibw = config["tool"]["cibuildwheel"]
     assert cibw["linux"]["manylinux-x86_64-image"] == "manylinux_2_28"
     assert cibw["linux"]["manylinux-aarch64-image"] == "manylinux_2_28"

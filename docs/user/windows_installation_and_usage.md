@@ -1,6 +1,6 @@
 # Windows native installation and usage
 
-`xstar-tools` supports a native Windows build through **MSYS2 UCRT64**, MinGW-w64 GCC, GNU Make, CFITSIO, and pkg-config. The current accepted portability baseline, `0.6.88.6.1.2.1`, qualifies this toolchain as part of the full four-host matrix. Windows passes warning-free native compilation, PE DLL/import-library/export checks, shared-library discovery, the Win32 process layer, local-process XSTAR2XSPEC scheduling, fixed-state same-host determinism and cross-platform reference equivalence, the embedded Python backend, the Python bridge, and the existing regression suite.
+`xstar-tools` supports a native Windows build through **MSYS2 UCRT64**, MinGW-w64 GCC, GNU Make, CFITSIO, and pkg-config. The historical four-host source/fixed-state portability baseline, `0.6.88.6.1.2.1`, qualified this toolchain; the newer **five-host CPython 3.13 wheel/installed-runtime closure, `0.6.91.4`, is also ACCEPTED**, including Windows UCRT64. Windows passes warning-free native compilation, PE DLL/import-library/export checks, shared-library discovery, the Win32 process layer, local-process XSTAR2XSPEC scheduling, fixed-state same-host determinism and cross-platform reference equivalence, the embedded Python backend, the Python bridge, and the existing regression suite.
 
 Windows MPI is not part of the accepted Windows contract. Use `xstar-xspec --processes N` for local parallel XSTAR2XSPEC work on Windows. Do not expect `xstar-xspec-mpi` to be produced by the Windows build.
 
