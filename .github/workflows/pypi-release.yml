@@ -97,6 +97,7 @@ jobs:
           if-no-files-found: error
 
   linux-arm64:
+    # Self-contained release job: independent of historical ARM64 qualification workflows.
     name: Linux aarch64 wheels
     needs: metadata
     runs-on: ubuntu-24.04-arm

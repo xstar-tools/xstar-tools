@@ -176,9 +176,34 @@ def check_preflight(root: Path) -> dict[str, object]:
         raise GateError("auditwheel repair not enabled")
     if "pypi_release_linux_smoke.py" not in cibw.get("test-command", ""):
         raise GateError("isolated Linux wheel smoke not enabled")
-    workflows = (root / ".github/workflows/linux-arm64-packaging.yml").read_text()
-    if "ubuntu-24.04-arm" not in workflows or "CIBW_ARCHS_LINUX: aarch64" not in workflows:
-        raise GateError("native ARM64 GitHub qualification runner not configured")
+    # The production release builds ARM64 wheels in its own job.  A historical
+    # milestone workflow (such as linux-arm64-packaging.yml) is optional and
+    # must never be a prerequisite for later PyPI releases.
+    release_workflow = (root / ".github/workflows/pypi-release.yml").read_text(
+        encoding="utf-8"
+    )
+    arm64_job_match = re.search(
+        r"(?ms)^  linux-arm64:[ \t]*\n(?P<job>.*?)(?=^  [a-zA-Z][a-zA-Z0-9_-]*:[ \t]*(?:#.*)?$|\Z)",
+        release_workflow,
+    )
+    if arm64_job_match is None:
+        raise GateError("PyPI release workflow is missing the Linux ARM64 job")
+    arm64_job = arm64_job_match.group("job")
+    for contract in (
+        "runs-on: ubuntu-24.04-arm",
+        "CIBW_ARCHS_LINUX: aarch64",
+        "pypa/cibuildwheel@",
+        "tools/release/validate_linux_arm64_wheels.py",
+        "--wheel-dir",
+    ):
+        if contract not in arm64_job:
+            raise GateError(f"PyPI release ARM64 job is missing {contract!r}")
+    if arm64_job.count("tools/release/validate_linux_arm64_wheels.py") < 2:
+        raise GateError("PyPI release ARM64 job needs preflight and wheel validation")
+    if "--preflight-only" not in arm64_job:
+        raise GateError("PyPI release ARM64 job is missing source preflight")
+    if re.search(r"\bcp\d+-manylinux_aarch64\b", arm64_job) is None:
+        raise GateError("PyPI release ARM64 job selects no AArch64 CPython wheels")
     if not (root / "tools/packaging/build_manylinux_cfitsio.sh").is_file():
         raise GateError("pinned CFITSIO build script missing")
     for rel in MANDATORY_CHECKERS:

@@ -120,3 +120,63 @@ def test_release_workflow_no_historical_qualifier():
     assert "tools/release/validate_linux_arm64_wheels.py" in workflow
     assert "run_linux_arm64_packaging_host_0_6_91_3.py" not in workflow
     assert "linux_arm64_packaging_06913_release_evidence" not in workflow
+
+
+def _minimal_release_tree(tmp_path: Path) -> Path:
+    """Create a release preflight tree without historical milestone workflows."""
+    import shutil
+
+    for rel in (
+        "pyproject.toml",
+        "qualification/parity_freeze.json",
+        ".github/workflows/pypi-release.yml",
+        "tools/packaging/build_manylinux_cfitsio.sh",
+    ):
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / rel, target)
+    # Deliberately DO NOT install linux-arm64-packaging.yml.
+    return tmp_path
+
+
+def test_release_preflight_does_not_require_historical_workflow(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    root = _minimal_release_tree(tmp_path)
+    assert not (root / ".github/workflows/linux-arm64-packaging.yml").exists()
+    monkeypatch.setattr(validator.subprocess, "run", lambda *a, **kw:
+                        SimpleNamespace(returncode=0, stdout="", stderr=""))
+    result = validator.check_preflight(root)
+    assert result["packaging_contract"] == "ACCEPT"
+    assert result["source_version"] == validator.release_policy(ROOT)["package_version"]
+
+
+@pytest.mark.parametrize("missing", [
+    "runs-on: ubuntu-24.04-arm",
+    "CIBW_ARCHS_LINUX: aarch64",
+    "pypa/cibuildwheel@",
+    "tools/release/validate_linux_arm64_wheels.py",
+])
+def test_release_preflight_rejects_missing_real_arm64_gate(tmp_path, monkeypatch, missing):
+    from types import SimpleNamespace
+
+    root = _minimal_release_tree(tmp_path)
+    path = root / ".github/workflows/pypi-release.yml"
+    content = path.read_text()
+    start = content.index("  linux-arm64:\n")
+    end = content.index("  macos-arm64:\n", start)
+    arm64_job = content[start:end]
+    assert missing in arm64_job
+    path.write_text(content[:start] + arm64_job.replace(
+        missing, "removed-qualification-contract", 1
+    ) + content[end:])
+    monkeypatch.setattr(validator.subprocess, "run", lambda *a, **kw:
+                        SimpleNamespace(returncode=0, stdout="", stderr=""))
+    with pytest.raises(validator.GateError, match="PyPI release ARM64 job"):
+        validator.check_preflight(root)
+
+
+def test_manifest_does_not_require_milestone_specific_workflow():
+    manifest = (ROOT / "MANIFEST.in").read_text()
+    assert "recursive-include .github/workflows *.yml" in manifest
+    assert "include .github/workflows/linux-arm64-packaging.yml" not in manifest
