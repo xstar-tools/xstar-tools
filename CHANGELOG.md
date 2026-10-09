@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 0.6.91.5 — CONDA_FORGE_LINUX_ARM64_ENABLEMENT (ACCEPT) - 2026-10-09
+
+- **Formally accepted and closed.** The independent conda-forge feedstock enabled
+  `provider.linux_aarch64: default`, rerendered its CI configuration (PR #6),
+  passed the Linux AArch64 build matrix, and published packages to the public
+  `conda-forge/linux-aarch64` channel.
+- Public-channel acceptance evidence: `conda search --override-channels -c
+  conda-forge --subdir linux-aarch64 xstar-tools` lists **0.6.90.5.8** builds
+  for Python 3.11, 3.12, 3.13, 3.14, and 3.15. This verifies architecture
+  enablement, not publication of the 0.6.91.5 source version.
+- Preserved existing conda-forge Linux x86-64 and macOS support and the Windows
+  conda exclusion.
+- Add a native `ubuntu-24.04-arm` conda source-build/installation qualification
+  workflow using a **local exact-source sdist** and conda-forge CFITSIO.
+- Add a reusable local/published-sdist recipe and feedstock preparation tool;
+  never pin an unpublished release or assume that the feedstock is updated.
+- Simplify the root README Status and move milestone-specific details to the
+  changelog and developer documentation.
+- No changes to the accepted scientific implementation, science revision,
+  numerical tolerances, or native ABIs. No `atdb.fits` included.
+
 ## 0.6.91.4 — CROSS_PLATFORM_CLOSURE - 2026-10-08
 
 - Introduce a dedicated five-host native PyPI wheel regression campaign: Linux x86_64/aarch64, macOS arm64/x86_64, and Windows UCRT64 AMD64. Use a single CPython 3.13 build per host, the existing repaired-wheel isolated smoke and a new fail-closed host-wheel/provenance/ABI/native-architecture/CFITSIO validator. Emit independently inspectable per-host JSON evidence; qualify only after all five host results are ACCEPT.

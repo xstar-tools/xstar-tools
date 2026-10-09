@@ -4,7 +4,7 @@ This page summarizes the **current accepted native portability contract**. Detai
 
 ## Linux ARM64 status
 
-`0.6.91.1 — LINUX_ARM64_BUILD` is formally **ACCEPT** on native `ubuntu-24.04-arm`: compile, link, ELF loader and frozen-science/source checks passed. `0.6.91.3 — LINUX_ARM64_PACKAGING` is **ACCEPT** for repaired CPython 3.11 and 3.13 Linux ARM64 wheels. The `0.6.91.4` cross-platform closure adds Linux ARM64 to the accepted **five-host CPython 3.13** wheel/installed-runtime matrix. ARM64 native physics and fixed-state scientific regression checks (0.6.91.2 Tier 1) are **ACCEPT**, consistent with the tests required for previously accepted macOS and Windows hosts. An optional full-model comparison with external `atdb.fits` (Tier 2) remains **NOT_RUN** pending reference assets; this is not a failing model comparison. ARM32 (`armhf`)/piwheels is out of scope. See {doc}`linux_arm64_build_0_6_91_1`, {doc}`linux_arm64_packaging_0_6_91_3`, and {doc}`linux_arm64_science_0_6_91_2`.
+`0.6.91.1 — LINUX_ARM64_BUILD` is formally **ACCEPT** on native `ubuntu-24.04-arm`: compile, link, ELF loader and frozen-science/source checks passed. `0.6.91.3 — LINUX_ARM64_PACKAGING` is **ACCEPT** for repaired CPython 3.11 and 3.13 Linux ARM64 wheels. The `0.6.91.4` cross-platform closure adds Linux ARM64 to the accepted **five-host CPython 3.13** wheel/installed-runtime matrix. ARM64 native physics and fixed-state scientific regression checks (0.6.91.2 Tier 1) are **ACCEPT**, consistent with the tests required for previously accepted macOS and Windows hosts. An optional full-model comparison with external `atdb.fits` (Tier 2) remains **NOT_RUN** pending reference assets; this is not a failing model comparison. See {doc}`linux_arm64_build_0_6_91_1`, {doc}`linux_arm64_packaging_0_6_91_3`, and {doc}`linux_arm64_science_0_6_91_2`.
 
 ## Current accepted release
 
@@ -91,3 +91,7 @@ make -C src/xstar_tools/xstar/cpp mpi
 ```
 
 The accepted MPI implementation is a Linux/macOS/HPC path. Windows MPI is not planned; Windows native support remains the standalone/local-process MinGW path, while production HPC deployment uses POSIX platforms.
+
+## Conda-forge ARM64
+
+**0.6.91.5 — CONDA_FORGE_LINUX_ARM64_ENABLEMENT is ACCEPTED.** The separate feedstock completed its Linux AArch64 rerender/build cycle and published `linux-aarch64` packages. Public `conda search` confirms `xstar-tools 0.6.90.5.8` for Python 3.11–3.15. This platform-enablement acceptance does not imply that the 0.6.91.5 source release is available through conda-forge or that full-model ARM64 science validation ran. See {doc}`conda_linux_arm64_0_6_91_5`.

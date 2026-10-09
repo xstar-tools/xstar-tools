@@ -48,7 +48,7 @@ The public conda-forge package is available now. Install with:
 conda install -c conda-forge xstar-tools
 ```
 
-The current feedstock release is based on the published PyPI `0.6.89.5` source; `0.6.90.1` is the host-qualification/source milestone and is not assumed to exist on PyPI.
+Conda-forge publishes packages for `linux-64`, `linux-aarch64`, `osx-arm64`, and `osx-64`. Linux ARM64 (`linux-aarch64`) enablement was accepted in 0.6.91.5; a public-channel `conda search` confirmed version `0.6.90.5.8` for Python 3.11–3.15. This is a distribution-platform acceptance, distinct from the version of the current source tree and from full scientific model validation. Check the conda-forge channel for the latest build on each platform. See {doc}`../developer/conda_linux_arm64_0_6_91_5`.
 
 ## Native source builds
 
@@ -62,7 +62,7 @@ The current accepted non-MPI source and wheel qualification covers five native a
 | macOS x86_64 | Apple Clang / GNU Make | ACCEPT |
 | Windows x86_64 | MSYS2 UCRT64 / MinGW-w64 GCC / GNU Make | ACCEPT |
 
-The latest five-host packaging and installed-runtime closure is `0.6.91.4` (ACCEPT); the earlier `0.6.88.6.1.2.1` four-host source/fixed-state baseline remains accepted. ARM64 platform-level native physics/fixed-state regression is accepted; an optional complete astrophysical real-model comparison (0.6.91.2 Tier 2) remains `NOT_RUN` without external pinned references. ARM32/`armhf` and piwheels are outside the accepted scope.
+The latest five-host packaging and installed-runtime closure is `0.6.91.4` (ACCEPT); the earlier `0.6.88.6.1.2.1` four-host source/fixed-state baseline remains accepted. ARM64 platform-level native physics/fixed-state regression is accepted; an optional complete astrophysical real-model comparison (0.6.91.2 Tier 2) remains `NOT_RUN` without external pinned references. The accepted platform matrix is summarized above.
 
 ### Linux
 

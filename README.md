@@ -12,44 +12,23 @@ Python/C++ tools for XSTAR atomic data and high-performance runtimes
 
 ## Status
 
-`0.6.91.4 — CROSS_PLATFORM_CLOSURE` is **formally ACCEPTED (2026-10-08)**. All five native GitHub Actions CPython 3.13 wheel/installed-runtime jobs passed on Linux x86_64/aarch64, macOS arm64/x86_64, and Windows MinGW UCRT64; the independent aggregate reported `CROSS_PLATFORM_CLOSURE_06914_FIVE_HOSTS=5` and `CROSS_PLATFORM_CLOSURE_06914_HOST_RESULT=ACCEPT`. The release workflow now uses a version-independent ARM64 wheel validator. All 51 frozen science-source files, the accepted science revision (`0.6.90.5.5`), and both native ABIs remain unchanged. These results establish cross-platform packaging/runtime acceptance, **not** an end-to-end XSTAR model comparison or publication of a new PyPI release. The ARM64 platform-level physics and fixed-state regression checks also passed; an optional external-data full-model comparison remains unexecuted, just as full-model runs were not required in the five-host portability closure. See [cross-platform closure](docs/developer/cross_platform_closure_0_6_91_4.md).
+**Native build and packaging:** accepted on Linux x86-64 and ARM64, macOS (Apple Silicon and Intel), and Windows (MSYS2 UCRT64). The five-host CPython 3.13 release-candidate qualification passed. The scientific implementation remains frozen; platform regression tests pass, while a full Linux ARM64 model comparison requiring external atomic data has not been run.
 
-`0.6.91.1 — LINUX_ARM64_BUILD` is **formally accepted** (native `ubuntu-24.04-arm` host: `LINUX_ARM64_BUILD_06911_HOST_RESULT=ACCEPT`, 2026-10-08). All 14 native shared libraries, 5 executables and frozen source-hash checks passed. This was build/link/loader acceptance only, not yet scientific validation. See [Linux ARM64 build qualification](docs/developer/linux_arm64_build_0_6_91_1.md).
+| Platform | Native / PyPI qualification | Conda-forge |
+|---|---|---|
+| Linux x86-64 | Accepted | Available (`linux-64`) |
+| Linux ARM64 (`aarch64`) | Accepted | Available (`linux-aarch64`) |
+| macOS Apple Silicon | Accepted | Available (`osx-arm64`) |
+| macOS Intel | Accepted | Available (`osx-64`) |
+| Windows x86-64 (MinGW UCRT64) | Accepted | Not supported |
 
-`0.6.91.2 — LINUX_ARM64_SCIENCE_QUALIFICATION` passed its native physics and retained fixed-state reference checks on Linux ARM64 (**platform scientific regression: ACCEPT**, using the same scope as other accepted hosts). The original optional full-model qualification runner still reports `REAL_MODEL_REFERENCE=NOT_RUN` and `HOST_RESULT=NOT_RUN` because its independent atomic-data/reference bundle was not supplied; this does **not** represent a failed numerical comparison. `0.6.91.2.1 — CI_TEST_HARNESS_CLOSURE` repairs three separate CI test setup problems without changing any frozen science files, accepted ABIs, or the optional full-model reference verification contract. See [Linux ARM64 science qualification](docs/developer/linux_arm64_science_0_6_91_2.md). The `0.6.91.3 — LINUX_ARM64_PACKAGING` milestone is **accepted**: the native ARM64 CPython 3.11 and 3.13 repaired wheels passed isolated smoke tests, ELF/CFITSIO/ABI/provenance verification, and `HOST_RESULT=ACCEPT` on GitHub Actions. The optional full-model ARM64 comparison remains unexecuted; platform-level scientific regression is accepted. See [Linux ARM64 packaging](docs/developer/linux_arm64_packaging_0_6_91_3.md).
+**Conda-forge Linux ARM64 is accepted and publicly available.** The channel lists `xstar-tools 0.6.90.5.8` for `linux-aarch64` with Python 3.11–3.15. Conda package versions can differ from the current source/PyPI release; `atdb.fits` remains external.
 
-
-`0.6.90.3 — REPOSITORY_HISTORY_AND_QUALIFICATION_CLEANUP` consolidates closed milestone machinery without changing XSTAR science, scientific source bytes, or public ABI contracts. Historical one-off reports and replay scripts are preserved by repository history/tags rather than shipped in every release tree.
-
-`0.6.90.4 — DOCUMENTATION_COVERAGE_CLOSURE` completes native/Python documentation coverage, integrates Sphinx branding assets, and makes the warning-as-error documentation build clean without changing accepted science or ABI contracts.
-
-`0.6.90.5.2 — LATEX_DVI_PS_PDF_PIPELINE_CLOSURE` normalizes generated EPS references to conventional `image.eps` spelling and makes `latexpdf` use the explicit two-pass `latex` → `dvips` → `ps2pdf` pipeline instead of Sphinx make-mode/`latexmk`, while HTML/Read the Docs continue to use SVG.
-
-`0.6.90.5.1 — LATEXPDF_MAKE_MODE_EPS_GRAPHICS_AND_READTHEDOCS_CLOSURE` fixes the Sphinx `-M latexpdf` option ordering, converts architecture SVG diagrams to EPS3 for LaTeX/PDF builds while HTML continues to use SVG, and makes Read the Docs install the explicit documentation dependency set required by MyST, the RTD theme, and autodoc imports.
-
-`0.6.90.5 — DOCUMENTATION_BUILD_OUTPUTS` adds explicit Sphinx `latex` and `latexpdf` targets, predictable `xstar-tools.tex` / `xstar-tools.pdf` output names, and documentation for the optional host LaTeX toolchain. The normal documentation release target remains HTML plus link checking.
-
-The `0.6.90 — CONDA_PACKAGING_REFRESH` is accepted and closed. It qualified the conda build contract on Linux x86_64, macOS arm64, and macOS Intel x86_64, and verified the public conda-forge `0.6.89.5` build-1 packages on `linux-64`, `osx-arm64`, and `osx-64`. All three public installs passed build, platform, external-CFITSIO, ABI, and offline-science checks. Windows conda packages are not supported. Windows support remains available through the accepted PyPI/MSYS2 UCRT64/MinGW-w64.
-
-| Platform | Release wheels | Conda-forge | Accepted platform baseline |
-|---|---|---|---|
-| Linux x86_64 | CPython 3.9–3.14, `manylinux_2_28_x86_64` | `linux-64` — accepted | `0.6.89.2.2` |
-| Linux ARM64 (`aarch64`) | `manylinux_2_28_aarch64` (CPython 3.11/3.13 individually qualified; 3.13 five-host closure ACCEPT; full 3.9–3.14 release matrix not yet verified) | not qualified | Build 0.6.91.1 ACCEPT; packaging 0.6.91.3 ACCEPT; five-host 0.6.91.4 ACCEPT; physics/fixed-state regression ACCEPT; optional full-model NOT_RUN |
-| macOS arm64 | CPython 3.9–3.14, `macosx_11_0_arm64` | `osx-arm64` — accepted | `0.6.89.3` |
-| macOS x86_64 | CPython 3.9–3.14, `macosx_11_0_x86_64` | `osx-64` — accepted | `0.6.89.3` |
-| Windows AMD64 | CPython 3.9–3.14, `win_amd64` | not supported | `0.6.89.4.5` |
-
-Project links:
-
-- GitHub: <https://github.com/xstar-tools/xstar-tools>
-- PyPI: <https://pypi.org/project/xstar-tools/>
-- Conda-forge: <https://anaconda.org/conda-forge/xstar-tools>
-
-The accepted cross-platform source-build is non-MPI on Windows and supports `xstar-cpp` plus local-process `xstar-xspec --processes N`. True MPI remains an explicit Linux/macOS/HPC build.
+See the [installation guide](docs/user/installation.md), [cross-platform status](docs/developer/cross_platform_portability_status.md), [conda packaging details](docs/developer/conda_packaging.md), and [changelog](CHANGELOG.md) for qualification evidence and release history.
 
 ## Install with conda-forge
 
-The package is available from conda-forge on Linux and macOS. Windows conda packages are not supported; Windows users should use the PyPI/MSYS2 UCRT64/MinGW-w64 path. Install conda-forge builds with:
+Conda-forge packages are available for Linux x86-64, Linux ARM64, and macOS (Intel and Apple Silicon). Windows conda packages are not supported; Windows users should use the PyPI/MSYS2 UCRT64/MinGW-w64 path. Install with:
 
 ```bash
 conda install -c conda-forge xstar-tools
@@ -63,7 +42,7 @@ xstar-xspec --version
 xstar-tools doctor --require zone-cpp --json
 ```
 
-The conda-forge package currently tracks the published PyPI `0.6.89.5` source. `0.6.90.1` qualified the conda build, and `0.6.90.2` verified clean public installation and native runtime behavior on `linux-64`, `osx-arm64`, and `osx-64`.
+For Linux ARM64, the published `linux-aarch64` package was verified at version `0.6.90.5.8`. Check the [conda-forge package files](https://anaconda.org/conda-forge/xstar-tools/files) for the current version on each platform.
 
 ## Install from PyPI
 
